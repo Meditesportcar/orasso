@@ -104,3 +104,121 @@ export async function readCopy<T>(key: string, account = accountGuard()): Promis
     return null;
   }
 }
+
+// --- Photos de la copie (R8c2, tour 2) -------------------------------------------------------------------------------------
+// La première photo d'une carte de la copie, **déjà reçue en ligne** (aucun préchargement, aucune requête de plus), est gardée
+// pour s'afficher sans réseau. Fichiers du compte sous le préfixe de la copie (`copy.<compte>.photo.<empreinte>.<date>.json`) :
+// effacés avec la copie à la déconnexion et au changement de compte. Chaque photo s'efface d'elle-même au bout de 7 jours ;
+// celles dont la carte a quitté la copie sont retirées (`prunePhotos`). Dans le navigateur (recette), au plus 8 photos.
+
+export const PHOTO_MAX_AGE_MS = 7 * 86_400_000;
+const WEB_PHOTO_MAX = 8;
+const WEB_INDEX = "copyphotos";
+
+/** Empreinte courte et stable d'une adresse de photo (nom de fichier). */
+export function photoHash(url: string): string {
+  let h = 5381;
+  for (let i = 0; i < url.length; i++) h = ((h << 5) + h + url.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+const photoPrefix = (scope: string) => kvKey(`copy.${scope}.photo.`);
+const photoFileName = (scope: string, hash: string, ms: number) => `${photoPrefix(scope)}${hash}.${ms}.json`;
+type WebPhoto = { hash: string; ms: number };
+const webKey = (hash: string) => `copyphoto.${hash}`;
+
+/** Les fichiers photo du compte : empreinte et date d'écriture lues dans le nom. */
+function photoEntries(scope: string): { entry: { name?: string; delete: () => void }; hash: string; ms: number }[] {
+  const prefix = photoPrefix(scope);
+  const out: { entry: { name?: string; delete: () => void }; hash: string; ms: number }[] = [];
+  for (const entry of new Directory(Paths.document).list()) {
+    const name = entry.name ?? "";
+    if (!name.startsWith(prefix)) continue;
+    const m = /^([^.]+)\.(\d+)\.json$/.exec(name.slice(prefix.length));
+    out.push({ entry, hash: m?.[1] ?? "", ms: Number(m?.[2] ?? 0) });
+  }
+  return out;
+}
+
+/** Garde la photo (`dataUrl`) de l'adresse `url`, écrite maintenant (`now`). */
+export async function savePhoto(
+  url: string,
+  dataUrl: string,
+  now: Date = new Date(),
+  account = accountGuard(),
+): Promise<void> {
+  const scope = account.scope;
+  if (!scope || !account.current()) return;
+  return serialized(`${scope}|photo|${photoHash(url)}`, async () => {
+    if (!account.current()) return;
+    try {
+      const hash = photoHash(url);
+      const ms = now.getTime();
+      if (isWeb) {
+        const index = (await cacheGetJson<WebPhoto[]>(WEB_INDEX)) ?? [];
+        const rest = index.filter((p) => p.hash !== hash);
+        if (rest.length >= WEB_PHOTO_MAX) return;
+        await cacheSetJson(webKey(hash), { ms, data: dataUrl }, scope);
+        await cacheSetJson(WEB_INDEX, [...rest, { hash, ms }], scope);
+        return;
+      }
+      for (const p of photoEntries(scope)) if (p.hash === hash) p.entry.delete();
+      if (!account.current()) return;
+      const file = new File(Paths.document, photoFileName(scope, hash, ms));
+      file.create();
+      file.write(dataUrl);
+    } catch {
+      // Ignoré : voir l'en-tête.
+    }
+  });
+}
+
+/** La photo gardée de `url` (adresse de données), ou `null` : absente, de plus de 7 jours, ou d'un autre compte. */
+export async function readPhoto(url: string, now: Date = new Date(), account = accountGuard()): Promise<string | null> {
+  const scope = account.scope;
+  if (!scope || !account.current()) return null;
+  try {
+    const hash = photoHash(url);
+    if (isWeb) {
+      const index = (await cacheGetJson<WebPhoto[]>(WEB_INDEX)) ?? [];
+      const hit = index.find((p) => p.hash === hash);
+      if (!hit || now.getTime() - hit.ms >= PHOTO_MAX_AGE_MS) return null;
+      const saved = await cacheGetJson<{ data?: string }>(webKey(hash));
+      return account.current() && typeof saved?.data === "string" ? saved.data : null;
+    }
+    const hit = photoEntries(scope).find((p) => p.hash === hash);
+    if (!hit || now.getTime() - hit.ms >= PHOTO_MAX_AGE_MS) return null;
+    const data = await new File(Paths.document, photoFileName(scope, hash, hit.ms)).text();
+    return account.current() && data.startsWith("data:") ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Retire les photos de plus de 7 jours et, si `keep` est donné, celles dont l'adresse n'y est pas (carte sortie de la copie).
+ * Appelée à chaque `saveCopy` du Fil et au démarrage.
+ */
+export async function prunePhotos(
+  keep: ReadonlySet<string> | null,
+  now: Date = new Date(),
+  account = accountGuard(),
+): Promise<void> {
+  const scope = account.scope;
+  if (!scope || !account.current()) return;
+  const keepHashes = keep ? new Set([...keep].map(photoHash)) : null;
+  const drop = (hash: string, ms: number) =>
+    now.getTime() - ms >= PHOTO_MAX_AGE_MS || (keepHashes !== null && !keepHashes.has(hash));
+  try {
+    if (isWeb) {
+      const index = (await cacheGetJson<WebPhoto[]>(WEB_INDEX)) ?? [];
+      const left = index.filter((p) => !drop(p.hash, p.ms));
+      for (const p of index) if (!left.includes(p)) await cacheSetJson(webKey(p.hash), null, scope);
+      if (left.length !== index.length) await cacheSetJson(WEB_INDEX, left, scope);
+      return;
+    }
+    for (const p of photoEntries(scope)) if (!p.hash || drop(p.hash, p.ms)) p.entry.delete();
+  } catch {
+    // Ignoré : voir l'en-tête.
+  }
+}

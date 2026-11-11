@@ -133,4 +133,54 @@ describe.each(["web", "ios"])("copie hors ligne (%s)", (os) => {
     expect((await copy.readCopy<{ de: string }>("fil.for_you"))?.value).toEqual({ de: "b" });
     expect(await copy.readCopy("fil.for_you", guardA)).toBeNull();
   });
+
+  describe("photos de la copie", () => {
+    const url = "/api/feed-posts/p1/photos/a.jpg";
+    const data = "data:image/jpeg;base64,AAAA";
+    const photoFiles = () => [...device.files.keys()].filter((k) => k.includes(".photo."));
+
+    it("une photo gardée se relit (hors ligne elle s'affiche), avec la copie du compte seulement", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      expect(await copy.readPhoto(url, when)).toBe(data);
+      expect(await copy.readPhoto("/autre.jpg", when)).toBeNull();
+    });
+
+    it("de plus de 7 jours : plus lue, et effacée au nettoyage", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      const later = new Date(when.getTime() + copy.PHOTO_MAX_AGE_MS);
+      expect(await copy.readPhoto(url, new Date(later.getTime() - 1))).toBe(data);
+      expect(await copy.readPhoto(url, later)).toBeNull();
+      await copy.prunePhotos(null, later);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      if (os === "ios") expect(photoFiles()).toHaveLength(0);
+    });
+
+    it("une carte sortie de la copie : sa photo est retirée, celles qui restent sont gardées", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      await copy.savePhoto("/b.jpg", data, when);
+      await copy.prunePhotos(new Set(["/b.jpg"]), when);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      expect(await copy.readPhoto("/b.jpg", when)).toBe(data);
+    });
+
+    it("déconnexion : plus aucun fichier photo du compte ; un autre compte ne lit rien", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      await kv.purgeCaches();
+      expect(photoFiles()).toHaveLength(0);
+      await kv.bindCacheScope("b");
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      await kv.bindCacheScope("a");
+      expect(await copy.readPhoto(url, when)).toBeNull();
+    });
+
+    it("sans compte lié, rien n'est gardé", async () => {
+      await copy.savePhoto(url, data, when);
+      expect(photoFiles()).toHaveLength(0);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+    });
+  });
 });

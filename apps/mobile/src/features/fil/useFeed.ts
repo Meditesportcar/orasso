@@ -38,6 +38,7 @@ import { ApiRequestError, errorMessage, NETWORK_MESSAGE } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
+import { resetWantedPhotos, setWantedPhotos } from "./copyPhotos";
 import { forgetMyPublished, myPublishedCards, takeFeedDirty } from "./feedSignal";
 
 const FILTER_KEY = "fil-filter";
@@ -59,11 +60,9 @@ async function dropFromCopies(id: string): Promise<void> {
     const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(feedCopyKey(f));
     const items = saved?.value.items;
     if (saved && Array.isArray(items) && items.some((c) => c.id === id)) {
-      await saveCopy(
-        feedCopyKey(f),
-        { ...saved.value, items: items.filter((c) => c.id !== id) },
-        new Date(saved.savedAt),
-      );
+      const left = items.filter((c) => c.id !== id);
+      setWantedPhotos(f, left);
+      await saveCopy(feedCopyKey(f), { ...saved.value, items: left }, new Date(saved.savedAt));
     }
   }
 }
@@ -116,6 +115,18 @@ export function useFeed() {
     forgetMyPublished();
     setMine([]);
     setReady(false);
+    // Les photos de la copie : ce que chaque copie garde est relu une fois par compte, puis les photos périmées ou orphelines partent.
+    resetWantedPhotos();
+    void (async () => {
+      for (const f of feedFilters) {
+        const saved = await readCopy<unknown>(feedCopyKey(f));
+        setWantedPhotos(
+          f,
+          (saved ? parseFeedCopy(saved.value, f) : null) ?? [],
+          f === feedFilters[feedFilters.length - 1],
+        );
+      }
+    })();
     let cancelled = false;
     void cacheGetJson<FeedFilter>(FILTER_KEY).then((saved) => {
       if (cancelled) return;
@@ -169,7 +180,9 @@ export function useFeed() {
         setErrorSource(null);
         setRound((n) => n + 1);
         // La première page reçue est gardée pour le prochain passage sans réseau (jamais mes cartes épinglées).
-        void saveCopy(feedCopyKey(f), { filter: f, items: feedCopyCards(applied.state.items) });
+        const copyCards = feedCopyCards(applied.state.items);
+        setWantedPhotos(f, copyCards);
+        void saveCopy(feedCopyKey(f), { filter: f, items: copyCards });
       } catch (e) {
         if (!ticket.current()) return;
         // Pas de réponse (hors ligne, API arrêtée) : la copie, même ancienne, plutôt qu'une erreur plein écran.

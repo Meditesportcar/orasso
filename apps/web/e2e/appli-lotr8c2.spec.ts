@@ -344,6 +344,15 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "for_you");
+  // Hors ligne, la première photo des cartes de la copie s'affiche : elle est gardée dès qu'elle est reçue en ligne.
+  const firstPhoto = page
+    .getByTestId("feed-card-feed_post")
+    .first()
+    .getByTestId("feed-post-photos")
+    .locator("img")
+    .first();
+  await expect(firstPhoto).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
   await tab(page, "nearby");
   await tab(page, "following");
   const onlineFirst = await page.getByTestId("feed-card-feed_post").first().textContent();
@@ -382,6 +391,10 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
   await expect(page.getByTestId("feed-card-sponsored")).toHaveCount(0);
   await expect(page.getByTestId("fil-waiting")).toHaveCount(0);
   await expect(page.getByTestId("load-error")).toHaveCount(0);
+  // La photo gardée remplace « Photo indisponible ».
+  const keptCard = page.getByTestId("feed-card-feed_post").first();
+  await expect(keptCard.getByTestId("feed-post-photos").locator("img").first()).toBeVisible({ timeout: 30_000 });
+  await expect(keptCard.getByTestId("photo-failed")).toHaveCount(0);
   await shot(page, "hors-ligne-pour-toi-390");
   await tab(page, "following");
   await expect(page.getByTestId("fil-offline")).toBeVisible();
