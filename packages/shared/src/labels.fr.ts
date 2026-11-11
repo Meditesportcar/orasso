@@ -51,6 +51,7 @@ export * from "./labels/plural.fr";
 export * from "./labels/points.fr";
 export * from "./labels/preferences.fr";
 export * from "./labels/presence.fr";
+export * from "./labels/pages.fr";
 export * from "./labels/pro-presta.fr";
 export * from "./labels/profile-r5.fr";
 export * from "./labels/profile-tabs.fr";
