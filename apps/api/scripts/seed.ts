@@ -48,7 +48,7 @@ import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedStaff } from "./seed/staff";
 import { seedStories } from "./seed/stories";
-import { seedWeather } from "./seed/weather";
+import { seedMyWeather, seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -117,6 +117,8 @@ async function main() {
   await seedSecurity(hash);
   // Lot 28 : prévisions météo factices (Nocturne de Canet mauvaise, Expo Rivesaltes bonne).
   await seedWeather();
+  // Lot R8m : « Ma météo » (lieu choisi de Damien, compte sans département).
+  await seedMyWeather();
   // Lot 17 : amis, demande en attente, profil privé.
   await seedSocial();
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
