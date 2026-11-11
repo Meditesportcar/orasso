@@ -32,6 +32,7 @@ import {
   ticketTypes,
 } from "../../db/schema";
 import { setExternalFetch } from "../../lib/external/cache";
+import { overpassQuery } from "../../lib/external/overpass";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { practicalService } from "./service";
 
@@ -464,5 +465,12 @@ describe("POST /practical : Overpass un appel à la fois, cache toléré en repl
     );
     expect(res.partial).toBe(true);
     expect(res.places.map((p) => p.name).sort()).toEqual(["Lavage du cache", "Station-service"]);
+  });
+});
+
+describe("Overpass : la requête n'excède pas le délai du client", () => {
+  it("[timeout:18] annoncé, sous les 20 s d'attente du client : l'appel suivant ne chevauche pas le précédent", () => {
+    expect(overpassQuery("66")).toContain("[timeout:18]");
+    expect(overpassQuery("66")).not.toContain("timeout:60");
   });
 });

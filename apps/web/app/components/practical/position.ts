@@ -6,11 +6,11 @@
 // Position partagée avec « Ma météo » pendant la séance : la donner ici la donne aussi à la météo, et une position déjà donnée à la
 // météo est reprise ici si le navigateur a déjà la permission (aucune fenêtre ne s'ouvre).
 import { coarsePosition, createPositionStore, type LatLng, type PracticalAt, type PracticalData } from "@orasso/shared";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
-import { askMyPosition, useWeatherPosition } from "../weather/position";
+import { useWeatherPosition } from "../weather/position";
 
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
 let pendingExact: LatLng | null = null;
@@ -94,8 +94,6 @@ export async function askPracticalPosition(silent = false): Promise<boolean> {
     } finally {
       pendingExact = null;
     }
-    // La météo suit : la même position, la même séance (elle arrondit et garde la sienne).
-    if (ok && !silent) void askMyPosition();
     return ok;
   } catch {
     return false;
@@ -114,16 +112,21 @@ export const forgetPracticalPosition = () => store.forget();
  * Lot R8q, tour 2 : « Pratique » suit « Ma météo ». Chaque nouvelle position donnée à la météo est reprise ici une seule fois, sans nouvelle
  * fenêtre (permission déjà accordée) : une deuxième position dans la même séance remplace la première des deux côtés.
  */
+/** Le dernier lieu de la météo déjà repris ici (mémoire de la séance). */
+let followed: string | null = null;
+
 export function useFollowWeatherPosition(): void {
   const weather = useWeatherPosition();
   const mine = usePracticalPosition();
-  const weatherKey = weather.at ? `${weather.at.label}|${weather.at.weather?.fetchedAt ?? ""}` : null;
-  const tried = useRef<string | null>(null);
+  // Clé de suivi : le lieu de la position de la météo (sa case de 0,1° se nomme par sa commune), jamais l'heure de sa prévision : un
+  // rafraîchissement de la météo (10 min) ne relance ni lecture de position ni requête.
+  const weatherKey = weather.at ? weather.at.label : null;
   const busy = mine.busy;
   useEffect(() => {
-    // Une tentative par position de la météo : un échec ne relance pas en boucle.
-    if (weatherKey && !busy && tried.current !== weatherKey) {
-      tried.current = weatherKey;
+    if (!weatherKey) followed = null;
+    // Une tentative par lieu de la météo, pour toute la séance (pas à chaque montage de l'écran) : un échec ne relance pas en boucle.
+    if (weatherKey && !busy && followed !== weatherKey) {
+      followed = weatherKey;
       void askPracticalPosition(true);
     }
   }, [weatherKey, busy]);

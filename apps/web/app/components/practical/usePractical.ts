@@ -4,6 +4,7 @@
 // Réponse partielle : une seule relecture, après 3 secondes.
 import {
   createSessionGuard,
+  createSingleTimer,
   PRACTICAL_PARTIAL_RETRY_MS,
   type PracticalChoice,
   type PracticalData,
@@ -58,6 +59,9 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   const who = useSessionId();
   const [state, setState] = useState<Read>({ data: null, loading: enabled, offline: false });
   const retried = useRef(false);
+  // Une seule relance de lieux partiels, annulée au démontage (tour 3).
+  const partialTimer = useRef(createSingleTimer()).current;
+  useEffect(() => () => partialTimer.cancel(), [partialTimer]);
 
   // Sans identité connue, rien ne part (la lecture attend l'annonce de la session, `who` change alors et relance l'effet).
   const load = useCallback(async () => {
@@ -75,9 +79,9 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     setState({ data: res.data, loading: false, offline: false });
     if (res.data.partial && !retried.current) {
       retried.current = true;
-      setTimeout(() => void load(), PRACTICAL_PARTIAL_RETRY_MS);
+      partialTimer.schedule(() => void load(), PRACTICAL_PARTIAL_RETRY_MS);
     }
-  }, [enabled, near, who]);
+  }, [enabled, near, who, partialTimer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {

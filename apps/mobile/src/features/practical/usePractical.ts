@@ -5,16 +5,21 @@
 // budget de l'API) : une seule relecture, après 3 secondes.
 import {
   createSessionGuard,
+  createSingleTimer,
   type LatLng,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  practicalReadAllowed,
+  practicalRetryDelay,
+  shouldRetryPractical,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
+import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
@@ -55,8 +60,6 @@ const guard = createSessionGuard(cacheScope);
 onCacheScopeDropped(async () => guard.invalidate());
 /** Sans identité connue, une lecture attend (aucune requête ne part sous un compte inconnu). */
 const WAIT_IDENTITY_MS = 500;
-/** Une lecture qui n'a jamais réussi (réseau absent au départ) est retentée à ce rythme tant que l'écran est affiché. */
-const RETRY_OFFLINE_MS = 15_000;
 
 function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): Read {
   const [state, setState] = useState<Read>(() => ({
@@ -68,24 +71,31 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   const shownFor = useRef<string | null>(null);
   const fetchedAt = useRef(0);
   const retried = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Une seule chaîne d'attente d'identité et une seule chaîne de relances, annulées au démontage (tour 3).
+  const waitTimer = useRef(createSingleTimer()).current;
+  const retryTimer = useRef(createSingleTimer()).current;
+  const attempts = useRef(0);
+  const lastStart = useRef(0);
+  const focused = useRef(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      if (timer.current) clearTimeout(timer.current);
+      waitTimer.cancel();
+      retryTimer.cancel();
     };
-  }, []);
+  }, [waitTimer, retryTimer]);
 
   const load = useCallback(async () => {
     if (!enabled) return;
     const ticket = guard.begin();
     if (!ticket) {
       // Identité inconnue : rien ne part ; on réessaie dès qu'elle l'est.
-      timer.current = setTimeout(() => void load(), WAIT_IDENTITY_MS);
+      waitTimer.schedule(() => void load(), WAIT_IDENTITY_MS);
       return;
     }
+    lastStart.current = Date.now();
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
@@ -93,21 +103,35 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
+      attempts.current = 0;
       setState({ data, loading: false, offline: false });
       if (data.partial && !retried.current) {
         retried.current = true;
-        timer.current = setTimeout(() => void load(), PARTIAL_RETRY_MS);
+        retryTimer.schedule(() => void load(), PARTIAL_RETRY_MS);
       }
-    } catch {
+    } catch (error) {
       if (!alive.current || !guard.valid(ticket)) return;
-      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: true }));
+      // Seule une erreur réseau est « hors ligne » et se relance ; un refus (403, 404, 429) n'est jamais relancé.
+      const network = error instanceof ApiRequestError && error.isNetwork;
+      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: network }));
+      if (network) {
+        retryTimer.schedule(
+          () => {
+            const foreground = AppState.currentState === "active";
+            if (shouldRetryPractical({ network: true, focused: focused.current, foreground })) void load();
+          },
+          practicalRetryDelay(attempts.current++),
+        );
+      }
     }
-  }, [enabled, near, eventId]);
+  }, [enabled, near, eventId, waitTimer, retryTimer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `load` change avec ses entrées ; une lecture par changement.
   useEffect(() => {
     retried.current = false;
     fetchedAt.current = 0;
+    attempts.current = 0;
+    lastStart.current = 0;
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return;
@@ -131,24 +155,23 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   // n'a encore réussi (premier échec réseau).
   const refresh = useCallback(() => {
     if (!enabled) return;
+    // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran, refus relu à chaque focus).
+    if (!practicalReadAllowed(lastStart.current, Date.now())) return;
     if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
   }, [enabled, load]);
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
       refresh();
       const sub = AppState.addEventListener("change", (next) => {
         if (next === "active") refresh();
       });
-      return () => sub.remove();
+      return () => {
+        focused.current = false;
+        sub.remove();
+      };
     }, [refresh]),
   );
-  // Aucune lecture n'a réussi (réseau absent au départ) : une nouvelle tentative régulière, qui reprend au retour du réseau.
-  const neverRead = state.offline && !fetchedAt.current;
-  useEffect(() => {
-    if (!neverRead || !enabled) return undefined;
-    const id = setInterval(() => void load(), RETRY_OFFLINE_MS);
-    return () => clearInterval(id);
-  }, [neverRead, enabled, load]);
   return state.data && shownFor.current !== null && shownFor.current !== cacheScope()
     ? { data: null, loading: enabled, offline: false }
     : state;

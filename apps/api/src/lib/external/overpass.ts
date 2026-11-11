@@ -59,7 +59,7 @@ export function parseOverpass(json: unknown, from: { lat: number; lng: number })
 
 /** Requête Overpass QL : tout le département (zone ISO 3166-2), points et bâtiments `amenity=car_wash`, centre inclus. */
 export function overpassQuery(department: string): string {
-  return `[out:json][timeout:60];area["ISO3166-2"="FR-${department}"]->.a;(node["amenity"="car_wash"](area.a);way["amenity"="car_wash"](area.a););out center tags ${PLACES_CACHE_LIMIT};`;
+  return `[out:json][timeout:18];area["ISO3166-2"="FR-${department}"]->.a;(node["amenity"="car_wash"](area.a);way["amenity"="car_wash"](area.a););out center tags ${PLACES_CACHE_LIMIT};`;
 }
 
 /**
