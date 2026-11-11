@@ -69,7 +69,7 @@ const carBase = (t: Date) =>
 /** Événement dont le plateau se montre : publié et non privé. Brouillon, privé, annulé ou supprimé : rien. */
 async function visibleEvent(id: string) {
   const e = await db.query.events.findFirst({ where: eq(events.id, id) });
-  if (!e || e.status !== "published" || e.admission === "invite_only") throw notFound("Plateau introuvable");
+  if (e?.status !== "published" || e.admission === "invite_only") throw notFound("Plateau introuvable");
   return e;
 }
 

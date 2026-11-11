@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
-import { RELAIS } from "./relais";
+import { phaseDir, RELAIS } from "./relais";
 
 // Lot R8f1 : captures « avant » / « après » du haut du Fil. Appli (version compilée, `APP_URL`) : Béton et Sable, 384 et
 // 390 px, police ×1, ×1,15 et ×1,3 : les trois filtres, l'état vide d'« Abonnements », « Choisis ton coin » (Autour de moi
@@ -10,7 +10,7 @@ import { RELAIS } from "./relais";
 // dans `hauteur-stories-carte.txt`. Comptes du seed seulement.
 const PHASE = process.env.PHASE ?? "apres";
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r8f1-captures/${PHASE}`;
+const DIR = phaseDir(`${RELAIS}/lot-r8f1-captures/${PHASE}`, PHASE);
 test.use({ actionTimeout: 30_000 });
 
 async function afterOpening(page: Page) {

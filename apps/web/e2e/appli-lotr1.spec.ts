@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { login, MOBILE, SEED_PASSWORD } from "./helpers";
-import { mediteTitles, r1Events } from "./helpers/lotr1";
+import { mediteTitles, r1Events, removeR1Events } from "./helpers/lotr1";
 import { RELAIS } from "./relais";
 
 // Lot R1 (retours de Damien sur l'APK du 24/10), côté appli (version web compilée) :
@@ -113,6 +113,8 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     await ctx.close();
   }
 });
+
+test.afterAll(removeR1Events);
 
 test("Explorer : « Médite », événements terminés, plus de stations", async ({ browser }) => {
   test.setTimeout(300_000);

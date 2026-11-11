@@ -108,7 +108,7 @@ export const votesLifecycle = {
    */
   async syncEvent(eventId: string): Promise<void> {
     const event = await eventsRepo.byId(eventId).catch(() => null);
-    if (!event || event.status !== "published") return;
+    if (event?.status !== "published") return;
     await ensureAllCategories(db, event);
     const t = now();
     const entered = await enteredVehicles(db, eventId);

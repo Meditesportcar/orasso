@@ -45,6 +45,8 @@ export const profileTabsLabels = {
   unknownCount: "–",
   /** L'onglet Garage vide : l'état vide et son bouton principal (le seul de l'onglet). */
   garageEmptyTitle: "Ton garage est vide",
+  /** Lot R8r : l'onglet Garage d'un visiteur dont les véhicules ne sont pas encore lus (pas de roue qui tourne). */
+  garageLoading: "Chargement du garage…",
   garageEmptyText: "Ajoute ta première voiture : marque, photos, plaque floutée.",
   /** Mon profil, l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut partout). */
   param: "onglet",

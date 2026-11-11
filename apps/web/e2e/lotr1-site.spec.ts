@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
-import { r1Events } from "./helpers/lotr1";
+import { r1Events, removeR1Events } from "./helpers/lotr1";
 import { RELAIS } from "./relais";
 
 // Lot R1 (retours de Damien du 24/10), côté site (le site raccord) : « Médite » trouve les événements de MéditeSportCar,
@@ -21,6 +21,8 @@ async function shot(page: Page, name: string) {
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: false });
 }
+
+test.afterAll(removeR1Events);
 
 test("site : « Médite », événements terminés, choix gardé, plus de stations", async ({ browser }) => {
   test.setTimeout(300_000);

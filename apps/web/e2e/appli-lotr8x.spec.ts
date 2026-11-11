@@ -118,7 +118,7 @@ for (const [width, scale] of [
     const card = rows.first();
     await expect(card.getByTestId("event-waitlist")).toBeVisible();
     await expect(card.getByTestId("event-waitlist")).toContainText("Liste d'attente");
-    await expect(card.getByTestId("event-seats")).toContainText("Complet ·");
+    await expect(card.getByTestId("event-seats")).toHaveText("Complet");
     const wait = await box(card.getByTestId("event-waitlist"));
     const seats = await box(card.getByTestId("event-seats"));
     const cardBox = await box(card);

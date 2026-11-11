@@ -5,7 +5,7 @@
 // Sans `suite=barre` (anneau d'un profil, story de l'organisateur, mentions) : l'auteur seul, comme avant.
 // Changement d'auteur : glissement horizontal court et fondu (fondu de 120 ms en mouvement réduit), tout l'état propre à une story
 // (flamme, réponse en cours, feuilles, minuterie) repart de zéro (visionneuse remontée, `key`). L'auteur suivant est lu d'avance.
-import { Icon, Text, useTheme } from "@orasso/design-system/native";
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   createReplyKeys,
   storyViewerLabels as L,
@@ -26,6 +26,9 @@ import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { barFor } from "../chainBar";
 import { AuthorViewer } from "./StoryViewer";
+
+const { space2, space3 } = tokens.spacing;
+const { radiusMd } = tokens.radius;
 
 const SLIDE_MS = 200;
 const REDUCED_FADE_MS = 120;
@@ -148,7 +151,8 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/fil"))}
             accessibilityRole="button"
             accessibilityLabel={L.close}
-            style={[styles.close, { top: insets.top + 8 }]}
+            hitSlop={6}
+            style={[styles.close, { top: insets.top + space2 }]}
             testID="story-close"
           >
             <Icon name="close" size={22} color={t.color.nightInk} />
@@ -163,9 +167,11 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   close: {
     position: "absolute",
-    right: 12,
+    right: space3,
+    // Mêmes valeurs que la croix de la visionneuse (`Header` : 38 px, coins `radiusMd`, zone de toucher élargie de 6).
     width: 38,
     height: 38,
+    borderRadius: radiusMd,
     alignItems: "center",
     justifyContent: "center",
   },
