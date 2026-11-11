@@ -3,16 +3,16 @@
 // leur auteur** : une ligne ouvre la publication, le nom de la personne ouvre son profil. Pour un responsable de la page (ou
 // quand la liste rend `hidden`) : « … » → « Masquer de la page » / « Remettre sur la page » ; l'écriture revérifie ses droits
 // (second facteur compris) côté API. Une panne n'est jamais « Personne n'a encore cité cette page. ».
-import { Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { pagesLabels as L, type MentionItem, type MentionsPage, mentionLine, publicationPath } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { SetList, SetRow } from "@/features/profil/parts";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { mediaSource } from "@/lib/media";
 import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
 import { SmButton } from "@/ui/Kit";
@@ -127,7 +127,7 @@ function Row({
         testID="mention-open"
       >
         <View style={[styles.thumb, { backgroundColor: c.surfaceRaised }]}>
-          {photo ? <Photo source={mediaSource(photo.url)} style={styles.thumbImage} /> : null}
+          {photo ? <CrewPhotoImage url={photo.url} style={styles.thumbImage} resizeMode="cover" /> : null}
         </View>
       </Pressable>
       <View style={styles.text}>

@@ -38,11 +38,11 @@ export function FollowLine({
   testID: string;
 }) {
   return following ? (
-    <SmButton kind="s" icon="check" disabled={busy} onPress={onPress} testID={testID}>
+    <SmButton kind="s" icon="check" style={styles.line} disabled={busy} onPress={onPress} testID={testID}>
       {L.following}
     </SmButton>
   ) : (
-    <SmButton kind="p" icon="add" disabled={busy} onPress={onPress} testID={testID}>
+    <SmButton kind="p" icon="add" style={styles.line} disabled={busy} onPress={onPress} testID={testID}>
       {L.follow}
     </SmButton>
   );
@@ -154,6 +154,8 @@ export function PageHead({
 }
 
 const styles = StyleSheet.create({
+  // Le petit bouton de la ligne du type, comme « Suivre » sur le Profil d'un autre (`FollowButton`, taille `line`).
+  line: { minHeight: 32, paddingHorizontal: 10, borderRadius: tokens.radius.radiusSm },
   top: { gap: space2 },
   id: { flexDirection: "row", alignItems: "flex-start", gap: space3 - 2 },
   veil: { top: -space3, bottom: -space3, left: -space4, right: -space4 },

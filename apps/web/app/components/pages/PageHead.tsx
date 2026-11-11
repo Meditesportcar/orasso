@@ -23,6 +23,7 @@ export function PageHead({
   counters,
   counterHref,
   nameAs: Name = "h1",
+  nameId,
 }: {
   testId: string;
   name: string;
@@ -41,6 +42,8 @@ export function PageHead({
   /** Où mène un compteur qui ouvre quelque chose (« événements », « partenaires » : l'onglet des événements). */
   counterHref?: (key: PageCounter["key"]) => string | undefined;
   nameAs?: "h1" | "h2";
+  /** L'ancre du titre (`so-title`, `pro-title` : les recettes et les liens y accèdent). */
+  nameId?: string;
 }) {
   const cells: BandCell[] = counters.map((x) => ({
     key: x.key,
@@ -57,14 +60,16 @@ export function PageHead({
             ring={ring}
             neon={false}
             size="profile"
-            src={logoUrl}
             name={name}
             href={storiesHref}
             label={storiesHref ? L.openStories : undefined}
-          />
+          >
+            {/* Le logo garde son texte alternatif (« Logo de … ») : l'anneau le pose dans sa pastille. */}
+            {logoUrl ? <img src={logoUrl} alt={`Logo de ${name}`} className="o-avring__img" /> : undefined}
+          </AvatarRing>
         </div>
         <div className="pt-id__mid">
-          <Name className="pg-id__name o-t-poster-l" data-testid="page-name">
+          <Name id={nameId} className="pg-id__name o-t-poster-l" data-testid="page-name">
             {name}
           </Name>
           <div className="pt-id__gl">

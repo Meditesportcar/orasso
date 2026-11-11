@@ -172,6 +172,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
     <div className="s-stack pg-page">
       <PageHead
         testId="structure-head"
+        nameId="so-title"
         name={structure.name}
         logoUrl={structure.logoUrl}
         ring={ring}

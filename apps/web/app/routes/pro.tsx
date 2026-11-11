@@ -144,6 +144,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
     <div className="s-stack pg-page">
       <PageHead
         testId="pro-head"
+        nameId="pro-title"
         name={pro.name}
         logoUrl={pro.logoUrl}
         ring={ring}
