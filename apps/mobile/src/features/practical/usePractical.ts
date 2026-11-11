@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
-import { cacheScope } from "@/lib/kv";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
   PARTIAL_RETRY_MS,
@@ -51,6 +51,8 @@ const STALE_MS = 60_000;
 
 /** Le compte et la génération de session sont capturés au départ d'une lecture et revérifiés à son arrivée (lot R8q, tour 2). */
 const guard = createSessionGuard(cacheScope);
+// Chaque fin de session invalide les lectures en cours (A → déconnexion → A pendant une réponse lente), comme « Ma météo ».
+onCacheScopeDropped(async () => guard.invalidate());
 /** Sans identité connue, une lecture attend (aucune requête ne part sous un compte inconnu). */
 const WAIT_IDENTITY_MS = 500;
 /** Une lecture qui n'a jamais réussi (réseau absent au départ) est retentée à ce rythme tant que l'écran est affiché. */

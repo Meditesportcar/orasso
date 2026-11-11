@@ -17,7 +17,7 @@ import * as Location from "expo-location";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { askMyPosition, useWeatherPosition } from "@/features/weather/position";
 import { api } from "@/lib/api";
-import { cacheScope } from "@/lib/kv";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
 let pendingExact: LatLng | null = null;
@@ -30,6 +30,9 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
     return { exact: pendingExact ?? store.getState().at?.exact ?? coarse, data };
   },
 });
+
+// Chaque fin de session invalide les demandes en cours, même sans position gardée (comme « Ma météo »).
+onCacheScopeDropped(async () => store.forget());
 
 export type PracticalPosition = { at: PracticalAt | null; busy: boolean };
 

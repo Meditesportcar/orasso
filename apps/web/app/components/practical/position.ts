@@ -29,7 +29,14 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
 });
 
 if (typeof window !== "undefined") {
-  listenSession(() => store.purgeForeign());
+  // Comme « Ma météo » : une annonce « aucun compte » invalide les demandes en cours ; un autre compte efface la position.
+  let seen: string | null = currentSession();
+  listenSession((userId) => {
+    if (userId === null) store.invalidate();
+    else if (seen !== null && userId !== seen) store.forget();
+    seen = userId ?? seen;
+    store.purgeForeign();
+  });
 }
 
 const EMPTY = { at: null, busy: false } as const;

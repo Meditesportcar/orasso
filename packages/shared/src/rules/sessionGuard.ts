@@ -16,6 +16,10 @@ export function createSessionGuard(scope: () => string | null) {
   return {
     /** À appeler quand la session peut avoir changé (annonce de session, rendu). */
     sync,
+    /** Une fin de session (déconnexion, autre compte) a eu lieu : les lectures en cours sont étrangères, même si le compte revient. */
+    invalidate() {
+      generation += 1;
+    },
     /** Le compte et la génération du départ, ou `null` tant que l'identité n'est pas connue. */
     begin(): SessionTicket | null {
       sync();

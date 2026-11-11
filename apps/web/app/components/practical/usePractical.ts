@@ -42,7 +42,12 @@ const guard = createSessionGuard(currentSession);
 /** Le compte annoncé par la mise en page : `null` tant qu'il ne l'est pas (le rendu serveur part de la même valeur vide). */
 function useSessionId(): string | null {
   return useSyncExternalStore(
-    (notify) => listenSession(() => notify()),
+    (notify) =>
+      listenSession((userId) => {
+        if (userId === null) guard.invalidate();
+        else guard.sync();
+        notify();
+      }),
     currentSession,
     () => null,
   );

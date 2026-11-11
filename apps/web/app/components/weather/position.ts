@@ -21,7 +21,16 @@ const store = createPositionStore({
 });
 
 if (typeof window !== "undefined") {
-  listenSession(() => store.purgeForeign());
+  // Chaque transition de session invalide les demandes en cours, même sans position gardée (A → aucun → A pendant le GPS).
+  // Une annonce « aucun compte » invalide les demandes en cours (la position gardée reste liée à son compte) ; un autre compte
+  // efface la position.
+  let seen: string | null = currentSession();
+  listenSession((userId) => {
+    if (userId === null) store.invalidate();
+    else if (seen !== null && userId !== seen) store.forget();
+    seen = userId ?? seen;
+    store.purgeForeign();
+  });
 }
 
 const EMPTY = { at: null, busy: false } as const;

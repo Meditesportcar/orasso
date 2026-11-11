@@ -746,6 +746,40 @@ describe("tour 3 : plafond du préchauffage et garde R8r complète", () => {
   });
 });
 
+describe("tour 4 : le plafond ne compte que les vrais appels", () => {
+  it("panne du fournisseur : 400 lectures ne consomment aucun budget, une autre ville a sa météo ensuite", async () => {
+    const down = providerStub(() => ({}), 500);
+    setWeatherFetch(down as unknown as typeof fetch);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const cell = { lat: 50.6, lng: 3.1, key: "50.6,3.1" };
+    for (let i = 0; i < 400; i++) await weatherService.cellForAt(cell);
+    expect(down).toHaveBeenCalledTimes(1);
+    const ok = providerStub();
+    setWeatherFetch(ok as unknown as typeof fetch);
+    setGeocodeFetch(geocoderStub() as unknown as typeof fetch);
+    const other = await weatherService.at({ lat: 43.6, lng: 1.44 });
+    expect(other.weather).not.toBeNull();
+    expect(ok).toHaveBeenCalledTimes(1);
+  });
+
+  it("réponse inexploitable : redemandée au plus une fois par 10 minutes", async () => {
+    const stale = providerStub(() => ({
+      ...omBody(),
+      daily: { ...omBody().daily, time: ["2026-10-01"] },
+      hourly: { ...omBody().hourly, time: omBody().hourly.time.map((t) => t.replace("2026-10-1", "2026-09-1")) },
+    }));
+    setWeatherFetch(stale as unknown as typeof fetch);
+    const cell = { lat: 45.7, lng: 4.8, key: "45.7,4.8" };
+    await weatherService.cellForAt(cell);
+    await weatherService.cellForAt(cell);
+    await weatherService.cellForAt(cell);
+    expect(stale).toHaveBeenCalledTimes(1);
+    clock.advance(11 * 60_000);
+    await weatherService.cellForAt(cell);
+    expect(stale).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("export des données personnelles et état « en cours de chargement »", () => {
   it("l'export contient les villes choisies, jamais une position", async () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);

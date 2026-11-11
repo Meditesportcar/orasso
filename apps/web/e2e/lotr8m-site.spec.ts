@@ -77,6 +77,9 @@ const shot = async (page: Page, name: string) => {
 
 for (const width of [390, 1280]) {
   test(`${width} px : par défaut (T10), détail, Changer de lieu, Second lieu, Retirer ce lieu`, async ({ browser }) => {
+    // `PUT /me/weather/places` est limité à 10 par minute et par compte : la fenêtre de la série précédente doit être passée.
+    if (width === 1280) await new Promise((r) => setTimeout(r, 62_000));
+    await apiCall(cookie, "PUT", "/me/weather/places", { places: [] });
     const { ctx, page } = await openHome(browser, { width, theme: width === 390 ? "beton" : "sable" });
     const block = await weatherBlock(page, "Perpignan · ta ville");
     await expect(block).toContainText("Ma météo");

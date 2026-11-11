@@ -302,3 +302,41 @@ test("tour 2 : l'attribution du fournisseur est sur les cartes de l'Accueil", as
   await expect(block.getByTestId("my-weather-card-0-source")).toHaveText("Open-Meteo");
   await ctx.close();
 });
+
+test("tour 4 : stock vide, relecture réussie, réseau coupé, détail : la météo relue", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 384, height: 900 }, baseURL: APP });
+  await ctx.addInitScript(() => {
+    localStorage.setItem("orasso.onboarded", "1");
+    localStorage.setItem("orasso.theme", "beton");
+  });
+  let reads = 0;
+  await ctx.route("**/api/me/home*", async (route) => {
+    const res = await route.fetch();
+    if (!route.request().url().includes("blocks=app") || reads++ > 0) return route.fulfill({ response: res });
+    const json = (await res.json()) as Record<string, unknown>;
+    const mine = json.myWeather as { places: Record<string, unknown>[] };
+    const myWeather = { ...mine, pending: true, places: mine.places.map((pl) => ({ ...pl, weather: null })) };
+    return route.fulfill({ response: res, json: { ...json, myWeather } });
+  });
+  const page = await ctx.newPage();
+  await page.goto("/auth");
+  await afterOpening(page);
+  await page.getByLabel("E-mail").fill(EMAIL);
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil/, { timeout: 60_000 });
+  await page
+    .getByTestId("whatsnew-dismiss")
+    .click({ timeout: 4_000 })
+    .catch(() => undefined);
+  await expect(page.getByTestId("home-weather-pending")).toBeVisible({ timeout: 30_000 });
+  // La relecture unique amène la météo ; la copie du détail est écrite à partir de la valeur affichée.
+  await expect(page.getByTestId("home-weather")).toContainText(/Vent \d+\s*km\/h/, { timeout: 45_000 });
+  await page.waitForTimeout(1500);
+  await ctx.setOffline(true);
+  await page.getByTestId("my-weather-card-0").click();
+  await expect(page.getByTestId("meteo-now")).toBeVisible();
+  await expect(page.getByTestId("meteo-unavailable")).toHaveCount(0);
+  await ctx.setOffline(false);
+  await ctx.close();
+});
