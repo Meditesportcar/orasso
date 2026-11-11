@@ -8,12 +8,13 @@
 import { Directory, File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 
-import { accountGuard, cacheGetJson, cacheSetJson, kvKey, onCacheScopeDropped } from "./kv";
+import { accountGuard, cacheGetJson, cacheScope, cacheSetJson, kvKey, onCacheScopeDropped } from "./kv";
 
 const isWeb = Platform.OS === "web";
 const refKey = (key: string) => `copy.${key}`;
 const fileOf = (scope: string, key: string) => new File(Paths.document, `${kvKey(`copy.${scope}.${key}`)}.json`);
 const filePrefix = (scope: string) => kvKey(`copy.${scope}.`);
+const anyPrefix = kvKey("copy.");
 
 /** Ce que le cache du compte retient d'une copie : sa date, et la valeur elle-même seulement dans le navigateur. */
 type CopyRef = { savedAt: string; file?: true; value?: unknown };
@@ -32,17 +33,21 @@ function serialized<T>(id: string, task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** Fichiers de copie du compte, effacés à chaque purge de ce compte. */
+/**
+ * Fichiers de copie effacés à chaque purge : ceux du compte purgé, et tout fichier `copy.*` dont le compte n'est plus lié
+ * (un fichier orphelin laissé par une écriture tardive pendant un changement de compte).
+ */
 async function purgeCopyFiles(scope: string): Promise<void> {
   if (isWeb) return;
-  const mine = filePrefix(scope);
+  const linked = cacheScope();
+  const keep = linked && linked !== scope ? filePrefix(linked) : null;
   for (const entry of new Directory(Paths.document).list()) {
-    if ((entry.name ?? "").startsWith(mine)) {
-      try {
-        entry.delete();
-      } catch {
-        // Ignoré : voir l'en-tête.
-      }
+    const name = entry.name ?? "";
+    if (!name.startsWith(anyPrefix) || (keep && name.startsWith(keep))) continue;
+    try {
+      entry.delete();
+    } catch {
+      // Ignoré : voir l'en-tête.
     }
   }
 }
@@ -70,6 +75,8 @@ export async function saveCopy(
         return;
       }
       const file = fileOf(scope, key);
+      // Le compte peut avoir changé pendant l'attente : on vérifie juste avant d'écrire (pas de fichier orphelin).
+      if (!account.current()) return;
       if (!file.exists) file.create();
       file.write(JSON.stringify({ savedAt, value }));
       await cacheSetJson(refKey(key), { savedAt, file: true } satisfies CopyRef, scope);

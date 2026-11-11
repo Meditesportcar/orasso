@@ -45,6 +45,8 @@ function current(): Store | null {
     queue: createSeenQueue({
       now: () => Date.now(),
       send: async (batch) => {
+        // Le compte a changé pendant l'attente (A part, B arrive) : rien ne part avec le jeton de B.
+        if (cacheScope() !== scope) return "retry";
         try {
           await api.feedSeen(batch);
           return "ok";
@@ -63,6 +65,7 @@ async function restore(s: Store): Promise<void> {
   if (s.restored) return;
   s.restored = true;
   const saved = await readCopy<SeenEntry[]>(QUEUE_KEY);
+  if (saved) written = { scope: s.scope, key: JSON.stringify(saved.value) };
   if (saved && cacheScope() === s.scope && Array.isArray(saved.value)) s.queue.restore(saved.value);
 }
 
@@ -81,10 +84,16 @@ export async function flushSeen(): Promise<void> {
   await persist(s, done);
 }
 
+/** Dernière file écrite sur le téléphone, par compte : on n'écrit que ce qui a changé. */
+let written: { scope: string; key: string } | null = null;
+
 async function persist(s: Store, done: boolean): Promise<void> {
   const left = s.queue.snapshot();
-  if (done && left.length === 0) await saveCopy(QUEUE_KEY, []);
-  else await saveCopy(QUEUE_KEY, left);
+  const key = JSON.stringify(done && left.length === 0 ? [] : left);
+  if (written?.scope === s.scope && written.key === key) return;
+  // Écrit sous le compte de cette file, jamais sous celui qui est lié maintenant.
+  await saveCopy(QUEUE_KEY, JSON.parse(key), new Date(), { scope: s.scope, current: () => cacheScope() === s.scope });
+  written = { scope: s.scope, key };
 }
 
 /** Les cartes qu'on suit : jamais ma propre publication, jamais une carte déjà vue, jamais une forme d'identifiant inconnue. */
@@ -122,7 +131,7 @@ export function useSeenTracker(opts: {
     dwell.current = createSeenDwell();
   }, [reset]);
 
-  /** Appelé au début d'un toucher sur une carte (les touchers remontent de la carte à son enveloppe). */
+  /** Appelé à la fin d'un vrai toucher sur une carte (déplacement de moins de 10 px : un défilement n'ouvre rien). */
   const touch = useCallback((id: string) => {
     touched.current = { id, at: Date.now() };
   }, []);

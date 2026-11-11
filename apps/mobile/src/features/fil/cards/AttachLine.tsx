@@ -65,8 +65,8 @@ export function AttachSeeButton({ attach }: { attach: FeedAttachView }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: tokens.spacing.space2 },
-  // Au moins 44 px de haut pour le doigt, le texte reste sur ses lignes (jamais tronqué).
-  line: { flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 3, minHeight: 32 },
+  // 44 px de haut pour le doigt, le texte reste sur ses lignes (jamais tronqué).
+  line: { flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 3, minHeight: 44 },
   text: { flexShrink: 1, fontFamily: "Archivo-ExtraBold", fontSize: 12.5, lineHeight: 16 },
   stamp: {
     flexDirection: "row",

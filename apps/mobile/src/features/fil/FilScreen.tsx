@@ -146,6 +146,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   // Les cartes vues : suivies à l'écran, envoyées par lots ; un toucher puis la sortie du Fil = la carte a été ouverte.
   const listBox = useRef<View>(null);
   const layouts = useRef(new Map<string, { y: number; h: number }>());
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const { touch } = useSeenTracker({
     list: listBox,
     layouts,
@@ -337,7 +338,16 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 onLayout={(e) =>
                   layouts.current.set(card.id, { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })
                 }
-                onTouchStart={() => touch(card.id)}
+                onTouchStart={(e) => {
+                  touchStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+                }}
+                onTouchEnd={(e) => {
+                  const from = touchStart.current;
+                  touchStart.current = null;
+                  // Un vrai toucher (moins de 10 px de déplacement) : un défilement n'ouvre aucune carte.
+                  if (from && Math.hypot(e.nativeEvent.pageX - from.x, e.nativeEvent.pageY - from.y) < 10)
+                    touch(card.id);
+                }}
                 style={styles.item}
               >
                 {i === frontier ? (

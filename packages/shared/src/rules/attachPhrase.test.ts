@@ -34,10 +34,14 @@ describe("attachPhrase : l'accord du verbe avec le titre", () => {
     }
   });
 
-  it("voyelle ou « h » au début : élision, sans espace", () => {
+  it("voyelle : élision, sans espace ; « h » muet seulement pour des mots français connus ; « y » reste consonne", () => {
     expect(attachPhrase("organizer", "before", "Anciennes du port")).toBe("pour l'Anciennes du port");
     expect(attachPhrase("on_site", "before", "Open de Perpignan")).toBe("présent à l'Open de Perpignan");
     expect(attachPhrase("attendee", "after", "Hivernale de Font-Romeu")).toBe("était à l'Hivernale de Font-Romeu");
+    expect(attachPhrase("on_site", "before", "Historique de Céret")).toBe("présent à l'Historique de Céret");
+    expect(attachPhrase("on_site", "before", "Hot Rod Day")).toBe("présent au Hot Rod Day");
+    expect(attachPhrase("organizer", "before", "Harley Days")).toBe("pour le Harley Days");
+    expect(attachPhrase("on_site", "before", "Youngtimers")).toBe("présent au Youngtimers");
   });
 
   it("un titre qui commence par un article : l'article passe dans la préposition", () => {

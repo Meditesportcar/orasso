@@ -32,7 +32,10 @@ type Gender = "m" | "f" | "p" | "elided";
 /** Sans accents, en minuscules : « Montée » et « montee » sont le même mot. */
 const plain = (s: string): string => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-const VOWEL_OR_MUTE_H = /^[aeiouyh]/;
+/** Voyelle sonore (« y » n'en est pas une ici : « au Youngtimers »). */
+const VOWEL = /^[aeiou]/;
+/** « h » muet : seulement des mots français connus ; un titre anglais en « h » (« Hot Rod », « Harley Days ») reste au masculin. */
+export const MUTE_H_WORDS = ["hivernale", "historique", "historiques", "heure", "heures", "hommage"] as const;
 
 /** L'article que porte déjà le titre (« Le », « La », « Les », « L' »), et le reste du titre sans lui. */
 function leadingArticle(title: string): { gender: Gender; rest: string } | null {
@@ -48,7 +51,7 @@ function leadingArticle(title: string): { gender: Gender; rest: string } | null 
 function genderOf(title: string): Gender {
   const first = plain(title.split(/\s+/)[0] ?? "");
   if ((FEMININE_TITLE_WORDS as readonly string[]).includes(first)) return "f";
-  if (VOWEL_OR_MUTE_H.test(first)) return "elided";
+  if (VOWEL.test(first) || (MUTE_H_WORDS as readonly string[]).includes(first)) return "elided";
   return "m";
 }
 

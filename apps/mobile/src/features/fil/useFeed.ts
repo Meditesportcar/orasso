@@ -54,6 +54,20 @@ function useAppActive(): boolean {
   return active;
 }
 
+async function dropFromCopies(id: string): Promise<void> {
+  for (const f of feedFilters) {
+    const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(feedCopyKey(f));
+    const items = saved?.value.items;
+    if (saved && Array.isArray(items) && items.some((c) => c.id === id)) {
+      await saveCopy(
+        feedCopyKey(f),
+        { ...saved.value, items: items.filter((c) => c.id !== id) },
+        new Date(saved.savedAt),
+      );
+    }
+  }
+}
+
 export function useFeed() {
   const [filter, setFilterState] = useState<FeedFilter>("for_you");
   const [list, setList] = useState<FeedListState | null>(null);
@@ -320,6 +334,8 @@ export function useFeed() {
       setList((s) => (s ? { ...s, items: withoutPlacement(s.items, placementId) } : s)),
     drop: (id: string) => {
       forgetMyPublished(id);
+      // Une publication supprimée sort aussi des copies gardées sur l'appareil (elle ne revient pas hors ligne).
+      void dropFromCopies(id);
       setMine((m) => m.filter((c) => c.id !== id));
       setList((s) => (s ? { ...s, items: s.items.filter((c) => c.id !== id) } : s));
       setCopy((c) => (c ? { ...c, items: c.items.filter((x) => x.id !== id) } : c));
