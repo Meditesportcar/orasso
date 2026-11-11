@@ -270,8 +270,10 @@ describe("ma publication après l'envoi", () => {
     expect(mine.reason.label).toBe(L.publishedReason);
     const fromApi = { ...mine, reason: { code: "following_author", label: "Tu suis Moi" } } as FeedCard;
     const list = withMyPublished([card("a"), fromApi], [mine]);
-    expect(list.map((c) => c.id)).toEqual(["a", "feed_post:p1"]);
-    expect(list[1]?.reason.label).toBe("Tu suis Moi");
+    // Elle monte en tête (le bandeau « Publié » parle d'elle), avec les données de l'API mais la raison « Ta publication ».
+    expect(list.map((c) => c.id)).toEqual(["feed_post:p1", "a"]);
+    expect(list[0]?.reason.label).toBe(L.publishedReason);
+    expect(list.filter((c) => c.id === "feed_post:p1")).toHaveLength(1);
   });
   it("sans doublon dans la liste, en tête, et la liste de l'API n'est pas modifiée", () => {
     const items = [card("a"), card("b")];

@@ -503,11 +503,21 @@ export function justPublished(mine: readonly FeedCard[], now: number): FeedCard[
   });
 }
 
-/** La liste affichée : mes publications récentes en tête, puis la page de l'API, sans doublon (la carte de l'API l'emporte). */
+/**
+ * La liste affichée : mes publications juste envoyées **en tête** (R8c2), puis la page de l'API. Si l'API a rendu la même carte
+ * (même identifiant, ce que fait « Abonnements »), ses données sont gardées (compteurs, légende) mais la raison reste « Ta
+ * publication » (maquette R8.7 : l'API n'a pas de raison propre pour elle) ; la carte monte en tête, le bandeau « Publié sur
+ * ton profil » parle d'elle. Sans doublon.
+ */
 export function withMyPublished(items: readonly FeedCard[], mine: readonly FeedCard[]): FeedCard[] {
   if (!mine.length) return [...items];
-  const seen = new Set(items.map((c) => c.id));
-  return [...mine.filter((c) => !seen.has(c.id)), ...items];
+  const byId = new Map(items.map((c) => [c.id, c]));
+  const head = mine.map((c) => {
+    const api = byId.get(c.id);
+    return api ? ({ ...api, reason: c.reason } as FeedCard) : c;
+  });
+  const pinned = new Set(head.map((c) => c.id));
+  return [...head, ...items.filter((c) => !pinned.has(c.id))];
 }
 
 // --- Réessayer ----------------------------------------------------------------------------------------------------------
