@@ -22,6 +22,9 @@ describe("mentions : mots lus", () => {
     expect(first("Salut @Kenji_66 et @wrap-66, @KENJI_66 ! mail a@b.fr @-")).toEqual(["kenji_66", "wrap-66"]);
     expect(first(null)).toEqual([]);
   });
+  it("un pseudo fait de points (3 à 24, admis par pseudoSchema) reste mentionnable ; `@.` et `@..` ne le sont pas", () => {
+    expect(mentionedCandidates("Merci @... ! et @. et @..")).toEqual([["...", "..", "."]]);
+  });
   it("borne le nombre de mots", () => {
     const caption = Array.from({ length: 60 }, (_, i) => `@mot${i}`).join(" ");
     expect(first(caption)).toHaveLength(MENTION_WORDS_MAX);

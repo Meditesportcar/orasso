@@ -34,8 +34,9 @@ export function mentionedCandidates(caption: string | null | undefined): string[
       word = word.slice(0, -1);
     }
     const first = candidates[0];
-    // Un mot fait de ponctuation seule (`@-`, `@.`) n'est pas une mention.
-    if (!first || /^[.-]+$/.test(first) || seen.has(first)) continue;
+    // Un mot fait de ponctuation seule (`@-`, `@.`) n'est pas une mention, sauf s'il peut être un pseudo : `pseudoSchema`
+    // admet de 3 à 24 points (`@...`).
+    if (!first || (/^[.-]+$/.test(first) && !/^\.{3,24}$/.test(first)) || seen.has(first)) continue;
     seen.add(first);
     out.push(candidates);
     if (out.length >= MENTION_WORDS_MAX) break;
