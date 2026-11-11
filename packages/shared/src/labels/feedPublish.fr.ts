@@ -82,6 +82,8 @@ export const feedPublishLabels = {
   uncertainUnchecked: "Impossible de vérifier l'envoi pour l'instant : réessaie dans un instant.",
   accountChanged: "Ta session a changé dans un autre onglet : recharge la page avant de publier.",
   sessionLost: "Ta session a expiré : reconnecte-toi, ta publication en cours est gardée.",
+  uncertainPhotos: (n: number) =>
+    `${n} photo${n > 1 ? "s" : ""} déjà envoyée${n > 1 ? "s" : ""} : ${n > 1 ? "elles repartent" : "elle repart"} avec « Réessayer ». Si tu modifies ta publication, ajoute-${n > 1 ? "les" : "la"} de nouveau.`,
   uncertainFound: "Ta publication est en ligne.",
   attachRetry: "Réessayer",
   securityLink: "Ouvrir la sécurité du compte",

@@ -404,44 +404,93 @@ export function accountCheckOf(
 }
 
 /** Le stockage de l'onglet (`sessionStorage`) ou tout ce qui y ressemble. */
-export type PublishStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type PublishStore = Pick<Storage, "getItem" | "setItem" | "removeItem" | "length" | "key">;
 
-const UNCERTAIN_KEY = "orasso:fil:publish-uncertain";
-type StoredUncertain = { account: string; body: { clientId: string } & Record<string, unknown> };
+/** Une clé **par compte** : l'envoi incertain de A n'est jamais touché par B (A → B → A le retrouve). */
+const UNCERTAIN_PREFIX = "orasso:fil:publish-uncertain:";
+const uncertainKey = (account: string) => `${UNCERTAIN_PREFIX}${account}`;
+export type UncertainBody = { clientId: string } & Record<string, unknown>;
 
-/** Garde le corps d'un envoi incertain pour ce compte (un seul à la fois). */
+/** Garde le corps d'un envoi incertain pour ce compte (un seul par compte). */
 export function saveUncertain(store: PublishStore | null, account: string, body: { clientId: string }): void {
   try {
-    store?.setItem(UNCERTAIN_KEY, JSON.stringify({ account, body } satisfies StoredUncertain));
+    store?.setItem(uncertainKey(account), JSON.stringify(body));
   } catch {
     // Stockage refusé : l'envoi reste incertain tant que la page est ouverte.
   }
 }
 
-/** Le corps incertain de ce compte ; jamais celui d'un autre (il est alors écarté), `null` sinon. */
-export function loadUncertain(
-  store: PublishStore | null,
-  account: string,
-): ({ clientId: string } & Record<string, unknown>) | null {
+/** Le corps incertain de ce compte, ou `null` (jamais celui d'un autre : il vit sous une autre clé). */
+export function loadUncertain(store: PublishStore | null, account: string): UncertainBody | null {
   try {
-    const raw = store?.getItem(UNCERTAIN_KEY);
+    const raw = store?.getItem(uncertainKey(account));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredUncertain>;
-    if (parsed.account !== account || typeof parsed.body?.clientId !== "string") {
-      if (parsed.account !== account) store?.removeItem(UNCERTAIN_KEY);
-      return null;
-    }
-    return parsed.body;
+    const parsed = JSON.parse(raw) as Partial<UncertainBody> | null;
+    return parsed && typeof parsed.clientId === "string" ? (parsed as UncertainBody) : null;
   } catch {
     return null;
   }
 }
 
-/** Efface le corps incertain (envoi confirmé, ou abandon vérifié). */
-export function clearUncertain(store: PublishStore | null): void {
+/** Efface le corps incertain **de ce compte** (envoi confirmé, ou abandon vérifié) : jamais celui d'un autre. */
+export function clearUncertain(store: PublishStore | null, account: string): void {
   try {
-    store?.removeItem(UNCERTAIN_KEY);
+    store?.removeItem(uncertainKey(account));
   } catch {
     // Rien à effacer.
   }
+}
+
+/** Déconnexion : tous les envois incertains gardés par l'onglet s'effacent, quel que soit le compte. */
+export function purgeUncertain(store: PublishStore | null): void {
+  try {
+    if (!store) return;
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key?.startsWith(UNCERTAIN_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) store.removeItem(key);
+  } catch {
+    // Rien à effacer.
+  }
+}
+
+/**
+ * Le brouillon affichable d'un envoi incertain repris après un rechargement : la casquette, l'événement, le véhicule, le lieu,
+ * « Info importante », la légende et le format du corps gardé. Les photos (fichiers de l'appareil) ne se restaurent pas : on dit
+ * seulement combien étaient parties.
+ */
+export function draftFromBody(
+  body: Record<string, unknown>,
+  authors: readonly PublishAuthor[],
+): {
+  choice: PublishChoice;
+  caption: string;
+  aspect: FeedAspect | null;
+  photoCount: number;
+} {
+  const persona = typeof body.persona === "string" ? body.persona : "fan";
+  const author =
+    authors.find(
+      (a) =>
+        a.persona === persona &&
+        (persona !== "organizer" || a.structureId === body.structureId) &&
+        (persona !== "pro" || a.proId === body.proId),
+    ) ?? authors[0];
+  const important = body.important as { reason?: ImportantReason } | undefined;
+  const aspects: readonly string[] = ["portrait_4_5", "square", "landscape"];
+  return {
+    choice: {
+      authorKey: author?.key ?? "me",
+      eventId: typeof body.eventId === "string" ? body.eventId : null,
+      vehicleId: typeof body.vehicleId === "string" ? body.vehicleId : null,
+      placeLabel: typeof body.placeLabel === "string" ? body.placeLabel : "",
+      importantOn: Boolean(important?.reason),
+      importantReason: important?.reason ?? null,
+    },
+    caption: typeof body.caption === "string" ? body.caption : "",
+    aspect: typeof body.aspect === "string" && aspects.includes(body.aspect) ? (body.aspect as FeedAspect) : null,
+    photoCount: Array.isArray(body.photos) ? body.photos.length : 0,
+  };
 }
