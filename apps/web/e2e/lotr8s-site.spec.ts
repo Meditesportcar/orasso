@@ -61,8 +61,8 @@ test("la barre ouvre l'auteur avec ?suite=barre ; lecture enchaînée, fermeture
 }) => {
   test.setTimeout(300_000);
   await resetViews();
-  const authors = await bar();
-  const unseen = authors.filter((a) => a.hasUnseen);
+  let authors = await bar();
+  let unseen = authors.filter((a) => a.hasUnseen);
   expect(unseen.length).toBeGreaterThanOrEqual(3);
   expect(authors[0]?.pseudoOrName).toBe("Roues Libres 66");
   await signedIn(page, "beton", 1280, 800);
@@ -81,6 +81,9 @@ test("la barre ouvre l'auteur avec ?suite=barre ; lecture enchaînée, fermeture
       { timeout: 30_000 },
     )
     .toBe(true);
+  // Toutes les attentes suivantes viennent de la réponse du serveur qui a alimenté la barre affichée (relue après l'accord).
+  authors = await bar();
+  unseen = authors.filter((a) => a.hasUnseen);
   await shot(page, "barre-1280");
   await page.getByLabel(new RegExp(`Voir les stories de ${unseen[0]?.pseudoOrName}`)).click();
   await expect(page).toHaveURL(/\/app\/story\/.*suite=barre/);
