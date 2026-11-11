@@ -98,7 +98,9 @@ export function ProfilScreen() {
   const hasGarage = persona.kind !== "visitor" || hasArchived;
   // Visiteur dont les véhicules ne sont pas encore lus : on ne sait pas s'il a l'onglet « Garage » (véhicules archivés) ; le panneau
   // attend la lecture au lieu d'ouvrir « Sorties » puis de basculer sur « Garage ».
-  const garageUnknown = persona.kind === "visitor" && base && vehicles.data === null && !vehicles.error;
+  // Seul l'onglet « Garage » attend : « Sorties » (saison, passeport) ne dépend pas des véhicules et s'ouvre tout de suite.
+  const garageUnknown =
+    persona.kind === "visitor" && base && vehicles.data === null && !vehicles.error && tab === "garage";
   const shownTab = visibleProfileTab(tab, hasGarage);
 
   const profile = me?.profile;
@@ -274,7 +276,11 @@ export function ProfilScreen() {
             />
           </StickyHeader>
           {garageUnknown ? (
-            <View style={styles.panel} testID="profil-tab-pending" />
+            <View style={styles.panel} testID="profil-tab-pending">
+              <Text variant="caption" color={t.color.inkMuted}>
+                {PT.garageLoading}
+              </Text>
+            </View>
           ) : shownTab === "garage" ? (
             <GarageScreen vehicles={vehicles} round={round} />
           ) : (
