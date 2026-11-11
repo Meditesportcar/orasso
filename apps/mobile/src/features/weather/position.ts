@@ -8,13 +8,17 @@ import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { api } from "@/lib/api";
-import { cacheScope } from "@/lib/kv";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 
 const store = createPositionStore({
   scope: cacheScope,
   now: () => Date.now(),
   weatherAt: (position) => api.weatherAt(position),
 });
+
+// Chaque fin de session (déconnexion, autre compte) invalide les demandes en cours, même sans position gardée :
+// A → déconnexion → A pendant l'attente du GPS ne ramène pas l'ancienne demande.
+onCacheScopeDropped(async () => store.forget());
 
 export type WeatherPosition = { at: ReturnType<typeof store.view>["at"]; busy: boolean };
 

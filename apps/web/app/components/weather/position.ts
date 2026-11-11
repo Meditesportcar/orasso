@@ -21,7 +21,13 @@ const store = createPositionStore({
 });
 
 if (typeof window !== "undefined") {
-  listenSession(() => store.purgeForeign());
+  // Chaque transition de session invalide les demandes en cours, même sans position gardée (A → aucun → A pendant le GPS).
+  let seen: string | null = currentSession();
+  listenSession((userId) => {
+    if (userId !== seen) store.forget();
+    seen = userId;
+    store.purgeForeign();
+  });
 }
 
 const EMPTY = { at: null, busy: false } as const;

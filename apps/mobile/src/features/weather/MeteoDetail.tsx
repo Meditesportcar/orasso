@@ -162,17 +162,18 @@ export function MeteoDetail() {
   );
   // Retour de l'appli au premier plan : lieux et position relus, au plus toutes les dix minutes (mêmes bornes que l'Accueil).
   const lastReload = useRef(Date.now());
+  const reloadPlaces = places.reload;
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
       void refreshMyPosition();
       if (Date.now() - lastReload.current >= POSITION_REFRESH_MS) {
         lastReload.current = Date.now();
-        void places.reload();
+        void reloadPlaces();
       }
     });
     return () => sub.remove();
-  }, [places]);
+  }, [reloadPlaces]);
   const [sheet, setSheet] = useState<"change" | "add" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

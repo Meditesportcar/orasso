@@ -557,7 +557,7 @@ export const weatherService = {
    * case à la fois ; fournisseur indisponible : l'ancienne prévision, sinon `null`. Au fournisseur ne part que la case.
    * `force` : la tâche planifiée (ignore l'âge du cache).
    */
-  async cellForecast(cell: WeatherCell, force = false) {
+  async cellForecast(cell: WeatherCell, force = false, onCall?: () => void) {
     const cached = await db.query.weatherPlacesCache.findFirst({ where: eq(weatherPlacesCache.cell, cell.key) });
     if (!force && cached && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
     const failedAt = cellFailures.get(cell.key);
@@ -565,6 +565,8 @@ export const weatherService = {
     let flight = cellFlights.get(cell.key);
     if (!flight) {
       flight = (async () => {
+        // Seul un appel réellement parti au fournisseur compte pour le plafond horaire.
+        if (weatherEnabled()) onCall?.();
         const result = await fetchForecast(cell.lat, cell.lng);
         if (!result) {
           if (weatherEnabled()) cellFailures.set(cell.key, now().getTime());
@@ -583,6 +585,8 @@ export const weatherService = {
           .values(values)
           .onConflictDoUpdate({ target: weatherPlacesCache.cell, set: values })
           .returning();
+        // Réponse reçue mais inexploitable (ni aujourd'hui ni l'heure en cours) : pas redemandée avant 10 minutes.
+        if (saved && this.placeWeather(saved) === null) cellFailures.set(cell.key, now().getTime());
         return saved ?? null;
       })().finally(() => cellFlights.delete(cell.key));
       cellFlights.set(cell.key, flight);
@@ -705,15 +709,17 @@ export const weatherService = {
     // ligne périmée (équivalent de `needToday`).
     const usable = cached ? this.placeWeather(cached) !== null : false;
     if (cached && fresh && usable) return cached;
+    // Retenue après échec (ou réponse inexploitable) : ni budget ni appel.
     const failedAt = cellFailures.get(cell.key);
-    if (cached && fresh && failedAt !== undefined && t - failedAt < DEPARTMENT_RETRY_MS) return cached;
+    if (failedAt !== undefined && t - failedAt < DEPARTMENT_RETRY_MS) return cached ?? null;
+    // Regroupement : une demande déjà en vol pour cette case n'entame pas le budget.
+    if (cellFlights.has(cell.key)) return this.cellForecast(cell, fresh).catch(() => null);
     while (atFetches.length > 0 && (atFetches[0] ?? 0) <= t - HOUR) atFetches.shift();
-    if (atFetches.length >= AT_NEW_CELLS_PER_HOUR && !cellFlights.has(cell.key)) {
+    if (atFetches.length >= AT_NEW_CELLS_PER_HOUR) {
       const near = await this.nearestCell(cell);
       return near ?? cached ?? null;
     }
-    if (!cellFlights.has(cell.key)) atFetches.push(t);
-    return this.cellForecast(cell, fresh).catch(() => null);
+    return this.cellForecast(cell, fresh, () => atFetches.push(now().getTime())).catch(() => null);
   },
 
   /** La case fraîche du stock la plus proche (à `NEAREST_CELL_DEG` au plus), ou `null`. */

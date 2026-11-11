@@ -119,6 +119,27 @@ describe("position en mémoire de « Ma météo »", () => {
     expect(t.calls()).toBe(0);
   });
 
+  it("A → déconnexion → A pendant l'attente du GPS puis du réseau : l'ancien ticket est invalidé", async () => {
+    const t = setup();
+    // Attente du GPS : la session passe par « aucune » puis revient sur A ; la transition invalide les tickets.
+    const gps = t.store.begin();
+    t.setScope(null);
+    t.store.forget();
+    t.setScope("A");
+    expect(gps && t.store.valid(gps)).toBe(false);
+    expect(await t.store.give(here, gps)).toBe(false);
+    expect(t.calls()).toBe(0);
+    // Attente du réseau.
+    const net = t.store.begin();
+    const p = t.store.give(here, net);
+    t.setScope(null);
+    t.store.forget();
+    t.setScope("A");
+    t.pending[0]?.resolve(at("Canet"));
+    expect(await p).toBe(false);
+    expect(t.store.view().at).toBeNull();
+  });
+
   it("une relecture en échec garde la dernière météo", async () => {
     const t = setup();
     const g = t.store.give(here);

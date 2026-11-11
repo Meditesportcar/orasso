@@ -129,8 +129,9 @@ export function MyWeatherBlock({ myWeather }: { myWeather: MyWeatherPlaces | nul
   }, [waiting]);
   // Le détail, ouvert hors ligne, part de cette copie de l'Accueil.
   useEffect(() => {
-    if (myWeather && myWeather.places.some((p) => p.weather))
-      void cacheSetJson("my-weather-places", places ?? myWeather);
+    // La valeur AFFICHÉE (relecture comprise), et la condition porte sur elle.
+    const shown = places ?? myWeather;
+    if (shown?.places.some((p) => p.weather)) void cacheSetJson("my-weather-places", shown);
   }, [myWeather, places]);
   if (!myWeather || !places) return null;
   const cards = weatherCards(places.places, at);
