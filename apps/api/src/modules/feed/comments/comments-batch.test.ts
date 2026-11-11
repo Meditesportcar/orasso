@@ -200,7 +200,8 @@ describe("pastille et acteurs", () => {
     await comment(y, id, "Réponse de Y", { parentId: top.json.id });
     await notificationsService.deliverDue();
     const before = (await notificationsService.list(lea.id, 20)).items[0];
-    expect((before?.data as { actors: { pseudo: string }[] }).actors.map((a) => a.pseudo).sort()).toEqual([
+    if (!before) throw new Error("aucune ligne dans le Journal");
+    expect((before.data as { actors: { pseudo: string }[] }).actors.map((a) => a.pseudo).sort()).toEqual([
       "Xavier_66",
       "Yann_66",
     ]);
