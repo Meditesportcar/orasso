@@ -130,7 +130,7 @@ export function PracticalBlock() {
           ))}
         </div>
       )}
-      {city ? (
+      {active === "me" ? (
         <div className="pq-gps">
           <Button
             type="button"
@@ -140,7 +140,7 @@ export function PracticalBlock() {
             onClick={() => void askPracticalPosition(false)}
             data-testid="practical-use-position"
           >
-            {L.usePosition}
+            {sources.me.onPosition ? L.relocate : L.usePosition}
           </Button>
         </div>
       ) : null}

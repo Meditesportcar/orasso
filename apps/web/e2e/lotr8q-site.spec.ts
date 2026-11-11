@@ -118,7 +118,7 @@ test("position accordée : jamais dans une adresse ni dans le stockage, les sour
   page.on("request", (r) => requests.push({ url: r.url(), body: r.postData() }));
   const b = await block(page);
   await b.getByTestId("practical-use-position").click();
-  await expect(b.getByTestId("practical-use-position")).toHaveCount(0, { timeout: 20_000 });
+  await expect(b.getByTestId("practical-use-position")).toContainText("Me relocaliser", { timeout: 20_000 });
   await expect(b.getByTestId("practical-hint")).toHaveCount(0);
   await expect(b.getByTestId("practical-fuel")).toContainText(/ · \d+,\d\skm/);
   const at = requests.find((r) => r.url.includes("/api/practical") && JSON.parse(r.body ?? "{}").near === "position");
@@ -238,3 +238,43 @@ for (const width of [390, 1280]) {
     await ctx.close();
   });
 }
+
+test("tour 2 : deux positions dans la même séance, « Me relocaliser »", async ({ browser }) => {
+  const { ctx, page } = await openHome(browser, { geo: true });
+  const posted: { lat: number; lng: number }[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/practical") && r.method() === "POST") {
+      const body = JSON.parse(r.postData() ?? "{}");
+      if (body.near === "position") posted.push({ lat: body.lat, lng: body.lng });
+    }
+  });
+  const b = await block(page);
+  await b.getByTestId("practical-use-position").click();
+  await expect(b.getByTestId("practical-use-position")).toContainText("Me relocaliser", { timeout: 20_000 });
+  await ctx.setGeolocation({ latitude: 42.552, longitude: 3.031 });
+  await b.getByTestId("practical-use-position").click();
+  await expect.poll(() => posted.at(-1)?.lat, { timeout: 20_000 }).toBe(42.6);
+  expect(posted.at(0)).toEqual({ lat: 42.7, lng: 2.9 });
+  await ctx.close();
+});
+
+test("tour 2 : A lance une lecture, B se connecte : rien de A n'apparaît sous B", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await ctx.newPage();
+  // La réponse du compte A est retardée de quelques secondes.
+  await ctx.route(/\/api\/practical/, async (route) => {
+    await new Promise((r) => setTimeout(r, 4000));
+    await route.continue();
+  });
+  await loginInBrowser(page, WITH_OUTING, undefined, "/app");
+  await page.goto("/app");
+  await ctx.clearCookies();
+  await loginInBrowser(page, NO_OUTING, undefined, "/app");
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
+  const b = page.getByTestId("widget-practical");
+  await expect(b.getByTestId("practical-fuel")).toBeVisible({ timeout: 40_000 });
+  // Compte B : pas de sélecteur « Près de ma sortie » (la sortie de A ne lui appartient pas).
+  await expect(b.getByTestId("practical-choice")).toHaveCount(0);
+  await ctx.close();
+});

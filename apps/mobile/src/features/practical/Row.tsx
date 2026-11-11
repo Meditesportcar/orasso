@@ -9,7 +9,7 @@ import { openMaps, openWaze } from "@/lib/directions";
 import { AppSheet } from "@/ui/AppSheet";
 import { SmButton } from "@/ui/Kit";
 
-export const kindIcon: Record<PracticalKind, IconName> = { fuel: "power", wash: "drop" };
+export const kindIcon: Record<PracticalKind, IconName> = { fuel: "fuel", wash: "drop" };
 
 /** Une destination : un lieu (titre et coordonnées). */
 export type GoTarget = { title: string; lat: number; lng: number };

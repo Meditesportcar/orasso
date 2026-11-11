@@ -72,7 +72,7 @@ export async function askPracticalPosition(silent = false): Promise<boolean> {
       ? await Location.getForegroundPermissionsAsync()
       : await Location.requestForegroundPermissionsAsync();
     if (permission.status !== "granted" || !store.valid(ticket)) return false;
-    const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, maximumAge: 0 });
     if (!store.valid(ticket)) return false;
     const ok = await give({ lat: fix.coords.latitude, lng: fix.coords.longitude }, ticket);
     // La météo suit : la même position, la même séance (elle arrondit et garde la sienne).
@@ -94,20 +94,20 @@ export const forgetPracticalPosition = () => store.forget();
 export const PARTIAL_RETRY_MS = PRACTICAL_PARTIAL_RETRY_MS;
 
 /**
- * La position donnée à « Ma météo » est reprise ici une seule fois par position, sans nouvelle fenêtre : l'écran s'y accroche
- * (`useFollowWeatherPosition`).
+ * Lot R8q, tour 2 : « Pratique » suit « Ma météo ». Chaque nouvelle position donnée à la météo est reprise ici une seule fois, sans nouvelle
+ * fenêtre (permission déjà accordée) : une deuxième position dans la même séance remplace la première des deux côtés.
  */
 export function useFollowWeatherPosition(): void {
   const weather = useWeatherPosition();
   const mine = usePracticalPosition();
-  const weatherAt = weather.at;
-  const gap = weatherAt !== null && mine.at === null && !mine.busy;
-  const tried = useRef<unknown>(null);
+  const weatherKey = weather.at ? `${weather.at.label}|${weather.at.weather?.fetchedAt ?? ""}` : null;
+  const tried = useRef<string | null>(null);
+  const busy = mine.busy;
   useEffect(() => {
     // Une tentative par position de la météo : un échec ne relance pas en boucle.
-    if (gap && tried.current !== weatherAt) {
-      tried.current = weatherAt;
+    if (weatherKey && !busy && tried.current !== weatherKey) {
+      tried.current = weatherKey;
       void askPracticalPosition(true);
     }
-  }, [weatherAt, gap]);
+  }, [weatherKey, busy]);
 }

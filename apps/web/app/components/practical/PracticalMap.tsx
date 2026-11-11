@@ -78,7 +78,7 @@ export function PracticalMap({
         el.setAttribute("aria-label", p.title);
         el.setAttribute("aria-pressed", String(p.id === selectedRef.current));
         el.dataset.testid = `practical-pin-${p.id}`;
-        el.append(svgIcon(p.kind === "fuel" ? "power" : "drop"));
+        el.append(svgIcon(p.kind === "fuel" ? "fuel" : "drop"));
         el.addEventListener("click", (e) => {
           e.stopPropagation();
           onSelectRef.current(p.id);

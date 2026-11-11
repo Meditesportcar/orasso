@@ -410,3 +410,59 @@ describe("rien ne change pour l'APK en ligne", () => {
     expect(stub.calls).toHaveLength(0);
   });
 });
+
+describe("POST /practical : Overpass un appel à la fois, cache toléré en repli", () => {
+  it("quatre demandes simultanées de régions différentes : jamais deux appels Overpass en même temps", async () => {
+    const stub = practicalSources({}, { delayMs: 40 });
+    const users = await Promise.all([fan("Fan_O1"), fan("Fan_O2"), fan("Fan_O3"), fan("Fan_O4")]);
+    const cells = [
+      { lat: 42.7, lng: 2.9 },
+      { lat: 43.6, lng: 1.4 },
+      { lat: 45.8, lng: 4.8 },
+      { lat: 48.9, lng: 2.3 },
+    ];
+    await Promise.all(users.map((u, i) => call(u, "POST", "/practical", { near: "position", ...cells[i] })));
+    expect(stub.count("wash")).toBeGreaterThanOrEqual(6);
+    expect(stub.maxWashInFlight()).toBe(1);
+  });
+
+  it("source lente avec un cache périmé tolérable : le cache est servi et la réponse est partielle", async () => {
+    const departments = nearestDepartments(PERPIGNAN);
+    const old = new Date(NOW.getTime() - 2 * DAY);
+    for (const d of departments) {
+      await db.insert(externalCache).values([
+        {
+          key: `wash:${d}`,
+          fetchedAt: new Date(NOW.getTime() - HOUR),
+          data: d === "66" ? [{ name: "Lavage du cache", address: null, lat: 42.71, lng: 2.9 }] : [],
+        },
+        {
+          key: `fuel:${d}`,
+          fetchedAt: old,
+          data:
+            d === "66"
+              ? [
+                  {
+                    name: "Station-service",
+                    address: "Route du cache, 66000 Perpignan",
+                    lat: 42.7,
+                    lng: 2.9,
+                    prices: {},
+                    updatedAt: null,
+                  },
+                ]
+              : [],
+        },
+      ]);
+    }
+    practicalSources({}, { hang: ["fuel"] });
+    const u = await fan("Fan_Cache");
+    const res = await practicalService.get(
+      await viewerOf(u),
+      { near: "position", cell: { lat: 42.7, lng: 2.9, key: "42.7,2.9" } },
+      60,
+    );
+    expect(res.partial).toBe(true);
+    expect(res.places.map((p) => p.name).sort()).toEqual(["Lavage du cache", "Station-service"]);
+  });
+});

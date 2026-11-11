@@ -143,7 +143,7 @@ export function PracticalScreen() {
           </Text>
         </View>
       ) : null}
-      {read.offline && data ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
+      {read.offline && data ? <Notice>{L.offline}</Notice> : null}
 
       {!data ? (
         <Text variant="caption" color={c.inkMuted} testID="practical-state">
@@ -194,7 +194,7 @@ export function PracticalScreen() {
           ))}
         </View>
       )}
-      {active === "me" && !onPosition && data ? (
+      {active === "me" && data ? (
         <View style={styles.gps}>
           <SmButton
             kind="s"
@@ -203,7 +203,7 @@ export function PracticalScreen() {
             onPress={() => void giveMyPosition()}
             testID="practical-use-position"
           >
-            {L.usePosition}
+            {onPosition ? L.relocate : L.usePosition}
           </SmButton>
         </View>
       ) : null}

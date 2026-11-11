@@ -122,7 +122,7 @@ export function PracticalBlock() {
           ))}
         </View>
       )}
-      {active === "me" && !sources.me.onPosition ? (
+      {active === "me" ? (
         <View style={styles.gps}>
           <SmButton
             kind="s"
@@ -131,7 +131,7 @@ export function PracticalBlock() {
             onPress={() => void giveMyPosition()}
             testID="practical-use-position"
           >
-            {L.usePosition}
+            {sources.me.onPosition ? L.relocate : L.usePosition}
           </SmButton>
         </View>
       ) : null}

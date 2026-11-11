@@ -62,6 +62,22 @@ export function overpassQuery(department: string): string {
   return `[out:json][timeout:60];area["ISO3166-2"="FR-${department}"]->.a;(node["amenity"="car_wash"](area.a);way["amenity"="car_wash"](area.a););out center tags ${PLACES_CACHE_LIMIT};`;
 }
 
+/**
+ * Lot R8q : l'instance publique d'Overpass n'admet qu'un appel à la fois (sinon 429, puis blocage de l'adresse) : tous les appels de
+ * l'API passent par cette file, quels que soient le département et l'appelant. Un appel qui échoue ne bloque pas les suivants.
+ */
+let overpassQueue: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
+  const run = overpassQueue.then(task, task);
+  overpassQueue = run.catch(() => undefined);
+  return run;
+}
+
+/** Tests : une file bloquée par un appel qui ne répond jamais est vidée (en production, le délai de 20 s la libère). */
+export function resetOverpassQueue(): void {
+  overpassQueue = Promise.resolve();
+}
+
 /** Stations de lavage de tout un département (cache 7 jours), `[]` si la source ne répond pas. */
 export async function washNear(department: string): Promise<CachedPlace[]> {
   const centre = departmentCentroids[department];
@@ -71,17 +87,18 @@ export async function washNear(department: string): Promise<CachedPlace[]> {
     ttlMs: WASH_TTL_MS,
     enabled: env.OVERPASS_URL !== "off",
     maxStaleMs: WASH_MAX_STALE_MS,
-    load: async () => {
-      const res = await externalRequest(env.OVERPASS_URL, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ data: overpassQuery(department) }),
-      });
-      const json = await readBoundedJson(res);
-      // Réponse sans liste (service en surcharge, message d'erreur en 200) : un échec, pas une liste vide mise en cache.
-      if (!Array.isArray((json as { elements?: unknown })?.elements)) return null;
-      return parseOverpass(json, centre);
-    },
+    load: () =>
+      oneAtATime(async () => {
+        const res = await externalRequest(env.OVERPASS_URL, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ data: overpassQuery(department) }),
+        });
+        const json = await readBoundedJson(res);
+        // Réponse sans liste (service en surcharge, message d'erreur en 200) : un échec, pas une liste vide mise en cache.
+        if (!Array.isArray((json as { elements?: unknown })?.elements)) return null;
+        return parseOverpass(json, centre);
+      }),
   });
   return data ?? [];
 }

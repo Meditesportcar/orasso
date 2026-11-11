@@ -34,9 +34,9 @@ const stub = async (): Promise<Stub> => (await fetch(`${STUB}/__stub`)).json() a
 
 async function open(
   browser: Browser,
-  opts: { scale?: number; theme?: string; width?: number; geo?: boolean; email?: string } = {},
+  opts: { scale?: number; theme?: string; width?: number; geo?: boolean; email?: string; offline?: boolean } = {},
 ) {
-  const { scale = 1, theme = "beton", width = 384, geo = false, email = NO_OUTING } = opts;
+  const { scale = 1, theme = "beton", width = 384, geo = false, email = NO_OUTING, offline = false } = opts;
   const ctx = await browser.newContext({
     viewport: { width, height: 900 },
     baseURL: APP,
@@ -44,6 +44,8 @@ async function open(
   });
   // Le fond de carte (tuiles d'OpenFreeMap, d'OpenStreetMap) ne sort jamais en recette : les épingles sont du DOM.
   await ctx.route(/(openfreemap|openstreetmap)\.org/, (route) => route.abort());
+  // Réseau absent pour « Pratique » au départ (tour 2) : la lecture échoue, puis reprend quand on la rétablit.
+  if (offline) await ctx.route(/\/api\/practical/, (route) => route.abort());
   await ctx.addInitScript(
     ([t, s]) => {
       localStorage.setItem("orasso.onboarded", "1");
@@ -151,7 +153,7 @@ test("position accordée : jamais dans une adresse ni dans le stockage, les sour
   page.on("request", (r) => requests.push({ url: r.url(), body: r.postData() }));
   const block = await blockReady(page);
   await block.getByTestId("practical-use-position").click();
-  await expect(block.getByTestId("practical-use-position")).toHaveCount(0, { timeout: 20_000 });
+  await expect(block.getByTestId("practical-use-position")).toContainText("Me relocaliser", { timeout: 20_000 });
   await expect(block.getByTestId("practical-hint")).toHaveCount(0);
   await expect(block.getByTestId("practical-fuel")).toContainText(/ · \d+,\d\skm/);
   const at = requests.find((r) => r.url.includes("/api/practical") && JSON.parse(r.body ?? "{}").near === "position");
@@ -337,6 +339,37 @@ test("hors ligne : la dernière réponse de la séance, jamais une donnée fauss
   await expect(page.getByTestId("home-practical")).toContainText("Station-service la plus proche");
   await shot(page, "appli-hors-ligne-beton-384");
   await ctx.setOffline(false);
+  await ctx.close();
+});
+
+test("tour 2 : deux positions dans la même séance, « Me relocaliser » ; la seconde remplace la première", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, { geo: true });
+  const posted: { lat: number; lng: number }[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/practical") && r.method() === "POST") {
+      const body = JSON.parse(r.postData() ?? "{}");
+      if (body.near === "position") posted.push({ lat: body.lat, lng: body.lng });
+    }
+  });
+  const block = await blockReady(page);
+  await block.getByTestId("practical-use-position").click();
+  await expect(block.getByTestId("practical-use-position")).toContainText("Me relocaliser", { timeout: 20_000 });
+  expect(posted.at(0)).toEqual({ lat: 42.7, lng: 2.9 });
+  await ctx.setGeolocation({ latitude: 42.552, longitude: 3.031 });
+  await block.getByTestId("practical-use-position").click();
+  await expect.poll(() => posted.some((p) => p.lat === 42.6 || p.lat === 42.5)).toBe(true);
+  expect(posted.at(-1)).toEqual({ lat: 42.6, lng: 3 });
+  await expect(block.getByTestId("practical-use-position")).toContainText("Me relocaliser");
+  await ctx.close();
+});
+
+test("tour 2 : premier échec réseau, puis reprise sans quitter l'Accueil", async ({ browser }) => {
+  const { ctx, page } = await open(browser, { offline: true });
+  await expect(page.getByTestId("home-practical").getByTestId("practical-fuel")).toHaveCount(0);
+  await ctx.unroute(/\/api\/practical/);
+  await expect(page.getByTestId("home-practical").getByTestId("practical-fuel")).toBeVisible({ timeout: 40_000 });
   await ctx.close();
 });
 

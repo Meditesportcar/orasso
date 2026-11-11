@@ -3,9 +3,16 @@
 // affiché : il n'est pas dans `GET /me/home`). Rien n'est écrit sur le téléphone : la dernière réponse de la séance reste en mémoire
 // (hors ligne, le bloc n'affiche rien de faux : cette réponse, sinon rien). Réponse partielle (une source n'a pas répondu dans le
 // budget de l'API) : une seule relecture, après 3 secondes.
-import type { LatLng, PracticalChoice, PracticalData, PracticalFilter } from "@orasso/shared";
+import {
+  createSessionGuard,
+  type LatLng,
+  type PracticalChoice,
+  type PracticalData,
+  type PracticalFilter,
+} from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
 import { cacheScope } from "@/lib/kv";
@@ -42,12 +49,21 @@ type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
 /** Relit au retour sur l'écran quand la réponse a plus d'une minute. */
 const STALE_MS = 60_000;
 
+/** Le compte et la génération de session sont capturés au départ d'une lecture et revérifiés à son arrivée (lot R8q, tour 2). */
+const guard = createSessionGuard(cacheScope);
+/** Sans identité connue, une lecture attend (aucune requête ne part sous un compte inconnu). */
+const WAIT_IDENTITY_MS = 500;
+/** Une lecture qui n'a jamais réussi (réseau absent au départ) est retentée à ce rythme tant que l'écran est affiché. */
+const RETRY_OFFLINE_MS = 15_000;
+
 function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): Read {
   const [state, setState] = useState<Read>(() => ({
     data: remembered(near, eventId),
     loading: enabled,
     offline: false,
   }));
+  /** Le compte pour qui `state` a été lu : une autre session l'efface. */
+  const shownFor = useRef<string | null>(null);
   const fetchedAt = useRef(0);
   const retried = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,13 +78,18 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
 
   const load = useCallback(async () => {
     if (!enabled) return;
-    const scope = cacheScope();
+    const ticket = guard.begin();
+    if (!ticket) {
+      // Identité inconnue : rien ne part ; on réessaie dès qu'elle l'est.
+      timer.current = setTimeout(() => void load(), WAIT_IDENTITY_MS);
+      return;
+    }
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
-      // Une réponse arrivée après un changement de compte ou de sortie est jetée.
-      if (!alive.current || cacheScope() !== scope) return;
-      const key = keyOf(near, eventId);
-      if (key) memory.set(key, data);
+      // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
+      if (!alive.current || !guard.valid(ticket)) return;
+      memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
+      shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
       setState({ data, loading: false, offline: false });
       if (data.partial && !retried.current) {
@@ -76,7 +97,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
         timer.current = setTimeout(() => void load(), PARTIAL_RETRY_MS);
       }
     } catch {
-      if (!alive.current || cacheScope() !== scope) return;
+      if (!alive.current || !guard.valid(ticket)) return;
       setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: true }));
     }
   }, [enabled, near, eventId]);
@@ -84,6 +105,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   // biome-ignore lint/correctness/useExhaustiveDependencies: `load` change avec ses entrées ; une lecture par changement.
   useEffect(() => {
     retried.current = false;
+    fetchedAt.current = 0;
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return;
@@ -92,12 +114,42 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     void load();
   }, [enabled, near, eventId]);
 
+  // Une autre session sur le même écran : les données de l'ancien compte disparaissent et la lecture repart.
+  useEffect(() => {
+    const who = cacheScope();
+    if (shownFor.current !== null && shownFor.current !== who) {
+      shownFor.current = null;
+      fetchedAt.current = 0;
+      setState({ data: remembered(near, eventId), loading: enabled, offline: false });
+      void load();
+    }
+  });
+
+  // Retour sur l'écran et retour de l'appli au premier plan : relit quand la réponse a plus d'une minute, ou quand aucune lecture
+  // n'a encore réussi (premier échec réseau).
+  const refresh = useCallback(() => {
+    if (!enabled) return;
+    if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
+  }, [enabled, load]);
   useFocusEffect(
     useCallback(() => {
-      if (enabled && fetchedAt.current && Date.now() - fetchedAt.current > STALE_MS) void load();
-    }, [enabled, load]),
+      refresh();
+      const sub = AppState.addEventListener("change", (next) => {
+        if (next === "active") refresh();
+      });
+      return () => sub.remove();
+    }, [refresh]),
   );
-  return state;
+  // Aucune lecture n'a réussi (réseau absent au départ) : une nouvelle tentative régulière, qui reprend au retour du réseau.
+  const neverRead = state.offline && !fetchedAt.current;
+  useEffect(() => {
+    if (!neverRead || !enabled) return undefined;
+    const id = setInterval(() => void load(), RETRY_OFFLINE_MS);
+    return () => clearInterval(id);
+  }, [neverRead, enabled, load]);
+  return state.data && shownFor.current !== null && shownFor.current !== cacheScope()
+    ? { data: null, loading: enabled, offline: false }
+    : state;
 }
 
 export type PracticalSources = {

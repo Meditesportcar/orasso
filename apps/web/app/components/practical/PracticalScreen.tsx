@@ -101,7 +101,7 @@ export function PracticalScreen() {
           <span>{data.origin ? L.aroundCity(data.origin.label) : L.noOrigin}</span>
         </p>
       ) : null}
-      {read.offline && data ? <p className="o-t-caption s-muted">Hors ligne : voici la dernière réponse.</p> : null}
+      {read.offline && data ? <p className="o-t-caption s-muted">{L.offlineWeb}</p> : null}
 
       {!data ? (
         <p className="o-t-caption s-muted" data-testid="practical-state">
@@ -151,7 +151,7 @@ export function PracticalScreen() {
           ))}
         </div>
       )}
-      {active === "me" && !onPosition && data ? (
+      {active === "me" && data ? (
         <div className="pq-gps">
           <Button
             type="button"
@@ -161,7 +161,7 @@ export function PracticalScreen() {
             onClick={() => void askPracticalPosition(false)}
             data-testid="practical-use-position"
           >
-            {L.usePosition}
+            {onPosition ? L.relocate : L.usePosition}
           </Button>
         </div>
       ) : null}

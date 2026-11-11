@@ -21,6 +21,11 @@ export const practicalTexts = {
   /** `aria-label` de « Y aller » : « Y aller : Station du Vernet ». */
   goA11y: (title: string) => `Y aller : ${title}`,
   usePosition: "Utiliser ma position",
+  /** Une position est déjà donnée : une nouvelle se demande par ce bouton. */
+  relocate: "Me relocaliser",
+  /** Hors ligne : la dernière réponse de la séance reste affichée. */
+  offline: "Hors ligne : voici ce que ton téléphone a gardé.",
+  offlineWeb: "Hors ligne : voici la dernière réponse.",
   /** « Autour de Perpignan, ta ville. » */
   aroundCity: (city: string) => `Autour de ${city}, ta ville.`,
   /** « Autour de la Nocturne de Canet, l'événement où tu vas. » */

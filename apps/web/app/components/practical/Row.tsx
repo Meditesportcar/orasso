@@ -6,7 +6,7 @@ import { practicalTexts as L, type PracticalKind } from "@orasso/shared";
 
 import { routeLinks } from "../../lib/directions";
 
-export const kindIcon: Record<PracticalKind, IconName> = { fuel: "power", wash: "drop" };
+export const kindIcon: Record<PracticalKind, IconName> = { fuel: "fuel", wash: "drop" };
 
 export function GoMenu({
   title,

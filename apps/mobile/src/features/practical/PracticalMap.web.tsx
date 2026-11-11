@@ -20,7 +20,7 @@ type MapLibre = typeof import("maplibre-gl");
 export const mapSupported = true;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const iconOf = (kind: PracticalPin["kind"]): IconName => (kind === "fuel" ? "power" : "drop");
+const iconOf = (kind: PracticalPin["kind"]): IconName => (kind === "fuel" ? "fuel" : "drop");
 
 /** Un pictogramme du jeu d'icônes d'Orasso en `<svg>` (trait de 2 px, grille de 24 px). */
 function svgIcon(name: IconName, color: string): SVGElement {

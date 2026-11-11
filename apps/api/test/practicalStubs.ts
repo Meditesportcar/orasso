@@ -3,6 +3,7 @@
 import { vi } from "vitest";
 
 import { setExternalFetch } from "../src/lib/external/cache";
+import { resetOverpassQueue } from "../src/lib/external/overpass";
 
 export type StubWash = { name?: string; lat: number; lon: number };
 export type StubFuel = { adresse: string; ville: string; cp: string; lat: number; lon: number };
@@ -13,9 +14,12 @@ export type SourceCall = { source: StubSource; department: string; url: string; 
 /** `wash` / `fuel` : département → lieux. `fail` : la source répond 503. `hang` : la source ne répond jamais. */
 export function practicalSources(
   data: { wash?: Record<string, StubWash[]>; fuel?: Record<string, StubFuel[]> },
-  opts: { fail?: StubSource[]; hang?: StubSource[] } = {},
+  opts: { fail?: StubSource[]; hang?: StubSource[]; delayMs?: number } = {},
 ) {
   const calls: SourceCall[] = [];
+  // Appels Overpass en cours au même instant (la règle d'Overpass : un à la fois).
+  let washInFlight = 0;
+  let maxWashInFlight = 0;
   const fn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     const body = init?.body ? String(init.body) : "";
@@ -24,6 +28,10 @@ export function practicalSources(
       calls.push({ source: "wash", department, url, body });
       if (opts.hang?.includes("wash")) return new Promise<Response>(() => undefined);
       if (opts.fail?.includes("wash")) return new Response("panne", { status: 503 });
+      washInFlight += 1;
+      maxWashInFlight = Math.max(maxWashInFlight, washInFlight);
+      if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+      washInFlight -= 1;
       return Response.json({
         elements: (data.wash?.[department] ?? []).map((p, i) => ({
           type: "node",
@@ -51,10 +59,12 @@ export function practicalSources(
       })),
     });
   });
+  resetOverpassQueue();
   setExternalFetch(fn as unknown as typeof fetch);
   return {
     fn,
     calls,
+    maxWashInFlight: () => maxWashInFlight,
     count: (source: StubSource, department?: string) =>
       calls.filter((c) => c.source === source && (!department || c.department === department)).length,
   };

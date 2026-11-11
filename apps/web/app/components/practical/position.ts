@@ -52,7 +52,7 @@ function readPosition(): Promise<GeolocationPosition> {
       reject(new Error("indisponible"));
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, reject, { maximumAge: 300_000, timeout: 10_000 });
+    navigator.geolocation.getCurrentPosition(resolve, reject, { maximumAge: 0, timeout: 10_000 });
   });
 }
 
@@ -103,18 +103,21 @@ export const refreshPracticalPosition = (force = false) => store.refresh(force);
 /** Oublie la position. */
 export const forgetPracticalPosition = () => store.forget();
 
-/** La position donnée à « Ma météo » est reprise ici une seule fois par position, sans nouvelle fenêtre. */
+/**
+ * Lot R8q, tour 2 : « Pratique » suit « Ma météo ». Chaque nouvelle position donnée à la météo est reprise ici une seule fois, sans nouvelle
+ * fenêtre (permission déjà accordée) : une deuxième position dans la même séance remplace la première des deux côtés.
+ */
 export function useFollowWeatherPosition(): void {
   const weather = useWeatherPosition();
   const mine = usePracticalPosition();
-  const weatherAt = weather.at;
-  const gap = weatherAt !== null && mine.at === null && !mine.busy;
-  const tried = useRef<unknown>(null);
+  const weatherKey = weather.at ? `${weather.at.label}|${weather.at.weather?.fetchedAt ?? ""}` : null;
+  const tried = useRef<string | null>(null);
+  const busy = mine.busy;
   useEffect(() => {
     // Une tentative par position de la météo : un échec ne relance pas en boucle.
-    if (gap && tried.current !== weatherAt) {
-      tried.current = weatherAt;
+    if (weatherKey && !busy && tried.current !== weatherKey) {
+      tried.current = weatherKey;
       void askPracticalPosition(true);
     }
-  }, [weatherAt, gap]);
+  }, [weatherKey, busy]);
 }

@@ -9,6 +9,7 @@ import {
   nearestDepartments,
   PRACTICAL_DEPARTMENTS,
   type PracticalData,
+  type PracticalKind,
   type PracticalOrigin,
   type PracticalPlace,
   placesAround,
@@ -136,47 +137,55 @@ export const practicalService = {
     budgetMs: number,
   ): Promise<{ places: PracticalPlace[]; partial: boolean }> {
     const departments = nearestDepartments(origin, PRACTICAL_DEPARTMENTS);
-    const loads = departments.flatMap((d) => [
-      withinBudget(washNear(d), [], budgetMs).then((list) =>
-        list.map(
-          (p): PracticalPlace => ({
-            id: practicalPlaceId("wash", p.lat, p.lng),
-            kind: "wash",
-            name: p.name,
-            address: p.address,
-            lat: p.lat,
-            lng: p.lng,
-          }),
-        ),
-      ),
-      // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
-      withinBudget(fuelNear(d), [], budgetMs).then((list) =>
-        list.map(
-          (p): PracticalPlace => ({
-            id: practicalPlaceId("fuel", p.lat, p.lng),
-            kind: "fuel",
-            name: p.name,
-            address: p.address,
-            lat: p.lat,
-            lng: p.lng,
-          }),
-        ),
-      ),
+    type Listed = {
+      kind: PracticalKind;
+      key: string;
+      list: { name: string; address: string | null; lat: number; lng: number }[] | null;
+    };
+    // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
+    const loads: Promise<Listed>[] = departments.flatMap((d) => [
+      withinBudget<Listed["list"]>(washNear(d), null, budgetMs).then((list) => ({
+        kind: "wash" as const,
+        key: `wash:${d}`,
+        list,
+      })),
+      withinBudget<Listed["list"]>(fuelNear(d), null, budgetMs).then((list) => ({
+        kind: "fuel" as const,
+        key: `fuel:${d}`,
+        list,
+      })),
     ]);
-    const all = (await Promise.all(loads)).flat();
-    // Une source muette (rien de servable en cache : en panne, désactivée ou trop lente) rend la réponse partielle.
-    const keys = departments.flatMap((d) => [`wash:${d}`, `fuel:${d}`]);
+    const listed = await Promise.all(loads);
+    const keys = listed.map((l) => l.key);
     const rows = await db
-      .select({ key: externalCache.key, fetchedAt: externalCache.fetchedAt })
+      .select({ key: externalCache.key, fetchedAt: externalCache.fetchedAt, data: externalCache.data })
       .from(externalCache)
       .where(inArray(externalCache.key, keys));
     const t = now().getTime();
-    const servable = new Set(
+    const servable = new Map(
       rows
         .filter((r) => t - r.fetchedAt.getTime() < STALE_LIMIT_MS[r.key.startsWith("wash:") ? "wash" : "fuel"])
-        .map((r) => r.key),
+        .map((r) => [r.key, r.data as Listed["list"]]),
     );
-    const partial = keys.some((k) => !servable.has(k));
+    let partial = false;
+    const all: PracticalPlace[] = [];
+    for (const l of listed) {
+      // Source lente : partiel, même si un cache toléré est servi (l'écran relit une fois).
+      if (l.list === null) partial = true;
+      // Une source muette (rien de servable en cache : en panne, désactivée) rend aussi la réponse partielle.
+      if (!servable.has(l.key)) partial = true;
+      // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
+      for (const p of l.list ?? servable.get(l.key) ?? []) {
+        all.push({
+          id: practicalPlaceId(l.kind, p.lat, p.lng),
+          kind: l.kind,
+          name: p.name,
+          address: p.address,
+          lat: p.lat,
+          lng: p.lng,
+        });
+      }
+    }
     return { places: placesAround(all, origin), partial };
   },
 };
