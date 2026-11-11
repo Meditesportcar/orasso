@@ -297,7 +297,7 @@ export const feedPostsService = {
           if (again) throw new Replayed(again.id);
         };
         // Fiche pro : même limite mensuelle et même verrou que `POST /pros/:id/posts`.
-        if (persona === "pro") await lockProPostQuota(tx, authorship.id, replayed);
+        const proAt = persona === "pro" ? await lockProPostQuota(tx, authorship.id, replayed) : null;
         if (input.important && event) await reserveImportant(tx, event.id, at, replayed);
         for (const p of photos) {
           if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
@@ -317,9 +317,9 @@ export const feedPostsService = {
           clientId: input.clientId ?? null,
           commercialPartnerId,
           persona,
-          // Fiche pro : l'heure de l'application (comme les offres) pour compter le mois sur l'horloge simulée.
-          // Un seul instant pour le comptage du mois (sous verrou) et l'insertion : pris ici, dans la transaction.
-          ...(persona === "pro" ? { createdAt: now() } : {}),
+          // Fiche pro : l'instant pris sous le verrou, celui-là même qui a servi à compter le mois (horloge de
+          // l'application, comme les offres) : le comptage et l'insertion ne peuvent pas tomber dans deux mois.
+          ...(proAt ? { createdAt: proAt } : {}),
           structureId: authorship.kind === "structure" ? authorship.id : null,
           proId: authorship.kind === "pro" ? authorship.id : null,
           providerId: authorship.kind === "provider" ? authorship.id : null,

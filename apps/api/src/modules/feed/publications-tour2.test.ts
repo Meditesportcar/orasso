@@ -37,6 +37,7 @@ import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { eventPlaceHolderIds, hasPlace } from "../events/place";
 import { purgeHeldPhotos } from "../moderation/targets/feedPost";
+import { uploadsService } from "../uploads/service";
 
 afterAll(async () => {
   await pool.end();
@@ -350,4 +351,23 @@ describe("tour 3", () => {
     expect(results[0]!.json.id).toBe(results[1]!.json.id);
     expect(await db.select().from(feedPosts).where(eq(feedPosts.authorId, owner.id))).toHaveLength(1);
   }, 30_000);
+
+  it("fiche pro : minuit passe entre le comptage et l'insertion, la publication reste datée de l'instant compté", async () => {
+    const owner = await signUp("ProMinuit_T4");
+    const pro = await createPro(owner.id);
+    const counted = fromWallTime({ year: 2026, month: 11, day: 30, hour: 23, minute: 59 });
+    clock.set(counted);
+    const body = { persona: "pro", proId: pro.id, ...(await photoOf(owner)) };
+    const realConsume = uploadsService.consume.bind(uploadsService);
+    // `consume` s'exécute sous le verrou, après le comptage et avant l'insertion.
+    const spy = vi.spyOn(uploadsService, "consume").mockImplementation(async (...args) => {
+      clock.set(fromWallTime({ year: 2026, month: 12, day: 1, hour: 0, minute: 1 }));
+      return realConsume(...args);
+    });
+    const res = await call(owner, "POST", "/me/feed-posts", body);
+    spy.mockRestore();
+    expect(res.status).toBe(201);
+    const [row] = await db.select().from(feedPosts).where(eq(feedPosts.id, res.json.id));
+    expect(row!.createdAt.getTime()).toBe(counted.getTime());
+  });
 });

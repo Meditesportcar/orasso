@@ -203,9 +203,11 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
 async function postsUsedThisMonth(
   proId: string,
   ex: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+  /** Instant du comptage (facultatif) : l'appelant sous verrou le réutilise pour dater son insertion. */
+  at: Date = now(),
 ): Promise<number> {
   // Les publications supprimées comptent (suppression douce, lot 34) : supprimer ne rend pas la place du mois.
-  const { start, end } = monthBounds(now());
+  const { start, end } = monthBounds(at);
   const [row] = await ex
     .select({ n: count() })
     .from(proPosts)
@@ -239,11 +241,14 @@ export async function lockProPostQuota(
 ) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${proId}`}, 0))`);
   await afterLock?.();
-  if (postsRemaining(await postsUsedThisMonth(proId, tx)) === 0) {
+  // Un seul instant, pris sous le verrou : il sert au comptage du mois et (rendu) à la date de l'insertion.
+  const at = now();
+  if (postsRemaining(await postsUsedThisMonth(proId, tx, at)) === 0) {
     throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
       limit: PRO_POSTS_PER_MONTH,
     });
   }
+  return at;
 }
 
 async function toOwner(p: ProRow, v: Viewer): Promise<ProOwner> {
@@ -522,11 +527,11 @@ export const prosService = {
     assertProMayPost(p);
     // Verrou par fiche : deux publications simultanées ne dépassent pas la limite du mois.
     const row = await db.transaction(async (tx) => {
-      await lockProPostQuota(tx, id);
+      const at = await lockProPostQuota(tx, id);
       const [created] = await tx
         .insert(proPosts)
         // Date de l'horloge de l'appli (et non celle de la base) : le mois compté suit l'horloge simulée en dev.
-        .values({ proId: id, ...input, createdAt: now(), updatedAt: now() })
+        .values({ proId: id, ...input, createdAt: at, updatedAt: at })
         .returning();
       return created;
     });
