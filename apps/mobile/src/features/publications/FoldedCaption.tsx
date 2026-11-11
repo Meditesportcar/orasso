@@ -1,6 +1,7 @@
 // La légende d'une publication posée dans une liste « Une par une » : repliée après trois lignes, « plus » la déroule, « moins »
 // la replie (règle `captionFold`). Hors d'une liste qui la demande (`FoldCaptions`), la légende reste entière : la carte du Fil
-// ne change pas. La mesure est faite une fois, sur le texte entier, pour savoir s'il dépasse trois lignes.
+// ne change pas. Le nombre de lignes du texte entier est mesuré par une copie invisible (hauteur lue ÷ interligne) : `onTextLayout`
+// n'existe pas sur le web, et la recette de l'appli y tourne.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { CAPTION_FOLD_LINES, captionFold, publicationsLabels as L } from "@orasso/shared";
 import { createContext, type ReactNode, useContext, useState } from "react";
@@ -16,7 +17,7 @@ export function FoldCaptions({ children }: { children: ReactNode }) {
 export function FoldedCaption({ text, style, testID }: { text: string; style?: TextStyle; testID?: string }) {
   const { t } = useTheme();
   const fold = useContext(FoldContext);
-  const [lines, setLines] = useState(0);
+  const [fullHeight, setFullHeight] = useState(0);
   const [expanded, setExpanded] = useState(false);
   if (!fold) {
     return (
@@ -25,6 +26,8 @@ export function FoldedCaption({ text, style, testID }: { text: string; style?: T
       </Text>
     );
   }
+  const lineHeight = style?.lineHeight ?? 20;
+  const lines = fullHeight > 0 ? Math.round(fullHeight / lineHeight) : 0;
   const state = captionFold({ lines, expanded });
   return (
     <>
@@ -32,10 +35,20 @@ export function FoldedCaption({ text, style, testID }: { text: string; style?: T
         variant="body"
         color={t.color.ink}
         style={style}
-        // Avant la mesure : le texte entier (sinon on ne sait pas s'il dépasse) ; ensuite repliée ou non.
-        numberOfLines={lines > 0 && state.clamp ? CAPTION_FOLD_LINES : undefined}
-        onTextLayout={lines === 0 ? (e) => setLines(e.nativeEvent.lines.length) : undefined}
+        numberOfLines={state.clamp ? CAPTION_FOLD_LINES : undefined}
         testID={testID}
+      >
+        {text}
+      </Text>
+      {/* La copie invisible : le texte entier, pour savoir s'il dépasse trois lignes ; absente de l'accessibilité. */}
+      <Text
+        variant="body"
+        color={t.color.ink}
+        style={[style, styles.probe]}
+        onLayout={(e) => setFullHeight(e.nativeEvent.layout.height)}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
       >
         {text}
       </Text>
@@ -57,6 +70,7 @@ export function FoldedCaption({ text, style, testID }: { text: string; style?: T
 }
 
 const styles = StyleSheet.create({
+  probe: { position: "absolute", left: 0, right: 0, opacity: 0 },
   toggle: { alignSelf: "flex-start", minHeight: 24, justifyContent: "center", marginTop: -tokens.spacing.space1 },
   toggleText: { fontSize: 13.5 },
 });

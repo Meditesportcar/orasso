@@ -17,8 +17,14 @@
   flex: 1 1 auto;
   font-size: 13px;
 }
-.pub-head__publish {
-  min-height: var(--touch);
+/* Le bouton « Publier » compact (`.btn.sm` de la maquette : 40 px, rayon 10, 12 px), seul bouton principal de l'écran. */
+.o-button.pub-head__publish {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* La bascule des deux vues (`.r8vt`). */
