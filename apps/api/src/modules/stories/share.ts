@@ -308,10 +308,14 @@ export const storiesShare = {
       and s.shared_from_story_id is null and s.audience in ('public', 'followers')
       and not (s.persona = 'organizer' and s.structure_id = ${structureId})
       and p.deleted_at is null and p.banned_at is null and (p.suspended_until is null or p.suspended_until <= ${at})
-      and (s.persona in ('organizer', 'pro') or p.visibility = 'public')
+      and (s.persona <> 'fan' or p.visibility = 'public')
       and (s.persona <> 'organizer' or exists (select 1 from structures st where st.id = s.structure_id
         and st.deleted_at is null and st.verification <> 'suspended'))
       and (s.persona <> 'pro' or exists (select 1 from pro_profiles pp where pp.id = s.pro_id and pp.deleted_at is null))
+      and (s.persona <> 'provider' or exists (select 1 from provider_profiles pv where pv.id = s.provider_id
+        and pv.deleted_at is null))
+      and (s.persona <> 'media' or exists (select 1 from media_profiles mp where mp.id = s.media_id
+        and mp.deleted_at is null))
       and (
         exists (select 1 from story_tags t where t.story_id = s.id and t.target_kind = 'structure'
           and t.target_id = ${structureId} and t.removed_at is null)
@@ -352,7 +356,10 @@ export const storiesShare = {
     const rest = rows
       .filter(
         (r) =>
-          accountActive(r.author, at) && storyDenial(viewerOf(v), audienceStoryOf(r, at), relationOf(sets, r)) === null,
+          // Une story de page sans page n'a pas de clé : jamais servie, jamais la clé du compte (lot R9a).
+          authorKeyOf(r) !== null &&
+          accountActive(r.author, at) &&
+          storyDenial(viewerOf(v), audienceStoryOf(r, at), relationOf(sets, r)) === null,
       )
       .sort((x, y) => rank(y) - rank(x) || (x.story.id < y.story.id ? 1 : -1));
     const shown = rest.slice(0, MENTIONS_PAGE);
