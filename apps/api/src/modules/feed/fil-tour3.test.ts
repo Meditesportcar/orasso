@@ -136,13 +136,13 @@ describe("tour 3", () => {
     expect(first.items.every((c) => c.seen)).toBe(true);
     // Une nouvelle vue fait dépasser le plafond : les 25 vues les plus anciennes sont évincées.
     await view(me, [await dbPost(author, at(0))]);
-    expect((await db.select().from(feedSeen).where(eq(feedSeen.userId, me.id))).length).toBe(5000);
+    expect((await db.select().from(feedSeen).where(eq(feedSeen.userId, me.id))).length).toBe(4000);
     expect((await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id))).length).toBe(1);
     clock.advance(60_000);
-    // Le parcours en cours repart (reset) : tout est servi une fois, rien n'est perdu.
+    // La borne n'est pas dans l'empreinte : le parcours continue sans reset, rien n'est perdu ni doublé.
     const second = await fil(me, `?filter=nearby&cursor=${first.next}`);
-    expect(second.json.reset).toBe(true);
-    const got = [...postIds(second.items)];
+    expect(second.json.reset).toBeUndefined();
+    const got = [...postIds(first.items), ...postIds(second.items)];
     let cursor = second.next;
     while (cursor) {
       const page = await fil(me, `?filter=nearby&cursor=${cursor}`);
@@ -154,7 +154,7 @@ describe("tour 3", () => {
     const byId = new Map(all.map((c) => [postIds([c])[0], c.seen]));
     for (const p of posts) expect(byId.get(p), p).toBe(true);
     expect(new Set(got).size).toBe(got.length);
-    expect(got.length).toBe(26);
+    expect(got.length).toBe(25);
     expect(all.length).toBe(26);
   }, 120_000);
 
@@ -203,5 +203,37 @@ describe("tour 3", () => {
       (pool as any).query = original;
     }
     expect(texts.filter((t) => t.includes('from "feed_posts"')).length).toBe(0);
+  }, 120_000);
+
+  it("tour 5 : au plafond, des envois de vues successifs pendant un parcours ne le font pas repartir et la borne reste stable", async () => {
+    const author = await person("Auteur_Palier5");
+    const me = await person("Lecteur_Palier5");
+    const posts: string[] = [];
+    for (let i = 0; i < 45; i++) posts.push(await dbPost(author, at(60 + i)));
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'lineup:' || gen_random_uuid()::text, ${at(120).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 5000) g`);
+    clock.advance(60_000);
+    // Premier envoi : au-delà du plafond, rognage par palier (4 000) ; la borne est posée une fois.
+    await view(me, [await dbPost(author, at(0))]);
+    const floor0 = (await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id)))[0]?.floorAt;
+    expect(floor0).toBeTruthy();
+    clock.advance(60_000);
+    const first = await fil(me, "?filter=nearby");
+    const got = [...postIds(first.items)];
+    let cursor = first.next;
+    for (let n = 0; cursor; n++) {
+      // Entre deux pages, le lecteur envoie un lot de vues (les cartes déjà affichées).
+      clock.advance(5_000);
+      await view(me, got.slice(-5));
+      const page = await fil(me, `?filter=nearby&cursor=${cursor}`);
+      expect(page.json.reset, `page ${n}`).toBeUndefined();
+      got.push(...postIds(page.items));
+      cursor = page.next;
+    }
+    expect(new Set(got).size).toBe(got.length);
+    expect(got.length).toBe(46);
+    const floor1 = (await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id)))[0]?.floorAt;
+    expect(floor1?.getTime()).toBe(floor0?.getTime());
   }, 120_000);
 });

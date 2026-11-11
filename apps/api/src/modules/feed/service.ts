@@ -74,7 +74,7 @@ export const WINDOW_CAP = 300;
  * Empreinte (6 octets, hexadécimal) de ce qui change le classement ou ce que les sources laissent entrer : abonnements,
  * crews, centres d'intérêt, départements, mes sorties. « Moins de ce genre » n'en fait pas partie : il est figé dans le curseur.
  */
-export function contextFingerprint(ctx: FeedViewerContext, seenFloor: Date | null = null): string {
+export function contextFingerprint(ctx: FeedViewerContext): string {
   const list = (it: Iterable<string>) => [...it].sort();
   const json = JSON.stringify([
     list(ctx.departments),
@@ -84,8 +84,6 @@ export function contextFingerprint(ctx: FeedViewerContext, seenFloor: Date | nul
     list(ctx.crewmates),
     list(ctx.interests),
     [...ctx.myOutings].map(([id, startsAt]) => `${id}@${startsAt.getTime()}`).sort(),
-    // Le plafond de vues a rogné des cartes en route : la zone A change, le parcours repart (sans carte perdue ni doublée).
-    seenFloor?.getTime() ?? 0,
   ]);
   return createHash("sha1").update(json).digest().subarray(0, 6).toString("hex");
 }
@@ -307,7 +305,7 @@ export const feedService = {
     if (counted) rateLimit("feedRead", v.user.id);
     const t = now();
     const [viewerCtx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
-    const fp = contextFingerprint(viewerCtx, seenFloor);
+    const fp = contextFingerprint(viewerCtx);
     const forYou = q.filter === "for_you";
     // Un curseur de la version précédente (APK en ligne en plein parcours) n'est jamais une erreur : première page, `reset`.
     const previous = isPreviousCursor(q.cursor);

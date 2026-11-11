@@ -9,7 +9,7 @@ import { db, pool } from "../../db/client";
 import { feedPostReactions, feedPosts, feedSeen } from "../../db/schema";
 import { accountService } from "../account/service";
 import { dbPost, fil, follow, HOUR, person, postIds, seen, view } from "./fil-test-helpers";
-import { feedSeenService, SEEN_MAX_PER_USER, SEEN_TTL_MS, seenWithoutInteraction } from "./seen";
+import { feedSeenService, SEEN_MAX_PER_USER, SEEN_TRIM_TO, SEEN_TTL_MS, seenWithoutInteraction } from "./seen";
 
 afterAll(async () => {
   await pool.end();
@@ -135,7 +135,8 @@ describe("POST /me/fil/seen", () => {
     )[0];
     await seen(me, [{ id: `feed_post:${UUID}`, action: "view" }]);
     const rows = await rowsOf(me.id);
-    expect(rows.length).toBe(SEEN_MAX_PER_USER);
+    // Par palier : au-delà de 5 000, retour à 4 000.
+    expect(rows.length).toBe(SEEN_TRIM_TO);
     expect(rows.some((r) => r.cardId === `feed_post:${UUID}`)).toBe(true);
     expect(Math.min(...rows.map((r) => r.seenAt.getTime()))).toBeGreaterThan(new Date(oldest?.at as Date).getTime());
   });
@@ -262,8 +263,8 @@ describe("tâche feed.seen-purge", () => {
       from generate_series(1, ${SEEN_MAX_PER_USER + 20}) g`);
     await db.insert(feedSeen).values({ userId: other.id, cardId: `lineup:${UUID}`, seenAt: hoursAgo(1) });
     const done = await feedSeenService.purge(clock.now);
-    expect(done.trimmed).toBe(20);
-    expect((await rowsOf(me.id)).length).toBe(SEEN_MAX_PER_USER);
+    expect(done.trimmed).toBe(SEEN_MAX_PER_USER + 20 - SEEN_TRIM_TO);
+    expect((await rowsOf(me.id)).length).toBe(SEEN_TRIM_TO);
     expect((await rowsOf(other.id)).length).toBe(1);
   });
 

@@ -20,6 +20,8 @@ export const SEEN_TTL_MS = FEED_SEEN_TTL_MS;
 export const PURGE_BATCH = 5000;
 /** Lignes gardées au plus par compte : les plus anciennes partent. */
 export const SEEN_MAX_PER_USER = 5000;
+/** Au-delà du plafond, le rognage redescend à ce nombre (par paliers : la borne ne bouge qu'une fois tous les ~1 000 envois). */
+export const SEEN_TRIM_TO = 4000;
 
 /**
  * Parmi `cardIds` (identifiants du Fil `genre:uuid`), celles que `userId` a vues sans interaction à l'instant `ref`.
@@ -61,15 +63,20 @@ export async function seenWithoutInteraction(
 }
 
 /**
- * Garde au plus `SEEN_MAX_PER_USER` lignes pour ce compte (les plus anciennement vues partent) et retient la borne de rognage
+ * Au-delà de `SEEN_MAX_PER_USER` lignes, redescend à `SEEN_TRIM_TO` (les plus anciennement vues partent) et retient la borne de rognage
  * (`feed_seen_floor`) : les cartes évincées restent « déjà vues » sans leur ligne.
  */
 async function trimUser(userId: string): Promise<number> {
+  const [{ n: total } = { n: 0 }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(feedSeen)
+    .where(eq(feedSeen.userId, userId));
+  if (total <= SEEN_MAX_PER_USER) return 0;
   const res = await db.execute(sql`
     with gone as (
       delete from feed_seen where user_id = ${userId} and card_id in (
         select card_id from feed_seen where user_id = ${userId}
-        order by seen_at desc, card_id desc offset ${SEEN_MAX_PER_USER})
+        order by seen_at desc, card_id desc offset ${SEEN_TRIM_TO})
       returning seen_at
     ), floor as (
       insert into feed_seen_floor (user_id, floor_at)
