@@ -19,8 +19,8 @@ import {
   weatherCodeLabels,
   windCompass,
 } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -31,7 +31,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { cardTitle } from "./MyWeatherBlock";
 import { PlaceSheet } from "./PlaceSheet";
-import { askMyPosition, forgetMyPosition, useWeatherPosition } from "./position";
+import { askMyPosition, forgetMyPosition, refreshMyPosition, useWeatherPosition } from "./position";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -58,7 +58,7 @@ function Hours({ weather }: { weather: PlaceWeather }) {
             {L.hourLabel(hourOf(h.time))}
           </Text>
           <Icon name={weatherIcons[h.code]} size={22} color={c.accentText} />
-          <Text variant="numberNarrow" color={c.ink} style={styles.hourTemp}>
+          <Text variant="bodyStrong" color={c.ink}>
             {`${Math.round(h.temp)}°`}
           </Text>
         </View>
@@ -88,7 +88,7 @@ function Detail({ card }: { card: WeatherCard }) {
         testID="meteo-now"
       >
         <Icon name={weatherIcons[now.code]} size={40} color={c.accentText} />
-        <Text variant="numberNarrow" color={c.ink} style={styles.bigNum}>
+        <Text variant="numberNarrow" color={c.ink}>
           {`${Math.round(now.temp)}°`}
         </Text>
         <View style={styles.fill}>
@@ -153,6 +153,12 @@ export function MeteoDetail() {
   const params = useLocalSearchParams<{ card?: string }>();
   const places = useApi(() => api.myWeatherPlaces(), [], { cacheKey: "my-weather-places" });
   const { at } = useWeatherPosition();
+  // Retour sur le détail : la météo de la position gardée est relue (au plus toutes les dix minutes).
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMyPosition();
+    }, []),
+  );
   const [sheet, setSheet] = useState<"change" | "add" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,17 +170,20 @@ export function MeteoDetail() {
   const card = cards[index] ?? null;
   const canAdd = cards.length < WEATHER_PLACES_MAX;
 
-  async function save(next: PlaceCoords[]) {
+  async function save(next: PlaceCoords[]): Promise<boolean> {
     setBusy(true);
     setError(null);
+    let ok = false;
     try {
       const saved = await api.saveWeatherPlaces(next);
       places.setData(saved);
       setSheet(null);
+      ok = true;
     } catch (e) {
       setError(errorMessage(e) || L.savedFailed);
     }
     setBusy(false);
+    return ok;
   }
 
   async function givePosition() {
@@ -192,7 +201,7 @@ export function MeteoDetail() {
       facts={card ? cardTitle(card) : undefined}
       onClose={() => router.back()}
       onRefresh={async () => {
-        await places.reload();
+        await Promise.all([places.reload(), refreshMyPosition(true)]);
       }}
       overlays={
         <PlaceSheet
@@ -206,9 +215,10 @@ export function MeteoDetail() {
             if (sheet === "add") {
               void save(placesAfterAdd(data.places, city));
             } else {
-              // La ville choisie remplace la carte ; la position gardée en mémoire est oubliée.
-              forgetMyPosition();
-              void save(placesAfterChange(data.places, card ?? { slot: null }, city));
+              // La ville choisie remplace la carte ; la position gardée en mémoire n'est oubliée qu'une fois la ville enregistrée.
+              void save(placesAfterChange(data.places, card ?? { slot: null }, city)).then((ok) => {
+                if (ok) forgetMyPosition();
+              });
             }
           }}
         />
@@ -244,7 +254,10 @@ export function MeteoDetail() {
           disabled={busy}
           onPress={() => {
             if (card.slot === null) return;
-            void save(placesAfterRemove(data.places, card.slot)).then(() => router.back());
+            // En échec, on reste ici : le message d'erreur reste visible.
+            void save(placesAfterRemove(data.places, card.slot)).then((ok) => {
+              if (ok) router.back();
+            });
           }}
           testID="meteo-remove"
         >
@@ -264,17 +277,15 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: tokens.radius.radiusLg,
   },
-  bigNum: { fontSize: 44, lineHeight: 44 },
   hours: { gap: 8, paddingBottom: 2 },
   hour: {
-    width: 62,
+    width: tokens.spacing.space4 * 4,
     alignItems: "center",
     gap: 4,
     paddingVertical: 10,
     borderRadius: tokens.radius.radiusMd,
   },
-  hourTemp: { fontSize: 16, lineHeight: 18 },
-  same: { borderRadius: 14, overflow: "hidden" },
+  same: { borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   sameRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12 },
   sameSplit: { borderTopWidth: StyleSheet.hairlineWidth },
   actions: { flexDirection: "row", gap: space2, alignItems: "center", paddingTop: space3 - space2 },

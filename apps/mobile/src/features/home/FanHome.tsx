@@ -38,6 +38,7 @@ import { Stamp } from "@/features/passport/Stamp";
 import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
 import { arrivalPhrase, liveApplications } from "@/features/sorties/model";
 import { MyWeatherBlock } from "@/features/weather/MyWeatherBlock";
+import { refreshMyPosition } from "@/features/weather/position";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDay, formatHour } from "@/lib/format";
@@ -454,7 +455,14 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   return (
     <TabScreen
       onRefresh={async () => {
-        await Promise.all([reload(), home.reload(), staff.reload(), passport.reload(), myTickets.reload()]);
+        await Promise.all([
+          reload(),
+          home.reload(),
+          staff.reload(),
+          passport.reload(),
+          myTickets.reload(),
+          refreshMyPosition(true),
+        ]);
       }}
     >
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}

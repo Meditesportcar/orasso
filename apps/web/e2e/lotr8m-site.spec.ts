@@ -214,3 +214,63 @@ test("sans département ni lieu : « Choisis ta ville »", async ({ browser }) =
   await shot(page, "site-sans-lieu-390");
   await ctx.close();
 });
+
+test("tour 2 : la session change sans rechargement (expiration puis autre compte) : la position de A disparaît", async ({
+  browser,
+}) => {
+  const a = await openHome(browser, { geo: true });
+  const requests: { url: string; body: string | null }[] = [];
+  a.page.on("request", (r) => requests.push({ url: r.url(), body: r.postData() }));
+  const block = await weatherBlock(a.page, "Perpignan · ta ville");
+  await block.getByTestId("my-weather-use-position").click();
+  await expect(block).toContainText("Canet-en-Roussillon · ma position", { timeout: 20_000 });
+  // Expiration de la session de A, puis connexion de B dans la même page (annonce de session, sans rechargement du document).
+  await a.page.evaluate(() => {
+    const c = new BroadcastChannel("orasso-session");
+    c.postMessage({ userId: null });
+    c.postMessage({ userId: "autre-compte" });
+    c.close();
+  });
+  await expect(block).not.toContainText("Canet-en-Roussillon", { timeout: 10_000 });
+  await expect(block).toContainText("Perpignan · ta ville");
+  await expect(block.getByTestId("my-weather-use-position")).toBeVisible();
+  // Rien de la position de A ne repart à l'API après le changement de session.
+  const before = requests.filter((r) => r.url.includes("/api/weather/at")).length;
+  await a.page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await a.page.waitForTimeout(1000);
+  expect(requests.filter((r) => r.url.includes("/api/weather/at")).length).toBe(before);
+  await a.ctx.close();
+});
+
+test("tour 2 : sans département, position puis « Second lieu » : la ville s'affiche à côté, la position n'est pas enregistrée", async ({
+  browser,
+}) => {
+  const cookie26 = await login("pilote26@orasso.local");
+  await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    geolocation: GEO,
+    permissions: ["geolocation"],
+  });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "pilote26@orasso.local", undefined, "/app");
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
+  const block = page.getByTestId("widget-weather");
+  await block.getByTestId("my-weather-choose").click();
+  await page.waitForURL(/\/app\/meteo/);
+  await page.getByTestId("meteo-change").click();
+  await page.getByTestId("my-weather-use-position").click();
+  await expect(page.getByText("Canet-en-Roussillon · ma position")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("meteo-second").click();
+  await page.getByTestId("place-search").fill("Lyon");
+  await page.getByTestId("place-search-submit").click();
+  await page.getByTestId("place-result-0").click();
+  await page.waitForURL(/\/app\/meteo$/);
+  await page.goto("/app");
+  const saved = await apiCall<{ places: { label: string }[] }>(cookie26, "GET", "/me/weather/places");
+  expect(saved.data.places.map((p) => p.label)).toEqual(["Lyon"]);
+  await expect(page.getByTestId("widget-weather").getByTestId("my-weather-card-0")).toBeVisible();
+  await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
+  await ctx.close();
+});

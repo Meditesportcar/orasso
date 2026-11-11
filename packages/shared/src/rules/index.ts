@@ -51,6 +51,7 @@ export * from "./password";
 export * from "./plateFrame";
 export * from "./plateNumber";
 export * from "./points";
+export * from "./positionStore";
 export * from "./poster";
 export * from "./presence";
 export * from "./pro";

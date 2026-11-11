@@ -1,37 +1,46 @@
 // « Utiliser ma position » de « Ma météo » sur le site (lot R8m). Comme dans l'appli : demandée au clic seulement, arrondie à
 // 0,1° AVANT l'envoi, envoyée en corps de requête (jamais dans l'adresse), gardée EN MÉMOIRE de la page (jamais dans le
-// stockage du navigateur ni dans un cookie) : recharger la page l'oublie. Refusée : la météo reste celle de la ville, sans
-// message d'erreur.
-import { coarsePosition, type LatLng, type WeatherAt } from "@orasso/shared";
+// stockage du navigateur) : recharger la page l'oublie. Tour 2 : liée au compte de la session (annonce de session déjà en
+// place, `sessionChannel`) et vidée dès que la session change ou disparaît (expiration, déconnexion, autre compte, dans
+// n'importe quelle fenêtre) ; une réponse lancée sous l'ancienne session est jetée (règles dans `positionStore` partagé).
+import { coarsePosition, createPositionStore, type WeatherAt } from "@orasso/shared";
 import { useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
 
-type State = { coarse: LatLng | null; at: WeatherAt | null; busy: boolean };
+/** Le compte annoncé par la mise en page de la page (`null` : aucun, ou pas encore annoncé). */
+let currentUser: string | null = null;
 
-const EMPTY: State = { coarse: null, at: null, busy: false };
-let state: State = EMPTY;
-const listeners = new Set<() => void>();
-const set = (patch: Partial<State>) => {
-  state = { ...state, ...patch };
-  for (const l of listeners) l();
-};
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => {
-    listeners.delete(l);
-  };
+const store = createPositionStore({
+  scope: () => currentUser,
+  now: () => Date.now(),
+  weatherAt: async (position) => {
+    const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: position });
+    if (!res.ok) throw new Error(res.error.message);
+    return res.data;
+  },
+});
+
+if (typeof window !== "undefined") {
+  listenSession((userId) => {
+    currentUser = userId;
+    store.purgeForeign();
+  });
+}
+
+const EMPTY = { at: null, busy: false } as const;
+let last = store.view();
+const snapshot = () => {
+  const next = store.view();
+  if (next.at !== last.at || next.busy !== last.busy) last = next;
+  return last;
 };
 
 /** La météo de la position donnée à l'instant (ou `null`) et si la demande est en cours. */
-export function useWeatherPosition(): { at: WeatherAt | null; busy: boolean } {
+export function useWeatherPosition() {
   // Le rendu serveur et l'hydratation partent de la même valeur vide ; la position gardée apparaît juste après.
-  const s = useSyncExternalStore(
-    subscribe,
-    () => state,
-    () => EMPTY,
-  );
-  return { at: s.at, busy: s.busy };
+  return useSyncExternalStore(store.subscribe, snapshot, () => EMPTY);
 }
 
 function readPosition(): Promise<GeolocationPosition> {
@@ -46,33 +55,20 @@ function readPosition(): Promise<GeolocationPosition> {
 
 /** Demande la position à l'appareil puis la météo de sa case. `false` si refusée ou indisponible (la ville reste). */
 export async function askMyPosition(): Promise<boolean> {
-  if (state.busy) return false;
-  set({ busy: true });
+  if (store.getState().busy) return false;
+  store.setBusy(true);
   try {
     const fix = await readPosition();
-    const coarse = coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude });
-    const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: coarse });
-    if (!res.ok) {
-      set({ busy: false });
-      return false;
-    }
-    set({ coarse, at: res.data, busy: false });
-    return true;
+    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }));
   } catch {
-    set({ busy: false });
     return false;
+  } finally {
+    store.setBusy(false);
   }
 }
 
-/** Relit la météo de la position gardée (retour sur la page) ; sans position gardée, ne fait rien. */
-export async function refreshMyPosition(): Promise<void> {
-  const coarse = state.coarse;
-  if (!coarse) return;
-  const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: coarse });
-  if (res.ok) set({ at: res.data });
-}
+/** Relit la météo de la position gardée (retour sur la page, actualisation) : au plus toutes les dix minutes, sauf `force`. */
+export const refreshMyPosition = (force = false) => store.refresh(force);
 
 /** Oublie la position (une ville choisie la remplace). */
-export function forgetMyPosition(): void {
-  set({ coarse: null, at: null });
-}
+export const forgetMyPosition = () => store.forget();

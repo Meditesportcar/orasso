@@ -280,4 +280,25 @@ test("police ×1,3 à 384 px : rien ne se coupe, deux lieux côte à côte", asy
   await ctx.close();
 });
 
-export type { BrowserContext };
+test("tour 2 : Accueil en ligne, réseau coupé, premier détail : la météo de la copie de l'Accueil", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser);
+  const block = await blockReady(page, "Perpignan · ta ville");
+  // Le bloc garde sa copie pour le détail ; on laisse le temps de l'écrire.
+  await page.waitForTimeout(1500);
+  await ctx.setOffline(true);
+  await block.getByTestId("my-weather-card-0").click();
+  await expect(page.getByTestId("meteo-now")).toBeVisible();
+  await expect(page.getByTestId("meteo-hours")).toBeVisible();
+  await expect(page.getByTestId("meteo-unavailable")).toHaveCount(0);
+  await ctx.setOffline(false);
+  await ctx.close();
+});
+
+test("tour 2 : l'attribution du fournisseur est sur les cartes de l'Accueil", async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  const block = await blockReady(page, "Perpignan · ta ville");
+  await expect(block.getByTestId("my-weather-card-0-source")).toHaveText("Open-Meteo");
+  await ctx.close();
+});

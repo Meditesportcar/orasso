@@ -16,10 +16,11 @@ import {
   weatherCodeLabels,
   windCompass,
 } from "@orasso/shared";
+import { useEffect } from "react";
 import { Form, useNavigate } from "react-router";
 
 import { cardTitle, UsePositionButton } from "./MyWeatherBlock";
-import { forgetMyPosition, useWeatherPosition } from "./position";
+import { forgetMyPosition, refreshMyPosition, useWeatherPosition } from "./position";
 
 const hourOf = (iso: string) => wallTime(new Date(iso), BUSINESS_TIMEZONE).hour;
 
@@ -169,6 +170,15 @@ export function MeteoDetail({
   error: string | null;
 }) {
   const { at } = useWeatherPosition();
+  // Retour sur le détail : la météo de la position gardée est relue (au plus toutes les dix minutes).
+  useEffect(() => {
+    void refreshMyPosition();
+    const visible = () => {
+      if (document.visibilityState === "visible") void refreshMyPosition();
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => document.removeEventListener("visibilitychange", visible);
+  }, []);
   const cards = places ? weatherCards(places.places, at) : [];
   const cardIndex = index >= 0 && index < cards.length ? index : 0;
   const card = cards[cardIndex] ?? null;
