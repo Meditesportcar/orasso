@@ -112,6 +112,30 @@ describe("heures calmes de l'Essentiel urgent", () => {
   });
 });
 
+describe("départ repoussé", () => {
+  it("départ demain 7 h repoussé d'une semaine, modifié à 23 h : prévenu tout de suite (le plus tôt des deux départs)", async () => {
+    const night = fromWallTime({ year: 2026, month: 11, day: 10, hour: 23, minute: 0 });
+    const oldStart = fromWallTime({ year: 2026, month: 11, day: 11, hour: 7, minute: 0 });
+    await db
+      .update(events)
+      .set({ startsAt: oldStart, endsAt: new Date(oldStart.getTime() + 4 * HOUR) })
+      .where(eq(events.id, eventId));
+    const u = await withDevice("Prevenu");
+    await apply(u, eventId, ref, "accepted");
+    quietHours(true);
+    clock.set(night);
+    const newStart = new Date(oldStart.getTime() + 7 * DAY + 16 * HOUR);
+    sent.mockClear();
+    const res = await call(owner, "PATCH", `/events/${eventId}`, {
+      startsAt: newStart.toISOString(),
+      endsAt: new Date(newStart.getTime() + 4 * HOUR).toISOString(),
+    });
+    expect(res.status).toBe(200);
+    await notificationsService.deliverDue();
+    expect(pushed()).toBe(1);
+  });
+});
+
 describe("résumé", () => {
   it("un billet déjà scanné (used) reste une place, événement commencé sur plusieurs jours", async () => {
     const u = await signUp("Visiteur");

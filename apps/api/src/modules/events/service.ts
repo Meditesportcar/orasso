@@ -183,6 +183,8 @@ async function isMember(structureId: string, userId: string) {
   return Boolean(m);
 }
 
+const earliest = (a: Date, b: Date) => (a.getTime() <= b.getTime() ? a : b);
+
 /** Organisateur de l'événement ; renvoie l'événement. */
 async function organizerEvent(v: Viewer, id: string) {
   const e = await eventsRepo.byId(id);
@@ -543,7 +545,8 @@ export const eventsService = {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -650,7 +653,8 @@ export const eventsService = {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
