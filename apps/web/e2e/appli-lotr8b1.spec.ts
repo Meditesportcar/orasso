@@ -61,7 +61,7 @@ test("mon profil : haut compact, quatre compteurs avec un partenaire, Garage · 
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
-  await go(page, "/profil");
+  await go(page, "/profil?onglet=garage");
   await expect(page.getByTestId("profil-head")).toBeVisible({ timeout: 30_000 });
   // QR et Réglages en icônes ; « Profil public » a quitté l'en-tête ; la ligne de logos des partenaires aussi.
   await expect(page.getByTestId("profil-account-qr")).toHaveAccessibleName("Mon QR");
@@ -228,6 +228,9 @@ test("visiteur sans véhicule : pas d'onglet Garage, ouvert sur Sorties ; l'ajou
   await go(page, "/profil");
   await expect(page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  // Lot R8b2 : « Publications » s'ouvre par défaut ; « Sorties » est à côté.
+  await expect(selected(page)).toHaveAccessibleName("Publications");
+  await page.getByTestId("profil-tab-sorties").click();
   await expect(selected(page)).toHaveAccessibleName("Sorties");
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await shot(page, "09-visiteur");
@@ -251,7 +254,7 @@ test("lot R8r : visiteur, lecture des véhicules suspendue : « Sorties » s'ouv
   await go(page, "/profil?onglet=sorties");
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("profil-tab-pending")).toHaveCount(0);
-  await go(page, "/profil");
+  await go(page, "/profil?onglet=garage");
   await expect(page.getByTestId("profil-tab-pending")).toContainText("Chargement du garage", { timeout: 30_000 });
   await ctx.close();
 });
@@ -268,7 +271,7 @@ test("garage vide d'un exposant : « Garage · 0 », état vide et son bouton pr
     const res = await route.fetch();
     await route.fulfill({ response: res, body: "[]" });
   });
-  await go(page, "/profil");
+  await go(page, "/profil?onglet=garage");
   await expect(selected(page)).toHaveAccessibleName("Garage · 0", { timeout: 30_000 });
   await expect(page.getByText("Ton garage est vide")).toBeVisible();
   await expect(page.getByText("Ajoute ta première voiture : marque, photos, plaque floutée.")).toBeVisible();
@@ -317,7 +320,7 @@ test("le profil d'un autre : « Suivre » sur la ligne du grade, « Message » e
   await ctx.close();
 });
 
-test("un compte privé vu d'un inconnu : les nombres, « Réservé à ses abonnés », pas d'onglets ; demande en attente", async ({
+test("un compte privé vu d'un inconnu : les nombres, le panneau « Compte privé » (lot R8b2), « Publications » seul ; demande en attente", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -328,8 +331,10 @@ test("un compte privé vu d'un inconnu : les nombres, « Réservé à ses abonn�
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
   await go(page, "/u/Marc_66");
   await expect(page.getByTestId("public-counts")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
-  await expect(page.getByTestId("profil-tabs")).toHaveCount(0);
+  // Lot R8b2 : plus de note « Réservé à ses abonnés » : l'onglet « Publications » (le seul) montre le panneau « Compte privé ».
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
+  await expect(page.getByTestId("profil-tabs").getByRole("tab")).toHaveText(["Publications"]);
+  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toBeVisible();
   await shot(page, "13-prive-inconnu");
   // Demander à suivre : la demande attend sa réponse.
@@ -337,7 +342,9 @@ test("un compte privé vu d'un inconnu : les nombres, « Réservé à ses abonn�
   await expect(page.getByTestId("follow-button")).toContainText("Demandé", { timeout: 30_000 });
   await page.reload();
   await afterOpening(page);
-  await expect(page.getByTestId("profile-private-note")).toContainText("Ta demande attend", { timeout: 30_000 });
+  await expect(page.getByTestId("publications-private-ask")).toHaveText("Demande envoyée à Marc_66", {
+    timeout: 30_000,
+  });
   await shot(page, "14-prive-attente");
   await ctx.close();
 });

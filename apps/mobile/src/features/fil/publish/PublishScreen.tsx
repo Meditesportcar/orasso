@@ -6,34 +6,61 @@
 // parties ; l'identifiant de la publication est gardé (une réponse perdue ne crée pas de doublon).
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  acceptEvents,
+  attachableQuery,
+  attachLeadOf,
   type CommercialDraft,
+  captionMaxOf,
+  chooseAuthor,
+  chooseEvent,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
-  eventsWithPlace,
+  type EventsForbidden,
+  type EventsLoad,
+  emptyEventsLoad,
+  eventsOf,
+  eventsStale,
   FEED_ASPECT_RATIOS,
-  FEED_CAPTION_MAX,
+  FEED_PLACE_LABEL_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
   feedAspectLabels,
-  feedPostBody,
+  feedPostBodyR8,
+  importantAvailable,
+  importantImmediate,
+  initialPublishChoice,
   feedScreenLabels as L,
   noCommercialDraft,
+  type PublishChoice,
   partnershipLabels,
-  publishIssue,
+  publicationErrors,
+  publishAuthors,
+  publishIssueR8,
+  publishSays,
+  showAuthorChoice,
+  showEventBlock,
+  startEventsLoad,
+  feedPublishLabels as T,
   vehicleWizardLabels as V,
+  vehicleAllowed,
+  withImportantLeft,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
+import type { FeedPostBody } from "@/lib/api/feed";
 import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
+import { isTwoFactorError } from "@/lib/orga";
 import { cropAspect, type PickedPhoto, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
+import { useSession } from "@/lib/session";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
 import { Seg, SmButton } from "@/ui/Kit";
@@ -59,6 +86,7 @@ import {
   setFrames,
   withDetection,
 } from "./model";
+import { AuthorChoice, EventChoice, ImportantBox, Note, PosterVisual, Says } from "./PublishChoices";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -67,6 +95,12 @@ const ASPECTS: { value: FeedAspect; label: string }[] = [
   { value: "square", label: "1:1" },
   { value: "landscape", label: "Paysage" },
 ];
+
+/** Le refus de la liste des événements : pas le droit de parler au nom de la page, ou second facteur manquant. */
+function forbiddenOf(e: unknown): EventsForbidden | null {
+  if (isTwoFactorError(e)) return "two_factor_required";
+  return e instanceof ApiRequestError && e.code === "persona_forbidden" ? "persona_forbidden" : null;
+}
 
 async function uploadPhoto(photo: PickedPhoto, i: number): Promise<string> {
   const form = new FormData();
@@ -80,7 +114,13 @@ async function uploadPhoto(photo: PickedPhoto, i: number): Promise<string> {
   return (await api.upload(form)).key;
 }
 
+/** Le formulaire est isolé par compte : un autre compte repart d'un brouillon vide (aucune liste ni présence de l'ancien). */
 export function PublishScreen() {
+  const { me } = useSession();
+  return <PublishForm key={me?.user.id ?? "none"} />;
+}
+
+function PublishForm() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -91,8 +131,27 @@ export function PublishScreen() {
   // ferait passer la suivante à sa place).
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [eventId, setEventId] = useState<string | null>(null);
+  // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
+  const { me } = useSession();
+  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
+  const authors = useMemo(
+    () => publishAuthors(me?.personas ?? [], me?.profile.pseudo ?? "", me?.profile.avatarUrl ?? null),
+    [me?.personas, me?.profile.pseudo, me?.profile.avatarUrl],
+  );
+  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  const fan = vehicleAllowed(author);
+  const account = me?.user.id ?? "";
+  const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
+  const [reloadEvents, setReloadEvents] = useState(0);
+  // Le compte et la casquette d'aujourd'hui : une réponse lue pour un autre couple est jetée.
+  const now = useRef({ account, key: author.key, loadedAt: 0 });
+  now.current = { account, key: author.key, loadedAt: loaded.loadedAt };
+  // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
+  const [uncertain, setUncertain] = useState<FeedPostBody | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [found, setFound] = useState(false);
+  const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
+  const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
@@ -106,7 +165,7 @@ export function PublishScreen() {
   // jusqu'à la fin, une seule opération à la fois.
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
-  const [clientId] = useState(() => randomUUID());
+  const [clientId, setClientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
   const keys = useRef<Record<string, string>>({});
   // Chaque changement de format ouvre une génération : les recadrages et détections d'avant sont jetés à leur arrivée.
@@ -121,8 +180,68 @@ export function PublishScreen() {
   };
 
   const vehicles = useApi(() => api.vehicles(), []);
-  const applications = useApi(() => api.applications("upcoming"), []);
-  const events = eventsWithPlace(applications.data ?? []);
+  const eventBlock = showEventBlock(author);
+  // Les événements rattachables de la casquette choisie (rôle déduit par l'API), pour ce compte : rechargés au changement de
+  // casquette, au retour sur l'écran, au changement de jour de Paris (plafond de l'« Info importante »), après un échec.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le compte et la casquette sont identifiés par leur clé.
+  useEffect(() => {
+    if (!eventBlock || !account) return;
+    const guard = accountGuard();
+    const asked = { account, key: author.key };
+    setLoaded((l) => startEventsLoad(l, account, author.key));
+    let live = true;
+    const apply = (result: Parameters<typeof acceptEvents>[3]) => {
+      if (!live || !guard.current()) return;
+      setLoaded((l) => acceptEvents(l, now.current, asked, result, Date.now()));
+    };
+    api
+      .attachableEvents(attachableQuery(author))
+      .then((r) => apply({ ok: true, items: r.items }))
+      .catch((e) => apply({ ok: false, forbidden: forbiddenOf(e) }));
+    return () => {
+      live = false;
+    };
+  }, [account, author.key, eventBlock, reloadEvents]);
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) firstFocus.current = false;
+      else setReloadEvents((n) => n + 1);
+    }, []),
+  );
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (eventsStale(now.current.loadedAt, new Date())) setReloadEvents((n) => n + 1);
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const events = eventBlock ? eventsOf(loaded, account, author.key) : [];
+  const eventsLoading =
+    eventBlock && (loaded.account !== account || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
+  const event = events.find((e) => e.id === choice.eventId) ?? null;
+  // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste.
+  useEffect(() => {
+    if (choice.eventId && loaded.items && loaded.account === account && loaded.key === author.key) {
+      if (!loaded.items.some((e) => e.id === choice.eventId)) setChoice((c) => chooseEvent(c, null));
+    }
+  }, [loaded, choice.eventId, account, author.key]);
+  const showImportant = importantAvailable(author, event);
+  // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.
+  useEffect(() => {
+    if (!showImportant || !event) return;
+    let live = true;
+    const guard = accountGuard();
+    const id = event.id;
+    api
+      .eventNotifyPreview(id)
+      .then((r) => live && guard.current() && setRecipients({ eventId: id, n: r.recipients }))
+      .catch(() => live && guard.current() && setRecipients({ eventId: id, n: null }));
+    return () => {
+      live = false;
+    };
+  }, [showImportant, event?.id]);
+  const posterVisual = photos.length === 0 && event !== null && event.hasVisual;
   const activeVehicles = (vehicles.data ?? []).filter((v) => v.status === undefined || v.status === "active");
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/fil"));
@@ -258,43 +377,103 @@ export function PublishScreen() {
 
   const controls = photo ? plateControls(photo) : null;
   const preparing = working || photos.some((p) => p.detection === "pending");
-  const locked = busy || working;
+  const frozen = busy || uncertain !== null;
+  const locked = frozen || working;
+  const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
   const issue =
-    publishIssue({ photos, caption, preparing }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick);
+    publishIssueR8({
+      photos,
+      caption,
+      preparing,
+      author,
+      event,
+      important,
+      forbidden: eventBlock ? loaded.forbidden : null,
+    }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   async function publish() {
-    if (busy || working || issue) return;
+    if (busy || working || (!uncertain && issue)) return;
     setBusy(true);
     setError(null);
+    setSecurity(false);
+    // Le compte au départ : après chaque attente, si ce n'est plus le même, rien ne part et rien n'est écrit (ni requête, ni
+    // Fil global, ni photos temporaires : tout cela appartient au compte d'aujourd'hui).
+    const guard = accountGuard();
+    let sending: FeedPostBody | null = null;
     try {
       const uploaded: string[] = [];
-      for (const [i, p] of photos.entries()) {
+      for (const [i, p] of uncertain ? [] : photos.entries()) {
         setSent(i);
         let key = keys.current[p.photo.uri];
         if (!key) {
           key = await uploadPhoto(p.photo, i);
+          if (!guard.current()) return;
           keys.current[p.photo.uri] = key;
         }
         uploaded.push(key);
       }
       setSent(photos.length);
-      const body = feedPostBody({
-        photos: photos.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
-        caption,
-        aspect,
-        vehicleId,
-        eventId,
-        clientId,
-        ...commercialField(commercialLine),
-      });
+      const body: FeedPostBody =
+        uncertain ??
+        feedPostBodyR8({
+          photos: photos.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
+          caption,
+          aspect,
+          clientId,
+          author,
+          eventId: event ? event.id : null,
+          vehicleId: choice.vehicleId,
+          placeLabel: choice.placeLabel,
+          important,
+          ...(fan ? commercialField(commercialLine) : {}),
+        });
+      if (!guard.current()) return;
+      sending = body;
       const post = await api.createFeedPost(body);
+      // La réponse d'un autre compte (déconnexion, reconnexion pendant l'envoi) n'écrit rien chez celui d'aujourd'hui.
+      if (!guard.current()) return;
+      setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
       markFeedDirty(post);
       discardTempPhotos();
       setDone(true);
     } catch (e) {
+      if (!guard.current()) return;
+      // Un refus définitif prouve que rien n'a été créé : on sort de l'état incertain (429 et 401 ne prouvent rien : le contrôle
+      // de rejeu de l'API vient après ; le corps incertain est gardé).
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.status !== 429 && e.status !== 401) {
+        setUncertain(null);
+      }
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
-      else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
+      else if (e instanceof ApiRequestError && e.status === 401) setError(errorMessage(e));
+      else if (sending && e instanceof ApiRequestError && (e.isNetwork || e.status >= 500)) {
+        // Pas de réponse : la publication est peut-être partie. Le formulaire se fige sur ce corps et ce `clientId`.
+        setUncertain(sending);
+        setError(T.noNetwork);
+      } else if (e instanceof ApiRequestError && e.isNetwork) setError(T.noNetwork);
+      else if (isTwoFactorError(e) || (e instanceof ApiRequestError && e.code === "persona_forbidden")) {
+        // Pas le droit de parler au nom de cette page (ou second facteur manquant) : le message et le lien vers la sécurité.
+        setError(
+          e instanceof ApiRequestError && e.code === "persona_forbidden"
+            ? publicationErrors.persona_forbidden
+            : errorMessage(e),
+        );
+        setSecurity(true);
+      } else if (e instanceof ApiRequestError && e.code === "event_not_attachable") {
+        // L'événement n'est plus rattachable : la liste est rechargée, l'événement retiré, rien d'autre n'est perdu.
+        setChoice((c) => chooseEvent(c, null));
+        setReloadEvents((n) => n + 1);
+        setError(`${publicationErrors.event_not_attachable} ${T.listReloaded}`);
+      } else if (e instanceof ApiRequestError && e.code === "important_quota") {
+        // Le plafond réel est affiché, la case se décoche, le reste du brouillon reste.
+        const d = e.details as { leftToday?: number; leftWeek?: number } | undefined;
+        const at = event?.id;
+        if (at && d && Number.isFinite(d.leftToday) && Number.isFinite(d.leftWeek)) {
+          setLoaded((l) => withImportantLeft(l, at, { leftToday: Number(d.leftToday), leftWeek: Number(d.leftWeek) }));
+        }
+        setChoice((c) => ({ ...c, importantOn: false, importantReason: null }));
+        setError(publicationErrors.important_quota);
+      } else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
         // Le serveur dit quelle photo n'a pas de décision de plaque : on l'ouvre.
         const at = Number((e.details as { photoIndex?: number } | undefined)?.photoIndex);
         if (Number.isFinite(at)) setCurrent(at);
@@ -307,6 +486,36 @@ export function PublishScreen() {
     } finally {
       setBusy(false);
       setSent(null);
+    }
+  }
+
+  /**
+   * « Modifier ma publication » après un envoi incertain : on vérifie d'abord (`GET /me/feed-posts/by-client/:clientId`).
+   * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
+   * reste incertain (le formulaire ne se libère jamais sur un doute).
+   */
+  async function abandonUncertain() {
+    if (!uncertain || checking) return;
+    const guard = accountGuard();
+    setChecking(true);
+    setError(null);
+    try {
+      const post = await api.feedPostByClient(uncertain.clientId);
+      if (!guard.current()) return;
+      markFeedDirty(post);
+      discardTempPhotos();
+      setUncertain(null);
+      setFound(true);
+      setDone(true);
+    } catch (e) {
+      if (!guard.current()) return;
+      if (e instanceof ApiRequestError && e.status === 404) {
+        setUncertain(null);
+        setClientId(randomUUID());
+        keys.current = {};
+      } else setError(T.uncertainUnchecked);
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -341,15 +550,17 @@ export function PublishScreen() {
             {L.published}
           </Text>
           <Text variant="body" color={c.inkMuted}>
-            {L.publishedText}
+            {found ? T.uncertainFound : L.publishedText}
           </Text>
         </View>
         <SmButton kind="p" big wide icon="feed" onPress={close} testID="fil-publish-back">
           {L.backToFeed}
         </SmButton>
-        <SmButton kind="s" wide icon="gallery" onPress={() => router.replace("/fil/mes-publications")}>
-          {L.mineTitle}
-        </SmButton>
+        {fan ? (
+          <SmButton kind="s" wide icon="gallery" onPress={() => router.replace("/fil/mes-publications")}>
+            {L.mineTitle}
+          </SmButton>
+        ) : null}
       </FlowScreen>
     );
   }
@@ -373,27 +584,44 @@ export function PublishScreen() {
                 {sent < photos.length ? L.sending(sent + 1, photos.length) : L.publishing}
               </Muted>
             </View>
+          ) : uncertain ? (
+            <Muted variant="caption" testID="fil-publish-uncertain">
+              {T.uncertainTitle}
+            </Muted>
           ) : issue ? (
             <Muted variant="caption" testID="fil-publish-missing">
               {issue}
             </Muted>
+          ) : null}
+          {uncertain && !busy ? (
+            <SmButton
+              kind="s"
+              wide
+              icon="edit"
+              disabled={checking}
+              onPress={() => void abandonUncertain()}
+              testID="fil-publish-uncertain-edit"
+            >
+              {checking ? T.uncertainChecking : T.uncertainEdit}
+            </SmButton>
           ) : null}
           <SmButton
             kind="p"
             big
             wide
             icon="upload"
-            disabled={busy || Boolean(issue)}
+            disabled={busy || (!uncertain && Boolean(issue))}
             onPress={() => void publish()}
             testID="fil-publish-send"
           >
-            {L.publish}
+            {uncertain ? T.uncertainRetry : L.publish}
           </SmButton>
         </View>
       }
     >
       <View style={styles.block} testID="fil-publish">
         <Label text={L.publishPhotos} hint={L.publishPhotosCount(photos.length, FEED_POST_PHOTOS_MAX)} />
+        {posterVisual && event ? <PosterVisual event={event} /> : null}
         <View style={styles.grid}>
           {photos.map((p, i) => (
             <Pressable
@@ -586,23 +814,34 @@ export function PublishScreen() {
         label={L.caption}
         value={caption}
         onChangeText={setCaption}
-        editable={!busy}
+        editable={!frozen}
         placeholder={L.captionPlaceholder}
-        maxLength={FEED_CAPTION_MAX}
+        maxLength={captionMaxOf(author)}
         multiline
         testID="fil-publish-caption"
       />
-      <Muted variant="caption">{L.captionHint}</Muted>
+      <Muted variant="caption">{fan ? L.captionHint : T.captionHintPage}</Muted>
 
-      {activeVehicles.length ? (
+      <Note lead={T.oneGesture.lead} testID="fil-publish-gesture">
+        {T.oneGesture.rest}
+      </Note>
+      {showAuthorChoice(authors) ? (
+        <AuthorChoice
+          authors={authors}
+          value={author.key}
+          disabled={frozen}
+          onChoose={(key) => setChoice((c) => chooseAuthor(c, authors, key))}
+        />
+      ) : null}
+      {fan && activeVehicles.length ? (
         <View style={styles.block}>
           <Label text={L.vehicle} hint={L.optional} />
           <View style={styles.chips}>
             {activeVehicles.map((v) => (
               <Chip
                 key={v.id}
-                selected={vehicleId === v.id}
-                onPress={() => !busy && setVehicleId(vehicleId === v.id ? null : v.id)}
+                selected={choice.vehicleId === v.id}
+                onPress={() => !frozen && setChoice((c) => ({ ...c, vehicleId: c.vehicleId === v.id ? null : v.id }))}
               >
                 {v.label}
               </Chip>
@@ -610,24 +849,64 @@ export function PublishScreen() {
           </View>
         </View>
       ) : null}
-      {events.length ? (
-        <View style={styles.block}>
-          <Label text={L.event} hint={L.optional} />
-          <View style={styles.chips}>
-            {events.map((e) => (
-              <Chip
-                key={e.id}
-                selected={eventId === e.id}
-                onPress={() => !busy && setEventId(eventId === e.id ? null : e.id)}
-              >
-                {e.title}
-              </Chip>
-            ))}
-          </View>
-        </View>
+      {eventBlock ? (
+        <EventChoice
+          lead={attachLeadOf(author)}
+          noneHint={T.attachNoneHint[author.destination]}
+          events={events}
+          loading={eventsLoading}
+          failed={loaded.account === account && loaded.key === author.key && loaded.failed && !loaded.forbidden}
+          onRetry={() => setReloadEvents((n) => n + 1)}
+          value={event ? event.id : null}
+          disabled={frozen}
+          onChoose={(id) => setChoice((c) => chooseEvent(c, id))}
+          foot={fan ? T.attachFoot : null}
+        />
       ) : null}
-      <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" />
+      {!event ? (
+        <TextField
+          label={`${T.placeLabel} · ${T.optional}`}
+          value={choice.placeLabel}
+          onChangeText={(placeLabel) => setChoice((c) => ({ ...c, placeLabel }))}
+          editable={!frozen}
+          placeholder={T.placePlaceholder}
+          maxLength={FEED_PLACE_LABEL_MAX}
+          testID="fil-publish-place"
+        />
+      ) : null}
+      {showImportant && event ? (
+        <ImportantBox
+          event={event}
+          on={choice.importantOn}
+          reason={choice.importantReason}
+          recipients={recipients?.eventId === event.id ? recipients.n : null}
+          immediate={importantImmediate(event.startsAt, new Date())}
+          disabled={frozen}
+          onToggle={(on) =>
+            setChoice((c) => ({ ...c, importantOn: on, importantReason: on ? c.importantReason : null }))
+          }
+          onReason={(importantReason) => setChoice((c) => ({ ...c, importantReason }))}
+        />
+      ) : null}
+      {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
+      <Says says={publishSays(author, event, important.on)} />
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {loaded.forbidden && eventBlock ? (
+        <Notice tone="error" testID="fil-publish-forbidden">
+          {loaded.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore}
+        </Notice>
+      ) : null}
+      {security || (loaded.forbidden && eventBlock) ? (
+        <SmButton
+          kind="s"
+          wide
+          icon="shield"
+          onPress={() => router.push("/reglages/securite")}
+          testID="fil-publish-security"
+        >
+          {T.securityLink}
+        </SmButton>
+      ) : null}
       {vehicles.error ? <LoadError message={vehicles.error.message} onRetry={() => void vehicles.reload()} /> : null}
     </FlowScreen>
   );

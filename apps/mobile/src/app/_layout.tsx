@@ -8,7 +8,7 @@ import {
   useOrassoFonts,
   useTheme,
 } from "@orasso/design-system/native";
-import { profilePosition } from "@orasso/shared";
+import { profilePosition, publicationLinkOf } from "@orasso/shared";
 import * as Notifications from "expo-notifications";
 import {
   DarkTheme,
@@ -181,7 +181,8 @@ function Shell() {
       }
       backToBase();
       // Un lien de l'appli (profil d'un membre, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
-      const link = appLinkOf(data?.link);
+      // Lot R8b2 : une notification qui porte `postId` ouvre la publication seule (les commentaires s'ouvrent avec `commentId`).
+      const link = publicationLinkOf(data) ?? appLinkOf(data?.link);
       if (link) router.navigate(link as never);
       else router.navigate("/acces");
     },
