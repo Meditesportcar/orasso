@@ -7,7 +7,7 @@ import {
   notificationTypeLabels,
   settingsEventRows,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import "../../styles/event-notify.css";
@@ -179,26 +179,38 @@ export function RecipientsBanner({ count, timing }: { count: number | null; timi
 }
 
 /**
- * Fin d'une candidature : « Ce que tu recevras pour cet événement ». « C'est noté » (le bouton principal) enregistre
- * (seulement si l'interrupteur a changé) puis continue. Un échec garde le défaut et ne remet jamais la candidature en cause.
+ * Fin d'une candidature : « Ce que tu recevras pour cet événement ». « Nouveautés » part du réglage déjà enregistré et
+ * s'enregistre au changement (quitter l'écran n'en perd rien) ; « C'est noté » (le bouton principal) continue. Un échec
+ * rend l'interrupteur à sa valeur et ne remet jamais la candidature en cause.
  */
 export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () => void }) {
   const [news, setNews] = useState(true);
-  const [busy, setBusy] = useState(false);
+  // Tant que le réglage enregistré n'est pas lu, l'interrupteur est à son défaut et ne se touche pas.
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
 
-  async function noted() {
-    if (busy) return;
-    if (news) return onDone();
-    setBusy(true);
-    setMessage(null);
-    const res = await apiFetch<EventNotificationPrefsView>(
-      `/me/events/${encodeURIComponent(eventId)}/notification-prefs`,
-      { method: "PUT", json: { news } },
+  useEffect(() => {
+    let alive = true;
+    void apiFetch<EventNotificationPrefsView>(`/me/events/${encodeURIComponent(eventId)}/notification-prefs`).then(
+      (res) => {
+        if (!alive) return;
+        if (res.ok) setNews(res.data.news);
+        setLoaded(true);
+      },
     );
-    if (res.ok) return onDone();
-    setBusy(false);
-    setNews(true);
+    return () => {
+      alive = false;
+    };
+  }, [eventId]);
+
+  async function change(next: boolean) {
+    const previous = news;
+    setNews(next);
+    setMessage(null);
+    const res = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: next } });
+    if (res.ok) return setNews(res.data.news);
+    setNews(previous);
     setMessage(L.saveFailed);
   }
 
@@ -212,7 +224,8 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
         title={L.eventNewsTitle}
         help={L.eventNewsHelpOnSignup}
         checked={news}
-        onChange={setNews}
+        onChange={(v) => void change(v)}
+        disabled={!loaded}
         testId="notify-signup-news"
       />
       {message ? (
@@ -222,7 +235,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       ) : (
         <p className="en-note o-t-caption">{L.signupNote}</p>
       )}
-      <Button icon="check" onClick={() => void noted()} loading={busy} data-testid="notify-noted">
+      <Button icon="check" onClick={onDone} data-testid="notify-noted">
         {L.noted}
       </Button>
     </section>

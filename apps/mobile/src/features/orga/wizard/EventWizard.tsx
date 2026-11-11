@@ -353,6 +353,13 @@ export function EventWizard({
   const preview = useApi(() => api.notifyPreview(saved?.id ?? ""), [saved?.id, notifies], { enabled: notifies });
   const previewCount = preview.data ? preview.data.recipients : null;
   const notifyShown = notifies && (preview.data !== null || preview.error !== null) && previewCount !== 0;
+  // L'heure se rafraîchit pendant que la confirmation est affichée (21 h 58 puis 22 h 01 : « à 8 h »).
+  const [, setNotifyTick] = useState(0);
+  useEffect(() => {
+    if (!notifyShown) return;
+    const timer = setInterval(() => setNotifyTick((n) => n + 1), 20_000);
+    return () => clearInterval(timer);
+  }, [notifyShown]);
   const notifyClock = now();
   const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
   const formatsOn = useEventFormats();
@@ -565,7 +572,11 @@ export function EventWizard({
       // « Brouillon » : « Brouillon enregistré. » (le brouillon a déjà un identifiant depuis le temps 2).
       let fait = mode === "draft" ? "cree" : "modifie";
       // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lue sur l'événement (EventPage) avec le même code.
-      if (mode === "save" && notifyShown) fait = `prevenus:${notifySavedCode(previewCount, notifyWhen)}`;
+      if (mode === "save" && notifyShown) {
+        // Le moment se calcule à l'enregistrement, pas au dernier rendu.
+        const when = notifyTiming({ now: now(), startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+        fait = `prevenus:${notifySavedCode(previewCount, when)}`;
+      }
       const warnings: string[] = [];
       if (mode === "publish") {
         try {

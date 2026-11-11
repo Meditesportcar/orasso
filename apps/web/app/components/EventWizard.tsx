@@ -201,6 +201,13 @@ export function EventWizard(props: Props) {
     };
   }, [notifies, savedId]);
   const notifyShown = notifies && preview.done && preview.count !== 0;
+  // L'heure se rafraîchit pendant que la confirmation est affichée (21 h 58 puis 22 h 01 : « à 8 h »).
+  const [, setNotifyTick] = useState(0);
+  useEffect(() => {
+    if (!notifyShown) return;
+    const timer = setInterval(() => setNotifyTick((n) => n + 1), 20_000);
+    return () => clearInterval(timer);
+  }, [notifyShown]);
   const notifyClock = clockNow();
   const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
 
@@ -563,7 +570,9 @@ export function EventWizard(props: Props) {
       );
     }
     // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lu par la page de l'événement (`?prevenus=`).
-    const told = mode === "save" && notifyShown ? `?prevenus=${notifySavedCode(preview.count, notifyWhen)}` : "";
+    // Le moment se calcule à l'enregistrement, pas au dernier rendu.
+    const whenSaved = notifyTiming({ now: clockNow(), startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+    const told = mode === "save" && notifyShown ? `?prevenus=${notifySavedCode(preview.count, whenSaved)}` : "";
     window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : told}`);
   }
 

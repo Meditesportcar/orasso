@@ -2,7 +2,7 @@
 // Les règles de livraison sont celles de R8n1 (`eventNotifications.ts`, `quietHours.ts`) : rien n'est recopié ici.
 import { draftStart, type EventDraft, fromWallInput, sortedDraftDays } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
-import { ESSENTIAL_URGENT_WITHIN_MS } from "./eventNotifications";
+import { ESSENTIAL_URGENT_WITHIN_MS, newsDigestType } from "./eventNotifications";
 import { isQuietHour, urgentWithin } from "./quietHours";
 
 /** Ce qui, dans un événement publié, prévient ses inscrits (les mêmes champs que l'API : début, fin, adresse). */
@@ -14,6 +14,8 @@ export type NotifyFields = {
   city?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** Événement sur plusieurs jours : un jour par ligne (date, début, fin) ; absent ou vide = un seul créneau. */
+  days?: { date: string; startsAt: string | number | Date | null; endsAt: string | number | Date | null }[];
 };
 
 const instant = (v: string | number | Date | null | undefined): number | null => {
@@ -28,12 +30,27 @@ const text = (v: string | null | undefined) => (v ?? "").trim();
  * diffèrent ; le titre, la description, le prix… ne préviennent personne (l'API est la seule à décider, ceci l'annonce).
  */
 export function notifyChanged(before: NotifyFields, after: NotifyFields): boolean {
+  if (daysChanged(before.days ?? [], after.days ?? [])) return true;
   if (instant(before.startsAt) !== instant(after.startsAt)) return true;
   if (instant(before.endsAt) !== instant(after.endsAt)) return true;
   if (text(before.addressLine) !== text(after.addressLine)) return true;
   if (text(before.postalCode) !== text(after.postalCode)) return true;
   if (text(before.city) !== text(after.city)) return true;
   return (before.lat ?? null) !== (after.lat ?? null) || (before.lng ?? null) !== (after.lng ?? null);
+}
+
+/**
+ * Aligné sur `setDays` (`apps/api/src/modules/events/service.ts`) : un jour est reconnu par sa date ; les inscrits sont
+ * prévenus si le nombre de jours change (jour ajouté ou retiré) ou si le début ou la fin d'un jour change. La capacité
+ * d'un jour seule ne prévient personne.
+ */
+function daysChanged(before: NonNullable<NotifyFields["days"]>, after: NonNullable<NotifyFields["days"]>): boolean {
+  if (before.length !== after.length) return true;
+  const old = new Map(before.map((d) => [d.date, d]));
+  return after.some((d) => {
+    const o = old.get(d.date);
+    return !o || instant(o.startsAt) !== instant(d.startsAt) || instant(o.endsAt) !== instant(d.endsAt);
+  });
 }
 
 /** Le plus tôt des deux débuts : un départ repoussé ne retarde pas le message (comme l'API). `null` si aucun n'est lisible. */
@@ -65,14 +82,18 @@ export function notifyTimingLine(timing: NotifyTiming, input: { now: Date }): st
 }
 
 /** Les deux lignes de la famille « Événements » des Réglages (la maquette R8.11, vue `reg`). */
-export function settingsEventRows(prefs: { event?: boolean; eventNews?: boolean } | null | undefined) {
+export function settingsEventRows(
+  prefs: { event?: boolean; eventNews?: boolean } | null | undefined,
+  mutedTypes: readonly string[] = [],
+) {
   const familyOff = prefs?.event === false;
   return {
     /** « Changements importants de mes sorties » : cadenas, jamais d'interrupteur. */
     essential: { locked: true as const },
     /** « Nouveautés de mes sorties » : absent = activé ; grisé, avec sa raison, quand la famille est coupée. */
     news: {
-      on: prefs?.eventNews !== false,
+      // Le résumé coupé par type (ancien réglage) se lit coupé aussi.
+      on: prefs?.eventNews !== false && !mutedTypes.includes(newsDigestType),
       disabled: familyOff,
       reason: familyOff ? eventNotifyLabels.newsFamilyOff : null,
     },
@@ -91,6 +112,11 @@ export function notifyFieldsOfDraft(d: EventDraft): NotifyFields {
     city: d.city,
     lat: d.lat,
     lng: d.lng,
+    days: days.map((x) => ({
+      date: x.date,
+      startsAt: fromWallInput(`${x.date}T${x.startTime}`),
+      endsAt: fromWallInput(`${x.date}T${x.endTime}`),
+    })),
   };
 }
 

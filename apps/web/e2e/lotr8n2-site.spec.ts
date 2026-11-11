@@ -98,9 +98,10 @@ for (const width of [390, 1280]) {
     const news = page.getByTestId("notify-signup-news");
     await expect(news).toBeChecked();
     await expect(news).toHaveAccessibleName("Nouveautés de l'événement");
-    // Rien n'est enregistré tant que « C'est noté » n'est pas touché.
     expect((await prefsOf(a.cookie, event.id)).data).toMatchObject({ news: true, hasPlace: true });
     await news.uncheck();
+    // Tour 2 : enregistré au changement de l'interrupteur, avant « C'est noté ».
+    await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
     await page.getByTestId("notify-noted").click();
     await page.waitForURL(/\/app\/(acces|sorties)/, { timeout: 30_000 });
     expect((await prefsOf(a.cookie, event.id)).data.news).toBe(false);
@@ -229,7 +230,7 @@ test("site : organisateur, « N inscrits seront prévenus » seulement pour l'he
   await expect(banner.getByRole("checkbox")).toHaveCount(0);
   if (await page.getByTestId("notify-recipients-timing").count()) {
     await expect(page.getByTestId("notify-recipients-timing")).toHaveText(
-      /Il est tard : ils seront prévenus à 8 h\.|L'événement commence dans moins de 12 h : ils sont prévenus tout de suite, même la nuit\./,
+      /C.est la nuit : ils seront prévenus à 8 h\.|L'événement commence dans moins de 12 h : ils sont prévenus tout de suite, même la nuit\./,
     );
   }
   await page.getByTestId("wizard-save").click();

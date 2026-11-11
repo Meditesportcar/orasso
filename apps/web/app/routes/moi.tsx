@@ -484,7 +484,9 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
               <EventNotificationsFieldset
                 key={family}
                 familyOn={settings.notificationPrefs.event !== false}
-                eventNews={settings.notificationPrefs.eventNews}
+                eventNews={
+                  settings.notificationPrefs.eventNews !== false && !settings.mutedTypes.includes(newsDigestType)
+                }
                 types={typesOf("event")}
                 mutedTypes={settings.mutedTypes}
               />

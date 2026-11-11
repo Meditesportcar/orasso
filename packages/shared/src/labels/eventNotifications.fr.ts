@@ -46,15 +46,14 @@ export const eventNotifyLabels = {
     "Les mêmes réglages qu'à l'inscription : on les retrouve par la cloche de la fiche, tant qu'on est inscrit.",
   alwaysOn: "Toujours actif",
   essentialAria: "Essentiel, toujours actif",
-  saveFailed:
-    "Ton choix n'a pas pu être enregistré : « Nouveautés de l'événement » reste activé. Tu peux le régler par la cloche de la fiche.",
+  saveFailed: "Ton choix n'a pas pu être enregistré. Tu peux le régler par la cloche de la fiche.",
   ficheSaveFailed: "Réglage non enregistré. Réessaie dans un instant.",
   newsFamilyOff: "Coupé : tu as désactivé les notifications « Événements » ci-dessous.",
   settingsGroup: "Événements",
   /** Organisateur : confirmation avant « Enregistrer les modifications » d'un événement publié. */
   recipientsFallback: "Les inscrits seront prévenus.",
   autoNotify: "Un changement d'heure ou de lieu prévient tout seul : pas de case à cocher.",
-  timingLate: "Il est tard : ils seront prévenus à 8 h.",
+  timingLate: "C'est la nuit : ils seront prévenus à 8 h.",
   timingUrgentNight: "L'événement commence dans moins de 12 h : ils sont prévenus tout de suite, même la nuit.",
   savedNotified: (count: number) => `Enregistré : ${count} ${count > 1 ? "inscrits prévenus" : "inscrit prévenu"}`,
   savedNotifiedAt8: (count: number) =>

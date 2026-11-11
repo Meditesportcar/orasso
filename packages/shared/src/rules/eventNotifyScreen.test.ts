@@ -137,3 +137,74 @@ describe("l'assistant de l'organisateur : champs lus et message de retour", () =
     expect(notifySavedMessage(null)).toBeNull();
   });
 });
+
+describe("passage à l'heure d'été et d'hiver (Paris)", () => {
+  const far = new Date("2026-12-31T12:00:00+01:00");
+  it("29 mars 2026 (été, UTC+2) : nuit à 22 h, jour à 8 h", () => {
+    expect(notifyTiming({ now: new Date("2026-03-29T21:59:00+02:00"), startsAt: far })).toBe("now");
+    expect(notifyTiming({ now: new Date("2026-03-29T22:00:00+02:00"), startsAt: far })).toBe("at_8");
+    expect(notifyTiming({ now: new Date("2026-03-29T07:59:00+02:00"), startsAt: far })).toBe("at_8");
+    expect(notifyTiming({ now: new Date("2026-03-29T08:00:00+02:00"), startsAt: far })).toBe("now");
+    // La veille (hiver, UTC+1) : 22 h reste la nuit.
+    expect(notifyTiming({ now: new Date("2026-03-28T22:00:00+01:00"), startsAt: far })).toBe("at_8");
+    expect(notifyTiming({ now: new Date("2026-03-28T21:59:00+01:00"), startsAt: far })).toBe("now");
+  });
+  it("25 octobre 2026 (hiver, UTC+1) : nuit à 22 h, jour à 8 h ; la veille en été", () => {
+    expect(notifyTiming({ now: new Date("2026-10-25T21:59:00+01:00"), startsAt: far })).toBe("now");
+    expect(notifyTiming({ now: new Date("2026-10-25T22:00:00+01:00"), startsAt: far })).toBe("at_8");
+    expect(notifyTiming({ now: new Date("2026-10-25T07:59:00+01:00"), startsAt: far })).toBe("at_8");
+    expect(notifyTiming({ now: new Date("2026-10-25T08:00:00+01:00"), startsAt: far })).toBe("now");
+    expect(notifyTiming({ now: new Date("2026-10-24T22:00:00+02:00"), startsAt: far })).toBe("at_8");
+  });
+  it("la limite de 12 h se compte en durée réelle à travers le changement d'heure", () => {
+    const now = new Date("2026-03-28T23:00:00+01:00");
+    // 12 h plus tard en durée réelle : 12 h 00 pile (déjà en été).
+    expect(notifyTiming({ now, startsAt: new Date(now.getTime() + 12 * HOUR) })).toBe("now");
+    expect(notifyTiming({ now, startsAt: new Date(now.getTime() + 12 * HOUR + 60_000) })).toBe("at_8");
+  });
+});
+
+describe("l'assistant : tous les changements de jours que l'API annonce (setDays)", () => {
+  const base = initialEventDraft(new Date("2026-11-10T10:00:00+01:00"));
+  const multi = (days: { date: string; startTime: string; endTime: string; capacity: string }[]) => ({
+    ...base,
+    multiDay: true,
+    days,
+  });
+  const d = (date: string, startTime = "10:00", endTime = "18:00", capacity = "") => ({
+    date,
+    startTime,
+    endTime,
+    capacity,
+  });
+  const d1 = d("2027-01-09");
+  const d3 = d("2027-01-11");
+  const three = [d1, d("2027-01-10"), d3];
+  const before = notifyFieldsOfDraft(multi(three));
+  it("l'heure du jour du milieu change : annoncé", () => {
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([d1, d("2027-01-10", "11:00"), d3])))).toBe(true);
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([d1, d("2027-01-10", "10:00", "19:00"), d3])))).toBe(true);
+  });
+  it("un jour ajouté ou retiré : annoncé", () => {
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([...three, d("2027-01-12")])))).toBe(true);
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([d1, d3])))).toBe(true);
+  });
+  it("une date de jour déplacée : annoncé ; la capacité seule, le titre seul : rien", () => {
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([d1, d("2027-01-13"), d3])))).toBe(true);
+    expect(notifyChanged(before, notifyFieldsOfDraft(multi([d1, d("2027-01-10", "10:00", "18:00", "30"), d3])))).toBe(
+      false,
+    );
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...multi(three), title: "Autre" }))).toBe(false);
+  });
+  it("passer de plusieurs jours à un seul créneau : annoncé", () => {
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...multi(three), multiDay: false }))).toBe(true);
+  });
+});
+
+describe("Nouveautés de mes sorties : le résumé coupé par type se lit coupé", () => {
+  it("event_news_digest dans les types coupés : la ligne est coupée", () => {
+    expect(settingsEventRows({ event: true, eventNews: true }, ["event_news_digest"]).news.on).toBe(false);
+    expect(settingsEventRows({ event: true, eventNews: true }, ["event_announcement"]).news.on).toBe(true);
+    expect(settingsEventRows({ event: true, eventNews: false }, []).news.on).toBe(false);
+  });
+});

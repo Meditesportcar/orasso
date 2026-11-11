@@ -132,6 +132,8 @@ test("appli : à l'inscription, la cloche de la fiche et la place perdue", async
   expect((await prefsOf(a.cookie, event.id)).data).toMatchObject({ news: true, hasPlace: true });
   await news.click();
   await expect(news).toHaveAttribute("aria-checked", "false");
+  // Tour 2 : enregistré au changement de l'interrupteur, avant même « C'est noté ».
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
   await page.getByTestId("notify-noted").click();
   await expect(page.getByTestId("cand-done")).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
@@ -157,6 +159,17 @@ test("appli : à l'inscription, la cloche de la fiche et la place perdue", async
   await expect(page.getByTestId("notify-message")).toContainText("Tu n'as pas de place à cet événement");
   await page.getByRole("button", { name: "Fermer" }).first().click({ force: true });
   await expect(page.getByTestId("notify-bell")).toHaveCount(0, { timeout: 15_000 });
+
+  // Tour 2 : une nouvelle candidature lit le réglage enregistré. On coupe, on quitte par la croix (rien n'est perdu),
+  // on se retire, on candidate de nouveau : l'interrupteur est coupé.
+  await applyInApp(page, event.slug);
+  await page.getByTestId("notify-signup-news").click();
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
+  await page.getByTestId("cand-close").click();
+  const again = await apiCall<{ id: string }[]>(a.cookie, "GET", "/me/applications?scope=upcoming");
+  expect((await apiCall(a.cookie, "POST", `/applications/${again.data[0]?.id}/withdraw`, {})).status).toBe(200);
+  await applyInApp(page, event.slug);
+  await expect(page.getByTestId("notify-signup-news")).toHaveAttribute("aria-checked", "false", { timeout: 15_000 });
   await ctx.close();
 });
 
@@ -265,7 +278,7 @@ test("appli : organisateur, « N inscrits seront prévenus » seulement pour l'h
   const timing = await page.getByTestId("notify-recipients-timing").count();
   if (timing) {
     await expect(page.getByTestId("notify-recipients-timing")).toHaveText(
-      /Il est tard : ils seront prévenus à 8 h\.|L'événement commence dans moins de 12 h : ils sont prévenus tout de suite, même la nuit\./,
+      /C.est la nuit : ils seront prévenus à 8 h\.|L'événement commence dans moins de 12 h : ils sont prévenus tout de suite, même la nuit\./,
     );
   }
   await v(page, "wizard-save").click();

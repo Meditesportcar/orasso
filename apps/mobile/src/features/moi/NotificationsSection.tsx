@@ -37,7 +37,7 @@ function EventRows({
 }: Pick<SettingsApi, "settings" | "save"> & { settings: NonNullable<SettingsApi["settings"]> }) {
   const { t } = useTheme();
   const c = t.color;
-  const rows = settingsEventRows(settings.notificationPrefs);
+  const rows = settingsEventRows(settings.notificationPrefs, settings.mutedTypes);
   return (
     <View style={styles.rows} testID="notif-event-rows">
       <View
@@ -55,7 +55,7 @@ function EventRows({
             {eventNotifyLabels.essentialHelp}
           </Text>
         </View>
-        <Text variant="caption" color={c.inkMuted} style={styles.lockedState}>
+        <Text variant="bodyStrong" color={c.inkMuted}>
           {eventNotifyLabels.alwaysOn}
         </Text>
       </View>
@@ -70,6 +70,10 @@ function EventRows({
               ...prefsWith(settings.notificationPrefs, "event", settings.notificationPrefs.event !== false),
               eventNews: on,
             },
+            // Un ancien « résumé coupé » par type se retire en même temps : la ligne n'a qu'un réglage.
+            ...(settings.mutedTypes.includes(newsDigestType)
+              ? { mutedTypes: toggleMutedType(settings.mutedTypes, newsDigestType, true) }
+              : {}),
           })
         }
         testID="notif-news"
@@ -157,5 +161,4 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   lockedText: { flex: 1, gap: 2 },
-  lockedState: { fontFamily: "Archivo-ExtraBold" },
 });

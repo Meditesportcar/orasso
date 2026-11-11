@@ -1,9 +1,10 @@
 // « Ce que tu recevras pour cet événement » (lot R8n2, maquette R8.11, vue « insc ») : le bloc de l'écran de fin d'une
-// candidature. L'Essentiel (cadenas), « Nouveautés de l'événement » activé par défaut, puis « C'est noté » : il enregistre
-// (seulement si l'interrupteur a changé) et ferme. Un échec ne remet jamais la candidature en cause : le défaut reste.
+// candidature. L'Essentiel (cadenas), « Nouveautés de l'événement » à la valeur déjà enregistrée (activé par défaut),
+// enregistrée au changement de l'interrupteur (comme la feuille de la cloche : quitter l'écran n'en perd rien), puis
+// « C'est noté », qui ferme. Un échec rend l'interrupteur à sa valeur, sans jamais remettre la candidature en cause.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { eventNotifyLabels as L } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
@@ -16,23 +17,32 @@ const { space2, space3 } = tokens.spacing;
 export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () => void }) {
   const { t } = useTheme();
   const [news, setNews] = useState(true);
-  const [busy, setBusy] = useState(false);
+  // Tant que le réglage enregistré n'est pas lu, l'interrupteur est à son défaut et ne se touche pas.
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function noted() {
-    if (busy) return;
-    if (news) return onDone();
-    setBusy(true);
+  useEffect(() => {
+    let alive = true;
+    api
+      .eventNotificationPrefs(eventId)
+      .then((prefs) => alive && setNews(prefs.news))
+      .catch(() => undefined)
+      .finally(() => alive && setLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [eventId]);
+
+  async function change(next: boolean) {
+    const previous = news;
+    setNews(next);
     setMessage(null);
     try {
-      await api.setEventNotificationPrefs(eventId, news);
-      onDone();
+      const saved = await api.setEventNotificationPrefs(eventId, next);
+      setNews(saved.news);
     } catch {
-      // Le défaut (activé) reste : un message discret, la candidature n'est jamais remise en cause.
-      setNews(true);
+      setNews(previous);
       setMessage(L.saveFailed);
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -46,7 +56,8 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
         title={L.eventNewsTitle}
         help={L.eventNewsHelpOnSignup}
         on={news}
-        onChange={setNews}
+        disabled={!loaded}
+        onChange={(v) => void change(v)}
         testID="notify-signup-news"
       />
       {message ? (
@@ -56,7 +67,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       ) : (
         <Muted variant="caption">{L.signupNote}</Muted>
       )}
-      <SmButton kind="p" big wide icon="check" onPress={() => void noted()} disabled={busy} testID="notify-noted">
+      <SmButton kind="p" big wide icon="check" onPress={onDone} testID="notify-noted">
         {L.noted}
       </SmButton>
     </View>

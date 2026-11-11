@@ -1,8 +1,8 @@
 // La cloche de la fiche d'un événement (lot R8n2, maquette R8.11, vue « fiche ») : visible seulement quand la personne a
 // une place (`hasPlace`, lue avec la fiche quand elle est connectée). Elle ouvre « Notifications de cet événement ».
-import { Icon, useTheme } from "@orasso/design-system/native";
+import { Icon, tokens, useTheme } from "@orasso/design-system/native";
 import { eventNotifyLabels as L } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
@@ -10,7 +10,7 @@ import { useApi } from "@/lib/useApi";
 import { Overlay } from "@/ui/Overlay";
 import { NotifyPrefsSheet } from "./NotifyPrefsSheet";
 
-const SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
+const { radiusMd } = tokens.radius;
 
 export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; signedIn: boolean; stamp?: string }) {
   const { t } = useTheme();
@@ -19,6 +19,12 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
   // Place perdue : le message reste lisible dans la feuille ouverte, la cloche disparaît à sa fermeture.
   const [gone, setGone] = useState(false);
   // `stamp` : l'état des candidatures de la fiche ; il change à l'envoi d'une candidature ou à un retrait, la place est relue.
+  // Une nouvelle candidature (l'état des candidatures change) rend la cloche : la place est relue.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la remise à zéro, il n'est pas lu.
+  useEffect(() => {
+    setLost(false);
+    setGone(false);
+  }, [stamp]);
   const prefs = useApi(() => api.eventNotificationPrefs(eventId), [eventId, signedIn, stamp], { enabled: signedIn });
   const data = prefs.data;
   if (!signedIn || !data?.hasPlace || lost) return null;
@@ -27,7 +33,6 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={L.bellLabel}
-        hitSlop={SLOP}
         onPress={() => setOpen(true)}
         style={[styles.bell, { backgroundColor: `${t.color.night}8c` }]}
         testID="notify-bell"
@@ -55,9 +60,9 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
 const styles = StyleSheet.create({
   bell: {
     marginLeft: "auto",
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: radiusMd,
     alignItems: "center",
     justifyContent: "center",
   },
