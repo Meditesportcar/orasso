@@ -28,7 +28,13 @@ export const weatherRoutes = new Hono<AppEnv>()
     return c.json(weather);
   })
   .get("/me/weather", async (c) => {
-    const weather = await weatherService.mine(await requireUser(c));
+    const user = await requireUser(c);
+    // Lot R8r : `?place=1` = la météo du département seule (relecture de l'Accueil au premier chargement), jamais mise en cache.
+    if (c.req.query("place") === "1") {
+      c.header("cache-control", "private, no-store");
+      return c.json(await weatherService.mineAtHome(user));
+    }
+    const weather = await weatherService.mine(user);
     c.header("cache-control", "private, max-age=600");
     return c.json(weather);
   })
@@ -50,7 +56,8 @@ export const weatherRoutes = new Hono<AppEnv>()
   // rien n'est écrit, rien n'est rattaché au compte, rien n'est mis en cache autre que la case de 0,1°.
   .post("/weather/at", async (c) => {
     const v = await requireUser(c);
-    rateLimit("myWeather", v.user.id);
+    rateLimit("weatherAt", v.user.id);
+    rateLimit("weatherAtHour", v.user.id);
     const position = await body(c, weatherAtInput);
     c.header("cache-control", "private, no-store");
     return c.json(await weatherService.at(position));

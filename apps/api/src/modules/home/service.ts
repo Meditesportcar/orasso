@@ -166,7 +166,7 @@ export const homeService = {
       upcoming,
       interests,
       nearby,
-      weatherMine,
+      weatherStock,
       outingsWeather,
       favoriteGarage,
       wash,
@@ -183,8 +183,8 @@ export const homeService = {
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
       shown.has("weather")
         ? // Lot R8e1, tour 2 : le stock seulement ; le rafraîchissement part sans être attendu.
-          weatherService.mineFromStock(v).catch(() => null)
-        : Promise.resolve(null),
+          weatherService.mineFromStock(v).catch(() => ({ weather: null, pending: false }))
+        : Promise.resolve({ weather: null, pending: false }),
       // Lot R8e1 : la ligne météo des cartes de « Prochaine sortie » ; masquée, elle n'est pas calculée.
       shown.has("event_weather")
         ? this.outingsWeather(v, upcomingPromise, profile === "exhibitor").catch(
@@ -226,13 +226,13 @@ export const homeService = {
     ]);
 
     // Prestataire : la météo du jour J de l'événement de sa mission (pas celle d'une autre candidature).
-    const weather =
-      profile === "provider" && !q.light && provider?.nextMission
-        ? await withinBudget(
-            weatherService.dayJForEvent(provider.nextMission.event.id).catch(() => null),
-            null,
-          )
-        : weatherMine;
+    const missionWeather = profile === "provider" && !q.light ? (provider?.nextMission ?? null) : null;
+    const weather = missionWeather
+      ? await withinBudget(
+          weatherService.dayJForEvent(missionWeather.event.id).catch(() => null),
+          null,
+        )
+      : weatherStock.weather;
     // Lot R8m : « Ma météo » (les lieux de la personne), lue du cache seulement ; masqué, le bloc n'est pas calculé.
     const myWeather = shown.has("weather") ? await weatherService.places(v, "stock").catch(() => null) : null;
 
@@ -248,6 +248,7 @@ export const homeService = {
       nearby,
       weather,
       myWeather,
+      weatherPending: !missionWeather && weather === null && weatherStock.pending,
       outingsWeather,
       favoriteGarage,
       wash,

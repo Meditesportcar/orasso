@@ -9,7 +9,7 @@ import { RELAIS } from "./relais";
 // thème Automatique par le soleil (horloge Playwright). Captures (390 px) dans le relais.
 // Prérequis : API et site lancés sur la base seedée (damien@orasso.local, garage-narbonne@orasso.local).
 
-const DIR = process.env.LOT38_CAPTURES ?? `${RELAIS}/lot-38-captures/site`;
+const DIR = process.env.CAPTURES_DIR ?? process.env.LOT38_CAPTURES ?? `${RELAIS}/lot-38-captures/site`;
 mkdirSync(DIR, { recursive: true });
 
 async function phone(

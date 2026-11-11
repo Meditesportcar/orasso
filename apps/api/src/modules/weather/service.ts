@@ -4,12 +4,14 @@
 // Les routes et le rappel de la veille ne lisent que cette base : jamais d'appel au fournisseur par requête, jamais
 // bloquant (sans météo, tout fonctionne comme avant).
 import {
+  addDays,
   departmentCentroids,
   departmentPrefectures,
   describeWeather,
   type EventWeather,
   eventDates,
   forecastForEvent,
+  fromWallTime,
   isBadWeather,
   type MyWeather,
   type MyWeatherPlaces,
@@ -38,6 +40,7 @@ import {
   applications,
   events,
   eventWeather,
+  externalCache,
   profiles,
   profileWeatherPlaces,
   structureMembers,
@@ -130,6 +133,14 @@ const CELL_REFRESH_AFTER_MS = 2 * HOUR;
 /** Cases rafraîchies par passage au plus, et durée de garde d'une case que personne ne lit plus. */
 const CELLS_PER_PASS = 300;
 const CELL_KEEP_MS = 7 * DAY;
+/** Cases nouvelles demandées au fournisseur pour « Utiliser ma position », par heure et pour toute la plateforme (quota gratuit). */
+const AT_NEW_CELLS_PER_HOUR = 300;
+const atFetches: number[] = [];
+/** Une case de repli (la plus proche déjà en stock) ne s'éloigne pas de plus de ça, en degrés (environ 50 km). */
+const NEAREST_CELL_DEG = 0.5;
+const CITY_KEY = "reverse-city:";
+const CITY_MISS_MS = HOUR;
+const CITY_KEEP_MS = 30 * DAY;
 /** Dernier échec du fournisseur par département (lot 30) et délai avant de réessayer. */
 const departmentFailures = new Map<string, number>();
 const DEPARTMENT_RETRY_MS = 10 * 60_000;
@@ -138,6 +149,13 @@ const DEPARTMENT_RETRY_MS = 10 * 60_000;
 export function resetPlaceCellState() {
   cellFlights.clear();
   cellFailures.clear();
+  atFetches.length = 0;
+}
+
+/** Tests : le plafond horaire de cases nouvelles (« Utiliser ma position ») est atteint. */
+export function fillPositionBudget() {
+  const t = now().getTime();
+  while (atFetches.length < AT_NEW_CELLS_PER_HOUR) atFetches.push(t);
 }
 
 export const weatherService = {
@@ -248,6 +266,14 @@ export const weatherService = {
       if (await this.cellForecast(cell, true)) cells += 1;
     }
     await db.delete(weatherPlacesCache).where(lt(weatherPlacesCache.fetchedAt, new Date(t.getTime() - CELL_KEEP_MS)));
+    await db
+      .delete(externalCache)
+      .where(
+        and(
+          sql`${externalCache.key} like ${`${CITY_KEY}%`}`,
+          lt(externalCache.fetchedAt, new Date(t.getTime() - CITY_KEEP_MS)),
+        ),
+      );
     return { cells };
   },
 
@@ -338,7 +364,7 @@ export const weatherService = {
   /** Météo du jour J d'un événement donné (accueil du prestataire : l'événement de sa mission), `null` si elle n'est pas encore visible. */
   async dayJForEvent(eventId: string): Promise<MyWeather | null> {
     const e = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-    if (!e || e.status !== "published" || !weatherVisible(e, now())) return null;
+    if (e?.status !== "published" || !weatherVisible(e, now())) return null;
     const found = await this.stored(e);
     if (!found) return null;
     return {
@@ -389,7 +415,8 @@ export const weatherService = {
   async mineAtHome(v: Viewer): Promise<MyWeather | null> {
     const department = v.profile.departments[0];
     if (!department) return null;
-    return placeWeather(department, await this.departmentWeather(department));
+    // Lot R8r : un stock récent sans la journée d'aujourd'hui est renouvelé (relecture de l'Accueil au premier chargement).
+    return placeWeather(department, await this.departmentWeather(department, { needToday: true }));
   },
 
   /**
@@ -398,16 +425,27 @@ export const weatherService = {
    * (requêtes simultanées regroupées, échec retenté au plus toutes les 10 minutes, erreur journalisée), pour que la prochaine
    * ouverture l'ait.
    */
-  async mineFromStock(v: Viewer): Promise<MyWeather | null> {
+  async mineFromStock(v: Viewer): Promise<{ weather: MyWeather | null; pending: boolean }> {
     const department = v.profile.departments[0];
-    if (!department) return null;
+    if (!department) return { weather: null, pending: false };
     const row = await db.query.weatherDepartments.findFirst({ where: eq(weatherDepartments.department, department) });
-    if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
-      void this.departmentWeather(department).catch((error) =>
+    const weather = placeWeather(department, row);
+    // Lot R8r : un stock récent qui n'a pas la journée d'aujourd'hui (veille, minuit passé) est à renouveler comme un stock périmé.
+    const refreshing = !row || weather === null || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS;
+    if (refreshing) {
+      void this.departmentWeather(department, { needToday: weather === null }).catch((error) =>
         console.warn("Météo du département non rafraîchie :", error instanceof Error ? error.message : error),
       );
     }
-    return placeWeather(department, row);
+    // Lot R8r : sans journée d'aujourd'hui en stock, l'Accueil dit « en cours de chargement » (champ `weatherPending`) tant
+    // qu'un rafraîchissement est réellement lancé : fournisseur actif, département connu, pas d'échec dans les 10 dernières minutes.
+    const failedAt = departmentFailures.get(department);
+    const pending =
+      weather === null &&
+      weatherEnabled() &&
+      Boolean(departmentCentroids[department]) &&
+      (failedAt === undefined || now().getTime() - failedAt >= DEPARTMENT_RETRY_MS);
+    return { weather, pending };
   },
 
   /**
@@ -429,11 +467,29 @@ export const weatherService = {
       if (e.status !== "published" || !weatherVisible(e, t)) continue;
       const row = byEvent.get(e.id);
       if (!validFor(row, e)) continue;
-      const summary = forecastForEvent(row.forecast, e);
+      const aggregate = forecastForEvent(row.forecast, e);
+      if (!aggregate) continue;
+      // Lot R8r : un événement commencé montre la journée d'aujourd'hui (Paris), pas celle du début ; pas encore commencé :
+      // son premier jour. Commencé, le résumé porte sur la part d'aujourd'hui de l'événement (ses heures d'aujourd'hui quand on
+      // les a, sinon la journée) : un événement d'un seul jour garde exactement ses heures, nuit exclue.
+      const started = e.startsAt.getTime() <= t.getTime();
+      const w = wallTime(started ? t : e.startsAt, "Europe/Paris");
+      const day = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+      let summary: WeatherSummary | null = aggregate;
+      if (started) {
+        const dayStart = fromWallTime({ ...w, hour: 0, minute: 0 }, "Europe/Paris");
+        const dayEnd = fromWallTime({ ...addDays(w, 1), hour: 0, minute: 0 }, "Europe/Paris");
+        const today = {
+          startsAt: new Date(Math.max(e.startsAt.getTime(), dayStart.getTime())),
+          endsAt: new Date(Math.min(e.endsAt.getTime(), dayEnd.getTime() - 1)),
+          timezone: "Europe/Paris",
+        };
+        // Seulement les données d'aujourd'hui : sans elles (prévision partielle ou ancienne), pas de ligne plutôt qu'une autre journée.
+        summary = forecastForEvent(row.forecast, today);
+      }
       if (!summary) continue;
-      const w = wallTime(e.startsAt, "Europe/Paris");
       out[e.id] = {
-        day: `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`,
+        day,
         summary,
         provider: row.provider,
         attribution: weatherAttributions[row.provider],
@@ -447,11 +503,13 @@ export const weatherService = {
    * Cache du centre d'un département (3 h). Au plus une requête au fournisseur par département et par passage
    * (requêtes simultanées regroupées) : aucune requête par utilisateur. Indisponible : l'ancien cache, sinon `null`.
    */
-  async departmentWeather(department: string) {
+  async departmentWeather(department: string, opts: { needToday?: boolean } = {}) {
     const cached = await db.query.weatherDepartments.findFirst({
       where: eq(weatherDepartments.department, department),
     });
-    if (cached && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
+    // `needToday` : un stock récent mais sans la journée d'aujourd'hui n'est pas servi tel quel (lot R8r).
+    const lacksToday = Boolean(opts.needToday && placeWeather(department, cached) === null);
+    if (cached && !lacksToday && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
     const centre = departmentCentroids[department];
     if (!centre) return cached ?? null;
     // Lot 30 : après un échec du fournisseur, on ne le réinterroge pas avant 10 minutes (l'Accueil appelle cette fonction
@@ -473,12 +531,21 @@ export const weatherService = {
           fetchedAt: now(),
           forecast: { days: result.forecast.daily, hours: [] } satisfies StoredForecast,
         };
-        const [saved] = await db
-          .insert(weatherDepartments)
-          .values(values)
-          .onConflictDoUpdate({ target: weatherDepartments.department, set: values })
-          .returning();
-        return saved ?? null;
+        try {
+          const [saved] = await db
+            .insert(weatherDepartments)
+            .values(values)
+            .onConflictDoUpdate({ target: weatherDepartments.department, set: values })
+            .returning();
+          // Réponse sans la journée d'aujourd'hui : même retenue de 10 minutes (pas de rappel à chaque Accueil).
+          if (placeWeather(department, saved) === null) departmentFailures.set(department, now().getTime());
+          return saved ?? null;
+        } catch (error) {
+          // Lot R8r : le fournisseur a répondu mais le stock n'a pas pu être écrit : même retenue de 10 minutes qu'après un échec du
+          // fournisseur (sinon chaque Accueil le rappellerait), et l'erreur remonte aux appelants comme avant.
+          departmentFailures.set(department, now().getTime());
+          throw error;
+        }
       })().finally(() => departmentFlights.delete(department));
       departmentFlights.set(department, flight);
     }
@@ -550,6 +617,7 @@ export const weatherService = {
     const shown = myWeatherPlaces({ saved, departments: v.profile.departments });
     const cells = shown.map((p) => weatherCell(p));
     let rows: (typeof weatherPlacesCache.$inferSelect | null)[];
+    let pending = false;
     if (mode === "fresh") {
       rows = await Promise.all(cells.map((c) => this.cellForecast(c).catch(() => null)));
     } else {
@@ -562,6 +630,14 @@ export const weatherService = {
       for (const c of new Map(cells.map((cell) => [cell.key, cell])).values()) {
         const row = byKey.get(c.key);
         if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+          const failedAt = cellFailures.get(c.key);
+          if (
+            !row &&
+            weatherEnabled() &&
+            (failedAt === undefined || now().getTime() - failedAt >= DEPARTMENT_RETRY_MS)
+          ) {
+            pending = true;
+          }
           void this.cellForecast(c).catch((error) =>
             console.warn("Météo du lieu non rafraîchie :", error instanceof Error ? error.message : error),
           );
@@ -570,6 +646,7 @@ export const weatherService = {
     }
     return {
       max: WEATHER_PLACES_MAX,
+      pending,
       places: shown.map((p, i) => ({
         slot: p.slot,
         label: p.label,
@@ -607,7 +684,59 @@ export const weatherService = {
    */
   async at(position: { lat: number; lng: number }): Promise<WeatherAt> {
     const cell = weatherCell(position);
-    const [city, row] = await Promise.all([reverseCity(cell), this.cellForecast(cell).catch(() => null)]);
+    const [city, row] = await Promise.all([this.cityOf(cell), this.cellForAt(cell)]);
     return { label: city ?? "Ma position", weather: this.placeWeather(row) };
+  },
+
+  /**
+   * La prévision d'une case pour « Utiliser ma position », avec un plafond de cases nouvelles par heure pour toute la
+   * plateforme (le quota gratuit du fournisseur sert aussi la météo des événements) : au-delà, la case la plus proche déjà en
+   * stock, sinon rien, sans appel.
+   */
+  async cellForAt(cell: WeatherCell) {
+    const cached = await db.query.weatherPlacesCache.findFirst({ where: eq(weatherPlacesCache.cell, cell.key) });
+    const t = now().getTime();
+    if (cached && t - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
+    while (atFetches.length > 0 && (atFetches[0] ?? 0) <= t - HOUR) atFetches.shift();
+    if (atFetches.length >= AT_NEW_CELLS_PER_HOUR && !cellFlights.has(cell.key)) {
+      const near = await this.nearestCell(cell);
+      return near ?? cached ?? null;
+    }
+    if (!cellFlights.has(cell.key)) atFetches.push(t);
+    return this.cellForecast(cell).catch(() => null);
+  },
+
+  /** La case fraîche du stock la plus proche (à `NEAREST_CELL_DEG` au plus), ou `null`. */
+  async nearestCell(cell: WeatherCell) {
+    const rows = await db.select().from(weatherPlacesCache);
+    const t = now().getTime();
+    let best: (typeof rows)[number] | null = null;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const r of rows) {
+      if (t - r.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) continue;
+      const [lat, lng] = r.cell.split(",").map(Number);
+      if (lat === undefined || lng === undefined) continue;
+      const d = Math.max(Math.abs(lat - cell.lat), Math.abs(lng - cell.lng));
+      if (d <= NEAREST_CELL_DEG && d < bestD) {
+        best = r;
+        bestD = d;
+      }
+    }
+    return best;
+  },
+
+  /** La commune d'une case, gardée avec la case (cache partagé, jamais lié à un compte) : une recherche par case, pas par demande. */
+  async cityOf(cell: WeatherCell): Promise<string | null> {
+    const key = `${CITY_KEY}${cell.key}`;
+    const hit = await db.query.externalCache.findFirst({ where: eq(externalCache.key, key) });
+    const t = now().getTime();
+    if (hit) {
+      const city = (hit.data as { city: string | null }).city;
+      if (city !== null || t - hit.fetchedAt.getTime() < CITY_MISS_MS) return city;
+    }
+    const city = await reverseCity(cell);
+    const values = { key, fetchedAt: now(), data: { city } };
+    await db.insert(externalCache).values(values).onConflictDoUpdate({ target: externalCache.key, set: values });
+    return city;
   },
 };

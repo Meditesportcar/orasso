@@ -13,7 +13,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
-import { RELAIS } from "./relais";
+import { phaseDir, RELAIS } from "./relais";
 
 // Lot M6 : paires « avant | après » des écrans touchés (consigne de Damien du 23/10 : aucune régression visuelle). Le
 // même parcours est capturé avant les changements (`M6_PHASE=avant`) puis après (`M6_PHASE=apres`), en Béton et en
@@ -23,7 +23,7 @@ import { RELAIS } from "./relais";
 // Lancer avec APP_URL (relais de Metro), l'API et le site lancés sur la base seedée.
 const APP = process.env.APP_URL;
 const PHASE = process.env.M6_PHASE ?? "apres";
-const DIR = `${RELAIS}/lot-m6-captures/${PHASE}`;
+const DIR = phaseDir(`${RELAIS}/lot-m6-captures/${PHASE}`, PHASE);
 const NOCTURNE = "nocturne-de-canet-2026";
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 30_000 });

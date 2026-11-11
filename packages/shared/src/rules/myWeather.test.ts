@@ -211,6 +211,20 @@ describe("cartes et modifications des lieux", () => {
     expect(placesAfterAdd([], lyon)).toEqual([lyon]);
     expect(placesAfterAdd([s0, s1], lyon)).toHaveLength(2);
   });
+  it("sans département : position, puis Second lieu : la ville s'affiche à côté, la position n'est pas enregistrée", () => {
+    const afterAdd = placesAfterAdd([], lyon);
+    expect(afterAdd).toEqual([lyon]);
+    const saved = [{ slot: 0, ...lyon, source: "saved" as const, weather: w("l") }];
+    expect(weatherCards(saved, here).map((c) => [c.kind, c.label])).toEqual([
+      ["position", "Canet-en-Roussillon"],
+      ["saved", "Lyon"],
+    ]);
+    // Changer de lieu sur la carte de la position : la ville la remplace, Lyon reste le second.
+    const toulouse = { label: "Toulouse", lat: 43.6, lng: 1.44 };
+    expect(placesAfterChange(saved, { slot: null, kind: "position" }, toulouse)).toEqual([toulouse, lyon]);
+    // Deux lieux choisis : la position prend la place du premier, le second reste.
+    expect(weatherCards([s0, s1], here).map((c) => c.label)).toEqual(["Canet-en-Roussillon", "Argelès-sur-Mer"]);
+  });
   it("Retirer ce lieu : les autres restent", () => {
     expect(placesAfterRemove([s0, s1], 0)).toEqual([{ label: "Argelès-sur-Mer", lat: 42.55, lng: 3.03 }]);
     expect(placesAfterRemove([s0], 0)).toEqual([]);

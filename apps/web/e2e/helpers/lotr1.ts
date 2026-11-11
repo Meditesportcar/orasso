@@ -31,9 +31,14 @@ async function create(damien: string, structureId: string, title: string) {
     description: "Événement de recette du lot R1.",
   });
   expect(created.status).toBe(201);
+  // Gardé dès la création : un échec avant la publication ou les mises à jour SQL ne laisse pas d'événement de recette.
+  createdIds.push(created.data.id);
   expect((await apiCall(damien, "POST", `/events/${created.data.id}/publish`)).status).toBe(200);
   return { id: created.data.id, slug: created.data.slug, title };
 }
+
+/** Les événements créés par `r1Events` dans ce processus, supprimés par `removeR1Events` (sinon « En cours R1… » reste visible sur le site). */
+const createdIds: string[] = [];
 
 export async function r1Events(damien: string): Promise<R1Events> {
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(damien, "GET", "/me");
@@ -52,6 +57,13 @@ export async function r1Events(damien: string): Promise<R1Events> {
     [running.id],
   );
   return { over, running };
+}
+
+/** À appeler en `afterAll` : supprime les événements de recette créés par `r1Events` (sans candidature : rien ne les retient). */
+export async function removeR1Events(): Promise<void> {
+  const ids = createdIds.splice(0);
+  if (ids.length === 0) return;
+  await sql("delete from events where id = any($1::uuid[])", [ids]);
 }
 
 /** Les titres des événements à venir de MéditeSportCar (ce que « Médite » doit trouver). */

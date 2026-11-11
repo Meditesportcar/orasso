@@ -240,6 +240,22 @@ test("visiteur sans véhicule : pas d'onglet Garage, ouvert sur Sorties ; l'ajou
   await ctx.close();
 });
 
+test("lot R8r : visiteur, lecture des véhicules suspendue : « Sorties » s'ouvre tout de suite, « Garage » dit qu'il charge", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "paul.photo@orasso.local");
+  // La lecture des véhicules ne répond jamais.
+  await ctx.route("**/api/me/vehicles", () => new Promise(() => undefined));
+  await go(page, "/profil?onglet=sorties");
+  await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("profil-tab-pending")).toHaveCount(0);
+  await go(page, "/profil");
+  await expect(page.getByTestId("profil-tab-pending")).toContainText("Chargement du garage", { timeout: 30_000 });
+  await ctx.close();
+});
+
 test("garage vide d'un exposant : « Garage · 0 », état vide et son bouton principal, pas de ligne d'ajout", async ({
   browser,
 }) => {

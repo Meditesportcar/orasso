@@ -6,12 +6,12 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { call, resetDb, signUp, useClock } from "../../../test/helpers";
 import { db } from "../../db/client";
-import { profiles, profileWeatherPlaces, user, weatherDepartments, weatherPlacesCache } from "../../db/schema";
+import { externalCache, profiles, profileWeatherPlaces, user, weatherDepartments, weatherPlacesCache } from "../../db/schema";
 import { env } from "../../env";
 import { setGeocodeFetch } from "../../lib/geocode";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { setWeatherFetch } from "../../lib/weather";
-import { resetPlaceCellState, weatherService } from "./service";
+import { fillPositionBudget, resetPlaceCellState, weatherService } from "./service";
 
 const NOW = new Date("2026-10-16T09:00:00Z");
 const HOUR = 3_600_000;
@@ -107,6 +107,7 @@ beforeEach(async () => {
   await resetDb();
   await db.delete(weatherDepartments);
   await db.delete(weatherPlacesCache);
+  await db.delete(externalCache);
   clock = useClock(NOW);
   resetRateLimits();
   resetPlaceCellState();
@@ -175,7 +176,7 @@ describe("GET /me/weather/places", () => {
     setWeatherFetch(f as unknown as typeof fetch);
     const u = await fan("Fan_SansDep", []);
     const res = await call(u, "GET", "/me/weather/places");
-    expect(res.json).toEqual({ places: [], max: 2 });
+    expect(res.json).toEqual({ places: [], max: 2, pending: false });
     expect(f).not.toHaveBeenCalled();
   });
 
@@ -207,7 +208,7 @@ describe("GET /me/weather/places", () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);
     const u = await fan("Fan_Blanche");
     const res = await call(u, "GET", "/me/weather/places");
-    expect(Object.keys(res.json).sort()).toEqual(["max", "places"]);
+    expect(Object.keys(res.json).sort()).toEqual(["max", "pending", "places"]);
     expect(Object.keys(res.json.places[0]).sort()).toEqual(["label", "lat", "lng", "slot", "source", "weather"]);
     expect(Object.keys(res.json.places[0].weather).sort()).toEqual([
       "attribution",
@@ -604,5 +605,73 @@ describe("fournisseur : ressenti, rafales, direction", () => {
       "time",
       "windKmh",
     ]);
+  });
+});
+
+describe("coût : limites de « Utiliser ma position » et cache du géocodage inverse", () => {
+  it("10 par minute et 30 par heure et par compte, 429 au-delà ; la recherche de ville garde sa limite", async () => {
+    setWeatherFetch(providerStub() as unknown as typeof fetch);
+    setGeocodeFetch(geocoderStub() as unknown as typeof fetch);
+    const u = await fan("Fan_Quota");
+    const t = [];
+    for (let i = 0; i < 11; i++) t.push((await call(u, "POST", "/weather/at", { lat: 42.7, lng: 2.9 })).status);
+    expect(t.slice(0, 10).every((x) => x === 200)).toBe(true);
+    expect(t[10]).toBe(429);
+    expect((await call(u, "GET", "/geo/cities?q=Arg")).status).toBe(200);
+  });
+
+  it("la commune d'une case est gardée : un seul appel au géocodeur pour la même case", async () => {
+    setWeatherFetch(providerStub() as unknown as typeof fetch);
+    const geocoder = geocoderStub("Canet");
+    setGeocodeFetch(geocoder as unknown as typeof fetch);
+    const a = await fan("Fan_Geo1");
+    const b = await fan("Fan_Geo2");
+    await call(a, "POST", "/weather/at", { lat: 42.7049, lng: 2.8954 });
+    const second = await call(b, "POST", "/weather/at", { lat: 42.7, lng: 2.9 });
+    expect(second.json.label).toBe("Canet");
+    expect(geocoder.mock.calls.filter((c) => String(c[0]).includes("/reverse"))).toHaveLength(1);
+  });
+
+  it("plafond de cases nouvelles par heure : au-delà, la case fraîche la plus proche, sinon rien, sans appel", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    setGeocodeFetch(geocoderStub() as unknown as typeof fetch);
+    const u = await fan("Fan_Plafond");
+    // Une case fraîche proche en stock (43.0, 3.0) ; le plafond est atteint.
+    await call(u, "POST", "/weather/at", { lat: 43.0, lng: 3.0 });
+    const before = f.mock.calls.length;
+    fillPositionBudget();
+    const near = await weatherService.at({ lat: 43.2, lng: 3.2 });
+    expect(near.weather?.now.time).toBe("2026-10-16T09:00:00.000Z");
+    expect(f.mock.calls.length).toBe(before);
+    const far = await weatherService.at({ lat: 48.8, lng: 2.3 });
+    expect(far.weather).toBeNull();
+    expect(f.mock.calls.length).toBe(before);
+    // Une heure plus tard, le plafond est levé.
+    clock.advance(HOUR + 1);
+    const later = await weatherService.at({ lat: 48.8, lng: 2.3 });
+    expect(later.weather).not.toBeNull();
+  });
+});
+
+describe("export des données personnelles et état « en cours de chargement »", () => {
+  it("l'export contient les villes choisies, jamais une position", async () => {
+    setWeatherFetch(providerStub() as unknown as typeof fetch);
+    const u = await fan("Fan_Export");
+    await call(u, "PUT", "/me/weather/places", { places: [perpignan] });
+    const res = await call(u, "GET", "/me/export");
+    expect(res.status).toBe(200);
+    expect(res.json.weatherPlaces).toEqual([{ slot: 0, label: "Perpignan", lat: 42.7, lng: 2.9 }]);
+  });
+
+  it("Accueil : sans case en stock et rafraîchissement lancé, pending vrai ; fournisseur en panne, faux", async () => {
+    setWeatherFetch(providerStub() as unknown as typeof fetch);
+    const u = await fan("Fan_Pending");
+    const first = await call(u, "GET", "/me/home?persona=visitor");
+    expect(first.json.myWeather.pending).toBe(true);
+    await vi.waitFor(async () => expect(await db.select().from(weatherPlacesCache)).toHaveLength(1));
+    const second = await call(u, "GET", "/me/home?persona=visitor");
+    expect(second.json.myWeather.pending).toBe(false);
+    expect(second.json.myWeather.places[0].weather).not.toBeNull();
   });
 });

@@ -163,8 +163,9 @@ export type WeatherCard = {
 };
 
 /**
- * Les cartes à montrer, deux au plus. La position donnée à l'instant (gardée en mémoire de l'écran, jamais enregistrée) prend
- * la place du premier lieu ; le second lieu choisi reste à côté.
+ * Les cartes à montrer, deux au plus. La position donnée à l'instant (gardée en mémoire de l'écran, jamais enregistrée) est la
+ * première carte. Elle remplace la ville par défaut et le premier de deux lieux choisis ; un seul lieu choisi reste à côté
+ * d'elle (le « second lieu » ajouté sans département s'affiche donc toujours).
  */
 export function weatherCards(places: MyWeatherPlace[], at: WeatherAt | null): WeatherCard[] {
   const asCard = (p: MyWeatherPlace): WeatherCard => ({
@@ -175,9 +176,10 @@ export function weatherCards(places: MyWeatherPlace[], at: WeatherAt | null): We
     weather: p.weather,
   });
   if (!at) return places.slice(0, WEATHER_PLACES_MAX).map(asCard);
-  const second = places.find((p) => p.source === "saved" && p.slot === 1);
+  const saved = places.filter((p) => p.source === "saved").sort((a, b) => a.slot - b.slot);
+  const next = saved.length >= WEATHER_PLACES_MAX ? saved[1] : saved[0];
   const first: WeatherCard = { key: "position", kind: "position", slot: null, label: at.label, weather: at.weather };
-  return second ? [first, asCard(second)] : [first];
+  return next ? [first, asCard(next)] : [first];
 }
 
 export type PlaceCoords = { label: string; lat: number; lng: number };
@@ -195,10 +197,12 @@ const savedOf = (places: MyWeatherPlace[]): PlaceCoords[] =>
  */
 export function placesAfterChange(
   places: MyWeatherPlace[],
-  card: Pick<WeatherCard, "slot">,
+  card: Pick<WeatherCard, "slot"> & { kind?: WeatherCard["kind"] },
   city: PlaceCoords,
 ): PlaceCoords[] {
   const saved = savedOf(places);
+  // La carte de la position : la ville la remplace, le lieu choisi qui était à côté d'elle reste le second.
+  if (card.kind === "position") return [city, ...saved.slice(-1)].slice(0, WEATHER_PLACES_MAX);
   const slot = card.slot ?? 0;
   const next = [...saved];
   next[Math.min(slot, next.length)] = city;

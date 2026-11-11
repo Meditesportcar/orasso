@@ -31,6 +31,8 @@ export const weatherApi = {
   weatherAt: (position: LatLng) => request<WeatherAt>("/api/weather/at", { method: "POST", body: position }),
   /** Lot R8m : communes à choisir dans « Changer de lieu ». */
   searchCities: (q: string) => request<{ cities: CitySuggestion[] }>(`/api/geo/cities${qs({ q })}`),
+  /** Lot R8r : la météo du département seule (relecture unique de l'Accueil au premier chargement). */
+  myPlaceWeather: () => request<MyWeather | null>("/api/me/weather?place=1"),
   /** Bascule Maintenu / Incertain (organisateur, double authentification exigée par l'API). */
   setOutlook: (eventId: string, outlook: EventOutlook) =>
     request<{ outlook: EventOutlook }>(`/api/events/${eventId}/outlook`, { method: "PATCH", body: { outlook } }),

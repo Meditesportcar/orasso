@@ -57,6 +57,9 @@ export type DailyForecast = {
 /** Résumé de la météo d'un événement (ses heures, à défaut ses jours) : même forme qu'un jour. */
 export type WeatherSummary = DailyForecast;
 
+/** Délai d'attente maximal d'une requête au fournisseur météo (l'API s'y tient ; les clients attendent plus longtemps avant de relire). */
+export const WEATHER_PROVIDER_TIMEOUT_MS = 8000;
+
 /** Ce que stocke `event_weather.forecast` : les jours couvrant l'événement et ses heures. */
 export type StoredForecast = { days: DailyForecast[]; hours: HourlyForecast[] };
 
@@ -127,7 +130,12 @@ export type MyWeatherPlace = {
 };
 
 /** Réponse de `GET /me/weather/places` et champ `myWeather` de `GET /me/home`. */
-export type MyWeatherPlaces = { places: MyWeatherPlace[]; max: number };
+export type MyWeatherPlaces = {
+  places: MyWeatherPlace[];
+  max: number;
+  /** Lot R8r/R8m : un lieu sans météo en stock dont le rafraîchissement vient de partir (« Météo en cours de chargement », une relecture). */
+  pending: boolean;
+};
 
 /** Réponse de `POST /weather/at` (« Utiliser ma position ») : jamais rattachée au compte. */
 export type WeatherAt = { label: string; weather: PlaceWeather | null };
