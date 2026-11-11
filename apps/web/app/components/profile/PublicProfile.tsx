@@ -140,7 +140,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
     ? "publications"
     : visibleProfileTab(
         asked ??
-          profileOpenTab({ mine, hasGarage, publications: publications === undefined ? undefined : publications }),
+          // Un compteur nul hors audience limitée (un organisateur) : comme un compteur inconnu, « Garage » ou « Sorties » s'ouvre.
+          profileOpenTab({ mine, hasGarage, publications: publications ?? undefined }),
         hasGarage,
       );
   const tabHref = (t: ProfileTab) => {
