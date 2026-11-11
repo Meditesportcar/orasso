@@ -274,3 +274,19 @@ test("tour 2 : sans département, position puis « Second lieu » : la ville s'a
   await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
   await ctx.close();
 });
+
+test("tour 2 : /app/fil puis l'Accueil sans recharger : « Utiliser ma position » marche", async ({ browser }) => {
+  const { ctx, page } = await openHome(browser, { geo: true });
+  await page.goto("/app/fil");
+  await page.waitForLoadState("networkidle");
+  // Navigation sans rechargement du document vers l'Accueil.
+  await page.evaluate(() => {
+    const a = document.querySelector('a[href="/app"]') as HTMLAnchorElement | null;
+    a?.click();
+  });
+  await page.waitForURL(/\/app$/);
+  const block = await weatherBlock(page, "Perpignan · ta ville");
+  await block.getByTestId("my-weather-use-position").click();
+  await expect(block).toContainText("Canet-en-Roussillon · ma position", { timeout: 20_000 });
+  await ctx.close();
+});
