@@ -144,5 +144,7 @@ export function publicationCard(post: FeedPostView): FeedCard<"feed_post"> {
     reason: { code: "following_author", label: post.mine ? L.cardReasonMine : L.cardReasonOther },
     at: post.createdAt,
     payload: { post },
+    // « Déjà vu » (R8c1) ne concerne que le parcours du Fil : sur un profil ou une publication seule, jamais de séparation.
+    seen: false,
   };
 }
