@@ -9,6 +9,8 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { Avatar } from "@/ui/Avatar";
 import { FeedPhotos } from "../FeedPhotos";
+import { useFilOffline } from "../offlineContext";
+import { noteSeen } from "../seenTracker";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CardShell } from "./CardShell";
 import { CommercialBadge } from "./CommercialBadge";
@@ -22,6 +24,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const c = t.color;
   const router = useRouter();
   const post: FeedPostView = card.payload.post;
+  const offline = useFilOffline();
   return (
     <CardShell
       card={card}
@@ -35,7 +38,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       testID="feed-card-feed_post"
       actions={
         <>
-          <PostActions post={post} />
+          <PostActions post={post} offline={offline} onShared={() => noteSeen(card.id, "share")} />
           {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
         </>
       }

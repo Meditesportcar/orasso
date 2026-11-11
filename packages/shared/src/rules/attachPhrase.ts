@@ -50,8 +50,9 @@ function leadingArticle(title: string): { gender: Gender; rest: string } | null 
 /** Le genre d'un titre sans article : liste de noms féminins, voyelle ou « h » (élision), sinon masculin. */
 function genderOf(title: string): Gender {
   const first = plain(title.split(/\s+/)[0] ?? "");
-  if ((FEMININE_TITLE_WORDS as readonly string[]).includes(first)) return "f";
+  // L'élision l'emporte aussi pour un nom féminin (« l'Exposition », « l'Expo »).
   if (VOWEL.test(first) || (MUTE_H_WORDS as readonly string[]).includes(first)) return "elided";
+  if ((FEMININE_TITLE_WORDS as readonly string[]).includes(first)) return "f";
   return "m";
 }
 

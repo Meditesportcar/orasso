@@ -36,8 +36,9 @@ import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
 import { HotRail } from "./HotRail";
 import { HowFeedSheet } from "./HowFeedSheet";
+import { FilOfflineContext } from "./offlineContext";
 import { PublishChoice } from "./PublishChoice";
-import { noteSeen, useSeenTracker } from "./seenTracker";
+import { isRealTap, noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
 
@@ -207,7 +208,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const showHot = feed.hot.length > 0 && feed.filter !== "for_you";
   const publishedId = feed.published;
   return (
-    <>
+    <FilOfflineContext.Provider value={feed.offline}>
       <View ref={anchor} collapsable={false} style={styles.anchor} />
       <StoriesBar />
       {/* Lot R8f1 (variante A1 de la maquette R8.2) : une seule rangée, le sélecteur prend la place restante et le bouton
@@ -345,8 +346,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                   const from = touchStart.current;
                   touchStart.current = null;
                   // Un vrai toucher (moins de 10 px de déplacement) : un défilement n'ouvre aucune carte.
-                  if (from && Math.hypot(e.nativeEvent.pageX - from.x, e.nativeEvent.pageY - from.y) < 10)
-                    touch(card.id);
+                  if (from && isRealTap(from, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })) touch(card.id);
                 }}
                 style={styles.item}
               >
@@ -442,7 +442,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         <HowFeedSheet visible={how} onClose={() => setHow(false)} />
         <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
-    </>
+    </FilOfflineContext.Provider>
   );
 }
 

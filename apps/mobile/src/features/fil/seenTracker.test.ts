@@ -6,13 +6,19 @@ const env = vi.hoisted(() => ({
   saved: [] as { key: string; scope: string | null; value: unknown }[],
   release: null as (() => void) | null,
   slow: false,
+  drop: null as ((scope: string) => Promise<void>) | null,
 }));
 vi.mock("react-native", () => ({
   AppState: { currentState: "active", addEventListener: () => ({ remove: () => undefined }) },
 }));
 vi.mock("expo-router", () => ({ useIsFocused: () => true }));
 vi.mock("@/ui/ScrollAssist", () => ({ useScrollAssist: () => null }));
-vi.mock("@/lib/kv", () => ({ cacheScope: () => env.scope }));
+vi.mock("@/lib/kv", () => ({
+  cacheScope: () => env.scope,
+  onCacheScopeDropped: (h: (scope: string) => Promise<void>) => {
+    env.drop = h;
+  },
+}));
 vi.mock("@/lib/http", () => ({
   ApiRequestError: class extends Error {
     status = 0;
@@ -78,5 +84,33 @@ describe("file des cartes vues : changement de compte", () => {
     await t.flushSeen();
     await t.flushSeen();
     expect(env.saved.length).toBe(first);
+  });
+
+  it("un lot en vol reste dans la file gardée : un second envoi ne l'efface pas, un redémarrage le retrouve", async () => {
+    t.noteSeen(id(1), "view");
+    env.slow = true;
+    const first = t.flushSeen();
+    await new Promise((r) => setTimeout(r, 0));
+    const second = t.flushSeen(); // un second envoi concurrent
+    await second;
+    const last = env.saved[env.saved.length - 1]?.value as { id: string }[] | undefined;
+    expect(last?.map((e) => e.id)).toEqual([id(1)]);
+    env.release?.();
+    env.slow = false;
+    await first;
+  });
+
+  it("A part : la file est invalidée (rien ne repart au nom d'un autre)", async () => {
+    t.noteSeen(id(1), "view");
+    await env.drop?.("a");
+    env.scope = "b";
+    await t.flushSeen();
+    expect(env.sent).toHaveLength(0);
+  });
+
+  it("un vrai toucher bouge de moins de 10 px ; un défilement n'est pas un toucher", () => {
+    expect(t.isRealTap({ x: 100, y: 400 }, { x: 103, y: 404 })).toBe(true);
+    expect(t.isRealTap({ x: 100, y: 400 }, { x: 100, y: 330 })).toBe(false);
+    expect(t.isRealTap({ x: 100, y: 400 }, { x: 100, y: 390 })).toBe(false);
   });
 });

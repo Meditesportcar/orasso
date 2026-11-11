@@ -450,3 +450,51 @@ test("hors ligne puis retour du réseau en bas de la liste : la pastille « Nouv
   expect(first.length).toBeGreaterThan(0);
   await ctx.close();
 });
+
+test("mode avion sans quitter l'onglet : la copie filtrée, « Pas de réseau » sur la flamme et le commentaire, puis le retour du réseau", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  await goFil(page, "for_you");
+  await expect(page.getByTestId("fil-offline")).toHaveCount(0);
+  await ctx.setOffline(true); // ni actualisation ni changement d'onglet
+  await expect(page.getByTestId("fil-offline")).toContainText("Hors ligne : voici ce que ton téléphone a gardé.", {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("fil-hot")).toHaveCount(0);
+  await expect(page.getByTestId("fil-more")).toHaveCount(0);
+  await expect(page.getByTestId("feed-card-spot_meetup")).toHaveCount(0);
+  await expect(page.getByTestId("feed-card-sponsored")).toHaveCount(0);
+  // Flamme et commentaire d'une carte de la copie : « Pas de réseau », le compteur ne bouge pas.
+  const card = page.getByTestId("feed-card-feed_post").first();
+  const before = await card.getByTestId("feed-post-fire-count").textContent();
+  await card.getByTestId("feed-post-fire").click();
+  await expect(card.getByTestId("feed-post-no-network")).toHaveText("Pas de réseau");
+  expect(await card.getByTestId("feed-post-fire-count").textContent()).toBe(before);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(card.getByTestId("feed-post-no-network")).toBeVisible();
+  await ctx.setOffline(false);
+  await expect(page.getByTestId("fil-offline")).toHaveCount(0, { timeout: 30_000 });
+  await ctx.close();
+});
+
+test("partager une carte la retient comme interaction (`share`)", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  const sent: { cards: { id: string; action: string }[] }[] = [];
+  page.on("request", (req) => {
+    if (req.method() === "POST" && req.url().includes("/api/me/fil/seen")) sent.push(req.postDataJSON());
+  });
+  await goFil(page, "following");
+  const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
+  await card.scrollIntoViewIfNeeded();
+  await card.getByTestId("feed-post-share").click();
+  await expect
+    .poll(() => sent.flatMap((b) => b.cards).filter((c) => c.action === "share").length, {
+      timeout: 40_000,
+      intervals: [1_000],
+    })
+    .toBeGreaterThan(0);
+  await ctx.close();
+});

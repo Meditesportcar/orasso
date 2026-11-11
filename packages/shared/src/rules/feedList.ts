@@ -202,6 +202,8 @@ export function createSeenQueue(opts: { send: (batch: SeenEntry[]) => Promise<Se
   let retryAt = 0;
   let failures = 0;
   let inFlight = false;
+  /** Le lot parti sans réponse : il reste dans l'état gardé (`snapshot`) jusqu'à l'acquittement. */
+  let sending: SeenEntry[] = [];
   const normalize = (list: readonly SeenEntry[]): SeenEntry[] => {
     const { send, rest } = seenBatch(list);
     return [...send, ...rest];
@@ -224,7 +226,7 @@ export function createSeenQueue(opts: { send: (batch: SeenEntry[]) => Promise<Se
     },
     snapshot(): SeenEntry[] {
       entries = fresh(entries);
-      return [...entries];
+      return normalize(fresh([...sending, ...entries]));
     },
     size: (): number => entries.length,
     /** Vrai : tout est parti (ou rien à envoyer). Faux : un envoi a échoué, ou on attend le prochain essai. */
@@ -241,12 +243,14 @@ export function createSeenQueue(opts: { send: (batch: SeenEntry[]) => Promise<Se
             break;
           }
           entries = rest;
+          sending = send;
           let result: SeenSendResult;
           try {
             result = await opts.send(send);
           } catch {
             result = "retry";
           }
+          sending = [];
           if (result === "retry") {
             entries = normalize([...send, ...entries]);
             failures += 1;

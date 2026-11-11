@@ -30,8 +30,13 @@ describe("attachPhrase : l'accord du verbe avec le titre", () => {
     expect(attachPhrase("attendee", "before", "Montée de Prats")).toBe("sera à la Montée de Prats");
     expect(attachPhrase("attendee", "after", "MONTÉE historique")).toBe("était à la MONTÉE historique");
     for (const word of FEMININE_TITLE_WORDS) {
-      expect(attachPhrase("on_site", "before", `${word} du port`)).toBe(`présent à la ${word} du port`);
+      const elided = /^[aeiou]/.test(word.normalize("NFD").toLowerCase());
+      expect(attachPhrase("on_site", "before", `${word} du port`)).toBe(
+        elided ? `présent à l'${word} du port` : `présent à la ${word} du port`,
+      );
     }
+    expect(attachPhrase("organizer", "before", "Exposition du port")).toBe("pour l'Exposition du port");
+    expect(attachPhrase("attendee", "before", "Expo du port")).toBe("sera à l'Expo du port");
   });
 
   it("voyelle : élision, sans espace ; « h » muet seulement pour des mots français connus ; « y » reste consonne", () => {

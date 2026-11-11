@@ -304,6 +304,18 @@ export function useFeed() {
     };
   }, [ref, online, focused, appActive, copy]);
 
+  // Le réseau disparaît pendant qu'on regarde le Fil (mode avion, sans quitter l'onglet ni actualiser) : la liste affichée passe à
+  // sa copie filtrée (40 cartes, sans rendez-vous au spot ni sponsorisé, sans rail ni pagination) ; le retour du réseau est
+  // traité par `FilScreen` (relecture en haut de liste, sinon la pastille).
+  useEffect(() => {
+    if (online) return;
+    const l = listRef.current;
+    if (!l || l.filter !== filterRef.current) return;
+    const items = feedCopyCards(l.items);
+    if (!items.length) return;
+    setCopy((c) => c ?? { filter: l.filter, items, savedAt: new Date(lastOk.current || Date.now()).toISOString() });
+  }, [online]);
+
   const showingCopy = Boolean(copy && copy.filter === filter);
   const shown: FeedCard[] | null = showingCopy
     ? (copy?.items ?? null)

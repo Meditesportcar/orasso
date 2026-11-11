@@ -18,7 +18,7 @@ import { AppState, type View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
-import { cacheScope } from "@/lib/kv";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 
@@ -60,13 +60,25 @@ function current(): Store | null {
   return store;
 }
 
+/** La garde d'une file : le compte d'origine, capturé à sa création ; faux dès qu'un autre compte est lié. */
+const guardOf = (s: Store) => ({ scope: s.scope, current: () => cacheScope() === s.scope });
+
+// Déconnexion ou changement de compte : la file de l'ancien compte est invalidée (rien ne part, rien ne s'écrit sous un autre).
+onCacheScopeDropped(async () => {
+  store = null;
+  written = null;
+});
+
 /** La file gardée sur le téléphone est reprise une fois (redémarrage de l'appli en cours de lecture hors ligne). */
 async function restore(s: Store): Promise<void> {
   if (s.restored) return;
   s.restored = true;
-  const saved = await readCopy<SeenEntry[]>(QUEUE_KEY);
-  if (saved) written = { scope: s.scope, key: JSON.stringify(saved.value) };
-  if (saved && cacheScope() === s.scope && Array.isArray(saved.value)) s.queue.restore(saved.value);
+  // Lue sous le compte de cette file, jamais sous celui qui est lié maintenant.
+  const saved = await readCopy<SeenEntry[]>(QUEUE_KEY, guardOf(s));
+  if (saved && cacheScope() === s.scope && Array.isArray(saved.value)) {
+    written = { scope: s.scope, key: JSON.stringify(saved.value) };
+    s.queue.restore(saved.value);
+  }
 }
 
 /** Retient une carte vue (`view`), ouverte (`open`) ou partagée (`share`). */
@@ -80,6 +92,8 @@ export async function flushSeen(): Promise<void> {
   const s = current();
   if (!s) return;
   await restore(s);
+  // Gardée avant l'attente réseau : un arrêt de l'appli pendant l'envoi ne perd rien (le lot en vol reste dans l'état gardé).
+  await persist(s, false);
   const done = await s.queue.flush();
   await persist(s, done);
 }
@@ -92,7 +106,7 @@ async function persist(s: Store, done: boolean): Promise<void> {
   const key = JSON.stringify(done && left.length === 0 ? [] : left);
   if (written?.scope === s.scope && written.key === key) return;
   // Écrit sous le compte de cette file, jamais sous celui qui est lié maintenant.
-  await saveCopy(QUEUE_KEY, JSON.parse(key), new Date(), { scope: s.scope, current: () => cacheScope() === s.scope });
+  await saveCopy(QUEUE_KEY, JSON.parse(key), new Date(), guardOf(s));
   written = { scope: s.scope, key };
 }
 
@@ -101,6 +115,10 @@ export const isTrackable = (card: FeedCard): boolean =>
   isSeenCardId(card.id) && !card.seen && !(card.kind === "feed_post" && card.payload.post.mine);
 
 type Layout = { y: number; h: number };
+
+/** Un vrai toucher : le doigt a bougé de moins de 10 px (un défilement n'ouvre aucune carte). */
+export const isRealTap = (from: { x: number; y: number }, to: { x: number; y: number }): boolean =>
+  Math.hypot(to.x - from.x, to.y - from.y) < 10;
 
 /**
  * Suit les cartes de la liste : toutes les 500 ms (Fil affiché, application active), mesure la liste et les cartes à l'écran,
