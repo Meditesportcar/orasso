@@ -246,7 +246,8 @@ export function PublicProfile({
   const restricted = limited || publications === null;
   const mine = mode === "self";
   const [tab, setTab] = useState<ProfileTab>(
-    explicitProfileTab(onglet) ?? profileOpenTab({ mine, hasGarage, publications: restricted ? null : publications }),
+    explicitProfileTab(onglet) ??
+      profileOpenTab({ mine, hasGarage, publications: limited ? null : (publications ?? undefined) }),
   );
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {

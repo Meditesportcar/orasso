@@ -252,10 +252,10 @@ test("organisateur sur un compte privé : Garage et Sorties restent visibles, «
     "Sorties",
     "Publications",
   ]);
-  await expect(selected(page)).toHaveAccessibleName("Publications");
-  await expect(page.getByTestId("publications-private")).toContainText("Compte privé", { timeout: 30_000 });
-  await page.goto("/u/Marc_66?onglet=garage");
+  // Hors audience limitée, un compteur nul ouvre « Garage » ; le panneau « Compte privé » est dans « Publications ».
   await expect(selected(page)).toHaveAccessibleName(/^Garage/);
+  await page.goto("/u/Marc_66?onglet=publications");
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé", { timeout: 30_000 });
   await page.goto("/u/Kenji_66?onglet=nimporte");
   await expect(selected(page)).toHaveAccessibleName("Publications");
 });
@@ -281,4 +281,24 @@ test("commentaires (R8k2) : `?commentaires=1` ouvre la feuille sur la publicatio
     .poll(async () => (await apiCall<{ commentsOff: boolean }>(kenji, "GET", `/feed-posts/${id}`)).data.commentsOff)
     .toBe(true);
   await apiCall(kenji, "DELETE", `/me/feed-posts/${id}`);
+});
+
+test("choix de vue : propre au compte, sans /me de plus, effacé à la déconnexion", async ({ page }) => {
+  test.setTimeout(180_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
+  let meCalls = 0;
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/api/me") meCalls++;
+  });
+  await page.goto("/app/moi");
+  await expect(page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Une par une" }).click();
+  expect(meCalls).toBe(0);
+  const keys = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("orasso.publications.view")));
+  expect((await keys()).length).toBe(1);
+  await page.getByTestId("reglage-deconnexion").click();
+  await expect(page.getByTestId("reglage-deconnexion")).toHaveCount(0, { timeout: 30_000 });
+  expect(await keys()).toEqual([]);
 });
