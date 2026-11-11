@@ -54,7 +54,7 @@ for (const width of [390, 1280]) {
     await expect(card.getByTestId("home-outing-weather-banner")).toHaveCount(0);
     // Le bloc « Météo » : le département seulement, jamais l'événement.
     const block = page.getByTestId("widget-weather");
-    await expect(block.getByTestId("weather-place")).toContainText("Dép. 66");
+    await expect(block).toContainText("Perpignan · ta ville");
     await expect(block).not.toContainText("Salon Argelès");
     // Pas d'horizontale parasite.
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);

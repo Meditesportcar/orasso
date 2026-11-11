@@ -129,8 +129,9 @@ test("le bloc « Météo » ne dit que le département ; « Météo de l'événe
   const { ctx, page } = await open(browser);
   const block = page.getByTestId("home-weather");
   await expect(block).toBeVisible({ timeout: 30_000 });
-  await expect(block).toContainText("Météo du jour");
-  await expect(block).toContainText("Dép. 66");
+  // Lot R8m : « Ma météo » (la ville du département, « Perpignan · ta ville »), plus « Météo du jour » ni « Dép. 66 ».
+  await expect(block).toContainText("Ma météo");
+  await expect(block).toContainText("Perpignan · ta ville");
   await expect(block).not.toContainText(/jour J/);
   await expect(page.getByTestId("home-outing-weather")).toHaveCount(2);
 
@@ -147,7 +148,7 @@ test("le bloc « Météo » ne dit que le département ; « Météo de l'événe
   await afterOpening(page);
   await expect(page.getByTestId("home-outing").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("home-outing-weather")).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66");
+  await expect(page.getByTestId("home-weather")).toContainText("Perpignan · ta ville");
   await ctx.close();
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["live", ...DEFAULT_HIDDEN] });
 });
