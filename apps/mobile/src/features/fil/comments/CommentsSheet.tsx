@@ -130,7 +130,8 @@ export function CommentsSheet({
   const counter = commentCounter(text);
   const bottom = Math.max(insets.bottom, keyboard);
   const items = sheet.items;
-  const pendingTop = sheet.pending.filter((p) => p.parentId === null);
+  // Un envoi dont le commentaire visé a disparu reste visible (son texte n'est jamais perdu) : il s'affiche à la suite de la liste.
+  const pendingTop = sheet.pending.filter((p) => p.parentId === null || !sheet.items.some((c) => c.id === p.parentId));
   const empty = sheet.loaded && items.length === 0 && pendingTop.length === 0 && !post.commentsOff;
 
   return (

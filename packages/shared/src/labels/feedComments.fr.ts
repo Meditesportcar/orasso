@@ -33,6 +33,7 @@ export const feedCommentScreenLabels = {
   fireOnComment: "Flamme sur le commentaire",
   reply: "Répondre",
   replyToLabel: (pseudo: string) => `Répondre à ${pseudo}`,
+  commentGone: "Ce commentaire n'existe plus.",
   retryLabel: "Réessayer d'envoyer le commentaire",
   loadMoreComments: "Voir plus de commentaires",
   loadMoreReplies: "Voir plus de réponses",

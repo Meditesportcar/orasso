@@ -253,6 +253,94 @@ test("un envoi en échec survit au changement de filtre : même clientId à la r
   await expect(commentRow(page, text)).toHaveCount(0, { timeout: 30_000 });
 });
 
+test("un 404 de commentaire n'est pas une publication disparue : seule la ligne part, la feuille reste", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const lea = await login("lea@orasso.local");
+  const damien = await login("damien@orasso.local");
+  const fil = await apiCall<{ items: { kind: string; payload: { post: { id: string; commentsCount: number } } }[] }>(
+    damien,
+    "GET",
+    "/fil?filter=for_you",
+  );
+  const postId = fil.data.items.find((c) => c.kind === "feed_post" && c.payload.post.commentsCount > 3)?.payload.post
+    .id;
+  expect(postId).toBeTruthy();
+  const make = async (cookie: string, text: string, parentId?: string) => {
+    const r = await apiCall<{ id: string }>(cookie, "POST", `/feed-posts/${postId}/comments`, {
+      text,
+      parentId,
+      clientId: crypto.randomUUID(),
+    });
+    expect(r.status).toBe(201);
+    return r.data.id;
+  };
+  const stamp = unique();
+  const parentP = await make(lea, `Parent P ${stamp}`);
+  const parentC = await make(lea, `Parent C ${stamp}`);
+  await make(lea, `Réponse de C ${stamp}`, parentC);
+  await goFil(page, "damien@orasso.local", 390);
+  const card = await commentedCard(page);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(page.getByTestId("feed-comments-waiting")).toHaveCount(0, { timeout: 30_000 });
+  const loadAll = async () => {
+    for (let n = 0; n < 10 && (await page.getByTestId("feed-comments-more").count()) > 0; n++)
+      await page.getByTestId("feed-comments-more").click();
+  };
+  await loadAll();
+  await expect(commentRow(page, `Parent P ${stamp}`)).toBeVisible({ timeout: 30_000 });
+  // 1. Supprimer un commentaire déjà retiré : seule la ligne part.
+  const mine = `À moi ${stamp}`;
+  await page.getByTestId("feed-comment-input").fill(mine);
+  await page.getByTestId("feed-comment-send").click();
+  await expect(commentRow(page, mine)).toBeVisible({ timeout: 30_000 });
+  await commentRow(page, mine).getByTestId("feed-comment-more").click();
+  // Le retrait par un autre chemin (API) arrive avant la confirmation.
+  const list = await apiCall<{ items: { id: string; text: string }[]; nextCursor: string | null }>(
+    damien,
+    "GET",
+    `/feed-posts/${postId}/comments`,
+  );
+  let found = list.data.items.find((c) => c.text === mine)?.id;
+  let cursor = list.data.nextCursor;
+  while (!found && cursor) {
+    const more = await apiCall<{ items: { id: string; text: string }[]; nextCursor: string | null }>(
+      damien,
+      "GET",
+      `/feed-posts/${postId}/comments?cursor=${encodeURIComponent(cursor)}`,
+    );
+    found = more.data.items.find((c) => c.text === mine)?.id;
+    cursor = more.data.nextCursor;
+  }
+  expect(found).toBeTruthy();
+  await apiCall(damien, "DELETE", `/feed-comments/${found}`);
+  page.once("dialog", (d) => void d.accept());
+  await page.getByTestId("feed-comment-delete").click();
+  await expect(commentRow(page, mine)).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible();
+  await expect(page.getByTestId("feed-post-gone")).toHaveCount(0);
+  // 2. Répondre à un commentaire que son auteur vient de supprimer : message bref, le texte reste, la feuille aussi.
+  await commentRow(page, `Parent P ${stamp}`).getByTestId("feed-comment-reply").click();
+  await apiCall(lea, "DELETE", `/feed-comments/${parentP}`);
+  const reply = `Réponse perdue ${stamp}`;
+  await page.getByTestId("feed-comment-input").fill(`@Lea_11 ${reply}`);
+  await page.getByTestId("feed-comment-send").click();
+  await expect(page.getByTestId("feed-comment-pending")).toContainText(reply, { timeout: 30_000 });
+  await expect(page.getByTestId("feed-comment-notsent")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible();
+  await expect(page.getByTestId("feed-post-gone")).toHaveCount(0);
+  // 3. Déplier les réponses d'un parent supprimé : la ligne part, jamais « plus disponible ».
+  const rowC = commentRow(page, `Parent C ${stamp}`);
+  await expect(rowC).toBeVisible();
+  await apiCall(lea, "DELETE", `/feed-comments/${parentC}`);
+  await page.getByTestId("feed-comment-replies-toggle").last().click();
+  await expect(commentRow(page, `Parent C ${stamp}`)).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible();
+  await expect(page.getByTestId("feed-post-gone")).toHaveCount(0);
+  await expect(page.getByTestId("feed-comment-input")).toBeVisible();
+});
+
 test("un compte qui ne voit pas la publication n'obtient rien ; un autre compte signale un commentaire", async ({
   page,
 }) => {

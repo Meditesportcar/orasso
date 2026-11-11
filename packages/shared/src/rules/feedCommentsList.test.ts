@@ -394,7 +394,7 @@ describe("tour 3 : compte, 404, réponses, flamme", () => {
     const store = createPostLiveStore();
     store.setAccount("A");
     const server = post({ commentsCount: 2, lastComments: [] });
-    const t = store.ticket();
+    const t = store.ticket("p");
     // A ajoute un commentaire privé puis en supprime un ancien : même total (2) mais un fil et des deux derniers différents.
     store.set(server, { ...server, commentsCount: 2, lastComments: [preview(at("mine", 5))] }, t);
     store.updateSheet("p", (s) => sheetAddComment(s, at("mine", 5), null).state, t);
@@ -425,22 +425,71 @@ describe("tour 3 : compte, 404, réponses, flamme", () => {
     store.updateSheet("p", (s) => pendingRetry(s, "c9"));
     expect(store.sheetOf("p").pending[0]).toMatchObject({ clientId: "c9", status: "sending" });
   });
-  it("404 après une lecture réussie : fil, compteurs, brouillon vidés, feuille fermée, réponse tardive jetée", async () => {
+  it("404 après une lecture réussie : fil, compteurs, brouillon vidés, feuille fermée ; une réponse partie avant est réellement jetée", async () => {
     const { createPostLiveStore } = await import("./feedCommentsList");
     const store = createPostLiveStore();
     store.setAccount("A");
     const server = post({ commentsCount: 1, lastComments: [] });
-    store.updateSheet("p", (s) => sheetWithTopPage(s, [at("a", 1)], null, true));
+    store.updateSheet("p", (s) => sheetWithTopPage(s, [at("a", 1)], "cur", true));
     store.set(server, { ...server, commentsCount: 4 });
     store.open("p", false);
-    const t = store.ticket();
-    store.markGone("p", t);
+    // « Voir plus » et une flamme partent avant le 404 : leurs tickets sont pris à ce moment.
+    const more = store.followRead("p", "top");
+    const flame = store.ticket("p");
+    store.markGone("p", store.ticket("p"));
     expect(store.sheetOf("p").items).toEqual([]);
     expect(store.apply(server)).toBe(server);
     expect(store.opening()).toBeNull();
     expect(store.isGone("p")).toBe(true);
+    // Les réponses tardives arrivent après le 404 : rien ne recrée le fil ni les compteurs.
+    store.updateSheet("p", (s) => sheetWithTopPage(s, [at("late", 9)], null, false), more);
+    store.updateSheet("p", (s) => sheetSetReaction(s, "a", { reactionsCount: 5, reactedByMe: true }), flame);
+    store.set(server, { ...server, commentsCount: 9 }, flame);
+    expect(store.sheetOf("p").items).toEqual([]);
+    expect(store.apply(server)).toBe(server);
+    expect(store.fresh(more)).toBe(false);
+    // Rouvrir ne dit pas « lisible » : seule une lecture réussie le fait, et pas une lecture partie avant le 404.
     store.open("p", false);
+    expect(store.isGone("p")).toBe(true);
+    store.clearGone(more);
+    expect(store.isGone("p")).toBe(true);
+    const reread = store.beginRead("p", "top");
+    store.clearGone(reread);
     expect(store.isGone("p")).toBe(false);
+    store.updateSheet("p", (s) => sheetWithTopPage(s, [at("a", 1)], null, true), reread);
+    expect(store.sheetOf("p").items).toHaveLength(1);
+  });
+  it("deux instances successives : les réponses arrivent dans l'ordre inverse, seule la dernière lecture écrit", async () => {
+    const { createPostLiveStore } = await import("./feedCommentsList");
+    const store = createPostLiveStore();
+    store.setAccount("A");
+    const old = store.beginRead("p", "r:a"); // ancienne instance (avant le changement de filtre)
+    const fresh = store.beginRead("p", "r:a"); // nouvelle instance
+    store.updateSheet("p", (s) => sheetWithRepliesPage(s, "a", [at("r1", 2)], null, true), fresh);
+    expect(store.fresh(fresh)).toBe(true);
+    // La réponse de l'ancienne arrive en dernier : jetée avant d'écrire (elle réintroduirait une réponse supprimée).
+    expect(store.fresh(old)).toBe(false);
+    // Un autre fil n'est pas touché.
+    expect(store.fresh(store.beginRead("p", "top"))).toBe(true);
+    expect(store.fresh(fresh)).toBe(true);
+    // La suite d'une lecture (page suivante) reste valable tant qu'aucune autre lecture du fil n'est partie.
+    const next = store.followRead("p", "r:a");
+    expect(store.fresh(next)).toBe(true);
+    store.beginRead("p", "r:a");
+    expect(store.fresh(next)).toBe(false);
+  });
+  it("réconciliation : une première page tardive garde l'ajout confirmé avec ses compteurs à jour, sans écraser la page", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("x", 1)], "c", true);
+    s = sheetAddComment(s, at("c1", 50), null).state;
+    s = sheetAddComment(s, at("r1", 51), "c1").state;
+    s = sheetSetReaction(s, "c1", { reactionsCount: 2, reactedByMe: true });
+    // La première page, partie avant, arrive : x y est plus frais (3 flammes) ; c1 n'y est pas.
+    s = sheetWithTopPage(s, [at("x", 1, { reactionsCount: 3 })], "c", true);
+    const c1 = s.items.find((c) => c.id === "c1");
+    expect(c1?.repliesCount).toBe(1);
+    expect(c1?.reactionsCount).toBe(2);
+    expect(s.items.find((c) => c.id === "x")?.reactionsCount).toBe(3);
+    expect(s.replies.c1?.items.map((c) => c.id)).toEqual(["r1"]);
   });
   it("la réouverture revalide les réponses : une réponse supprimée entre deux ouvertures disparaît", () => {
     let s = sheetWithTopPage(emptySheet(), [at("a", 1, { repliesCount: 2 })], null, true);
@@ -500,6 +549,35 @@ describe("tour 3 : compte, 404, réponses, flamme", () => {
     resolvers[2]?.({ reactionsCount: 4, reactedByMe: true });
     await second;
     expect(current).toEqual({ reactionsCount: 4, reactedByMe: true });
+  });
+  it("flamme : si le compte change pendant la série, aucun envoi ne part sous la session suivante", async () => {
+    const { createFlameGate } = await import("./feedCommentsList");
+    const gate = createFlameGate();
+    const sent: boolean[] = [];
+    let resolve: ((v: { reactionsCount: number; reactedByMe: boolean }) => void) | undefined;
+    let alive = true;
+    const applied: unknown[] = [];
+    const io = {
+      send: (on: boolean) => {
+        sent.push(on);
+        return new Promise<{ reactionsCount: number; reactedByMe: boolean }>((r) => {
+          resolve = r;
+        });
+      },
+      apply: (v: unknown) => {
+        applied.push(v);
+      },
+      alive: () => alive,
+    };
+    const base = { reactionsCount: 3, reactedByMe: false };
+    const done = gate.fire("c", base, io); // A met une flamme
+    void gate.fire("c", base, io); // puis la retire : une seconde mutation attend
+    const appliedBefore = applied.length;
+    alive = false; // B se connecte avant la réponse de la première
+    resolve?.({ reactionsCount: 4, reactedByMe: true });
+    await done;
+    expect(sent).toEqual([true]);
+    expect(applied.length).toBe(appliedBefore);
   });
   it("flamme : une panne remet l'état connu de l'API, pas une annulation périmée", async () => {
     const { createFlameGate } = await import("./feedCommentsList");

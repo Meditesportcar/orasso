@@ -18,7 +18,7 @@ export type RepliesState = {
   /** Une première lecture a abouti (remis à faux à chaque réouverture : les réponses se revalident au dépliage). */
   loaded: boolean;
   /** Réponses confirmées par l'API depuis la dernière revalidation : une page qui arrive ne les efface pas (réconciliation par identifiant). */
-  recent: FeedCommentView[];
+  recent: string[];
 };
 
 /** Un envoi que l'API n'a pas encore confirmé : la ligne s'affiche tout de suite, grisée. Le `clientId` est gardé à chaque essai. */
@@ -38,7 +38,7 @@ export type SheetState = {
   replies: Record<string, RepliesState>;
   pending: PendingComment[];
   /** Commentaires de premier niveau confirmés depuis la dernière ouverture : une première page tardive ne les efface pas. */
-  recent: FeedCommentView[];
+  recent: string[];
 };
 
 export const emptySheet = (): SheetState => ({
@@ -68,6 +68,21 @@ export function mergeComments(
 }
 
 /**
+ * Une première page qui arrive : ce qu'elle apporte fait foi, et les ajouts confirmés depuis (`recent`) qu'elle ne contient pas
+ * (envoyés après son départ) restent, **dans leur version locale la plus fraîche** (compteurs de réponses, flammes) : jamais une
+ * copie ancienne qui masquerait une réponse.
+ */
+function withLocalAdditions(
+  page: readonly FeedCommentView[],
+  local: readonly FeedCommentView[],
+  recent: readonly string[],
+): FeedCommentView[] {
+  const inPage = new Set(page.map((c) => c.id));
+  const keep = local.filter((c) => recent.includes(c.id) && !inPage.has(c.id));
+  return mergeComments(keep, page);
+}
+
+/**
  * Applique une page de premier niveau. Sans curseur envoyé (`first`) : la liste est remplacée (on garde ce qu'on vient
  * d'écrire s'il n'y est pas encore). Sinon la page s'ajoute à la suite.
  */
@@ -79,7 +94,7 @@ export function sheetWithTopPage(
 ): SheetState {
   return {
     ...state,
-    items: first ? mergeComments(items, state.recent) : mergeComments(state.items, items),
+    items: first ? withLocalAdditions(items, state.items, state.recent) : mergeComments(state.items, items),
     cursor: nextCursor,
     loaded: true,
   };
@@ -100,7 +115,7 @@ export function sheetWithRepliesPage(
       ...state.replies,
       [parentId]: {
         ...was,
-        items: first ? mergeComments(items, was.recent) : mergeComments(was.items, items),
+        items: first ? withLocalAdditions(items, was.items, was.recent) : mergeComments(was.items, items),
         cursor: nextCursor,
         loaded: true,
       },
@@ -133,7 +148,7 @@ export function sheetAddComment(
       state: {
         ...state,
         items: mergeComments(state.items, [comment]),
-        recent: known ? state.recent : mergeComments(state.recent, [comment]),
+        recent: known || state.recent.includes(comment.id) ? state.recent : [...state.recent, comment.id],
       },
       counted: known ? 0 : 1,
     };
@@ -149,7 +164,7 @@ export function sheetAddComment(
         [parentId]: {
           ...was,
           items: mergeComments(was.items, [comment]),
-          recent: known ? was.recent : mergeComments(was.recent, [comment]),
+          recent: known || was.recent.includes(comment.id) ? was.recent : [...was.recent, comment.id],
           open: true,
         },
       },
@@ -172,7 +187,7 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
         ...state,
         items: state.items.filter((c) => c.id !== id),
         replies,
-        recent: state.recent.filter((c) => c.id !== id),
+        recent: state.recent.filter((x) => x !== id),
       },
       removed: 1 + top.repliesCount,
     };
@@ -185,7 +200,7 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
         items: patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: Math.max(0, c.repliesCount - 1) })),
         replies: {
           ...state.replies,
-          [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((c) => c.id !== id) },
+          [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((x) => x !== id) },
         },
       },
       removed: 1,
@@ -278,6 +293,8 @@ export function createFlameGate() {
         let last: FlameState = entry.known;
         try {
           for (;;) {
+            // Le compte a changé pendant la série : aucun nouvel envoi ne part sous la session suivante.
+            if (io.alive && !io.alive()) return;
             const sent = entry.want;
             last = await io.send(sent);
             if (entry.want === sent) break;
@@ -488,6 +505,10 @@ const emptyDraft = (): CommentDraft => ({ text: "", replyTo: null });
 
 type Thread = { sheet: SheetState; draft: CommentDraft };
 
+/** Ce qu'une réponse de l'API doit prouver avant d'écrire : le compte (génération), la publication (404 ou autre compte) et, pour une lecture, son rang. */
+export type LiveTicket = { g: number; id: string; p: number };
+export type ReadTicket = LiveTicket & { key: string; c: number };
+
 export function createPostLiveStore() {
   const entries = new Map<string, LiveEntry>();
   const threads = new Map<string, Thread>();
@@ -497,6 +518,10 @@ export function createPostLiveStore() {
   let version = 0;
   let account: string | null | undefined;
   let generation = 0;
+  /** Génération de chaque publication : change au 404 (les réponses parties avant ne comptent plus). */
+  const postGen = new Map<string, number>();
+  /** Rang des lectures par fil (`<publication>|top`, `<publication>|r:<commentaire>`) : seule la dernière partie compte, même d'une autre instance. */
+  const reads = new Map<string, number>();
   /** Les instances de `PostActions` montées pour chaque publication : porte la feuille celle dont l'écran est affiché (sinon la première). */
   const hosts = new Map<string, { id: string; focused: boolean }[]>();
   const emit = () => {
@@ -504,13 +529,18 @@ export function createPostLiveStore() {
     for (const fn of subs) fn();
   };
   const threadOf = (postId: string): Thread => threads.get(postId) ?? { sheet: emptySheet(), draft: emptyDraft() };
+  const pg = (postId: string) => postGen.get(postId) ?? 0;
   const reset = () => {
     entries.clear();
     threads.clear();
     gone.clear();
+    postGen.clear();
+    reads.clear();
     opening = null;
     generation += 1;
   };
+  /** Une écriture est valable pour le bon compte, la bonne génération de publication, et une publication encore lisible. */
+  const writable = (t: LiveTicket) => t.g === generation && t.p === pg(t.id) && !gone.has(t.id);
   return {
     subscribe(fn: () => void) {
       subs.add(fn);
@@ -522,7 +552,7 @@ export function createPostLiveStore() {
     version: () => version,
     /**
      * Le compte qui regarde (`null` : personne). Un autre compte, ou aucun : tout ce qui appartient au précédent s'en va (publications
-     * changées, fils, brouillons, envois en attente) et les réponses encore en route sont jetées (`ticket` / `alive`).
+     * changées, fils, brouillons, envois en attente) et les réponses encore en route sont jetées.
      */
     setAccount(next: string | null, silent = false) {
       if (account === next) return;
@@ -532,9 +562,24 @@ export function createPostLiveStore() {
       reset();
       if (!silent) emit();
     },
-    /** La génération courante : une réponse partie sous un autre compte n'écrit rien (`alive(ticket)` faux). */
-    ticket: () => generation,
-    alive: (ticket: number) => ticket === generation,
+    /** Le ticket d'une écriture sur cette publication : à prendre au départ de l'appel, rendu à chaque écriture. */
+    ticket: (postId: string): LiveTicket => ({ g: generation, id: postId, p: pg(postId) }),
+    /** La réponse de l'API peut-elle encore écrire (même compte, même génération de publication) ? */
+    alive: (t: LiveTicket): boolean => t.g === generation && t.p === pg(t.id),
+    /** Une nouvelle lecture d'un fil (`channel` : `top` ou `r:<commentaire>`) : les précédentes, même d'une autre instance, ne comptent plus. */
+    beginRead(postId: string, channel: string): ReadTicket {
+      const key = `${postId}|${channel}`;
+      const c = (reads.get(key) ?? 0) + 1;
+      reads.set(key, c);
+      return { ...this.ticket(postId), key, c };
+    },
+    /** La suite d'une lecture (page suivante) : valable tant qu'aucune autre lecture du même fil n'est partie. */
+    followRead(postId: string, channel: string): ReadTicket {
+      const key = `${postId}|${channel}`;
+      return { ...this.ticket(postId), key, c: reads.get(key) ?? 0 };
+    },
+    /** La lecture est-elle toujours la dernière de son fil (et la réponse d'un compte et d'une publication encore valables) ? */
+    fresh: (t: ReadTicket): boolean => t.g === generation && t.p === pg(t.id) && (reads.get(t.key) ?? 0) === t.c,
     /**
      * La publication telle qu'on la montre : ce que l'écran a changé depuis, tant que la publication reçue de l'API est celle d'alors.
      */
@@ -548,8 +593,8 @@ export function createPostLiveStore() {
       return { ...server, ...entry.fields };
     },
     /** Retient la publication changée (`next`) par-dessus celle de l'API (`server`). */
-    set(server: FeedPostView, next: FeedPostView, ticket: number = generation) {
-      if (ticket !== generation) return;
+    set(server: FeedPostView, next: FeedPostView, ticket?: LiveTicket) {
+      if (ticket ? !writable(ticket) : gone.has(server.id)) return;
       entries.set(server.id, {
         base: baseKey(server),
         fields: { commentsCount: next.commentsCount, commentsOff: next.commentsOff, lastComments: next.lastComments },
@@ -558,8 +603,8 @@ export function createPostLiveStore() {
     },
     /** Le fil (liste, réponses, envois en attente) d'une publication. */
     sheetOf: (postId: string): SheetState => threadOf(postId).sheet,
-    updateSheet(postId: string, fn: (s: SheetState) => SheetState, ticket: number = generation): SheetState {
-      if (ticket !== generation) return threadOf(postId).sheet;
+    updateSheet(postId: string, fn: (s: SheetState) => SheetState, ticket?: LiveTicket): SheetState {
+      if (ticket ? !writable(ticket) : gone.has(postId)) return threadOf(postId).sheet;
       const t = threadOf(postId);
       const sheet = fn(t.sheet);
       threads.set(postId, { ...t, sheet });
@@ -572,9 +617,13 @@ export function createPostLiveStore() {
       threads.set(postId, { ...t, draft: { ...t.draft, ...patch } });
       emit();
     },
-    /** La publication n'est plus lisible (404) : ses commentaires, compteurs, brouillon et envois en attente s'en vont ; la feuille se ferme. */
-    markGone(postId: string, ticket: number = generation) {
-      if (ticket !== generation) return;
+    /**
+     * La publication n'est plus lisible (404 d'une route de la publication) : ses commentaires, compteurs, brouillon et envois en attente
+     * s'en vont, la feuille se ferme, et tout ce qui était en route avant (réponses, flammes) est jeté.
+     */
+    markGone(postId: string, ticket?: LiveTicket) {
+      if (ticket && !(ticket.g === generation && ticket.p === pg(ticket.id))) return;
+      postGen.set(postId, pg(postId) + 1);
       threads.delete(postId);
       entries.delete(postId);
       gone.add(postId);
@@ -582,10 +631,15 @@ export function createPostLiveStore() {
       emit();
     },
     isGone: (postId: string): boolean => gone.has(postId),
+    /** Une lecture de la publication a réussi : elle est de nouveau lisible (jamais avant : rouvrir ne le dit pas). */
+    clearGone(t: ReadTicket) {
+      if (!this.fresh(t) || !gone.has(t.id)) return;
+      gone.delete(t.id);
+      emit();
+    },
     opening: (): CommentsOpening | null => opening,
     /** Ouvre la feuille d'une publication (`focus` : le champ prend la main, bouton « Commenter »). */
     open(postId: string, focus: boolean) {
-      gone.delete(postId);
       opening = { postId, focus };
       emit();
     },
