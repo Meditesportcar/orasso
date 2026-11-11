@@ -60,4 +60,3 @@ describe("lastNotify", () => {
     expect(res.json.lastNotify?.id).toBe(first.json.lastNotify?.id);
   });
 });
-

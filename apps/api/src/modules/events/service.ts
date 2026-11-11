@@ -413,14 +413,21 @@ export const eventsService = {
     // Lot R8n2, tour 3 : le dernier changement annoncé aux inscrits et son échéance décidée par l'API (différé = pas encore
     // parti, prévu plus tard) : l'assistant dit « à 8 h » d'après elle, jamais d'après un calcul local.
     const [lastNotify] = await db
-      .select({ id: notifications.id, deliverAfter: notifications.deliverAfter, deliveredAt: notifications.deliveredAt })
+      .select({
+        id: notifications.id,
+        deliverAfter: notifications.deliverAfter,
+        deliveredAt: notifications.deliveredAt,
+      })
       .from(notifications)
       .where(and(eq(notifications.eventId, id), eq(notifications.type, "event_updated")))
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(1);
     return {
       lastNotify: lastNotify
-        ? { id: lastNotify.id, deferred: lastNotify.deliveredAt === null && lastNotify.deliverAfter.getTime() > now().getTime() }
+        ? {
+            id: lastNotify.id,
+            deferred: lastNotify.deliveredAt === null && lastNotify.deliverAfter.getTime() > now().getTime(),
+          }
         : null,
       ...(await publicView(e, s, {
         instructions: true,
