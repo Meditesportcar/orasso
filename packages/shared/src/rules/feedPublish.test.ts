@@ -17,6 +17,7 @@ import {
   chooseAuthor,
   chooseEvent,
   clearUncertain,
+  draftFromBody,
   emptyEventsLoad,
   eventsOf,
   eventsStale,
@@ -31,6 +32,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  purgeUncertain,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -504,26 +506,71 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
   const memory = () => {
     const m = new Map<string, string>();
     return {
+      get length() {
+        return m.size;
+      },
+      key: (i: number) => [...m.keys()][i] ?? null,
       getItem: (k: string) => m.get(k) ?? null,
       setItem: (k: string, v: string) => void m.set(k, v),
       removeItem: (k: string) => void m.delete(k),
     };
   };
-  it("le corps incertain survit au rechargement, par compte, et s'efface", () => {
+  it("le corps incertain survit au rechargement, par compte : A → B → A garde l'envoi de A", () => {
     const store = memory();
     saveUncertain(store, "A", { clientId: "c1", caption: "x" } as never);
     expect(loadUncertain(store, "A")).toMatchObject({ clientId: "c1", caption: "x" });
-    // Un autre compte ne le relit jamais, et l'écarte.
+    // B n'en relit rien et n'efface rien de A.
     expect(loadUncertain(store, "B")).toBeNull();
-    expect(loadUncertain(store, "A")).toBeNull();
-    saveUncertain(store, "A", { clientId: "c2" });
-    clearUncertain(store);
+    saveUncertain(store, "B", { clientId: "cB" });
+    clearUncertain(store, "B");
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "c1" });
+    clearUncertain(store, "A");
     expect(loadUncertain(store, "A")).toBeNull();
     expect(loadUncertain(null, "A")).toBeNull();
   });
+  it("la déconnexion efface les envois incertains de tous les comptes, rien d'autre", () => {
+    const store = memory();
+    store.setItem("autre-cle", "garde");
+    saveUncertain(store, "A", { clientId: "c1" });
+    saveUncertain(store, "B", { clientId: "c2" });
+    purgeUncertain(store);
+    expect(loadUncertain(store, "A")).toBeNull();
+    expect(loadUncertain(store, "B")).toBeNull();
+    expect(store.getItem("autre-cle")).toBe("garde");
+    expect(() => purgeUncertain(null)).not.toThrow();
+  });
   it("un contenu abîmé n'est pas un corps incertain", () => {
     const store = memory();
-    store.setItem("orasso:fil:publish-uncertain", "{pas du json");
+    store.setItem("orasso:fil:publish-uncertain:A", "{pas du json");
     expect(loadUncertain(store, "A")).toBeNull();
+  });
+  it("le brouillon affichable d'une reprise : structure, événement, Info importante, légende, format, photos parties", () => {
+    const body = {
+      persona: "organizer",
+      structureId: "s2",
+      eventId: "e9",
+      caption: "Parking fermé",
+      aspect: "square",
+      important: { reason: "access" },
+      photos: [{ uploadKey: "k1" }, { uploadKey: "k2" }],
+      clientId: "c1",
+    };
+    const d = draftFromBody(body, authors);
+    expect(d.choice).toMatchObject({
+      authorKey: "structure:s2",
+      eventId: "e9",
+      importantOn: true,
+      importantReason: "access",
+      vehicleId: null,
+    });
+    expect(d).toMatchObject({ caption: "Parking fermé", aspect: "square", photoCount: 2 });
+    // Un corps de « Moi » ou d'une casquette disparue retombe sur « Moi ».
+    expect(draftFromBody({ caption: "x", vehicleId: "v1", placeLabel: "Port" }, authors).choice).toMatchObject({
+      authorKey: "me",
+      vehicleId: "v1",
+      placeLabel: "Port",
+      importantOn: false,
+    });
+    expect(draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey).toBe("me");
   });
 });
