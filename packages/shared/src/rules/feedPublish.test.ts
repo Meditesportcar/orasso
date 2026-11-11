@@ -9,11 +9,15 @@ import {
 } from "../labels/feedPublish.fr";
 import type { PlateRect } from "../schemas/vehicle";
 import {
+  acceptEvents,
   attachableQuery,
   attachLeadOf,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
+  emptyEventsLoad,
+  eventsOf,
+  eventsStale,
   feedPostBodyR8,
   importantAvailable,
   importantBlocked,
@@ -26,7 +30,9 @@ import {
   publishSays,
   showAuthorChoice,
   showEventBlock,
+  startEventsLoad,
   vehicleAllowed,
+  withImportantLeft,
 } from "./feedPublish";
 import { nextPlateFrame } from "./plateFrame";
 
@@ -135,7 +141,7 @@ describe("chooseAuthor / chooseEvent", () => {
 
 describe("publishIssueR8", () => {
   const draft = (over: Partial<PublishDraft> = {}): PublishDraft => ({
-    photos: [{ ...decided }],
+    photos: [decided],
     caption: "",
     author: byKey("me"),
     event: null,
@@ -388,3 +394,97 @@ describe("libellés d'un événement rattachable", () => {
     expect(attachPhraseOf(null, "after", "Rassemblement du Lydia")).toBe("Rassemblement du Lydia");
   });
 });
+
+describe("événements lus pour un compte (tour 2)", () => {
+  const item = (id: string) => ({ id, title: id, important: { leftToday: 1, leftWeek: 3 } }) as never;
+  it("la réponse tardive du compte A est jetée quand B est connecté (même casquette « me »)", () => {
+    let state = startEventsLoad(emptyEventsLoad, "A", "me");
+    const askedA = { account: "A", key: "me" };
+    // B se connecte avant la réponse de A : la liste de A est vidée, B a son propre chargement.
+    state = startEventsLoad(state, "B", "me");
+    expect(eventsOf(state, "B", "me")).toEqual([]);
+    state = acceptEvents(state, { account: "B", key: "me" }, askedA, { ok: true, items: [item("secret-de-A")] }, 1);
+    expect(eventsOf(state, "B", "me")).toEqual([]);
+    expect(state.items).toBeNull();
+    // La réponse de B est prise.
+    state = acceptEvents(
+      state,
+      { account: "B", key: "me" },
+      { account: "B", key: "me" },
+      { ok: true, items: [item("b1")] },
+      2,
+    );
+    expect(eventsOf(state, "B", "me").map((e) => e.id)).toEqual(["b1"]);
+    // Et rien n'est servi à A.
+    expect(eventsOf(state, "A", "me")).toEqual([]);
+  });
+  it("une casquette changée jette la réponse de l'ancienne ; une relecture de la même garde la liste", () => {
+    let state = startEventsLoad(emptyEventsLoad, "A", "me");
+    state = acceptEvents(
+      state,
+      { account: "A", key: "me" },
+      { account: "A", key: "me" },
+      { ok: true, items: [item("e1")] },
+      5,
+    );
+    const same = startEventsLoad(state, "A", "me");
+    expect(same).toBe(state);
+    const failed = acceptEvents(
+      state,
+      { account: "A", key: "me" },
+      { account: "A", key: "me" },
+      { ok: false, forbidden: null },
+      6,
+    );
+    expect(failed).toMatchObject({ failed: true, loadedAt: 5 });
+    expect(failed.items).toHaveLength(1);
+    const other = startEventsLoad(state, "A", "structure:s1");
+    expect(other.items).toBeNull();
+    expect(
+      acceptEvents(
+        other,
+        { account: "A", key: "structure:s1" },
+        { account: "A", key: "me" },
+        { ok: true, items: [item("x")] },
+        7,
+      ).items,
+    ).toBeNull();
+  });
+  it("un refus de la liste (droit, second facteur) bloque « Publier » avec la raison", () => {
+    const base = {
+      photos: [decidedPhoto()],
+      caption: "x",
+      author: byKey("structure:s1"),
+      event: null,
+      important: { on: false, reason: null },
+    } satisfies PublishDraft;
+    expect(publishIssueR8({ ...base, forbidden: "persona_forbidden" })).toBe(
+      "Tu ne peux pas publier au nom de cette page.",
+    );
+    expect(publishIssueR8({ ...base, forbidden: "two_factor_required" })).toContain("double authentification");
+    expect(publishIssueR8({ ...base, forbidden: null })).toBeNull();
+  });
+  it("le plafond est périmé au changement de jour de Paris, pas avant", () => {
+    const loadedAt = new Date("2026-11-11T21:30:00Z").getTime(); // 22 h 30 à Paris
+    expect(eventsStale(loadedAt, new Date("2026-11-11T22:30:00Z"))).toBe(false);
+    expect(eventsStale(loadedAt, new Date("2026-11-11T23:01:00Z"))).toBe(true); // minuit passé à Paris
+    expect(eventsStale(0, new Date())).toBe(false);
+  });
+  it("le plafond d'un événement se remplace sans toucher aux autres", () => {
+    let state = startEventsLoad(emptyEventsLoad, "A", "structure:s1");
+    state = acceptEvents(
+      state,
+      { account: "A", key: "structure:s1" },
+      { account: "A", key: "structure:s1" },
+      { ok: true, items: [item("e1"), item("e2")] },
+      1,
+    );
+    const next = withImportantLeft(state, "e1", { leftToday: 0, leftWeek: 2 });
+    expect(next.items?.[0]?.important).toEqual({ leftToday: 0, leftWeek: 2 });
+    expect(next.items?.[1]?.important).toEqual({ leftToday: 1, leftWeek: 3 });
+  });
+});
+
+function decidedPhoto() {
+  return { rects: [{ x: 0.1, y: 0.1, w: 0.3, h: 0.1 }], noPlate: false } as never;
+}

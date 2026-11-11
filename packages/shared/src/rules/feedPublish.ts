@@ -18,7 +18,7 @@ import type { PersonaEntry } from "../schemas/profile";
 import type { StoryPersona } from "./audience";
 import { ESSENTIAL_URGENT_WITHIN_MS } from "./eventNotifications";
 import { FEED_CAPTION_MAX, FEED_POST_PHOTOS_MAX, type FeedAspect } from "./feed";
-import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, type ImportantReason } from "./feedAttach";
+import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, type ImportantReason, importantWindow } from "./feedAttach";
 import { type DraftFeedPhoto, firstUndecidedPhoto } from "./feedList";
 import { deliverAfter } from "./quietHours";
 
@@ -208,6 +208,8 @@ export type PublishDraft = {
   /** L'événement choisi, tel que l'API l'a rendu (`hasVisual` : une affiche existe). */
   event: Pick<AttachableEventItem, "hasVisual"> | null;
   important: { on: boolean; reason: ImportantReason | null };
+  /** La liste des événements a été refusée pour cette casquette : on ne publie pas à son nom. */
+  forbidden?: EventsForbidden | null;
 };
 
 /**
@@ -217,6 +219,8 @@ export type PublishDraft = {
  */
 export function publishIssueR8(draft: PublishDraft): string | null {
   if (draft.preparing) return L.preparing;
+  if (draft.forbidden)
+    return draft.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore;
   if (draft.photos.length === 0) {
     if (!draft.event) return L.missingPhoto;
     if (!draft.event.hasVisual) return T.noPoster;
@@ -305,3 +309,83 @@ export function publishSays(
     }),
   };
 }
+
+// --- Les événements rattachables d'une casquette, chargés pour un compte (tour 2) ------------------------------------
+
+/** Pourquoi la liste est refusée : pas le droit de parler au nom de la page, ou second facteur manquant. */
+export type EventsForbidden = "persona_forbidden" | "two_factor_required";
+
+/**
+ * Ce que l'écran sait des événements : pour **quel compte** et **quelle casquette** ils ont été lus, jamais seulement pour la
+ * casquette (la clé « me » vaut pour tous les comptes). `loadedAt` : l'instant de la lecture (jour de Paris du plafond).
+ */
+export type EventsLoad = {
+  account: string;
+  key: string;
+  items: AttachableEventItem[] | null;
+  failed: boolean;
+  forbidden: EventsForbidden | null;
+  loadedAt: number;
+};
+
+export const emptyEventsLoad: EventsLoad = {
+  account: "",
+  key: "",
+  items: null,
+  failed: false,
+  forbidden: null,
+  loadedAt: 0,
+};
+
+/** Une lecture qui part : la liste d'un autre compte ou d'une autre casquette est vidée tout de suite, la même est gardée. */
+export function startEventsLoad(current: EventsLoad, account: string, key: string): EventsLoad {
+  if (current.account === account && current.key === key) return current;
+  return { ...emptyEventsLoad, account, key };
+}
+
+export type EventsResult =
+  | { ok: true; items: AttachableEventItem[] }
+  | { ok: false; forbidden: EventsForbidden | null };
+
+/**
+ * La réponse d'une lecture. Elle n'est appliquée que si elle est pour le compte **et** la casquette d'aujourd'hui
+ * (`current`) : la réponse tardive d'un autre compte est jetée. Un échec garde la liste déjà lue de la même casquette.
+ */
+export function acceptEvents(
+  state: EventsLoad,
+  current: { account: string; key: string },
+  asked: { account: string; key: string },
+  result: EventsResult,
+  now: number,
+): EventsLoad {
+  if (asked.account !== current.account || asked.key !== current.key) return state;
+  if (state.account !== asked.account || state.key !== asked.key) return state;
+  if (result.ok) return { ...state, items: result.items, failed: false, forbidden: null, loadedAt: now };
+  return { ...state, failed: true, forbidden: result.forbidden };
+}
+
+/** Les événements à afficher : seulement ceux lus pour ce compte et cette casquette. */
+export function eventsOf(state: EventsLoad, account: string, key: string): AttachableEventItem[] {
+  return state.account === account && state.key === key ? (state.items ?? []) : [];
+}
+
+/** La liste a été lue un autre jour (Paris) : le plafond d'« Info importante » (jour et semaine) a pu changer. */
+export function eventsStale(loadedAt: number, now: Date): boolean {
+  if (!loadedAt) return false;
+  return importantWindow(now).dayStart.getTime() > loadedAt;
+}
+
+/** Remplace le plafond d'un événement (réponse 409) sans toucher au reste de la liste. */
+export function withImportantLeft(
+  state: EventsLoad,
+  eventId: string,
+  left: { leftToday: number; leftWeek: number },
+): EventsLoad {
+  return {
+    ...state,
+    items: (state.items ?? []).map((e) => (e.id === eventId ? { ...e, important: left } : e)),
+  };
+}
+
+/** Le premier ordre d'envoi, figé tant qu'il est incertain (réponse perdue) : le même corps repart avec le même `clientId`. */
+export type UncertainSend = { clientId: string; body: unknown };

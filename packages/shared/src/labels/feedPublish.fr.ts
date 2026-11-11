@@ -74,7 +74,13 @@ export const feedPublishLabels = {
 
   // Envoi et refus.
   sending: "Publication…",
-  noNetwork: "Pas de réseau : ta publication est gardée, réessaie dans un instant.",
+  noNetwork: "Pas de réseau : ta publication est gardée. Réessayer renvoie exactement la même, sans doublon.",
+  uncertainTitle: "Envoi en cours de vérification",
+  uncertainRetry: "Réessayer",
+  uncertainEdit: "Modifier ma publication",
+  uncertainEdited:
+    "Ta publication précédente a peut-être été publiée : regarde « Mes publications » avant de la renvoyer.",
+  attachRetry: "Réessayer",
   securityLink: "Ouvrir la sécurité du compte",
   forbiddenMore: "Pour publier au nom d'une structure, la double authentification doit être active.",
   listReloaded: "Ta liste d'événements a été mise à jour : choisis-en un, ou publie sans.",

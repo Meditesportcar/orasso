@@ -18,10 +18,14 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 import { Avatar } from "@/ui/Avatar";
-import { CheckBox } from "@/ui/Kit";
+import { CheckBox, SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 
 const { space1, space2, space3 } = tokens.spacing;
+// Aucun jeton de trait, de vignette ni d'avatar : on les compose depuis les jetons d'espacement.
+const LINE = space1 / 2;
+const THUMB = tokens.spacing.space12 + tokens.spacing.space6;
+const AVATAR = tokens.spacing.space8 + space1;
 
 /** Une ligne de choix exclusif (radio) : icône, titre, sous-titre ; annonce « coché » aux lecteurs d'écran. */
 function Option({
@@ -91,7 +95,7 @@ export function Note({ lead, children, testID }: { lead?: string; children: stri
       <Icon name="info" size={16} color={t.color.inkMuted} />
       <Text variant="caption" color={t.color.inkMuted} style={styles.flex}>
         {lead ? (
-          <Text variant="caption" color={t.color.ink} style={styles.bold}>
+          <Text variant="bodyStrong" color={t.color.ink}>
             {`${lead} `}
           </Text>
         ) : null}
@@ -144,6 +148,7 @@ export function EventChoice({
   events,
   loading,
   failed,
+  onRetry,
   value,
   onChoose,
   disabled,
@@ -154,6 +159,7 @@ export function EventChoice({
   events: readonly AttachableEventItem[];
   loading: boolean;
   failed: boolean;
+  onRetry: () => void;
   value: string | null;
   onChoose: (id: string | null) => void;
   disabled: boolean;
@@ -186,7 +192,14 @@ export function EventChoice({
         ))}
       </View>
       {loading ? <Muted variant="caption">{T.attachLoading}</Muted> : null}
-      {failed ? <Muted variant="caption">{T.attachFailed}</Muted> : null}
+      {failed ? (
+        <>
+          <Muted variant="caption">{T.attachFailed}</Muted>
+          <SmButton kind="s" icon="undo" onPress={onRetry} testID="fil-publish-events-retry">
+            {T.attachRetry}
+          </SmButton>
+        </>
+      ) : null}
       {foot ? <Muted variant="caption">{foot}</Muted> : null}
     </View>
   );
@@ -291,7 +304,7 @@ export function Says({ says }: { says: PublishSays }) {
     <View style={styles.block} testID="fil-publish-says">
       <Label>{T.says}</Label>
       <View style={[styles.sayCard, { backgroundColor: c.surface, borderColor: c.line }]}>
-        <Avatar url={says.logoUrl} pseudo={says.authorName} size={36} />
+        <Avatar url={says.logoUrl} pseudo={says.authorName} size={AVATAR} />
         <View style={styles.flex}>
           <Text variant="bodyStrong" color={c.ink}>
             {says.authorName}
@@ -319,27 +332,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space3,
-    minHeight: 48,
+    minHeight: tokens.spacing.touch,
     padding: space3,
     borderRadius: tokens.radius.radiusMd,
-    borderWidth: 2,
+    borderWidth: LINE,
   },
   block: { gap: space2 },
   list: { gap: space2 },
   flex: { flex: 1, flexShrink: 1 },
-  bold: { fontWeight: "800" },
   note: { flexDirection: "row", gap: space2, alignItems: "flex-start" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   poster: { flexDirection: "row", gap: space3, alignItems: "center" },
-  posterThumb: { width: 72, aspectRatio: 0.8, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
+  posterThumb: { width: THUMB, aspectRatio: 0.8, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   notif: {
     flexDirection: "row",
     alignItems: "center",
     gap: space2 + space1,
-    minHeight: 48,
+    minHeight: tokens.spacing.touch,
     padding: space3,
     borderRadius: tokens.radius.radiusMd,
-    borderWidth: 2,
+    borderWidth: LINE,
   },
   sayCard: {
     flexDirection: "row",
@@ -347,7 +359,7 @@ const styles = StyleSheet.create({
     gap: space2 + space1,
     padding: space3,
     borderRadius: tokens.radius.radiusMd,
-    borderWidth: 1.5,
+    borderWidth: LINE,
   },
   stamp: {
     flexDirection: "row",

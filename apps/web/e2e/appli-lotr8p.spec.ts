@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { cutWords } from "./cutWords";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R8p (maquette R8.4), côté appli (version web compilée de recette, `APP_URL`) : l'écran « Publier au Fil ». Au nom de
@@ -293,5 +293,100 @@ test("police ×1,3 à 384 px, Sable : aucun nom d'événement coupé, le bouton 
   expect(await cutWords(page, "fil-publish-events")).toEqual([]);
   await expect(page.getByRole("button", { name: "Publier", exact: true })).toHaveCount(1);
   await shot(page, "sable-384-x13");
+  await ctx.close();
+});
+
+// --- Tour 2 : envoi incertain, liste à rejouer, refus de la liste ---------------------------------------------------------
+
+/** La réponse se perd après que le serveur a validé : la requête part vraiment, puis la connexion tombe. */
+async function loseResponses(page: Page) {
+  await page.route("**/api/me/feed-posts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await route.fetch();
+    await route.abort("failed");
+  });
+}
+
+async function myCaptions(): Promise<string[]> {
+  const cookie = await login("damien@orasso.local");
+  const res = await apiCall<{ items: { caption: string | null }[] }>(cookie, "GET", "/me/feed-posts");
+  return res.data.items.map((p) => p.caption ?? "");
+}
+
+test("réponse perdue après validation : le formulaire se fige, « Réessayer » renvoie la même publication sans doublon", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  const caption = `Réessai ${Date.now()}`;
+  await page.getByTestId("fil-publish-caption").fill(caption);
+  await loseResponses(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).not.toBeEditable();
+  await expect(page.getByTestId("fil-publish-send")).toContainText(/Réessayer/i);
+  await shot(page, "envoi-incertain");
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  expect((await myCaptions()).filter((c) => c === caption)).toHaveLength(1);
+  await ctx.close();
+});
+
+test("réponse perdue puis « Modifier » : un nouvel identifiant et le message clair, jamais l'ancien corps annoncé comme le nouveau", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  const stamp = Date.now();
+  await page.getByTestId("fil-publish-caption").fill(`Avant ${stamp}`);
+  await loseResponses(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByText("a peut-être été publiée")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeEditable();
+  await page.getByTestId("fil-publish-caption").fill(`Après ${stamp}`);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  const captions = await myCaptions();
+  expect(captions).toContain(`Avant ${stamp}`);
+  expect(captions).toContain(`Après ${stamp}`);
+  await ctx.close();
+});
+
+test("la liste des événements en panne : « Réessayer » ; refus 403 : message, lien sécurité, « Publier » bloqué", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await structure(page).click();
+  await expect(page.getByTestId("fil-publish-events")).toContainText("Expo Rivesaltes");
+  await page.route("**/api/me/feed-posts/attachable-events**", (route) => route.abort("failed"));
+  await page.getByTestId("fil-publish-as-me").click();
+  await expect(page.getByTestId("fil-publish-events-retry")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts/attachable-events**");
+  await page.getByTestId("fil-publish-events-retry").click();
+  await expect(page.getByTestId("fil-publish-events")).toContainText("Nocturne de Canet");
+  await expect(page.getByTestId("fil-publish-events-retry")).toHaveCount(0);
+  // Refus : structure sans second facteur ou suspendue.
+  await page.route("**/api/me/feed-posts/attachable-events**", (route) =>
+    route.request().url().includes("persona=organizer")
+      ? route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "two_factor_required", message: "2FA" } }),
+        })
+      : route.continue(),
+  );
+  await structure(page).click();
+  await expect(page.getByTestId("fil-publish-forbidden")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-security")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
+  await expect(missing(page)).toContainText("double authentification");
+  await shot(page, "liste-refusee");
   await ctx.close();
 });

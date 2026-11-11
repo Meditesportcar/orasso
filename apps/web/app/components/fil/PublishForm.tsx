@@ -6,6 +6,7 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   type AttachableEventItem,
+  acceptEvents,
   attachableQuery,
   attachDateLabel,
   attachLeadOf,
@@ -17,6 +18,10 @@ import {
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
+  type EventsLoad,
+  emptyEventsLoad,
+  eventsOf,
+  eventsStale,
   FEED_ASPECT_RATIOS,
   FEED_PLACE_LABEL_MAX,
   FEED_POST_PHOTOS_MAX,
@@ -45,10 +50,12 @@ import {
   publishSays,
   showAuthorChoice,
   showEventBlock,
+  startEventsLoad,
   feedPublishLabels as T,
   type UploadResult,
   vehicleWizardLabels as V,
   vehicleAllowed,
+  withImportantLeft,
 } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -137,12 +144,13 @@ export function PublishForm({
   const authors = useMemo(() => publishAuthors(personas, pseudo, avatarUrl), [personas, pseudo, avatarUrl]);
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
-  const [loaded, setLoaded] = useState<{ key: string; items: AttachableEventItem[] | null; failed: boolean }>({
-    key: "",
-    items: null,
-    failed: false,
-  });
+  const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
   const [reloadEvents, setReloadEvents] = useState(0);
+  // Le compte et la casquette d'aujourd'hui : une réponse lue pour un autre couple est jetée.
+  const now = useRef({ account: userId, key: author.key, loadedAt: 0 });
+  now.current = { account: userId, key: author.key, loadedAt: loaded.loadedAt };
+  // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
+  const [uncertain, setUncertain] = useState<unknown | null>(null);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
   const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
@@ -157,37 +165,68 @@ export function PublishForm({
   const [done, setDone] = useState(false);
   const [preparing, setPreparing] = useState(false);
   // Pendant l'envoi comme pendant un recadrage, rien de ce qui part ne bouge : l'écran montre exactement ce qui est envoyé.
-  const locked = busy || preparing;
-  const [clientId] = useState(() => crypto.randomUUID());
+  const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  const frozen = busy || uncertain !== null;
+  const locked = frozen || preparing;
   const keys = useRef<Record<string, string>>({});
   const generation = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const eventBlock = showEventBlock(author);
-  // Les événements rattachables de la casquette choisie (rôle déduit par l'API), rechargés à chaque changement de casquette.
+  // Les événements rattachables de la casquette choisie, pour ce compte : rechargés au changement de casquette, au retour sur
+  // l'onglet, au changement de jour de Paris (plafond de l'« Info importante »), après un échec.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la casquette est identifiée par sa clé.
   useEffect(() => {
     if (!eventBlock) return;
     let live = true;
-    setLoaded({ key: author.key, items: null, failed: false });
+    const asked = { account: userId, key: author.key };
+    setLoaded((l) => startEventsLoad(l, userId, author.key));
     const q = attachableQuery(author);
     const query = new URLSearchParams({ persona: q.persona });
     if (q.structureId) query.set("structureId", q.structureId);
     if (q.proId) query.set("proId", q.proId);
     void apiFetch<{ items: AttachableEventItem[] }>(`/me/feed-posts/attachable-events?${query}`).then((res) => {
       if (!live) return;
-      setLoaded(
-        res.ok
-          ? { key: author.key, items: res.data.items, failed: false }
-          : { key: author.key, items: [], failed: true },
+      const code = res.ok ? null : res.error.code;
+      const forbidden = code === "persona_forbidden" || code === "two_factor_required" ? code : null;
+      setLoaded((l) =>
+        acceptEvents(
+          l,
+          now.current,
+          asked,
+          res.ok ? { ok: true, items: res.data.items } : { ok: false, forbidden },
+          Date.now(),
+        ),
       );
     });
     return () => {
       live = false;
     };
-  }, [author.key, eventBlock, reloadEvents]);
-  const events = eventBlock && loaded.key === author.key ? (loaded.items ?? []) : [];
-  const eventsLoading = eventBlock && (loaded.key !== author.key || loaded.items === null);
+  }, [userId, author.key, eventBlock, reloadEvents]);
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState === "visible") setReloadEvents((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("focus", again);
+    const timer = window.setInterval(() => {
+      if (eventsStale(now.current.loadedAt, new Date())) setReloadEvents((n) => n + 1);
+    }, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", again);
+      window.removeEventListener("focus", again);
+      window.clearInterval(timer);
+    };
+  }, []);
+  const events = eventBlock ? eventsOf(loaded, userId, author.key) : [];
+  const eventsLoading =
+    eventBlock && (loaded.account !== userId || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
   const event = events.find((e) => e.id === choice.eventId) ?? null;
+  // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste.
+  useEffect(() => {
+    if (choice.eventId && loaded.items && loaded.account === userId && loaded.key === author.key) {
+      if (!loaded.items.some((e) => e.id === choice.eventId)) setChoice((c) => chooseEvent(c, null));
+    }
+  }, [loaded, choice.eventId, userId, author.key]);
   const showImportant = importantAvailable(author, event);
   // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
   // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.
@@ -305,16 +344,31 @@ export function PublishForm({
   }
   const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
   const issue =
-    publishIssueR8({ photos: items, caption, preparing, author, event, important }) ??
-    (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
+    publishIssueR8({
+      photos: items,
+      caption,
+      preparing,
+      author,
+      event,
+      important,
+      forbidden: eventBlock ? loaded.forbidden : null,
+    }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
+
+  /** Modifier une publication dont l'envoi est incertain : nouvel identifiant (jamais l'ancien avec un autre corps). */
+  function abandonUncertain() {
+    setUncertain(null);
+    setClientId(crypto.randomUUID());
+    keys.current = {};
+    setError(T.uncertainEdited);
+  }
 
   async function publish() {
-    if (busy || issue) return;
+    if (busy || (!uncertain && issue)) return;
     setBusy(true);
     setError(null);
     setSecurity(false);
     const uploaded: string[] = [];
-    for (const [i, p] of items.entries()) {
+    for (const [i, p] of uncertain ? [] : items.entries()) {
       setProgress(L.sending(i + 1, items.length));
       let key = keys.current[p.key + p.url];
       if (!key) {
@@ -331,28 +385,35 @@ export function PublishForm({
       uploaded.push(key);
     }
     setProgress(L.publishing);
-    const body = feedPostBodyR8({
-      photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
-      caption,
-      aspect,
-      clientId,
-      author,
-      eventId: event ? event.id : null,
-      vehicleId: choice.vehicleId,
-      placeLabel: choice.placeLabel,
-      important,
-      ...(fan ? commercialField(commercialLine) : {}),
-    });
+    const body =
+      (uncertain as ReturnType<typeof feedPostBodyR8> | null) ??
+      feedPostBodyR8({
+        photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
+        caption,
+        aspect,
+        clientId,
+        author,
+        eventId: event ? event.id : null,
+        vehicleId: choice.vehicleId,
+        placeLabel: choice.placeLabel,
+        important,
+        ...(fan ? commercialField(commercialLine) : {}),
+      });
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
     setProgress(null);
+    if (!res.ok && (res.status === 0 || res.status >= 500)) {
+      // Pas de réponse : la publication est peut-être partie. Le formulaire se fige sur ce corps et ce `clientId`.
+      setUncertain(body);
+      return setError(T.noNetwork);
+    }
+    setUncertain(null);
     if (res.ok) {
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements »).
       rememberPublished(userId, res.data as FeedPostView);
       return setDone(true);
     }
     if (res.status === 429) return setError(L.tooManyRequests);
-    if (res.status === 0) return setError(T.noNetwork);
     if (res.error.code === "persona_forbidden" || res.error.code === "two_factor_required") {
       setSecurity(true);
       return setError(res.error.code === "persona_forbidden" ? publicationErrors.persona_forbidden : res.error.message);
@@ -366,12 +427,7 @@ export function PublishForm({
       const d = (res.error as { details?: { leftToday?: number; leftWeek?: number } }).details;
       const at = event?.id;
       if (at && d && Number.isFinite(d.leftToday) && Number.isFinite(d.leftWeek)) {
-        setLoaded((l) => ({
-          ...l,
-          items: (l.items ?? []).map((x) =>
-            x.id === at ? { ...x, important: { leftToday: Number(d.leftToday), leftWeek: Number(d.leftWeek) } } : x,
-          ),
-        }));
+        setLoaded((l) => withImportantLeft(l, at, { leftToday: Number(d.leftToday), leftWeek: Number(d.leftWeek) }));
       }
       setChoice((c) => ({ ...c, importantOn: false, importantReason: null }));
       return setError(publicationErrors.important_quota);
@@ -619,7 +675,7 @@ export function PublishForm({
           maxLength={captionMaxOf(author)}
           rows={3}
           placeholder={L.captionPlaceholder}
-          disabled={busy}
+          disabled={frozen}
           onChange={(e) => setCaption(e.currentTarget.value)}
           data-testid="fil-publish-caption"
         />
@@ -646,7 +702,7 @@ export function PublishForm({
                 type="button"
                 aria-pressed={a.key === author.key}
                 className={a.key === author.key ? "fp-opt is-on" : "fp-opt"}
-                disabled={busy}
+                disabled={frozen}
                 onClick={() => setChoice((c) => chooseAuthor(c, authors, a.key))}
                 data-testid={`fil-publish-as-${a.key}`}
               >
@@ -672,7 +728,7 @@ export function PublishForm({
                 type="button"
                 className={choice.vehicleId === v.id ? "fil-chip is-on" : "fil-chip"}
                 aria-pressed={choice.vehicleId === v.id}
-                disabled={busy}
+                disabled={frozen}
                 onClick={() => setChoice((c) => ({ ...c, vehicleId: c.vehicleId === v.id ? null : v.id }))}
               >
                 {v.label}
@@ -691,7 +747,7 @@ export function PublishForm({
               type="button"
               aria-pressed={!event}
               className={!event ? "fp-opt is-on" : "fp-opt"}
-              disabled={busy}
+              disabled={frozen}
               onClick={() => setChoice((c) => chooseEvent(c, null))}
               data-testid="fil-publish-event-none"
             >
@@ -707,7 +763,7 @@ export function PublishForm({
                 type="button"
                 aria-pressed={event?.id === e.id}
                 className={event?.id === e.id ? "fp-opt is-on" : "fp-opt"}
-                disabled={busy}
+                disabled={frozen}
                 onClick={() => setChoice((c) => chooseEvent(c, e.id))}
                 data-testid={`fil-publish-event-${e.id}`}
               >
@@ -727,7 +783,20 @@ export function PublishForm({
             ))}
           </div>
           {eventsLoading ? <p className="o-t-caption">{T.attachLoading}</p> : null}
-          {loaded.key === author.key && loaded.failed ? <p className="o-t-caption">{T.attachFailed}</p> : null}
+          {loaded.account === userId && loaded.key === author.key && loaded.failed && !loaded.forbidden ? (
+            <>
+              <p className="o-t-caption">{T.attachFailed}</p>
+              <Button
+                type="button"
+                variant="secondary"
+                icon="undo"
+                onClick={() => setReloadEvents((n) => n + 1)}
+                data-testid="fil-publish-events-retry"
+              >
+                {T.attachRetry}
+              </Button>
+            </>
+          ) : null}
           {fan ? <p className="o-t-caption">{T.attachFoot}</p> : null}
         </div>
       ) : null}
@@ -741,7 +810,7 @@ export function PublishForm({
             value={choice.placeLabel}
             maxLength={FEED_PLACE_LABEL_MAX}
             placeholder={T.placePlaceholder}
-            disabled={busy}
+            disabled={frozen}
             onChange={(e) => {
               const placeLabel = e.currentTarget.value;
               setChoice((c) => ({ ...c, placeLabel }));
@@ -756,11 +825,11 @@ export function PublishForm({
           event={event}
           choice={choice}
           recipients={recipients?.eventId === event.id ? recipients.n : null}
-          busy={busy}
+          busy={frozen}
           onChoice={setChoice}
         />
       ) : null}
-      {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" /> : null}
+      {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
       <SaysBlock says={publishSays(author, event, important.on)} />
 
       {error ? (
@@ -772,18 +841,44 @@ export function PublishForm({
         <p className="o-t-caption" role="status" data-testid="fil-publish-progress">
           {progress}
         </p>
+      ) : uncertain ? (
+        <p className="o-t-caption" role="status" data-testid="fil-publish-uncertain">
+          {T.uncertainTitle}
+        </p>
       ) : issue ? (
         <p className="o-t-caption" data-testid="fil-publish-missing">
           {issue}
         </p>
       ) : null}
-      {security ? (
+      {loaded.forbidden && eventBlock ? (
+        <p className="s-error" role="alert" data-testid="fil-publish-forbidden">
+          {loaded.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore}
+        </p>
+      ) : null}
+      {uncertain && !busy ? (
+        <Button
+          type="button"
+          variant="secondary"
+          icon="edit"
+          onClick={abandonUncertain}
+          data-testid="fil-publish-uncertain-edit"
+        >
+          {T.uncertainEdit}
+        </Button>
+      ) : null}
+      {security || (loaded.forbidden && eventBlock) ? (
         <a className="fil-link" href="/app/securite" data-testid="fil-publish-security">
           <Icon name="shield" size={16} /> {T.securityLink}
         </a>
       ) : null}
-      <Button type="submit" icon="upload" fullWidth disabled={busy || Boolean(issue)} data-testid="fil-publish-send">
-        {L.publish}
+      <Button
+        type="submit"
+        icon="upload"
+        fullWidth
+        disabled={busy || (!uncertain && Boolean(issue))}
+        data-testid="fil-publish-send"
+      >
+        {uncertain ? T.uncertainRetry : L.publish}
       </Button>
       <a className="fil-link" href="/app/fil">
         <Icon name="close" size={16} /> Annuler

@@ -32,6 +32,7 @@ export function meta() {
 export default function AppFilPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      key={loaderData.userId}
       userId={loaderData.userId}
       pseudo={loaderData.pseudo}
       avatarUrl={loaderData.avatarUrl}

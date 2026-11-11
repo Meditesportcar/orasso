@@ -176,3 +176,92 @@ test("une fiche pro ne voit pas le bloc des événements ; prestataire et média
   await expect(page.getByTestId("fil-publish-events")).toBeVisible();
   await shot(page, "prestataire-390");
 });
+
+// --- Tour 2 ------------------------------------------------------------------------------------------------------------
+
+test("site : réponse perdue après validation, le formulaire se fige ; « Modifier » donne un nouvel identifiant", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await addPhoto(page);
+  const stamp = Date.now();
+  await page.getByTestId("fil-publish-caption").fill(`Avant ${stamp}`);
+  await page.route("**/api/me/feed-posts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await route.fetch();
+    await route.abort("failed");
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByText("a peut-être été publiée")).toBeVisible();
+  await page.getByTestId("fil-publish-caption").fill(`Après ${stamp}`);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  const res = await page.evaluate(async () => (await fetch("/api/me/feed-posts")).json());
+  const captions = (res.items as { caption: string | null }[]).map((p) => p.caption);
+  expect(captions).toContain(`Avant ${stamp}`);
+  expect(captions).toContain(`Après ${stamp}`);
+});
+
+test("site : « Réessayer » sans doublon après une réponse perdue", async ({ page }) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await addPhoto(page);
+  const caption = `Réessai ${Date.now()}`;
+  await page.getByTestId("fil-publish-caption").fill(caption);
+  await page.route("**/api/me/feed-posts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await route.fetch();
+    await route.abort("failed");
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  const res = await page.evaluate(async () => (await fetch("/api/me/feed-posts")).json());
+  expect((res.items as { caption: string | null }[]).filter((p) => p.caption === caption)).toHaveLength(1);
+});
+
+test("site : liste relue au retour sur l'onglet, « Réessayer » après une panne, refus 403 bloque « Publier »", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await structure(page).click();
+  await expect(page.getByTestId("fil-publish-events")).toContainText("Expo Rivesaltes");
+  await eventByTitle(page, "Expo Rivesaltes").click();
+  await page.route("**/api/me/feed-posts/attachable-events**", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    await route.fulfill({
+      response: res,
+      json: { items: json.items.filter((e: { title: string }) => e.title !== "Expo Rivesaltes") },
+    });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByTestId("fil-publish-events")).not.toContainText("Expo Rivesaltes");
+  await expect(page.getByTestId("fil-publish-poster")).toHaveCount(0);
+  await page.unroute("**/api/me/feed-posts/attachable-events**");
+  await page.route("**/api/me/feed-posts/attachable-events**", (route) => route.abort("failed"));
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByTestId("fil-publish-events-retry")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts/attachable-events**");
+  await page.getByTestId("fil-publish-events-retry").click();
+  await expect(page.getByTestId("fil-publish-events")).toContainText("Expo Rivesaltes");
+  await page.route("**/api/me/feed-posts/attachable-events**", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "persona_forbidden", message: "non" } }),
+    }),
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByTestId("fil-publish-forbidden")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-security")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
+});
