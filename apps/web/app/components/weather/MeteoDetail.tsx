@@ -16,7 +16,7 @@ import {
   weatherCodeLabels,
   windCompass,
 } from "@orasso/shared";
-import { Form } from "react-router";
+import { Form, useNavigate } from "react-router";
 
 import { cardTitle, UsePositionButton } from "./MyWeatherBlock";
 import { forgetMyPosition, useWeatherPosition } from "./position";
@@ -174,6 +174,12 @@ export function MeteoDetail({
   const card = cards[cardIndex] ?? null;
   const canAdd = cards.length < WEATHER_PLACES_MAX;
   const here = (lieu: "changer" | "second") => `?card=${cardIndex}&lieu=${lieu}`;
+  // Navigation sans rechargement : la position donnée (gardée en mémoire de la page) n'est pas oubliée.
+  const navigate = useNavigate();
+  const go = (to: string) => (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    navigate(to);
+  };
   return (
     <div className="s-stack" data-testid="meteo-detail">
       {card ? <p className="o-t-caption s-muted">{cardTitle(card)}</p> : null}
@@ -197,11 +203,23 @@ export function MeteoDetail({
 
       {places ? (
         <div className="wxm-actions">
-          <Button href={here("changer")} variant="secondary" icon="place" data-testid="meteo-change">
+          <Button
+            href={here("changer")}
+            onClick={go(here("changer"))}
+            variant="secondary"
+            icon="place"
+            data-testid="meteo-change"
+          >
             {L.changePlace}
           </Button>
           {canAdd && card ? (
-            <Button href={here("second")} variant="secondary" icon="add" data-testid="meteo-second">
+            <Button
+              href={here("second")}
+              onClick={go(here("second"))}
+              variant="secondary"
+              icon="add"
+              data-testid="meteo-second"
+            >
               {L.secondPlace}
             </Button>
           ) : null}

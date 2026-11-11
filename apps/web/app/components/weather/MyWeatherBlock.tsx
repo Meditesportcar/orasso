@@ -9,6 +9,7 @@ import {
   weatherCodeLabels,
 } from "@orasso/shared";
 import { useEffect } from "react";
+import { Link, useNavigate } from "react-router";
 
 import { askMyPosition, refreshMyPosition, useWeatherPosition } from "./position";
 
@@ -21,9 +22,9 @@ export function WeatherCardLink({ card, index }: { card: WeatherCard; index: num
   const w = card.weather;
   const title = cardTitle(card);
   return (
-    <a
+    <Link
       className="wxm-card"
-      href={`/app/meteo?card=${index}`}
+      to={`/app/meteo?card=${index}`}
       aria-label={w ? L.aria(title, weatherCodeLabels[w.now.code], Math.round(w.now.temp)) : `${L.title}, ${title}`}
       data-testid={`my-weather-card-${index}`}
     >
@@ -39,7 +40,7 @@ export function WeatherCardLink({ card, index }: { card: WeatherCard; index: num
       ) : (
         <small className="o-t-caption">{L.unavailable}</small>
       )}
-    </a>
+    </Link>
   );
 }
 
@@ -66,10 +67,20 @@ export function MyWeatherCards({ myWeather }: { myWeather: MyWeatherPlaces }) {
     void refreshMyPosition();
   }, []);
   const cards = weatherCards(myWeather.places, at);
+  const navigate = useNavigate();
   return (
     <div className="wxm" data-testid="home-weather">
       {cards.length === 0 ? (
-        <Button href="/app/meteo" variant="secondary" icon="place" data-testid="my-weather-choose">
+        <Button
+          href="/app/meteo"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("/app/meteo");
+          }}
+          variant="secondary"
+          icon="place"
+          data-testid="my-weather-choose"
+        >
           {L.choosePlace}
         </Button>
       ) : (
