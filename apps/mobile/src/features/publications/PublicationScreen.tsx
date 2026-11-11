@@ -3,7 +3,7 @@
 // suit `manage` (Supprimer, avec confirmation). Retirée ou devenue invisible (404) : « Cette publication n'est plus visible. »
 // et retour. Le lien d'une notification de publication mène ici (dette R7f4).
 import { Icon, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedPostWithManage, publicationsLabels as L } from "@orasso/shared";
+import { type FeedPostWithManage, publicationsLabels as L, publicationCard } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -19,7 +19,6 @@ import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 import { Waiting } from "@/ui/Waiting";
 import { PostMenu } from "./PostMenu";
-import { postCard } from "./postCard";
 
 type Read =
   | { status: "loading" }
@@ -72,7 +71,7 @@ export function PublicationScreen() {
       ) : null}
       {read.status === "ok" ? (
         <>
-          <FeedPostCard card={postCard(read.post)} faded={false} onMenu={() => setMenu(true)} />
+          <FeedPostCard card={publicationCard(read.post)} faded={false} onMenu={() => setMenu(true)} />
           <PostMenu
             post={menu ? read.post : null}
             canDelete={read.post.manage?.canDelete ?? read.post.mine}

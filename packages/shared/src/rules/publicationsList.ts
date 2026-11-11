@@ -2,7 +2,8 @@
 // maquette R8.1 `pr-profil` et R8.6 `pu-publi`). Pures : le site et l'appli les lisent, aucune n'est écrite dans un écran.
 import { BUSINESS_TIMEZONE } from "../enums";
 import type { ProfileTab } from "../labels/profile-tabs.fr";
-import type { FeedPostView } from "../schemas/feed";
+import { publicationsLabels as L } from "../labels/publications.fr";
+import type { FeedCard, FeedPostView } from "../schemas/feed";
 
 /** Le compteur d'un profil (`GET /users/:pseudo`) : `null` = liste restreinte (compte privé non suivi), absent = inconnu. */
 export type PublicationsCount = { count: number } | null | undefined;
@@ -131,3 +132,17 @@ export function publicationLinkOf(data: unknown, opts: { web?: boolean } = {}): 
 
 /** Un profil servi par `GET /users/:pseudo` avec le compteur de publications (décoration de R8a2 ; absent d'une réponse plus ancienne). */
 export type WithPublications<T> = T & { publications?: { count: number } | null };
+
+/**
+ * Une publication dans la carte du Fil (`feed_post`), réutilisée telle quelle par les listes de profil et la page d'une
+ * publication seule : la raison du Fil (« Autour de toi ») n'a pas de sens ici, la petite ligne dit où elle se trouve.
+ */
+export function publicationCard(post: FeedPostView): FeedCard<"feed_post"> {
+  return {
+    id: `feed_post:${post.id}`,
+    kind: "feed_post",
+    reason: { code: "following_author", label: post.mine ? L.cardReasonMine : L.cardReasonOther },
+    at: post.createdAt,
+    payload: { post },
+  };
+}

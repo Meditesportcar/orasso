@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
+import { FoldedCaption } from "../publications/FoldedCaption";
 import { ShareDialog } from "../ShareSheet";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
@@ -289,11 +290,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       }
     >
       <FeedPhotos post={post} />
-      {post.caption ? (
-        <p className="o-t-body" data-testid="feed-post-caption">
-          {post.caption}
-        </p>
-      ) : null}
+      {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
       {post.vehicle || post.event ? (
         <div className="fil-pills">
           {post.vehicle ? (

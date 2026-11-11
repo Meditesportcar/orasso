@@ -1,0 +1,163 @@
+/* L'onglet « Publications » d'un profil et la page d'une publication seule (lot R8b2, maquette R8.1 et R8.6). Jetons seulement.
+   Préfixe `pub`. */
+
+.pub {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* La ligne du haut : « N publications », « Publier » (chez moi), la bascule des deux vues. */
+.pub-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pub-head__count {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+.pub-head__publish {
+  min-height: var(--touch);
+}
+
+/* La bascule des deux vues (`.r8vt`). */
+.pub-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: calc(var(--radius-md) + 2px);
+  background: var(--surface-raised);
+}
+.pub-toggle__btn {
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: 38px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 1px);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.pub-toggle__btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+.pub-toggle__btn:focus-visible,
+.pub-tile__photo:focus-visible,
+.pub-caption__toggle:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* La grille de deux ; trois colonnes au-delà de 900 px (journal des choix). */
+.pub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px var(--space-3);
+}
+@media (min-width: 900px) {
+  .pub-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.pub-tile {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+.pub-tile__photo {
+  display: block;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.pub-tile__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pub-tile__caption {
+  display: grid;
+  gap: 1px;
+  padding-inline: 2px;
+}
+.pub-tile__caption b {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.pub-tile__caption span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* La vue « Une par une » : les cartes du Fil, une sous l'autre. */
+.pub-one {
+  display: grid;
+  gap: 12px;
+}
+/* Légende repliée après trois lignes ; « plus » la déroule. */
+.pub-caption--clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--pub-lines, 3);
+  line-clamp: var(--pub-lines, 3);
+  overflow: hidden;
+}
+.pub-caption__toggle {
+  justify-self: start;
+  min-height: var(--touch);
+  margin-top: calc(var(--space-2) * -1);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Les états : chargement, erreur, vide, compte privé (`.r8gempty`, `.r8priv`). */
+.pub-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: 22px var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-align: center;
+}
+.pub-state svg {
+  color: var(--ink-muted);
+}
+.pub-state p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+.pub-state--wait {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* La page d'une publication seule : une colonne de 600 px, la carte entière. */
+.pub-page {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pub-toggle__btn {
+    transition: opacity 120ms linear;
+  }
+}

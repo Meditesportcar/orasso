@@ -3,7 +3,13 @@
 // nouvelle (retenue, place libérée…), sobre pour une information ; toucher = ouvrir son lien, ✕ = fermer. Mêmes règles
 // que l'appli (`announceToneOf`, `ANNOUNCE_MS` de `packages/shared`). L'actualité du Journal n'a pas de bandeau.
 import { Icon } from "@orasso/design-system/web";
-import { ANNOUNCE_MS, type AnnounceTone, announceToneOf, notificationAnnounced } from "@orasso/shared";
+import {
+  ANNOUNCE_MS,
+  type AnnounceTone,
+  announceToneOf,
+  notificationAnnounced,
+  publicationLinkOf,
+} from "@orasso/shared";
 import { useCallback, useEffect, useState } from "react";
 
 export type SiteAnnouncement = {
@@ -40,7 +46,7 @@ export function announcementOf(payload: unknown): SiteAnnouncement | null {
     tone: announceToneOf(n.type),
     title: n.title,
     text: n.body ?? null,
-    href: internalPath(n.data?.link),
+    href: publicationLinkOf(n.data, { web: true }) ?? internalPath(n.data?.link),
   };
 }
 

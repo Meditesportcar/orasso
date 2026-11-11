@@ -5,12 +5,13 @@ import { UnderTabs } from "../UnderTabs";
 // Les onglets internes du Profil (lot R7b1, maquette R7.12) : Garage · Sorties, des liens (`?onglet=`) : l'onglet se lit dans
 // l'adresse, la page marche sans JavaScript et se partage. Lot R8b1 (D40, maquette R8.1) : les segments pleins deviennent les
 // onglets soulignés du kit (`UnderTabs`) : « Garage · N » (icône voiture) et « Sorties » (icône tampon), collants sous la
-// barre du haut (la rangée est un enfant direct de la colonne de la page : un sticky ne colle que dans son parent). Enveloppe mince : elle garde les identifiants `profil-tabs` et `profil-tab-<id>` et accepte un troisième
-// onglet (« Publications », lot R8b2) sans rien refaire.
+// barre du haut (la rangée est un enfant direct de la colonne de la page : un sticky ne colle que dans son parent). Enveloppe mince : elle garde les identifiants `profil-tabs` et `profil-tab-<id>` ; lot R8b2 : le troisième
+// onglet, « Publications » (icône galerie), ouvert par défaut.
 
-const ITEMS: { id: ProfileTab; label: string; icon: "vehicle" | "stamp" }[] = [
+const ITEMS: { id: ProfileTab; label: string; icon: "vehicle" | "stamp" | "gallery" }[] = [
   { id: "garage", label: L.garage, icon: "vehicle" },
   { id: "sorties", label: L.outings, icon: "stamp" },
+  { id: "publications", label: L.publications, icon: "gallery" },
 ];
 
 export function ProfileTabs({
