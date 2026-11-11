@@ -31,7 +31,7 @@ function Tile({ post, tick }: { post: FeedPostView; tick: number }) {
         ref={box}
         accessibilityRole="button"
         accessibilityLabel={label}
-        onPress={() => router.push(publicationPath(post.id))}
+        onPress={() => router.push(publicationPath(post.id) as never)}
         style={({ pressed }) => [styles.photo, { backgroundColor: c.surface }, pressed && styles.pressed]}
         testID="publication-tile-open"
       >
