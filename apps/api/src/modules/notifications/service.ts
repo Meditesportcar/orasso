@@ -3,7 +3,9 @@
 import {
   ACTIVITY_MAX_ACTORS,
   deliverAfter,
+  deliversNotification,
   emailAlwaysTypes,
+  essentialNeedsPlace,
   journalOnlyNotificationTypes,
   journalWindowStart,
   type NotificationType,
@@ -25,6 +27,7 @@ import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
 import { type Executor, withTx } from "../../lib/tx";
+import { hasPlace } from "../events/place";
 import { citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
 
 export type NotificationRow = typeof notifications.$inferSelect;
@@ -261,6 +264,36 @@ export const notificationsService = {
     }
   },
 
+  /**
+   * Lot R8n1 : une notification personnalisée par personne (le résumé quotidien), en une requête par tranche de 1 000.
+   * Mêmes règles d'heure que `notifyMany` (heures calmes), sans regroupement.
+   */
+  async notifyEach(
+    ex: Executor,
+    type: NotificationType,
+    items: readonly { userId: string; title: string; body: string; link?: { label: string; path: string } }[],
+  ): Promise<void> {
+    if (!items.length) return;
+    const at = now();
+    const deliverAt = env.NOTIFY_QUIET_HOURS ? deliverAfter(at, null, undefined, r7QuietOverride(type)) : at;
+    for (let i = 0; i < items.length; i += 1000) {
+      await ex.insert(notifications).values(
+        items.slice(i, i + 1000).map((item) => ({
+          userId: item.userId,
+          type,
+          family: notificationTypes[type],
+          title: item.title,
+          body: item.body,
+          data: item.link ? { link: item.link.path, linkLabel: item.link.label } : {},
+          inJournal: true,
+          eventId: null,
+          groupKey: null,
+          deliverAfter: deliverAt,
+        })),
+      );
+    }
+  },
+
   /** Livre les notifications arrivées à échéance (idempotent : chaque ligne est réservée avant l'envoi). */
   async deliverDue(limit = 200): Promise<number> {
     const at = now();
@@ -397,16 +430,37 @@ export const notificationsService = {
   },
 };
 
+/**
+ * Lot R8n1 : la personne reçoit-elle cette notification (préférences) ? La règle ordinaire (`shouldDeliver`) d'abord ; seulement
+ * si elle refuse un type de l'Essentiel rattaché à un événement, on lit la place de la personne (aucune requête de plus dans
+ * le cas courant). Les décisions sur la candidature n'ont pas besoin de place.
+ */
+async function wantsNotification(n: NotificationRow, profile: typeof profiles.$inferSelect | undefined) {
+  const prefs = profile?.notificationPrefs;
+  const mutedTypes = profile?.mutedTypes;
+  const base = { prefs, mutedTypes, type: n.type, hasEventId: Boolean(n.eventId) };
+  if (shouldDeliver(prefs, mutedTypes, n.type)) return true;
+  const needsPlace = essentialNeedsPlace(n.type, Boolean(n.eventId));
+  const placed = needsPlace && n.eventId ? await hasPlace(db, n.eventId, n.userId) : false;
+  return deliversNotification({ ...base, hasPlace: placed });
+}
+
 async function deliverOne(n: NotificationRow) {
   const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   const banned = Boolean(profile?.bannedAt);
+  // La préférence n'est lue qu'une fois (et seulement si le reste du verdict la demande).
+  let wanted: Promise<boolean> | null = null;
+  const wants = () => {
+    wanted ??= wantsNotification(n, profile);
+    return wanted;
+  };
   // Lot M6, tour 2 : le Journal garde toujours la notification, mais le bandeau en direct ne l'annonce que si elle est
   // livrée (`delivered`) : pas pour un type ou une famille coupés, un compte supprimé ou banni, une actualité du Journal.
   const delivered =
     !journalOnlyNotificationTypes.includes(n.type) &&
     !profile?.deletedAt &&
     !(banned && n.family !== "account") &&
-    shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type);
+    (await wants());
   realtime.publish(`user:${n.userId}`, "notification", {
     id: n.id,
     type: n.type,
@@ -422,7 +476,7 @@ async function deliverOne(n: NotificationRow) {
   // Compte banni (lot 32, relecture) : seulement la famille « Sécurité du compte », par e-mail (appareils révoqués).
   if (banned && n.family !== "account") return;
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
-  if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
+  if (!(await wants())) return;
 
   // Lot M6, tour 4 : seulement les appareils dont la session d'inscription vit encore (`push.tokensOf`).
   const tokens = banned ? [] : await push.tokensOf(n.userId);
