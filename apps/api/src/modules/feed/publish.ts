@@ -50,6 +50,7 @@ import {
 } from "./attach";
 import { pageDepartment } from "./authors";
 import { reserveImportant, sendImportant } from "./important";
+import { materializeMentions } from "./mentions";
 import { FEED_PHOTO_NAME_RE, feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
 
 const PAGE = 20;
@@ -290,6 +291,8 @@ export const feedPostsService = {
             })),
           );
         }
+        // Mentions (lot R8a2) : les cibles de la publication, dans sa transaction ; les personnes citées sont prévenues.
+        await materializeMentions(tx, postId, { notify: true });
         if (input.important && event) {
           await sendImportant(tx, after, {
             postId,

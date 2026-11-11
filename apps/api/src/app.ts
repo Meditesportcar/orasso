@@ -46,6 +46,7 @@ import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { feedRoutes } from "./modules/feed/routes";
+import { feedListRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -269,6 +270,8 @@ app.route("/", communicationRoutes);
 app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
+// Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
+app.route("/", feedListRoutes);
 app.route("/", feedRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
