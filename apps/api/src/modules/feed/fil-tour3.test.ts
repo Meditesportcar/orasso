@@ -1,11 +1,11 @@
 // Lot R8c1, tour 3 (relecture Codex) : curseur sans publication invisible, synchronisation hors ligne sans carte perdue,
 // classement stable quand des flammes sont retirées, nouveautés qui ne s'arrêtent pas aux 60 premières publications à moi.
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, createStructure, resetDb, seedReference, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { feedPostReactions, structures } from "../../db/schema";
+import { feedPostReactions, feedSeen, feedSeenFloor, profiles, structures } from "../../db/schema";
 import { decodeCursor } from "./cursor";
 import { dbPost, fil, flames, follow, HOUR, person, postIds, seen, view, walk } from "./fil-test-helpers";
 
@@ -118,5 +118,90 @@ describe("tour 3", () => {
       const res = await call(me, "GET", `/fil/fresh?filter=${filter}&since=${encodeURIComponent(since.toISOString())}`);
       expect(res.json.count, filter).toBe(1);
     }
+  }, 120_000);
+
+  it("tour 4 : plafond de 5 000 vues atteint en plein parcours : aucune carte perdue ni doublée, aucune carte évincée ne revient en zone A", async () => {
+    const author = await person("Auteur_Plafond4");
+    const me = await person("Lecteur_Plafond4");
+    const posts: string[] = [];
+    for (let i = 0; i < 25; i++) posts.push(await dbPost(author, at(360 + i)));
+    // Leurs vues sont les plus anciennes du compte ; 5 000 autres vues (autres cartes) sont plus récentes.
+    await db.insert(feedSeen).values(posts.map((p) => ({ userId: me.id, cardId: `feed_post:${p}`, seenAt: at(300) })));
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'lineup:' || gen_random_uuid()::text, ${at(60).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 5000) g`);
+    clock.advance(60_000);
+    const first = await fil(me, "?filter=nearby");
+    expect(first.items.length).toBe(20);
+    expect(first.items.every((c) => c.seen)).toBe(true);
+    // Une nouvelle vue fait dépasser le plafond : les 25 vues les plus anciennes sont évincées.
+    await view(me, [await dbPost(author, at(0))]);
+    expect((await db.select().from(feedSeen).where(eq(feedSeen.userId, me.id))).length).toBe(5000);
+    expect((await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id))).length).toBe(1);
+    clock.advance(60_000);
+    // Le parcours en cours repart (reset) : tout est servi une fois, rien n'est perdu.
+    const second = await fil(me, `?filter=nearby&cursor=${first.next}`);
+    expect(second.json.reset).toBe(true);
+    const got = [...postIds(second.items)];
+    let cursor = second.next;
+    while (cursor) {
+      const page = await fil(me, `?filter=nearby&cursor=${cursor}`);
+      got.push(...postIds(page.items));
+      cursor = page.next;
+    }
+    // Au parcours suivant : les 25 cartes évincées restent « déjà vues » (zone B), la nouvelle est en zone A.
+    const all = (await walk(me, "nearby")).flat();
+    const byId = new Map(all.map((c) => [postIds([c])[0], c.seen]));
+    for (const p of posts) expect(byId.get(p), p).toBe(true);
+    expect(new Set(got).size).toBe(got.length);
+    expect(got.length).toBe(26);
+    expect(all.length).toBe(26);
+  }, 120_000);
+
+  it("tour 4 : une flamme retirée plus bas que la frontière ne renvoie pas le lecteur en haut", async () => {
+    const author = await person("Auteur_Bas4");
+    const me = await person("Lecteur_Bas4");
+    const fan = await person("Fan_Bas4");
+    const posts: string[] = [];
+    for (let i = 0; i < 60; i++) posts.push(await dbPost(author, at(5 + i * 30)));
+    await flames(posts[59] as string, [fan], at(1));
+    const first = await fil(me);
+    expect(first.items.length).toBe(20);
+    expect(postIds(first.items)).not.toContain(posts[59]);
+    await db.delete(feedPostReactions).where(eq(feedPostReactions.userId, fan.id));
+    const second = await fil(me, `?cursor=${first.next}`);
+    expect(second.json.reset).toBeUndefined();
+    expect(second.items.length).toBe(20);
+  }, 120_000);
+
+  it("tour 4 : « Moins de ce genre » : fresh ne lit pas les publications (aucune requête sur feed_posts)", async () => {
+    const author = await person("Auteur_Moins4");
+    const me = await person("Lecteur_Moins4");
+    await follow(me, author);
+    for (let i = 0; i < 70; i++) await dbPost(author, at(1 + i));
+    await db
+      .update(profiles)
+      .set({ feedLessKinds: ["feed_post"] })
+      .where(eq(profiles.userId, me.id));
+    const original = pool.query.bind(pool);
+    const texts: string[] = [];
+    // biome-ignore lint/suspicious/noExplicitAny: espion de requêtes
+    (pool as any).query = (...args: unknown[]) => {
+      texts.push(JSON.stringify(args[0]));
+      // biome-ignore lint/suspicious/noExplicitAny: voir ci-dessus
+      return (original as any)(...args);
+    };
+    try {
+      const res = await call(
+        me,
+        "GET",
+        `/fil/fresh?filter=following&since=${encodeURIComponent(at(300).toISOString())}`,
+      );
+      expect(res.json.count).toBe(0);
+    } finally {
+      // biome-ignore lint/suspicious/noExplicitAny: remise en place
+      (pool as any).query = original;
+    }
+    expect(texts.filter((t) => t.includes('from "feed_posts"')).length).toBe(0);
   }, 120_000);
 });

@@ -1,5 +1,5 @@
 {
-  "id": "5b85a448-b109-4dcb-bf7e-d100ab563243",
+  "id": "8bc24c3f-6e4c-426c-b13f-c8173e4d7c1f",
   "prevId": "18f3ffd9-5343-4193-a602-0d0da4de688d",
   "version": "7",
   "dialect": "postgresql",
@@ -7276,6 +7276,45 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.feed_seen_floor": {
+      "name": "feed_seen_floor",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "floor_at": {
+          "name": "floor_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "feed_seen_floor_user_id_user_id_fk": {
+          "name": "feed_seen_floor_user_id_user_id_fk",
+          "tableFrom": "feed_seen_floor",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

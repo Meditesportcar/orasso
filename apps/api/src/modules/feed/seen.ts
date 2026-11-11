@@ -9,7 +9,7 @@ import { FEED_SEEN_TTL_MS, type FeedSeenAction, type FeedSeenBody } from "@orass
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { feedPostReactions, feedSeen } from "../../db/schema";
+import { feedPostReactions, feedSeen, feedSeenFloor } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
@@ -60,13 +60,34 @@ export async function seenWithoutInteraction(
   return seen;
 }
 
-/** Garde au plus `SEEN_MAX_PER_USER` lignes pour ce compte (les plus anciennement vues partent). */
+/**
+ * Garde au plus `SEEN_MAX_PER_USER` lignes pour ce compte (les plus anciennement vues partent) et retient la borne de rognage
+ * (`feed_seen_floor`) : les cartes évincées restent « déjà vues » sans leur ligne.
+ */
 async function trimUser(userId: string): Promise<number> {
   const res = await db.execute(sql`
-    delete from feed_seen where user_id = ${userId} and card_id in (
-      select card_id from feed_seen where user_id = ${userId}
-      order by seen_at desc, card_id desc offset ${SEEN_MAX_PER_USER})`);
-  return res.rowCount ?? 0;
+    with gone as (
+      delete from feed_seen where user_id = ${userId} and card_id in (
+        select card_id from feed_seen where user_id = ${userId}
+        order by seen_at desc, card_id desc offset ${SEEN_MAX_PER_USER})
+      returning seen_at
+    ), floor as (
+      insert into feed_seen_floor (user_id, floor_at)
+      select ${userId}, max(seen_at) from gone having count(*) > 0
+      on conflict (user_id) do update set floor_at = greatest(feed_seen_floor.floor_at, excluded.floor_at)
+      returning 1
+    )
+    select (select count(*) from gone)::int as n`);
+  return (res.rows[0] as { n: number } | undefined)?.n ?? 0;
+}
+
+/** La borne de rognage du compte (`null` : jamais rogné). */
+export async function seenFloorOf(userId: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ at: feedSeenFloor.floorAt })
+    .from(feedSeenFloor)
+    .where(eq(feedSeenFloor.userId, userId));
+  return row?.at ?? null;
 }
 
 export const feedSeenService = {
@@ -124,11 +145,11 @@ export const feedSeenService = {
       expired += n;
       if (n < PURGE_BATCH) break;
     }
-    const res = await db.execute(sql`
-      delete from feed_seen f using (
-        select user_id, card_id, row_number() over (partition by user_id order by seen_at desc, card_id desc) as rn
-        from feed_seen where user_id in (select user_id from feed_seen group by user_id having count(*) > ${SEEN_MAX_PER_USER})
-      ) x where f.user_id = x.user_id and f.card_id = x.card_id and x.rn > ${SEEN_MAX_PER_USER}`);
-    return { expired, trimmed: res.rowCount ?? 0 };
+    let trimmed = 0;
+    const over = await db.execute(
+      sql`select user_id from feed_seen group by user_id having count(*) > ${SEEN_MAX_PER_USER}`,
+    );
+    for (const r of over.rows as { user_id: string }[]) trimmed += await trimUser(r.user_id);
+    return { expired, trimmed };
   },
 };

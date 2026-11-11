@@ -6,7 +6,10 @@ import { feedCardKinds, feedFilters } from "../rules/feed";
 
 /** Cartes par envoi de `POST /me/fil/seen`. */
 export const FEED_SEEN_BATCH_MAX = 50;
-/** Une carte vue hors ligne part avec son heure, jusqu'à 24 h en arrière ; au-delà, elle est ramenée à cette borne. */
+/**
+ * Heure de l'appareil (`at`) d'une carte vue hors ligne : acceptée jusqu'à 24 h en arrière, au-delà ramenée à cette borne. Elle ne
+ * date pas la vue : l'API date à la réception (le parcours en cours reste figé).
+ */
 export const FEED_SEEN_AT_MAX_AGE_MS = 24 * 3_600_000;
 /**
  * Durée de vie d'une carte vue (30 jours), **et** âge au-delà duquel une carte du Fil n'est plus « pas vue » : plus ancienne que

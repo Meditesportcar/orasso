@@ -27,3 +27,15 @@ export const feedSeen = pgTable(
     index("feed_seen_seen_idx").on(t.seenAt),
   ],
 );
+
+/**
+ * Borne de rognage par compte : quand le plafond de 5 000 lignes évince des vues, `floor_at` garde la plus récente `seen_at` des
+ * lignes évincées. Une carte vue a toujours une date antérieure à sa vue : toute carte datée au plus de `floor_at` reste en zone B
+ * (« déjà vu »), comme si sa ligne existait encore. Ne dit rien d'autre (aucune carte, aucun contenu), effacée avec le compte.
+ */
+export const feedSeenFloor = pgTable("feed_seen_floor", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  floorAt: tstz("floor_at").notNull(),
+});

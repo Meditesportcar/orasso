@@ -62,7 +62,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { type Cursor, decodeCursor, encodeCursor, isPreviousCursor, MAX_OFFSET } from "./cursor";
 import { hotCards } from "./hot";
-import { seenWithoutInteraction } from "./seen";
+import { seenFloorOf, seenWithoutInteraction } from "./seen";
 import { rankedSources } from "./sources";
 import { sponsoredPicker } from "./sources/sponsored";
 import type { FeedSource, Key, LoadedCard, SourceInput, Zone } from "./sources/types";
@@ -74,7 +74,7 @@ export const WINDOW_CAP = 300;
  * Empreinte (6 octets, hexadécimal) de ce qui change le classement ou ce que les sources laissent entrer : abonnements,
  * crews, centres d'intérêt, départements, mes sorties. « Moins de ce genre » n'en fait pas partie : il est figé dans le curseur.
  */
-export function contextFingerprint(ctx: FeedViewerContext): string {
+export function contextFingerprint(ctx: FeedViewerContext, seenFloor: Date | null = null): string {
   const list = (it: Iterable<string>) => [...it].sort();
   const json = JSON.stringify([
     list(ctx.departments),
@@ -84,6 +84,8 @@ export function contextFingerprint(ctx: FeedViewerContext): string {
     list(ctx.crewmates),
     list(ctx.interests),
     [...ctx.myOutings].map(([id, startsAt]) => `${id}@${startsAt.getTime()}`).sort(),
+    // Le plafond de vues a rogné des cartes en route : la zone A change, le parcours repart (sans carte perdue ni doublée).
+    seenFloor?.getTime() ?? 0,
   ]);
   return createHash("sha1").update(json).digest().subarray(0, 6).toString("hex");
 }
@@ -162,10 +164,12 @@ async function loadAll(
   floor: (kind: FeedCardKind) => Key | null = () => null,
 ): Promise<Loaded[]> {
   return Promise.all(
-    rankedSources.map(async (source) => ({
-      source,
-      ...(await source.load({ ...input, before: before(source.kind), floor: floor(source.kind) })),
-    })),
+    rankedSources
+      .filter((source) => !input.skipKinds?.has(source.kind))
+      .map(async (source) => ({
+        source,
+        ...(await source.load({ ...input, before: before(source.kind), floor: floor(source.kind) })),
+      })),
   );
 }
 
@@ -219,6 +223,7 @@ async function hotRail(
   filter: FeedFilter,
   nearby: readonly string[],
   ctx: FeedViewerContext,
+  seenFloor: Date | null,
 ): Promise<FeedCard<"feed_post">[]> {
   const cards = await hotCards({ userId, ref, filter, nearby });
   if (!cards.length) return [];
@@ -228,7 +233,7 @@ async function hotRail(
     ref,
   );
   // Plus ancienne que 30 jours : « vue » comme dans la liste (zone B).
-  const oldAt = ref.getTime() - FEED_SEEN_TTL_MS;
+  const oldAt = Math.max(ref.getTime() - FEED_SEEN_TTL_MS, seenFloor?.getTime() ?? 0);
   return cards.map((c) => toCard(c, ctx, seen.has(c.id) || c.at.getTime() <= oldAt, ref) as FeedCard<"feed_post">);
 }
 
@@ -293,11 +298,16 @@ async function olderPage(
 const kindOfId = (id: string) => id.slice(0, id.indexOf(":"));
 
 export const feedService = {
-  async feed(v: Viewer, q: { filter: FeedFilter; cursor?: string | undefined }): Promise<FeedPage> {
-    rateLimit("feedRead", v.user.id);
+  async feed(
+    v: Viewer,
+    q: { filter: FeedFilter; cursor?: string | undefined },
+    /** `false` : relance interne après un `reset`, déjà comptée dans la limite de lecture. */
+    counted = true,
+  ): Promise<FeedPage> {
+    if (counted) rateLimit("feedRead", v.user.id);
     const t = now();
-    const viewerCtx = await viewerContext(v, t);
-    const fp = contextFingerprint(viewerCtx);
+    const [viewerCtx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
+    const fp = contextFingerprint(viewerCtx, seenFloor);
     const forYou = q.filter === "for_you";
     // Un curseur de la version précédente (APK en ligne en plein parcours) n'est jamais une erreur : première page, `reset`.
     const previous = isPreviousCursor(q.cursor);
@@ -315,7 +325,7 @@ export const feedService = {
     const ref = new Date(refMs);
     const boundary = new Date(refMs - FEED_SCORE_WINDOW_MS);
     const nearby = nearbyDepartments(ctx.departments);
-    const base = { viewer: v, userId: v.user.id, ref, filter: q.filter, ctx, nearby, until: ref } as const;
+    const base = { viewer: v, userId: v.user.id, ref, filter: q.filter, ctx, nearby, until: ref, seenFloor } as const;
     const keep = (c: LoadedCard) => allowed(c, q.filter, ctx, nearby, v.user.id);
     const offset = cursor?.offset ?? 0;
     const phase1 = cursor?.phase === 1 ? cursor : null;
@@ -363,10 +373,13 @@ export const feedService = {
           .filter(keep)
           .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
           .sort(compareByScore);
-        const sc = flamesDigest(ranked);
-        if (phase1 && phase1.sc !== sc) {
-          // Des flammes ont changé depuis la première page : les scores ne sont plus ceux du parcours.
-          return { ...(await feedService.feed(v, { filter: q.filter })), reset: true as const };
+        // Empreinte des flammes des seules cartes déjà consommées (au-dessus de la frontière) : seules elles peuvent être servies
+        // deux fois si leur score change. Une flamme retirée plus bas dans le classement ne renvoie personne en haut.
+        const consumedDigest = (edge: { score: number; id: string }) =>
+          flamesDigest(ranked.filter((c) => compareByScore(c, edge) <= 0));
+        if (phase1 && phase1.sc !== consumedDigest({ score: phase1.score, id: phase1.frontier })) {
+          // Des flammes ont changé depuis la page précédente : les scores ne sont plus ceux du parcours.
+          return { ...(await feedService.feed(v, { filter: q.filter }, false)), reset: true as const };
         }
         // Les cartes après la frontière (la dernière consommée), puis celles qui ont été vues sans être servies.
         const rest = phase1
@@ -386,7 +399,7 @@ export const feedService = {
           next = {
             ...head("A"),
             phase: 1,
-            sc,
+            sc: consumedDigest(edge),
             score: edge.score,
             frontier: edge.id,
             kinds: [...(phase1?.kinds ?? []), ...shown.map((c) => c.kind)].slice(-2),
@@ -435,7 +448,7 @@ export const feedService = {
     // Au-delà de la borne, `decodeCursor` refuserait le curseur suivant : la liste se termine plutôt que de le fabriquer.
     if (next) next = offset + out.length > MAX_OFFSET ? null : { ...next, offset: offset + out.length };
     // Le rail « Ça plaît en ce moment » : première page d'« Abonnements » et d'« Autour de moi ».
-    const hot = !cursor && !forYou ? await hotRail(v.user.id, ref, q.filter, nearby, ctx) : null;
+    const hot = !cursor && !forYou ? await hotRail(v.user.id, ref, q.filter, nearby, ctx, seenFloor) : null;
     return {
       items: out,
       nextCursor: next ? encodeCursor(next) : null,
@@ -455,7 +468,7 @@ export const feedService = {
     rateLimit("feedRead", v.user.id);
     const t = now();
     const sinceMs = Math.min(t.getTime(), Math.max(t.getTime() - FEED_FRESH_MAX_AGE_MS, Date.parse(q.since)));
-    const ctx = await viewerContext(v, t);
+    const [ctx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
     const nearby = nearbyDepartments(ctx.departments);
     // Les exclusions (mes publications) sont posées dans le SQL des publications, avant le LIMIT ; pour les autres genres, on relit
     // plus large (×4, trois fois au plus) tant que moins de 20 cartes admissibles sont trouvées et qu'une source a encore des lignes.
@@ -473,6 +486,8 @@ export const feedService = {
         nearby,
         zone: "A",
         excludeMine: true,
+        skipKinds: ctx.lessKinds,
+        seenFloor,
       });
       cards = merge(lists).filter(
         (c) =>

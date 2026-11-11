@@ -40,6 +40,10 @@ export type SourceInput = {
   zone: Zone;
   /** `GET /fil/fresh` : ne lit pas mes publications (exclues **avant** le LIMIT). */
   excludeMine?: boolean;
+  /** Genres que la lecture ne lit pas du tout (`GET /fil/fresh` : « Moins de ce genre »). */
+  skipKinds?: ReadonlySet<string>;
+  /** Borne de rognage du compte (`feed_seen_floor`) : toute carte datée au plus de cette date est « déjà vue » (zone B). */
+  seenFloor?: Date | null;
 };
 
 export type Zone = "A" | "B";
@@ -117,11 +121,12 @@ export function atBounds(
   atExpr: SQL,
   idExpr: SQL,
   kind: FeedCardKind,
-  input: Pick<SourceInput, "since" | "until" | "before" | "floor" | "zone" | "userId" | "ref">,
+  input: Pick<SourceInput, "since" | "until" | "before" | "floor" | "zone" | "userId" | "ref" | "seenFloor">,
 ): SQL[] {
   const seen = seenSql(kind, idExpr, input);
   // Plus ancienne que ref − 30 jours (durée de vie du « vu ») : toujours zone B, la purge ne la fait pas revenir en haut.
-  const old = sql`${atExpr} <= ${ts(new Date(input.ref.getTime() - FEED_SEEN_TTL_MS))}`;
+  const cutoff = Math.max(input.ref.getTime() - FEED_SEEN_TTL_MS, input.seenFloor?.getTime() ?? 0);
+  const old = sql`${atExpr} <= ${ts(new Date(cutoff))}`;
   const out = [
     sql`${atExpr} <= ${ts(input.until)}`,
     input.zone === "B" ? sql`(${seen} or ${old})` : sql`(not ${seen} and not ${old})`,
