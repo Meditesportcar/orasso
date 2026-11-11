@@ -110,21 +110,26 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
 
 /**
  * Garde de lecture du Journal : un domaine retire d'une liste (et de la pastille) les lignes que leur destinataire ne peut
- * plus lire (ex. commentaire d'une publication qu'il ne voit plus). `false` : la ligne n'est pas montrée.
+ * plus lire (ex. commentaire d'une publication qu'il ne voit plus), **en lot** : une garde reçoit toutes les lignes de son
+ * domaine d'une page (ou de la pastille) et rend un verdict par ligne. `shown: false` : la ligne n'est pas montrée ;
+ * `actors` : les pseudos des personnes d'une ligne regroupée que le destinataire peut encore lire (les autres ne sont pas nommées).
  */
-export type JournalGuard = (n: NotificationRow) => Promise<boolean>;
+export type JournalVerdict = { shown: boolean; actors?: string[] };
+export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
 const journalGuards = new Map<string, JournalGuard>();
 export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
   for (const t of types) journalGuards.set(t, guard);
 }
-/** Les lignes retirées par les gardes de lecture (identifiants). */
-async function hiddenByJournalGuards(rows: readonly NotificationRow[]): Promise<Set<string>> {
-  const hidden = new Set<string>();
+/** Verdicts des gardes de lecture pour ces lignes (une seule passe par garde, quel que soit le nombre de lignes). */
+async function journalVerdicts(userId: string, rows: readonly NotificationRow[]): Promise<Map<string, JournalVerdict>> {
+  const byGuard = new Map<JournalGuard, NotificationRow[]>();
   for (const n of rows) {
     const guard = journalGuards.get(n.type);
-    if (guard && !(await guard(n))) hidden.add(n.id);
+    if (guard) byGuard.set(guard, [...(byGuard.get(guard) ?? []), n]);
   }
-  return hidden;
+  const verdicts = new Map<string, JournalVerdict>();
+  for (const [guard, mine] of byGuard) for (const [id, v] of await guard(userId, mine)) verdicts.set(id, v);
+  return verdicts;
 }
 
 export const notificationsService = {
@@ -412,24 +417,36 @@ export const notificationsService = {
       )
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(limit + 1);
-    const hidden = await hiddenByJournalGuards(rows.slice(0, limit));
+    const verdicts = await journalVerdicts(userId, rows.slice(0, limit));
     // Personnes d'une ligne regroupée relues à l'instant : pseudos, avatars, total et textes sans les comptes partis.
     const views = await citedViews(
       rows.filter((n) => Array.isArray((n.data as { _actorIds?: unknown })._actorIds)),
       db,
     );
     const page = toPage(rows, limit, (n) => {
-      if (hidden.has(n.id)) return null;
+      const verdict = verdicts.get(n.id);
+      if (verdict && !verdict.shown) return null;
       const view = views.get(n.id);
       // Ligne regroupée dont le texte ne se recompose pas sans la personne partie : masquée (la page peut être plus courte).
       if (view === null) return null;
+      // Les personnes que le destinataire ne peut plus lire (compte passé privé…) ne sont ni nommées ni montrées.
+      const allowed = verdict?.actors ? new Set(verdict.actors) : null;
+      const actors = view && allowed ? view.actors.filter((a) => allowed.has(a.pseudo)) : view?.actors;
+      const narrowed = Boolean(view && actors && actors.length < view.actors.length);
+      const template = (n.data as { _text?: { title?: unknown } })._text?.title;
+      const first = actors?.[0];
       return {
         id: n.id,
         type: n.type,
         family: n.family,
-        title: view?.title ?? n.title,
+        title:
+          narrowed && first && typeof template === "string"
+            ? fillTemplate(template, first.pseudo)
+            : (view?.title ?? n.title),
         body: view?.body ?? n.body,
-        data: view ? { ...stripInternal(n.data), actors: view.actors, count: view.count } : stripInternal(n.data),
+        data: view
+          ? { ...stripInternal(n.data), actors, count: narrowed ? Math.max(1, allowed?.size ?? 1) : view.count }
+          : stripInternal(n.data),
         eventId: n.eventId,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,
@@ -452,7 +469,8 @@ export const notificationsService = {
           citedPeopleRemain(now(), true),
         ),
       );
-    // Lignes que leur destinataire ne peut plus lire (gardes de lecture) : pas comptées.
+    // Lignes que leur destinataire ne peut plus lire (gardes de lecture) : pas comptées. Les mêmes exclusions que le total
+    // (`citedPeopleRemain`) : une ligne déjà exclue n'est pas retirée deux fois. Une seule passe en lot.
     const guarded = journalGuards.size
       ? await ex
           .select()
@@ -463,11 +481,14 @@ export const notificationsService = {
               eq(notifications.inJournal, true),
               isNotNull(notifications.deliveredAt),
               isNull(notifications.readAt),
+              citedPeopleRemain(now(), true),
               inArray(notifications.type, [...journalGuards.keys()] as NotificationType[]),
             ),
           )
       : [];
-    const hidden = guarded.length ? (await hiddenByJournalGuards(guarded)).size : 0;
+    const hidden = guarded.length
+      ? [...(await journalVerdicts(userId, guarded)).values()].filter((v) => !v.shown).length
+      : 0;
     return Math.max(0, (row?.n ?? 0) - hidden);
   },
 
