@@ -83,9 +83,9 @@ describe("publication validée après le curseur du résumé", () => {
     await eventNewsDigest.run(day2);
     const rows = await digests(u);
     expect(rows).toHaveLength(2);
-    const second = rows.find((r) => (r.data as { postIds?: string[] }).postIds?.includes(late));
+    const second = rows.find((r) => (r.data as { _postIds?: string[] })._postIds?.includes(late));
     expect(second?.title).toBe("1 nouveauté pour tes sorties");
-    expect((second?.data as { postIds: string[] }).postIds).not.toContain(early);
+    expect((second?.data as { _postIds: string[] })._postIds).not.toContain(early);
     // Jour 3 : ni l'une ni l'autre ne reviennent.
     await eventNewsDigest.run(new Date(AT.getTime() + 2 * DAY));
     expect(await digests(u)).toHaveLength(2);

@@ -29,7 +29,7 @@ const BATCH = 500;
 const FIRST_WINDOW_MS = DAY;
 /**
  * Marge de chevauchement : une publication dont la transaction a commencé avant le passage précédent mais s'est validée après
- * (sa date précède donc le curseur) est reprise ; celles déjà résumées sont écartées par leur identifiant (`data.postIds`
+ * (sa date précède donc le curseur) est reprise ; celles déjà résumées sont écartées par leur identifiant (`data._postIds`
  * des résumés envoyés).
  */
 const OVERLAP_MS = 60 * 60_000;
@@ -127,7 +127,7 @@ export const eventNewsDigest = {
               and ${postOkSql(at)}
               and not exists (select 1 from notifications n where n.user_id = h.user_id and n.type = 'event_news_digest'
                 and n.created_at >= ${new Date(at.getTime() - DEDUP_LOOKBACK_MS).toISOString()}::timestamptz
-                and n.data -> 'postIds' @> to_jsonb(p.id::text))
+                and n.data -> '_postIds' @> to_jsonb(p.id::text))
             group by h.user_id, e.id, e.title, e.slug, e.starts_at
             order by h.user_id, e.starts_at, e.id`);
           for (const row of news.rows) byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row]);
@@ -137,7 +137,7 @@ export const eventNewsDigest = {
           return {
             userId,
             ...composeDigest(events),
-            data: { events, postIds: rows.flatMap((r) => r.post_ids) },
+            data: { events, _postIds: rows.flatMap((r) => r.post_ids) },
           };
         });
         await notificationsService.notifyEachNow(tx, DIGEST_TYPE, items);
