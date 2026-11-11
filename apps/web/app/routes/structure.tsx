@@ -1,30 +1,55 @@
-import { Button, Chip, Icon, Plate } from "@orasso/design-system/web";
+// Page publique d'une structure (`/o/<slug>`), vue d'un visiteur.
+// Lot R8g (D40, maquettes R8.6 `pu-publi` et R9.3 `n-page`) : le haut compact du Profil (logo dans l'anneau de ses stories, nom,
+// type et vérification, « Suivre », bio sur une ligne, icônes « Message » et « Plus », trois compteurs) puis des onglets soulignés
+// et collants lus dans `?onglet=` (un lien partagé ouvre le bon) : « Événements » (ce que la page montrait), « Publications »
+// (les siennes, filtre « Tout · Événements · Hors événement » dans `?filtre=`, ouvert par défaut), « Mentions · N » (ceux qui la
+// citent). Sans session : « Événements » et « Publications » seulement, en liste blanche, rendues côté serveur ; titres,
+// description et balises de partage inchangés.
+import { Button, Chip } from "@orasso/design-system/web";
 import {
+  type AuthorPostsFilter,
+  authorKeyOf,
   countFr,
   type EventCard,
+  explicitPageFilter,
+  pagesLabels as L,
+  PAGE_FILTER_PARAM,
+  PAGE_TAB_PARAM,
   type Page,
   type ProCard,
+  type PublicPostsPage,
+  pageCounters,
+  pageMentionsCount,
+  pagePublicationsCount,
+  pageShownTab,
+  pageTabs,
+  profileRingState,
   type StructureOrganizer,
   type StructurePublic,
   staffRequestLabels,
   structureKindLabels,
-  widestWordEm,
+  type WithPageExtras,
 } from "@orasso/shared";
-import type { CSSProperties } from "react";
 import { data, Form, redirect } from "react-router";
 
-import { EventTile } from "../components/EventTile";
-import { ContactOrganizer } from "../components/Messaging";
-import { ProTile } from "../components/ProTile";
+import { PageHead } from "../components/pages/PageHead";
+import { PageMentions } from "../components/pages/PageMentions";
+import { PageMore } from "../components/pages/PageMore";
+import { PagePublications } from "../components/pages/PagePublications";
+import { PageTabs, pageTabHref } from "../components/pages/PageTabs";
+import { StructureEvents } from "../components/pages/StructureEvents";
+import { SideIcon } from "../components/profile/ProfileHead";
 import { ShareButtons } from "../components/ShareButtons";
-import { Stars } from "../components/Stars";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { messageAction } from "../lib/messaging.server";
 import type { Route } from "./+types/structure";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
-  const structure = await apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(slug)}`);
+  const structure = await apiOrThrow<WithPageExtras<StructurePublic>>(
+    request,
+    `/structures/by-slug/${encodeURIComponent(slug)}`,
+  );
   const [upcoming, past, me, partners] = await Promise.all([
     api<Page<EventCard>>(request, `/events?structureId=${structure.id}&limit=50`),
     api<Page<EventCard>>(request, `/events?structureId=${structure.id}&scope=past&limit=12`),
@@ -38,16 +63,36 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const full = organizer ? await api<StructureOrganizer>(request, `/structures/${structure.id}`) : null;
   // Devenir staff (lot 24) : où en est ma demande ou mon appartenance à cette structure.
   const mine = me?.memberships.find((m) => m.structureId === structure.id);
+  // Lot R8g : l'onglet et le filtre se lisent dans l'adresse ; « Publications » s'ouvre par défaut quand la page en a.
+  const url = new URL(request.url);
+  const session = Boolean(me);
+  const tab = pageShownTab("structure", {
+    raw: url.searchParams.get(PAGE_TAB_PARAM),
+    counts: { publications: pagePublicationsCount(structure) },
+    session,
+  });
+  const filter = explicitPageFilter(url.searchParams.get(PAGE_FILTER_PARAM));
+  // Sans session : les publications de la structure (liste blanche, T4), lues par le serveur pour un rendu sans JavaScript.
+  const publicFirst =
+    !session && tab === "publications"
+      ? await api<PublicPostsPage>(
+          request,
+          `/authors/${encodeURIComponent(authorKeyOf("structure", structure.id))}/feed-posts`,
+        )
+      : null;
   return {
     staffState: (mine && mine.role === "staff" ? mine.status : null) as "active" | "invited" | "requested" | null,
     structure,
     upcoming: upcoming.ok ? upcoming.data.items : [],
     past: past.ok ? past.data.items : [],
     partners: partners.ok ? partners.data : [],
-    connected: Boolean(me),
+    connected: session,
     inviteToken: full?.ok ? full.data.inviteToken : null,
     isOrganizer: Boolean(organizer),
     origin: originOf(request),
+    tab,
+    filter,
+    publicFirst: publicFirst?.ok ? publicFirst.data : null,
   };
 }
 
@@ -96,202 +141,164 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function StructurePage({ loaderData, actionData }: Route.ComponentProps) {
-  const { structure, upcoming, past, partners, connected, inviteToken, isOrganizer, origin, staffState } = loaderData;
+  const {
+    structure,
+    upcoming,
+    past,
+    partners,
+    connected,
+    inviteToken,
+    isOrganizer,
+    origin,
+    staffState,
+    tab,
+    filter,
+    publicFirst,
+  } = loaderData;
   const staffError = (actionData as { staffError?: string } | undefined)?.staffError;
-  const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
-  const socials = Object.entries(structure.socials).filter(([, url]) => Boolean(url)) as [string, string][];
-  const average = structure.rating.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  const messageError = (actionData as { messageError?: string | null } | undefined)?.messageError;
+  const path = `/o/${structure.slug}`;
+  const retour = `/connexion?retour=${encodeURIComponent(path)}`;
+  const tabs = pageTabs("structure", { session: connected, mentionsCount: pageMentionsCount(structure) });
+  const counters = pageCounters("structure", {
+    followers: structure.followersCount,
+    events: upcoming.length + past.length,
+    partners: partners.length,
+  });
+  const key = authorKeyOf("structure", structure.id);
+  const ring = connected ? profileRingState(structure.stories) : null;
+  const eventsHref = pageTabHref(path, "events");
   return (
-    <div className="s-stack">
-      <Plate as="section" className="so__head" aria-labelledby="so-title">
-        <div className="so__logo" aria-hidden={!structure.logoUrl}>
-          {structure.logoUrl ? (
-            <img src={structure.logoUrl} alt={`Logo de ${structure.name}`} />
-          ) : (
-            <Icon name="staff" size={36} />
-          )}
-        </div>
-        <div className="s-grow s-stack s-stack--tight s-fit">
-          <div className="o-t-label s-tile__muted">
-            {structureKindLabels[structure.kind]}
-            {structure.verified && (
-              <>
-                {" · "}
-                <span className="s-verified" data-testid="verified-badge">
-                  Structure vérifiée
-                </span>
-              </>
-            )}
-          </div>
-          <h1
-            id="so-title"
-            className="s-title s-title--fit"
-            style={{ "--em": widestWordEm(structure.name) } as CSSProperties}
-          >
-            {structure.name}
-          </h1>
-          {where && <div className="o-t-meta s-tile__muted">{where}</div>}
-          <div className="o-t-meta" data-testid="structure-rating">
-            {average ? (
-              <>
-                <Stars rating={Math.round(structure.rating.average ?? 0)} />{" "}
-                <strong className="o-t-number">{average}</strong> / 3 · {structure.rating.count} avis
-              </>
-            ) : (
-              <span className="s-tile__muted">
-                {structure.rating.count > 0
-                  ? `${structure.rating.count} avis · la note s'affiche à partir de 3 avis`
-                  : "Pas encore d'avis"}
-              </span>
-            )}
-          </div>
-          <div className="o-t-caption s-tile__muted">{countFr(structure.followersCount, "abonné")}</div>
-        </div>
-        <div className="so__actions">
-          {connected ? (
-            <Form method="post">
+    <div className="s-stack pg-page">
+      <PageHead
+        testId="structure-head"
+        name={structure.name}
+        logoUrl={structure.logoUrl}
+        ring={ring}
+        storiesHref={
+          connected && (structure.stories?.count ?? 0) > 0 ? `/app/story/${encodeURIComponent(key)}` : undefined
+        }
+        typeLabel={L.typeStructure}
+        verifiedLabel={structure.verified ? L.verifiedStructure : null}
+        follow={
+          connected ? (
+            <Form method="post" className="fl-form">
               <input type="hidden" name="structureId" value={structure.id} />
               <Button
                 type="submit"
                 name="intent"
                 value={structure.isFollowing ? "unfollow" : "follow"}
-                variant="primary"
-                icon="heart"
-                fullWidth
+                variant={structure.isFollowing ? "secondary" : "primary"}
+                icon={structure.isFollowing ? "check" : "add"}
+                className="fl-line"
+                data-testid="follow-button"
               >
-                {structure.isFollowing ? "Tu suis cette structure" : "Suivre"}
+                {structure.isFollowing ? L.following : L.follow}
               </Button>
             </Form>
           ) : (
-            <Button
-              variant="primary"
-              icon="heart"
-              href={`/connexion?retour=${encodeURIComponent(`/o/${structure.slug}`)}`}
-              fullWidth
-            >
-              Suivre
+            <Button variant="primary" icon="add" className="fl-line" href={retour} data-testid="follow-button">
+              {L.follow}
             </Button>
-          )}
-          {structure.verified && !isOrganizer && (
-            <ContactOrganizer structureId={structure.id} connected={connected} retour={`/o/${structure.slug}`} />
-          )}
-          {structure.verified && !isOrganizer && (
-            <div className="s-stack s-stack--tight" data-testid="become-staff">
-              {staffState === "active" ? (
-                <Chip variant="accent">Tu fais partie du staff</Chip>
-              ) : staffState === "requested" ? (
-                <Chip>{staffRequestLabels.sent}</Chip>
-              ) : staffState === "invited" ? (
-                <Button variant="secondary" icon="staff" href="/app/activite/demandes" fullWidth>
-                  {staffRequestLabels.invited}
-                </Button>
-              ) : connected ? (
-                <Form method="post">
+          )
+        }
+        bio={structure.description}
+        side={
+          <>
+            {/* « Message » : la conversation avec l'équipe organisatrice (l'ancien « Contacter l'organisateur »). */}
+            {structure.verified &&
+              !isOrganizer &&
+              (connected ? (
+                <Form method="post" className="pt-side__form">
+                  <input type="hidden" name="intent" value="contact_organizer" />
                   <input type="hidden" name="structureId" value={structure.id} />
-                  <Button type="submit" name="intent" value="become_staff" variant="secondary" icon="staff" fullWidth>
-                    {staffRequestLabels.becomeStaff}
-                  </Button>
+                  <SideIcon icon="chat" label={L.message} type="submit" testId="contact-organizer" />
                 </Form>
               ) : (
-                <Button
-                  variant="secondary"
-                  icon="staff"
-                  href={`/connexion?retour=${encodeURIComponent(`/o/${structure.slug}`)}`}
-                  fullWidth
-                >
-                  {staffRequestLabels.becomeStaff}
-                </Button>
-              )}
-              {staffError && (
-                <p className="s-error" role="alert">
-                  {staffError}
-                </p>
-              )}
-            </div>
-          )}
-          {isOrganizer && (
-            <Button variant="secondary" icon="calendar" href={`/orga/${structure.slug}`} fullWidth>
-              Espace organisateur
-            </Button>
-          )}
-        </div>
-      </Plate>
-
-      {structure.description && (
-        <Plate as="section" aria-labelledby="so-about">
-          <h2 id="so-about" className="s-h2">
-            À propos
-          </h2>
-          <p className="s-prewrap">{structure.description}</p>
-          {(structure.website || socials.length > 0) && (
-            <div className="s-row">
-              {structure.website && (
-                <a href={structure.website} rel="noopener nofollow" target="_blank">
-                  Site web
-                </a>
-              )}
-              {socials.map(([name, url]) => (
-                <a key={name} href={url} rel="noopener nofollow" target="_blank">
-                  {name.charAt(0).toUpperCase() + name.slice(1)}
-                </a>
+                <SideIcon icon="chat" label={L.message} href={retour} testId="contact-organizer" />
               ))}
-            </div>
-          )}
-        </Plate>
+            <PageMore>
+              <div className="s-stack s-stack--tight">
+                <ShareButtons url={`${origin}${path}`} title={`${structure.name} sur Orasso`} />
+                {structure.verified && !isOrganizer && (
+                  <div className="s-stack s-stack--tight" data-testid="become-staff">
+                    {staffState === "active" ? (
+                      <Chip variant="accent">Tu fais partie du staff</Chip>
+                    ) : staffState === "requested" ? (
+                      <Chip>{staffRequestLabels.sent}</Chip>
+                    ) : staffState === "invited" ? (
+                      <Button variant="secondary" icon="staff" href="/app/activite/demandes" fullWidth>
+                        {staffRequestLabels.invited}
+                      </Button>
+                    ) : connected ? (
+                      <Form method="post" className="s-stack s-stack--tight">
+                        <input type="hidden" name="structureId" value={structure.id} />
+                        <Button
+                          type="submit"
+                          name="intent"
+                          value="become_staff"
+                          variant="secondary"
+                          icon="staff"
+                          fullWidth
+                        >
+                          {staffRequestLabels.becomeStaff}
+                        </Button>
+                      </Form>
+                    ) : (
+                      <Button variant="secondary" icon="staff" href={retour} fullWidth>
+                        {staffRequestLabels.becomeStaff}
+                      </Button>
+                    )}
+                    {staffError && (
+                      <p className="s-error" role="alert">
+                        {staffError}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {isOrganizer && (
+                  <Button variant="secondary" icon="calendar" href={`/orga/${structure.slug}`} fullWidth>
+                    Espace organisateur
+                  </Button>
+                )}
+              </div>
+            </PageMore>
+          </>
+        }
+        counters={counters}
+        counterHref={() => eventsHref}
+      />
+
+      {messageError && (
+        <p className="s-error" role="alert">
+          {messageError}
+        </p>
       )}
 
-      <section className="s-stack" aria-labelledby="so-next">
-        <h2 id="so-next" className="s-h2 s-head">
-          Prochains événements
-        </h2>
-        {upcoming.length === 0 ? (
-          <p className="s-notice">Aucun événement à venir pour l'instant. Suis la structure pour être prévenu.</p>
-        ) : (
-          <div className="w-cards" data-testid="structure-upcoming">
-            {upcoming.map((event) => (
-              <EventTile key={event.id} event={event} showStructure={false} />
-            ))}
-          </div>
-        )}
-      </section>
+      <PageTabs value={tab} items={tabs} path={path} />
 
-      {past.length > 0 && (
-        <section className="s-stack" aria-labelledby="so-past">
-          <h2 id="so-past" className="s-h2 s-head">
-            Événements passés
-          </h2>
-          <div className="w-cards" data-testid="structure-past">
-            {past.map((event) => (
-              <EventTile key={event.id} event={event} showStructure={false} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {partners.length > 0 && (
-        <section className="s-stack" aria-labelledby="so-partners" data-testid="structure-partners">
-          <h2 id="so-partners" className="s-h2 s-head">
-            Pros partenaires
-          </h2>
-          <div className="s-grid">
-            {partners.map((pro) => (
-              <ProTile key={pro.slug} pro={pro} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {inviteToken && (
-        <Plate as="section" aria-labelledby="so-invite">
-          <h2 id="so-invite" className="s-h2">
-            Lien d'invitation
-          </h2>
-          <p className="s-entry__text">
-            Partage ce lien à tes passionnés : en créant leur compte, ils suivent {structure.name} et sont prévenus de
-            tes prochains événements en avant-première.
-          </p>
-          <ShareButtons url={`${origin}/invitation/${inviteToken}`} title={`Rejoins ${structure.name} sur Orasso`} />
-        </Plate>
+      {tab === "events" ? (
+        <StructureEvents
+          structure={structure}
+          upcoming={upcoming}
+          past={past}
+          partners={partners}
+          inviteToken={inviteToken}
+          origin={origin}
+        />
+      ) : tab === "publications" ? (
+        <PagePublications
+          authorKey={key}
+          name={structure.name}
+          path={path}
+          withFilter
+          filter={filter as AuthorPostsFilter}
+          total={pagePublicationsCount(structure) ?? null}
+          session={connected}
+          publicFirst={publicFirst}
+        />
+      ) : (
+        <PageMentions pageKey={key} pageName={structure.name} manage={isOrganizer} />
       )}
     </div>
   );
