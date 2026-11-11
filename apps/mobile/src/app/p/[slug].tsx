@@ -32,6 +32,7 @@ import { PageMentions } from "@/features/pages/PageMentions";
 import { PagePublications } from "@/features/pages/PagePublications";
 import { PageTabs } from "@/features/pages/PageTabs";
 import { ProPresentation } from "@/features/pages/ProPresentation";
+import { useReloadToken } from "@/features/pages/useReloadToken";
 import { SideIcon } from "@/features/profil/ProfileHead";
 import { SetList, SetRow } from "@/features/profil/parts";
 import { openReport } from "@/features/ReportSheet";
@@ -62,6 +63,11 @@ export default function ProPage() {
   const [more, setMore] = useState(false);
   const [picked, setPicked] = useState<PageTab | null>(null);
   const [mentionsDelta, setMentionsDelta] = useState(0);
+  const mentionsBase = p ? pageMentionsCount(p) : undefined;
+  // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque nombre neuf.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nombre servi neuf remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [mentionsBase, slug]);
+  const [reloadToken, bumpReload] = useReloadToken();
   const viewed = useRef<string | null>(null);
 
   // Une vue comptée par fiche et par ouverture (jamais celle du pro : l'API l'ignore).
@@ -120,7 +126,6 @@ export default function ProPage() {
   }
 
   const hasPosition = p.lat !== null && p.lng !== null;
-  const mentionsBase = pageMentionsCount(p);
   const mentionsCount = mentionsBase === undefined ? undefined : Math.max(0, mentionsBase + mentionsDelta);
   const tabs = pageTabs("pro", { session, mentionsCount });
   const wanted = picked ?? pageOpenTab("pro", { publications: pagePublicationsCount(p) }, session);
@@ -137,7 +142,10 @@ export default function ProPage() {
     <FlowScreen
       title={p.name}
       onClose={close}
-      onRefresh={pro.reload}
+      onRefresh={async () => {
+        bumpReload();
+        await pro.reload();
+      }}
       overlays={
         <>
           <PhotoViewer
@@ -235,6 +243,7 @@ export default function ProPage() {
         <ProPresentation pro={p} onOpenPhoto={setViewer} onTrack={track} />
       ) : tab === "publications" ? (
         <PagePublications
+          reloadToken={reloadToken}
           authorKey={key}
           name={p.name}
           withFilter={false}
@@ -245,6 +254,7 @@ export default function ProPage() {
         />
       ) : (
         <PageMentions
+          reloadToken={reloadToken}
           pageKey={key}
           pageName={p.name}
           manage={owner}

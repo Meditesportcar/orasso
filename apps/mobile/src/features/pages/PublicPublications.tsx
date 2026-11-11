@@ -81,16 +81,16 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
     <View style={styles.list} testID="public-publications">
       {items.map((post) => {
         const meta = tileMeta(post, now());
-        const photo = post.photos[0];
         return (
           <Card key={post.id} padded={false} testID="public-publication">
-            {photo ? (
+            {post.photos.map((photo) => (
               <Photo
+                key={photo.url}
                 source={mediaSource(photo.url)}
                 placeholder={`linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`}
-                style={styles.photo}
+                style={{ width: "100%", aspectRatio: photo.width / Math.max(1, photo.height) }}
               />
-            ) : null}
+            ))}
             <View style={styles.body}>
               {post.important ? (
                 <Text variant="label" color={t.color.accentText}>
@@ -120,7 +120,6 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
 
 const styles = StyleSheet.create({
   list: { gap: space3 },
-  photo: { width: "100%", aspectRatio: 4 / 5 },
   body: { gap: space2, padding: space3 },
   empty: { alignItems: "center", gap: space2 },
 });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MentionItem } from "../schemas/feedLists";
 
 import {
+  aspectOfPhotos,
   explicitPageFilter,
   explicitPageTab,
   isPageManager,
@@ -174,5 +175,19 @@ describe("mentionLine : la ligne d'une mention", () => {
     expect(mentionLine({ post: post(attach(null, "after")), source: "attach", hidden: false }, "RL66").text).toBe(
       "a cité RL66",
     );
+  });
+});
+
+describe("aspectOfPhotos : le cadrage d'une publication sans session", () => {
+  it("le format le plus proche de la première photo", () => {
+    expect(aspectOfPhotos([{ width: 1080, height: 1350 }])).toBe("portrait_4_5");
+    expect(
+      aspectOfPhotos([
+        { width: 1080, height: 1080 },
+        { width: 1080, height: 1350 },
+      ]),
+    ).toBe("square");
+    expect(aspectOfPhotos([{ width: 1350, height: 1080 }])).toBe("landscape");
+    expect(aspectOfPhotos([])).toBe("portrait_4_5");
   });
 });

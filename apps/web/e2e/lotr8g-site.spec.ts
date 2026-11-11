@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme, signUpApi, unique } from "./helpers";
 import { portraitPhoto } from "./publications-helpers";
+import { publishLandscapeAsStructure } from "./r8g-helpers";
 import { RELAIS } from "./relais";
 
 // Lot R8g (D40, maquettes R8.6 `pu-publi` et R9.3 `n-page`), côté site : la page d'une structure et la fiche d'un pro, vues d'un
@@ -308,6 +309,78 @@ test("la responsable masque une mention de sa page, puis la remet", async ({ pag
     await row.getByTestId("mention-hide").click();
     await expect(row.getByTestId("mention-hidden")).toHaveCount(0, { timeout: 20_000 });
     expect((await read(false)).items.map((i) => i.post.id)).toContain(target);
+  } finally {
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+  }
+});
+
+test("tour 3 : sans session, toutes les photos au cadrage de la publication (paysage compris)", async ({ page: p }) => {
+  test.setTimeout(120_000);
+  const sarah = await login("sarah@orasso.local");
+  const rl = await page(sarah, "structures", "roues-libres-66");
+  const id = await publishLandscapeAsStructure(sarah, rl.id, `Paysage ${unique()}`, 2);
+  try {
+    await setTheme(p, "beton");
+    await p.setViewportSize({ width: 390, height: 900 });
+    await p.goto("/o/roues-libres-66");
+    const card = p.getByTestId("public-publication").filter({ hasText: "Paysage" });
+    await expect(card.locator(".fil-photos__slide img")).toHaveCount(2);
+    const box = await card.getByTestId("feed-post-photos").boundingBox();
+    expect(Math.abs((box?.width ?? 1) / (box?.height ?? 1) - 1.25)).toBeLessThan(0.05);
+    await shot(p, "structure-sans-session-paysage");
+  } finally {
+    await apiCall(sarah, "DELETE", `/me/feed-posts/${id}`);
+  }
+});
+
+test("tour 3 : une panne à la deuxième page des mentions se reprend par « Réessayer » ; le nombre de l'onglet ne se corrige pas deux fois", async ({
+  page: p,
+}) => {
+  test.setTimeout(180_000);
+  await setTheme(p, "beton");
+  await p.setViewportSize({ width: 390, height: 900 });
+  await loginInBrowser(p, "sarah@orasso.local", undefined, "/o/roues-libres-66");
+  const sarah = await login("sarah@orasso.local");
+  const rl = await page(sarah, "structures", "roues-libres-66");
+  let fail = true;
+  const mentionsRoute = /\/api\/authors\/[^/]+\/mentions/;
+  await p.route(mentionsRoute, async (route) => {
+    const url = route.request().url();
+    if (url.includes("cursor=")) {
+      if (fail) return route.abort();
+      return route.fulfill({ json: { items: [], nextCursor: null } });
+    }
+    const res = await route.fetch();
+    const body = await res.json();
+    await route.fulfill({ response: res, json: { ...body, nextCursor: "page-2" } });
+  });
+  await p.goto("/o/roues-libres-66?onglet=mentions");
+  await expect(p.getByTestId("mention-row").first()).toBeVisible({ timeout: 30_000 });
+  await p.getByTestId("mentions-more").click();
+  await expect(p.getByTestId("mentions-retry")).toBeVisible({ timeout: 20_000 });
+  fail = false;
+  await p.getByTestId("mentions-retry").click();
+  await expect(p.getByTestId("mentions-retry")).toHaveCount(0, { timeout: 20_000 });
+  await expect(p.getByTestId("mentions-more")).toHaveCount(0);
+  await p.unroute(mentionsRoute);
+
+  // Masquer, puis une relecture de la page (suivre / ne plus suivre) : le nombre ne bouge pas une seconde fois.
+  type List = { items: { post: { id: string }; hidden: boolean }[] };
+  const all = (await apiCall<List>(sarah, "GET", `/authors/s:${rl.id}/mentions?hidden=1`)).data;
+  const visible = all.items.filter((i) => !i.hidden).length;
+  const index = all.items.findIndex((i) => !i.hidden);
+  const target = all.items[index]?.post.id ?? "";
+  try {
+    await p.goto("/o/roues-libres-66?onglet=mentions");
+    await expect(p.getByTestId("mention-row")).toHaveCount(all.items.length, { timeout: 30_000 });
+    const row = p.getByTestId("mention-row").nth(index);
+    await row.getByTestId("mention-more").click();
+    await row.getByTestId("mention-hide").click();
+    await expect(p.getByTestId("page-tab-mentions")).toContainText(`· ${visible - 1}`, { timeout: 20_000 });
+    await p.getByTestId("follow-button").click();
+    await p.waitForTimeout(1500);
+    await expect(p.getByTestId("page-tab-mentions")).toContainText(`· ${visible - 1}`);
+    await p.getByTestId("follow-button").click();
   } finally {
     await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
   }

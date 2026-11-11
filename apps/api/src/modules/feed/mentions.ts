@@ -38,6 +38,7 @@ import {
   msSql,
   pageInGoodStanding,
   pageOf,
+  proPostsHidden,
   requireJournalEvent,
   visibleMentionsFrom,
 } from "./lists";
@@ -234,6 +235,7 @@ export async function listAuthorMentions(
   const includeHidden = q.hidden === "1";
   if (includeHidden && !(await manages(v, key.key))) throw forbidden(feedListErrors.hiddenForbidden);
   if (key.kind === "provider" || key.kind === "media") return { items: [], nextCursor: null };
+  if (await proPostsHidden(db, key, v.user.id, at)) return { items: [], nextCursor: null };
   const { page, nextCursor } = await mentionIds(
     { kind: key.kind, id: key.id, section: "all", includeHidden, cursor: q.cursor },
     at,

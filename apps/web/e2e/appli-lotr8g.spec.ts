@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { portraitPhoto } from "./publications-helpers";
+import { publishLandscapeAsStructure } from "./r8g-helpers";
 import { RELAIS } from "./relais";
 
 // Lot R8g (D40, maquettes R8.6 `pu-publi` et R9.3 `n-page`), côté appli (version web compilée de recette) : la page d'une structure
@@ -348,6 +349,64 @@ test("la responsable masque une mention de sa page, puis la remet", async ({ bro
     await page.getByTestId("mention-hide").click();
     await expect(row.getByTestId("mention-hidden")).toHaveCount(0, { timeout: 20_000 });
     expect((await read(false)).items.map((i) => i.post.id)).toContain(target);
+  } finally {
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+    await ctx.close();
+  }
+});
+
+test("tour 3 : sans session toutes les photos ; retour sur la page relit les publications ; le nombre de mentions ne se corrige pas deux fois", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const sarah = await login("sarah@orasso.local");
+  const rl = await served(sarah, "structures", "roues-libres-66");
+  const landscape = await publishLandscapeAsStructure(sarah, rl.id, `Paysage ${unique()}`, 2);
+  let fresh = "";
+  try {
+    // Sans session : les deux photos.
+    const anon = await open(browser);
+    await go(anon.page, "/o/roues-libres-66");
+    const card = anon.page.getByTestId("public-publication").filter({ hasText: "Paysage" });
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    expect(await card.getByRole("img").count()).toBeGreaterThanOrEqual(2);
+    await anon.ctx.close();
+
+    // Revenir sur la page relit la liste : une publication faite entre-temps y est.
+    const { ctx, page } = await open(browser);
+    await signIn(page, "kenji@orasso.local");
+    await go(page, "/o/roues-libres-66");
+    await expect(page.getByTestId("publication-tile").first()).toBeVisible({ timeout: 30_000 });
+    const before = await page.getByTestId("publication-tile").count();
+    fresh = await publishLandscapeAsStructure(sarah, rl.id, `Neuve ${unique()}`, 1);
+    await page.getByTestId("publication-tile-open").first().click();
+    await expect(page).toHaveURL(/publication/, { timeout: 20_000 });
+    await page.goBack();
+    await expect(page.getByTestId("publication-tile")).toHaveCount(before + 1, { timeout: 30_000 });
+    await ctx.close();
+  } finally {
+    await apiCall(sarah, "DELETE", `/me/feed-posts/${landscape}`);
+    if (fresh) await apiCall(sarah, "DELETE", `/me/feed-posts/${fresh}`);
+  }
+
+  // Masquer puis relire la fiche (suivre / ne plus suivre) : le nombre ne bouge pas une seconde fois.
+  type List = { items: { post: { id: string }; hidden: boolean }[] };
+  const all = (await apiCall<List>(sarah, "GET", `/authors/s:${rl.id}/mentions?hidden=1`)).data;
+  const visible = all.items.filter((i) => !i.hidden).length;
+  const index = all.items.findIndex((i) => !i.hidden);
+  const target = all.items[index]?.post.id ?? "";
+  const { ctx, page } = await open(browser);
+  try {
+    await signIn(page, "sarah@orasso.local");
+    await go(page, "/o/roues-libres-66?onglet=mentions");
+    await expect(page.getByTestId("mention-row")).toHaveCount(all.items.length, { timeout: 30_000 });
+    await page.getByTestId("mention-row").nth(index).getByTestId("mention-more").click();
+    await page.getByTestId("mention-hide").click();
+    await expect(page.getByTestId("page-tab-mentions")).toHaveAccessibleName(`Mentions · ${visible - 1}`);
+    await page.getByTestId("follow").click();
+    await page.waitForTimeout(1500);
+    await expect(page.getByTestId("page-tab-mentions")).toHaveAccessibleName(`Mentions · ${visible - 1}`);
+    await page.getByTestId("follow").click();
   } finally {
     await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
     await ctx.close();

@@ -1,9 +1,11 @@
 // Les règles d'écran de la page d'une structure et de la fiche d'un pro, vues par un visiteur (vague R8, lot R8g, maquettes R8.6
 // `pu-publi` et R9.3 `n-page`). Pures : le site et l'appli les lisent, aucune n'est écrite dans un écran. `now` n'intervient pas ici.
+
 import { attachPhraseOf } from "../labels/feedPublish.fr";
 import { pagesLabels as L } from "../labels/pages.fr";
 import type { AuthorPostsFilter, MentionItem, PageCounts } from "../schemas/feedLists";
 import type { StoriesSummary } from "../schemas/stories";
+import { FEED_ASPECT_RATIOS, type FeedAspect, feedAspects } from "./feed";
 
 export type PageKind = "structure" | "pro";
 
@@ -185,4 +187,17 @@ export function mentionLine(item: MentionItem, pageName: string): { text: string
   if (item.source === "attach" && a?.role)
     return { text: attachPhraseOf(a.role, a.phase, a.event.title), commercial: false };
   return { text: L.mentionCited(pageName), commercial: false };
+}
+
+/**
+ * Le cadrage d'une publication vue sans session (`PublicPostView` ne porte pas `aspect`) : le format le plus proche de la
+ * première photo (toutes les photos d'une publication ont le même). Sans photo : 4:5.
+ */
+export function aspectOfPhotos(photos: readonly { width: number; height: number }[]): FeedAspect {
+  const first = photos[0];
+  if (!first || first.height <= 0) return "portrait_4_5";
+  const ratio = first.width / first.height;
+  return [...feedAspects].sort(
+    (a, b) => Math.abs(ratio / FEED_ASPECT_RATIOS[a] - 1) - Math.abs(ratio / FEED_ASPECT_RATIOS[b] - 1),
+  )[0] as FeedAspect;
 }

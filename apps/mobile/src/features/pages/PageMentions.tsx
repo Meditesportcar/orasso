@@ -179,7 +179,7 @@ function Row({
   );
 }
 
-export function PageMentions({
+function PageMentionsList({
   pageKey,
   pageName,
   manage,
@@ -289,3 +289,11 @@ const styles = StyleSheet.create({
   tag: { flexDirection: "row", alignItems: "center", gap: 4 },
   more: { width: tokens.spacing.touch, height: tokens.spacing.touch, alignItems: "center", justifyContent: "center" },
 });
+
+/** Change `reloadToken` : la liste repart d une lecture neuve (la clé est posée ici : le gabarit de l écran remplace celle de l appelant). */
+export function PageMentions({
+  reloadToken = 0,
+  ...props
+}: Parameters<typeof PageMentionsList>[0] & { reloadToken?: number }) {
+  return <PageMentionsList key={reloadToken} {...props} />;
+}
