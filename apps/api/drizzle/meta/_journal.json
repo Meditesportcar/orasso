@@ -547,6 +547,13 @@
       "when": 1794355612340,
       "tag": "0077_publications",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794359227082,
+      "tag": "0078_event-notification-prefs",
+      "breakpoints": true
     }
   ]
 }
