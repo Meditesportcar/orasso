@@ -93,6 +93,23 @@ export async function requireVisibleComment(v: Viewer, id: string, ex: Executor 
     rel,
   );
   if (!visible) throw notFound(feedCommentLabels.commentNotFound);
+  // Une réponse ne se lit que si son commentaire de premier niveau se lit aussi (compte privé non suivi : ni flamme, ni signalement, ni citation).
+  if (row.c.parentId) {
+    const root = await commentRow(row.c.parentId, ex);
+    const rootOk =
+      root &&
+      canSeeComment(
+        viewer,
+        {
+          authorId: root.c.authorId,
+          authorVisibility: root.p.visibility,
+          authorUnavailable: unavailable(root.p, at),
+          deleted: root.c.deletedAt !== null,
+        },
+        await relationOf(v.user.id, root.c.authorId, ex),
+      );
+    if (!rootOk) throw notFound(feedCommentLabels.commentNotFound);
+  }
   return { ...row, post, manages };
 }
 

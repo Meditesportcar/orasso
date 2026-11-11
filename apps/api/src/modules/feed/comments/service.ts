@@ -8,7 +8,6 @@
 //   la publication d'abord, puis le commentaire (même ordre que la flamme d'une publication) ;
 // - un commentaire s'attache à une ligne de `feed_posts` : aucune route n'accepte un identifiant de carte du Fil.
 import {
-  canSeeFeedPost,
   commentMentions,
   commentParent,
   FEED_COMMENTS_PAGE,
@@ -28,7 +27,6 @@ import {
   feedPostComments,
   feedPosts,
   profiles,
-  userFollows,
 } from "../../../db/schema";
 import { now } from "../../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../../lib/errors";
@@ -37,7 +35,7 @@ import { rateLimit } from "../../../lib/rateLimit";
 import type { Viewer } from "../../../lib/session";
 import { type Tx, withTx } from "../../../lib/tx";
 import { moderationService } from "../../moderation/service";
-import { factsOf, postWithAuthor, profileOkSql, requireVisiblePost, UUID_RE } from "../access";
+import { postWithAuthor, profileOkSql, requireVisiblePost, UUID_RE } from "../access";
 import { notifyCommentLike, notifyNewComment } from "./notify";
 import { softDeleteComment } from "./remove";
 import { mentionSuggestions } from "./suggest";
@@ -98,10 +96,13 @@ async function page(
   };
 }
 
-/** Les personnes citées qui peuvent voir la publication : en règle, ni l'auteur du commentaire. */
+/**
+ * Les personnes citées : tout pseudo existant et en règle, ni l'auteur du commentaire, rendu de la même façon à tous. La
+ * liste `mentions` ne dépend jamais des droits du compte cité (elle révélerait qui est abonné à un compte privé) : seule la
+ * notification dépend de ce qu'il peut lire (`commentReaders`).
+ */
 async function mentionedPeople(
   tx: Tx,
-  postRow: NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>,
   commenterId: string,
   text: string,
   at: Date,
@@ -121,30 +122,9 @@ async function mentionedPeople(
         sql`${profiles.userId} <> ${commenterId}`,
       ),
     );
-  if (!people.length) return [];
-  const followers = new Set(
-    (
-      await tx
-        .select({ id: userFollows.followerId })
-        .from(userFollows)
-        .where(
-          and(
-            eq(userFollows.followedId, postRow.post.authorId),
-            eq(userFollows.status, "accepted"),
-            inArray(
-              userFollows.followerId,
-              people.map((p) => p.userId),
-            ),
-          ),
-        )
-    ).map((r) => r.id),
-  );
-  const facts = factsOf(postRow, at);
   // Dans l'ordre où le texte les cite.
   const order = new Map(pseudos.map((p, i) => [p.toLowerCase(), i]));
-  return people
-    .filter((p) => canSeeFeedPost({ userId: p.userId }, facts, { followAccepted: followers.has(p.userId) }))
-    .sort((a, b) => (order.get(a.pseudo.toLowerCase()) ?? 0) - (order.get(b.pseudo.toLowerCase()) ?? 0));
+  return people.sort((x, y) => (order.get(x.pseudo.toLowerCase()) ?? 0) - (order.get(y.pseudo.toLowerCase()) ?? 0));
 }
 
 export const feedCommentsService = {
@@ -247,8 +227,8 @@ export const feedCommentsService = {
             .where(eq(c.id, parentId));
         }
 
-        // `@pseudo` : seules les personnes qui voient la publication sont citées (ligne, lien, notification).
-        const mentioned = await mentionedPeople(tx, post, userId, input.text, at);
+        // `@pseudo` : la liste rendue est la même pour tous ; la notification ne part qu'à qui lit le commentaire.
+        const mentioned = await mentionedPeople(tx, userId, input.text, at);
         if (mentioned.length) {
           await tx
             .insert(feedCommentMentions)
@@ -296,6 +276,14 @@ export const feedCommentsService = {
   async remove(v: Viewer, commentId: string): Promise<void> {
     rateLimit("feedWrite", v.user.id);
     await withTx(async (tx) => {
+      // Son propre commentaire se supprime même quand on ne voit plus la publication (rien d'autre n'est lu).
+      const own = await commentRow(commentId, tx);
+      if (own && own.c.authorId === v.user.id) {
+        if (!(await softDeleteComment(tx, own.c.id, v.user.id, now()))) {
+          throw notFound(feedCommentLabels.commentNotFound);
+        }
+        return;
+      }
       const found = await requireVisibleComment(v, commentId, tx);
       if (found.c.authorId !== v.user.id) {
         // Une page exige le second facteur : son erreur remonte telle quelle ; sans droit, rien n'est révélé.
@@ -315,7 +303,21 @@ export const feedCommentsService = {
   async react(v: Viewer, commentId: string, on: boolean): Promise<FeedCommentReaction> {
     rateLimit("feedReact", v.user.id);
     return withTx(async (tx, after) => {
-      const found = await requireVisibleComment(v, commentId, tx);
+      // Retirer **sa** flamme reste possible sans voir la publication (rien d'autre n'est lu) ; sinon, lire le commentaire.
+      const [mineFlame] = on
+        ? []
+        : await tx
+            .select({ id: feedPostCommentReactions.commentId })
+            .from(feedPostCommentReactions)
+            .where(
+              and(eq(feedPostCommentReactions.commentId, commentId), eq(feedPostCommentReactions.userId, v.user.id)),
+            );
+      const found = mineFlame
+        ? await commentRow(commentId, tx).then((r) => {
+            if (!r || r.c.deletedAt) throw notFound(feedCommentLabels.commentNotFound);
+            return r;
+          })
+        : await requireVisibleComment(v, commentId, tx);
       // Verrou du commentaire : les compteurs ne se perdent pas à deux flammes simultanées.
       const [locked] = await tx
         .select({ n: c.reactionsCount, deletedAt: c.deletedAt })

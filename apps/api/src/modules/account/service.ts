@@ -478,12 +478,13 @@ export const accountService = {
       // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.
       await anonymizeStoriesForDeletedAccount(tx, userId, after);
 
+      // Lot R8k1 : ses commentaires du Fil, ses réponses, ses flammes et ses citations (les compteurs suivent). Avant les
+      // notifications regroupées : la publication d'abord, puis les notifications, comme la création d'un commentaire.
+      await anonymizeFeedCommentsForDeletedAccount(tx, userId);
       // Lot R7c1 : les notifications regroupées des autres (flammes sur une story…) perdent son pseudo et son avatar.
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
-      // Lot R8k1 : ses commentaires du Fil, ses réponses, ses flammes et ses citations (les compteurs suivent).
-      await anonymizeFeedCommentsForDeletedAccount(tx, userId);
       // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
       photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));

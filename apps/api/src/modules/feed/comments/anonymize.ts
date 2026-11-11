@@ -1,12 +1,26 @@
 // Commentaires du Fil (lot R8k1) : compte supprimé. Ses commentaires et ses réponses partent (avec les réponses des autres
 // sous ses commentaires, leurs flammes et leurs citations), ses flammes sur les commentaires des autres aussi, et il n'est
 // plus cité. Les compteurs (`comments_count`, `replies_count`, `reactions_count`) sont recalculés sur ce qui reste, sous
-// verrou : les publications d'abord (par identifiant), puis les commentaires touchés. Appelé par `accountService.anonymize`,
-// dans sa transaction, avant l'effacement de ses publications.
-import { eq, inArray, sql } from "drizzle-orm";
+// verrou : les publications d'abord (par identifiant), puis les commentaires touchés ; les notifications qui citent ce qui
+// part sont retirées ensuite (publication, puis notification : même ordre que la création d'un commentaire). Appelé par
+// `accountService.anonymize`, dans sa transaction, **avant** l'anonymisation des notifications regroupées.
+//
+// Exception (preuve d'un signalement, comme les publications du Fil) : un commentaire qui a un signalement en attente est
+// seulement retiré (caché, flammes et citations effacées) ; sa ligne et son texte restent jusqu'à la décision, qui les efface
+// (`moderation/targets/feedComment.ts`, `afterDecision`). Son commentaire de premier niveau reste aussi (la cascade d'un
+// parent effacerait la réponse signalée).
+import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { feedCommentMentions, feedPostCommentReactions, feedPostComments, feedPosts } from "../../../db/schema";
+import {
+  feedCommentMentions,
+  feedPostCommentReactions,
+  feedPostComments,
+  feedPosts,
+  reports,
+} from "../../../db/schema";
+import { now } from "../../../lib/deps";
 import type { Tx } from "../../../lib/tx";
+import { dropCommentNotifications } from "./notify";
 
 export async function anonymizeFeedCommentsForDeletedAccount(tx: Tx, userId: string): Promise<void> {
   const c = feedPostComments;
@@ -37,9 +51,45 @@ export async function anonymizeFeedCommentsForDeletedAccount(tx: Tx, userId: str
     await tx.select({ id: c.id }).from(c).where(inArray(c.id, touched)).orderBy(c.id).for("update");
   }
 
-  // Ses flammes ailleurs, puis ses commentaires (les réponses des autres, leurs flammes et citations partent avec eux).
+  // Ce qui part : ses commentaires et les réponses des autres dessous.
+  const mineIds = mine.map((m) => m.id);
+  const repliesUnder = mineIds.length
+    ? await tx.select({ id: c.id, parentId: c.parentId }).from(c).where(inArray(c.parentId, mineIds))
+    : [];
+  const leaving = new Set([...mineIds, ...repliesUnder.map((r) => r.id)]);
+  const heldRows = leaving.size
+    ? await tx
+        .select({ id: reports.targetId })
+        .from(reports)
+        .where(
+          and(
+            eq(reports.targetType, "feed_comment"),
+            inArray(reports.targetId, [...leaving]),
+            inArray(reports.status, ["pending", "reviewing"]),
+          ),
+        )
+    : [];
+  const held = new Set(heldRows.map((r) => r.id));
+  // Le commentaire de premier niveau d'une réponse gardée reste aussi.
+  for (const r of repliesUnder) if (held.has(r.id) && r.parentId) held.add(r.parentId);
+  for (const m of mine) if (held.has(m.id) && m.parentId && leaving.has(m.parentId)) held.add(m.parentId);
+
   await tx.delete(feedPostCommentReactions).where(eq(feedPostCommentReactions.userId, userId));
-  if (mine.length) await tx.delete(c).where(eq(c.authorId, userId));
+  if (held.size) {
+    const at = now();
+    await tx
+      .update(c)
+      .set({
+        deletedAt: sql`coalesce(${c.deletedAt}, ${at.toISOString()}::timestamptz)`,
+        deletedBy: sql`coalesce(${c.deletedBy}, ${userId})`,
+      })
+      .where(inArray(c.id, [...held]));
+    await tx.delete(feedPostCommentReactions).where(inArray(feedPostCommentReactions.commentId, [...held]));
+    await tx.delete(feedCommentMentions).where(inArray(feedCommentMentions.commentId, [...held]));
+  }
+  const gone = [...leaving].filter((id) => !held.has(id));
+  if (gone.length) await tx.delete(c).where(inArray(c.id, gone));
+  await dropCommentNotifications(tx, [...leaving], postIds);
 
   // Compteurs recalculés sur ce qui reste.
   if (touched.length) {

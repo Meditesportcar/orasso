@@ -63,7 +63,7 @@ const notifs = (userId: string, type: string) =>
     .where(and(eq(notifications.userId, userId), eq(notifications.type, type as never)));
 
 describe("écrire et lire", () => {
-  it("un commentaire est rendu en liste blanche, sans identifiant de compte, et relu dans l'ordre du temps", async () => {
+  it("un commentaire est rendu en liste blanche (l'auteur est un FeedAuthorView), et relu dans l'ordre du temps", async () => {
     const kenji = await person("Kenji_66");
     const lea = await person("Lea_11");
     const nina = await person("Nina_34");
@@ -401,7 +401,7 @@ describe("@ : citer une personne", () => {
     expect((await listComments(nina, id)).items[0]?.mentions.sort()).toEqual(["Kenji_66", "Nina_34"]);
   });
 
-  it("publication d'un compte privé : seul un abonné accepté peut être cité (les autres ne sont ni prévenus ni en lien)", async () => {
+  it("publication d'un compte privé : seul un abonné accepté peut être cité (les autres ne sont pas prévenus ; la liste rendue est la même)", async () => {
     const priv = await person("Marc_66", { visibility: "private" });
     const friend = await person("Ami_66");
     const stranger = await person("Inconnu_66");
@@ -411,10 +411,11 @@ describe("@ : citer une personne", () => {
     const id = await dbPost(priv);
     const res = await comment(lea, id, "Pour @Ami_66 et @Inconnu_66");
     expect(res.status).toBe(201);
-    expect(res.json.mentions).toEqual(["Ami_66"]);
+    // La liste rendue ne dépend pas des droits du compte cité : elle ne révèle pas qui est abonné.
+    expect(res.json.mentions.sort()).toEqual(["Ami_66", "Inconnu_66"]);
     expect(await notifs(friend.id, "feed_comment_mention")).toHaveLength(1);
     expect(await notifs(stranger.id, "feed_comment_mention")).toHaveLength(0);
-    expect(await db.select().from(feedCommentMentions)).toHaveLength(1);
+    expect(await db.select().from(feedCommentMentions)).toHaveLength(2);
   });
 
   it("un compte hors règle n'est pas cité", async () => {
@@ -459,7 +460,8 @@ describe("notifications", () => {
     expect(rows[0]?.groupKey).toBe(`feed_comment:${id}`);
     expect(rows[0]?.readAt).toBeNull();
     expect(rows[0]?.title).toBe("Paul_34 a commenté ta publication");
-    expect(rows[0]?.body).toBe("« Trois : le dernier mot »");
+    // Une ligne de plusieurs personnes n'a pas d'extrait (il serait attribué à la première nommée).
+    expect(rows[0]?.body).toBe("Paul_34 a commenté ta publication.");
     expect(rows[0]?.data).toMatchObject({ postId: id, link: "/app/fil", count: 3 });
     // Une publication différente : une autre ligne.
     const other = await dbPost(kenji);

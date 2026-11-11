@@ -7,6 +7,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { feedPostComments, feedPosts } from "../../../db/schema";
 import type { Tx } from "../../../lib/tx";
 import { UUID_RE } from "../access";
+import { dropCommentNotifications } from "./notify";
 
 /** Verrou de la publication d'un commentaire (à prendre avant toute écriture sur ses commentaires). */
 export async function lockPostOfComment(tx: Tx, commentId: string): Promise<string | null> {
@@ -45,6 +46,7 @@ export async function softDeleteComment(tx: Tx, commentId: string, deletedBy: st
     .returning({ id: feedPostComments.id });
   if (!removed.length) return false;
   let gone = 1;
+  const goneIds = [commentId];
   if (head.parentId) {
     await tx
       .update(feedPostComments)
@@ -57,10 +59,13 @@ export async function softDeleteComment(tx: Tx, commentId: string, deletedBy: st
       .where(and(eq(feedPostComments.parentId, commentId), isNull(feedPostComments.deletedAt)))
       .returning({ id: feedPostComments.id });
     gone += replies.length;
+    goneIds.push(...replies.map((r) => r.id));
   }
   await tx
     .update(feedPosts)
     .set({ commentsCount: sql`greatest(${feedPosts.commentsCount} - ${gone}, 0)` })
     .where(eq(feedPosts.id, postId));
+  // Les Journaux ne citent plus ce qui est retiré.
+  await dropCommentNotifications(tx, goneIds, [postId]);
   return true;
 }

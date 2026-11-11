@@ -43,7 +43,7 @@ export const mentionSuggestionsQuery = z.object({
 
 /** `POST /feed-comments/:id/report` : le motif (liste du type `feed_comment`) et, pour « Autre », quelques mots. */
 export const feedCommentReportSchema = z
-  .object({ reason: z.enum(reportReasons), details: optionalText(1000) })
+  .strictObject({ reason: z.enum(reportReasons), details: optionalText(1000) })
   .refine((v) => v.reason !== "other" || Boolean(v.details), {
     message: "Précise le motif « Autre » en quelques mots",
     path: ["details"],
@@ -54,8 +54,9 @@ export const feedCommentReportSchema = z
   });
 
 /**
- * Un commentaire rendu : l'aperçu (auteur, texte, date) et ce qui sert à l'écran. Jamais d'identifiant de compte :
- * `mentions` ne porte que des pseudos (ceux qui peuvent voir la publication, à afficher en lien).
+ * Un commentaire rendu : l'aperçu (auteur, texte, date) et ce qui sert à l'écran. L'auteur est un `FeedAuthorView`
+ * (contrat de R8a1) dont la `key` d'une personne est `u:<compte>` ; `mentions` ne porte que des pseudos (tout pseudo existant et
+ * en règle, rendu de la même façon à tous : la liste ne dépend pas des droits du compte cité).
  * `repliesCount` et `reactionsCount` sont des **totaux** (les réponses d'un compte privé que je ne suis pas y sont comptées).
  */
 export type FeedCommentView = FeedCommentPreview & {
