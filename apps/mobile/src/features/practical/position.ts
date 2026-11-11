@@ -75,7 +75,10 @@ export async function askPracticalPosition(silent = false): Promise<boolean> {
       ? await Location.getForegroundPermissionsAsync()
       : await Location.requestForegroundPermissionsAsync();
     if (permission.status !== "granted" || !store.valid(ticket)) return false;
-    const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    // Une position donnée par un geste explicite est lue neuve (le navigateur de recette garde sinon la première) : `maximumAge` n'est
+    // pas dans les types d'Expo mais est lu par son implémentation web.
+    const options = { accuracy: Location.Accuracy.Balanced, maximumAge: 0 };
+    const fix = await Location.getCurrentPositionAsync(options);
     if (!store.valid(ticket)) return false;
     const ok = await give({ lat: fix.coords.latitude, lng: fix.coords.longitude }, ticket);
     // La météo suit : la même position, la même séance (elle arrondit et garde la sienne).
