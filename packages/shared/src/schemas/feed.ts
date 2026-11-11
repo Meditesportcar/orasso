@@ -146,6 +146,30 @@ export type FeedAttachView = {
   presenceValidated: boolean;
 };
 
+/** `GET /me/feed-posts/attachable-events?persona=&structureId=&proId=` : la casquette, comme pour publier. */
+export const attachableEventsQuery = z.object({
+  persona: z.enum(storyPersonas).default("fan"),
+  structureId: z.uuid().optional(),
+  proId: z.uuid().optional(),
+});
+
+/** Un événement où l'on peut se rattacher, avec le rôle qui serait déduit (jamais choisi) ; 50 au plus. */
+export type AttachableEventItem = {
+  id: string;
+  slug: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  city: string | null;
+  posterUrl: string | null;
+  role: FeedEventRole;
+  phase: FeedAttachPhase;
+  /** Une affiche (ou une photo) existe : une publication sans photo peut la prendre pour visuel. */
+  hasVisual: boolean;
+  /** Seulement pour la casquette organisateur : ce qu'il reste d'« Info importante » aujourd'hui et cette semaine. */
+  important: { leftToday: number; leftWeek: number } | null;
+};
+
 /** Aperçu d'un commentaire sous une publication (rempli par R8k1 ; vide dans R8a1). */
 export type FeedCommentPreview = { id: string; author: FeedAuthorView; text: string; createdAt: string };
 
