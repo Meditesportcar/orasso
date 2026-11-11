@@ -240,7 +240,7 @@ export const storiesBar = {
           : asPage.kind === "provider"
             ? and(eq(stories.persona, "provider"), eq(stories.providerId, asPage.id))
             : and(eq(stories.persona, "media"), eq(stories.mediaId, asPage.id));
-    const mineRows = await selectStories(and(liveStory(at), mineWhere, notMaskedCopy(at)));
+    const mineRows = await selectStories(and(liveStory(at), mineWhere, asPage ? notMaskedCopy(at) : undefined));
     const mine = mineRows.length
       ? {
           count: mineRows.length,
