@@ -11,6 +11,7 @@ export * from "./audience";
 export * from "./audiencePrize";
 export * from "./authors";
 export * from "./coalesce";
+export * from "./coauthors";
 export * from "./commercial";
 export * from "./conversationTag";
 export * from "./crewFeed";

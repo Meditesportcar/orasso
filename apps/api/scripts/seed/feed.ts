@@ -197,6 +197,7 @@ export async function migrateLegacyFeedKeys(): Promise<number> {
 export async function seedFeed() {
   await seedOrassoFeed();
   await seedPublications();
+  await seedCoauthors();
 }
 
 async function seedOrassoFeed() {
@@ -451,4 +452,89 @@ export async function seedPublications() {
     }
   }
   console.log("Publications rattachées : Roues Libres 66 (3), La Brasa, Kenji_66 ajoutées.");
+}
+
+// --- Collaboration : publications co-signées (vague R8, lot R8o) -------------------------------------------------------------
+// Une publication de Kenji_66 co-signée et acceptée par Garage du Port (pro partenaire de Kenji : « Collaboration
+// commerciale ») ; une invitation en attente adressée à Damien_66 ; une autre adressée à MéditeSportCar, la structure qu'il
+// gère. Tant qu'elles attendent, rien ne les montre ailleurs que chez Kenji_66. Rejouable : rien si une ligne de
+// co-auteur existe déjà.
+export async function seedCoauthors() {
+  const [already] = await db.select({ id: t.feedPostCoauthors.postId }).from(t.feedPostCoauthors).limit(1);
+  if (already) {
+    console.log("Collaboration : publications co-signées déjà présentes.");
+    return;
+  }
+  const kenji = await byPseudo("Kenji_66");
+  const damien = await byPseudo("Damien_66");
+  const garage = await db.query.proProfiles.findFirst({ where: eq(t.proProfiles.slug, "garage-du-port") });
+  const msc = await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") });
+  if (!kenji || !damien || !garage || !msc) {
+    console.log("Collaboration : Kenji_66, Damien_66, Garage du Port ou MéditeSportCar absents, rien ajouté.");
+    return;
+  }
+  const at = Date.now();
+  const plan = [
+    {
+      hoursAgo: 4,
+      caption: "Révision terminée chez Garage du Port : merci à toute l'équipe.",
+      photo: 9,
+      coKind: "pro" as const,
+      coId: garage.id,
+      status: "accepted" as const,
+      responder: garage.ownerUserId,
+      commercial: garage.id,
+    },
+    {
+      hoursAgo: 7,
+      caption: "On s'est retrouvés au port avec Damien : la sortie du matin.",
+      photo: 10,
+      coKind: "user" as const,
+      coId: damien.userId,
+      status: "pending" as const,
+      responder: null,
+      commercial: null,
+    },
+    {
+      hoursAgo: 11,
+      caption: "Le plateau de samedi, avec toute l'équipe de MéditeSportCar.",
+      photo: 11,
+      coKind: "structure" as const,
+      coId: msc.id,
+      status: "pending" as const,
+      responder: null,
+      commercial: null,
+    },
+  ];
+  let added = 0;
+  for (const p of plan) {
+    const id = randomUUID();
+    const createdAt = new Date(at - p.hoursAgo * HOUR);
+    await db.insert(t.feedPosts).values({
+      id,
+      authorId: kenji.userId,
+      caption: p.caption,
+      department: "66",
+      createdAt,
+      updatedAt: createdAt,
+      commercialPartnerId: p.commercial,
+    });
+    if (!(await storeFeedPhoto(id, p.photo))) {
+      await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+      console.log("Collaboration : photos du seed absentes, rien ajouté.");
+      return;
+    }
+    await db.insert(t.feedPostCoauthors).values({
+      postId: id,
+      coauthorKind: p.coKind,
+      coauthorId: p.coId,
+      status: p.status,
+      invitedBy: kenji.userId,
+      invitedAt: createdAt,
+      respondedBy: p.responder,
+      respondedAt: p.responder ? new Date(createdAt.getTime() + HOUR) : null,
+    });
+    added += 1;
+  }
+  console.log(`Collaboration : ${added} publications de Kenji_66 (une acceptée par Garage du Port, deux en attente).`);
 }

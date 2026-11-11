@@ -6,9 +6,10 @@
 // efface (`moderation/targets/feedPost.ts`, `afterDecision`).
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { feedPostPhotos, feedPostReactions, feedPosts, reports } from "../../db/schema";
+import { feedPostCoauthors, feedPostPhotos, feedPostReactions, feedPosts, reports } from "../../db/schema";
 import { now } from "../../lib/deps";
 import type { Tx } from "../../lib/tx";
+import { dropCoauthorNotifications } from "./coauthors";
 
 export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Promise<string[]> {
   // Ses flammes ailleurs : le compteur des autres publications baisse d'un.
@@ -22,6 +23,20 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
       ),
     );
   await tx.delete(feedPostReactions).where(eq(feedPostReactions.userId, userId));
+  // Collaboration (R8o) : son nom disparaît des publications des autres (la publication reste chez son auteur) ; les
+  // invitations qu'il avait envoyées pour ses publications personnelles partent avec elles.
+  await tx
+    .delete(feedPostCoauthors)
+    .where(and(eq(feedPostCoauthors.coauthorKind, "user"), eq(feedPostCoauthors.coauthorId, userId)));
+  await tx.delete(feedPostCoauthors).where(
+    inArray(
+      feedPostCoauthors.postId,
+      tx
+        .select({ id: feedPosts.id })
+        .from(feedPosts)
+        .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.persona, "fan"))),
+    ),
+  );
   // Verrou des publications (par identifiant) avant de lire les signalements : un signalement ou une décision qui arrive
   // en même temps est vu, ou attend la fin.
   const posts = await tx
@@ -34,6 +49,7 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
     .for("update");
   const ids = posts.map((p) => p.id);
   if (!ids.length) return [];
+  for (const id of ids) await dropCoauthorNotifications(tx, id);
   const heldRows = await tx
     .select({ id: reports.targetId })
     .from(reports)

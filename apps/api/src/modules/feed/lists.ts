@@ -174,8 +174,27 @@ export function requireAuthorKey(raw: string | undefined): AuthorKey {
   return key;
 }
 
+/**
+ * Une publication co-signée (R8o) : cette clé en est le co-auteur **accepté** (jamais en attente, refusé ou retiré). La règle
+ * de visibilité reste celle de l'auteur d'origine : sa publication d'un compte privé n'apparaît pas à qui ne le suit pas,
+ * même sur la page publique du co-auteur. Sans session (`viewerId` nul), jamais : un visiteur ne voit que le journal d'un
+ * organisateur. Alias `p` (feed_posts) et `a` (profiles de `p.author_id`) ; `id` peut être une colonne d'une requête englobante.
+ */
+export function coSignedSql(key: { kind: AuthorKey["kind"]; id: string | SQL }, viewerId: string | null): SQL {
+  const seen = viewerId
+    ? sql`(p.persona <> 'fan' or a.visibility = 'public' or p.author_id = ${viewerId}
+        or exists (select 1 from user_follows uf where uf.follower_id = ${viewerId} and uf.followed_id = p.author_id and uf.status = 'accepted'))`
+    : sql`false`;
+  return sql`(exists (select 1 from feed_post_coauthors c where c.post_id = p.id and c.status = 'accepted'
+      and c.coauthor_kind = ${key.kind}::coauthor_kind and c.coauthor_id = ${key.id}) and ${seen})`;
+}
+
 /** La colonne de page de `feed_posts` d'une clé, en SQL (`p.structure_id = …`) ; `fan` : `p.persona = 'fan' and p.author_id`. */
-export function authorPostsWhere(key: AuthorKey): SQL {
+export function authorPostsWhere(key: AuthorKey, viewerId: string | null): SQL {
+  return sql`(${ownPostsWhere(key)} or ${coSignedSql(key, viewerId)})`;
+}
+
+function ownPostsWhere(key: AuthorKey): SQL {
   switch (key.kind) {
     case "user":
       return sql`(p.persona = 'fan' and p.author_id = ${key.id})`;
@@ -200,12 +219,14 @@ export async function authorPostIds(
   filter: AuthorPostsFilter,
   cursor: ListCursor | null,
   at: Date,
+  /** Le regard : les co-signatures acceptées ne servent qu'à une personne connectée (R8o). */
+  viewerId: string | null,
   limit = PAGE + 1,
 ): Promise<{ id: string; at: Date }[]> {
   const created = msSql("p.created_at");
   const res = await ex.execute<{ id: string; at: Date }>(sql`select p.id as id, ${created} as at
     from feed_posts p join profiles a on a.user_id = p.author_id
-    where ${authorPostsWhere(key)} and ${filterSql(filter)} and ${postOkSql(at)} and ${beforeSql(created, "p.id", cursor)}
+    where ${authorPostsWhere(key, viewerId)} and ${filterSql(filter)} and ${postOkSql(at)} and ${beforeSql(created, "p.id", cursor)}
     order by ${created} desc, p.id desc limit ${limit}`);
   return res.rows.map((r) => ({ id: r.id, at: new Date(r.at) }));
 }
@@ -246,7 +267,7 @@ export async function listAuthorPosts(
   } else if (!(await pageInGoodStanding(db, key))) {
     throw notFound(feedListErrors.authorNotFound);
   }
-  const rows = await authorPostIds(db, key, q.filter, cursor, at);
+  const rows = await authorPostIds(db, key, q.filter, cursor, at, v.user.id);
   const { page, nextCursor } = pageOf(rows);
   const items: FeedPostView[] = await loadPostViews(
     db,
@@ -345,7 +366,7 @@ export async function countsForAuthor(
   const cited = key.kind === "structure" || key.kind === "pro";
   const res = await ex.execute<{ publications: number; mentions: number }>(sql`select
     (select count(*)::int from feed_posts p join profiles a on a.user_id = p.author_id
-      where ${authorPostsWhere(key)} and ${postOkSql(at)}) as publications,
+      where ${authorPostsWhere(key, viewerId)} and ${postOkSql(at)}) as publications,
     ${viewerId && cited ? sql`(select count(*)::int ${visibleMentionsFrom(key.kind, key.id, at, { section: "all" })})` : sql`0`} as mentions`);
   const r = res.rows[0];
   return viewerId
@@ -363,12 +384,15 @@ export async function countsForPerson(
   viewerId: string,
   at: Date,
 ): Promise<ProfileCounts> {
+  // Les publications co-signées (acceptées) d'un autre auteur comptent aussi, avec la visibilité de leur auteur d'origine (R8o).
   const res = await ex.execute<{ n: number | null }>(sql`select case
-      when ${profileOkSql("a", at)} and (a.visibility = 'public' or a.user_id = ${viewerId}
-        or exists (select 1 from user_follows uf where uf.follower_id = ${viewerId} and uf.followed_id = a.user_id and uf.status = 'accepted'))
-      then (select count(*)::int from feed_posts p where p.persona = 'fan' and p.author_id = a.user_id and p.deleted_at is null and ${servedSql})
+      when ${profileOkSql("pv", at)} and (pv.visibility = 'public' or pv.user_id = ${viewerId}
+        or exists (select 1 from user_follows uf where uf.follower_id = ${viewerId} and uf.followed_id = pv.user_id and uf.status = 'accepted'))
+      then (select count(*)::int from feed_posts p where p.persona = 'fan' and p.author_id = pv.user_id and p.deleted_at is null and ${servedSql})
+        + (select count(*)::int from feed_posts p join profiles a on a.user_id = p.author_id
+          where ${coSignedSql({ kind: "user", id: sql`pv.user_id` }, viewerId)} and ${postOkSql(at)})
       else null end as n
-    from profiles a where lower(a.pseudo) = lower(${pseudo})`);
+    from profiles pv where lower(pv.pseudo) = lower(${pseudo})`);
   const n = res.rows[0]?.n;
   return { publications: n === null || n === undefined ? null : { count: Number(n) } };
 }

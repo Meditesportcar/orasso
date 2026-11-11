@@ -10,7 +10,15 @@ import {
 } from "@orasso/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
-import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
+import {
+  feedPostCoauthors,
+  feedPostPhotos,
+  feedPostReactions,
+  feedPosts,
+  profiles,
+  userFollows,
+  vehicles,
+} from "../../db/schema";
 import { managedPageKeys } from "../../lib/authorship";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
@@ -21,6 +29,7 @@ import { vehicleLabel } from "../vehicles/serializers";
 import { factsOf } from "./access";
 import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
 import { loadPageInfo, pageKeyOf } from "./authors";
+import { dropCoauthorNotifications, loadCoAuthors } from "./coauthors";
 import { eventSummariesByIds } from "./summary";
 
 export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">): FeedPerson => ({
@@ -165,6 +174,15 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     visible.map((r) => r.post.commercialPartnerId),
   );
   const lastComments = await lastCommentsLoader(ex, postIds, viewerId, at);
+  // Collaboration (R8o) : le co-auteur seulement s'il a accepté ; l'état de l'invitation à l'auteur d'origine seul.
+  const coAuthors = await loadCoAuthors(
+    ex,
+    visible.map((r) => {
+      const k = pageKeyOf(r.post);
+      return { id: r.post.id, mine: k ? managed.has(k) : r.post.authorId === viewerId };
+    }),
+    viewerId,
+  );
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {
     const r = byId.get(id);
@@ -199,7 +217,9 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
         createdAt: r.post.createdAt.toISOString(),
         mine: key ? managed.has(key) : r.post.authorId === viewerId,
         commercialPartner: r.post.commercialPartnerId ? (commercialBy.get(r.post.commercialPartnerId) ?? null) : null,
-        coAuthor: null,
+        coAuthor: coAuthors.get(r.post.id)?.coAuthor ?? null,
+        coAuthorInvite: coAuthors.get(r.post.id)?.invite ?? null,
+        coAuthoredByMe: coAuthors.get(r.post.id)?.byMe ?? false,
         attach: attached ? attached.attach : null,
         placeLabel: attached ? attached.event.city : r.post.placeLabel,
         visual: own.length ? "photos" : "event_poster",
@@ -235,6 +255,9 @@ export async function softDeletePost(
     .returning({ id: feedPosts.id });
   if (!done) return [];
   await tx.delete(feedPostReactions).where(eq(feedPostReactions.postId, postId));
+  // La suppression emporte la co-signature (R8o) : plus d'invitation, plus de demande, plus de notification.
+  await tx.delete(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId));
+  await dropCoauthorNotifications(tx, postId);
   if (opts.keepPhotos) return [];
   const photos = await tx
     .delete(feedPostPhotos)
