@@ -475,6 +475,7 @@ function EventPage({
     invited,
   } = loaderData;
   const fil = remainingFil(feed);
+  const showFeed = fil.length > 0 || !journal || (counts.publications?.count ?? 0) === 0;
   const inviteResult = actionData as InviteNoticeData | undefined;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
@@ -837,11 +838,10 @@ function EventPage({
             signedIn={connected}
             userId={userId}
             initial={journal}
+            anchorFil={!showFeed}
           />
         ) : null}
-        {fil.length > 0 || !journal || (counts.publications?.count ?? 0) === 0 ? (
-          <EventFeed items={fil} connected={connected} />
-        ) : null}
+        {showFeed ? <EventFeed items={fil} connected={connected} /> : null}
 
         {event.instructions && (
           <section className="s-section">

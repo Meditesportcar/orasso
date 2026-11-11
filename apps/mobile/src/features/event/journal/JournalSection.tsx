@@ -154,7 +154,7 @@ export function JournalSection({
           <Muted variant="caption" style={styles.center}>
             {L.inviteText}
           </Muted>
-          <Button variant="primary" icon="camera" onPress={publish} testID="journal-publish">
+          <Button variant="secondary" icon="camera" onPress={publish} testID="journal-publish">
             {L.publishFor}
           </Button>
         </View>

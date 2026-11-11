@@ -212,6 +212,8 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
       if (photoKey && row.image_key) await storage.copy(row.image_key, photoKey);
       const pinnedHere = await db.transaction(async (tx) => {
         let pin = false;
+        // Même verrou que l'épinglage en direct (`pin.ts`) : une course avec lui ne fait pas échouer la transaction.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pin:${row.event_id}`}))`);
         if (winnerOf.get(row.event_id) === row.id) {
           const taken = await tx.execute(
             sql`select 1 from feed_posts where event_id = ${row.event_id} and pinned_at is not null and deleted_at is null limit 1`,
@@ -303,6 +305,14 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
   }
   // Lignes d'abord (la transaction décide), fichiers ensuite : un échec laisse au pire un fichier orphelin, jamais une
   // publication sans fichier.
+  // Signalements et notifications qui pointent vers ces publications partent avec elles (rien ne pend dans le vide). Perdu avec
+  // elles : les flammes et les commentaires reçus depuis la reprise.
+  await db.execute(
+    sql`delete from reports where target_type = 'feed_post' and target_id in (select id::text from feed_posts where legacy_announcement_id is not null)`,
+  );
+  await db.execute(
+    sql`delete from notifications where data ->> 'postId' in (select id::text from feed_posts where legacy_announcement_id is not null)`,
+  );
   await db.delete(feedPosts).where(isNotNull(feedPosts.legacyAnnouncementId));
   for (const p of photos) await storage.remove(p.storage_key).catch(() => undefined);
   return { dryRun, posts: posts.length, files: photos.length, postsBefore, postsAfter: await countPosts() };

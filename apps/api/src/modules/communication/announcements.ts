@@ -13,7 +13,7 @@ import {
   shorten,
   statusChangeText,
 } from "@orasso/shared";
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -34,6 +34,8 @@ import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { arrivalsOf } from "../events/arrivals";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { postOkSql } from "../feed/lists";
+import { setPinned as setPostPinned } from "../feed/pin";
 import { softDeletePost } from "../feed/posts";
 import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
@@ -72,11 +74,17 @@ function serialize(
 /** Les publications qui ont repris ces annonces, retirées comprises : une reprise retirée du journal ne revient pas en annonce. */
 async function migratedPosts(ex: Tx | typeof db, ids: string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
-  const rows = await ex
-    .select({ announcementId: feedPosts.legacyAnnouncementId, postId: feedPosts.id })
-    .from(feedPosts)
-    .where(and(isNotNull(feedPosts.legacyAnnouncementId), inArray(feedPosts.legacyAnnouncementId, ids)));
-  return new Map(rows.flatMap((r) => (r.announcementId ? [[r.announcementId, r.postId] as const] : [])));
+  // Seulement une reprise **servie** (visuel, auteur et page en règle : `postOkSql`) : sinon l'annonce reste affichée, l'information
+  // ne disparaît pas des deux côtés. Une reprise retirée a déjà retiré son annonce (`softDeletePost`).
+  const res = await ex.execute<{ announcement_id: string; post_id: string }>(
+    sql`select p.legacy_announcement_id as announcement_id, p.id as post_id
+      from feed_posts p join profiles a on a.user_id = p.author_id
+      where p.legacy_announcement_id in (${sql.join(
+        ids.map((i) => sql`${i}::uuid`),
+        sql`, `,
+      )}) and ${postOkSql(now())}`,
+  );
+  return new Map(res.rows.map((r) => [r.announcement_id, r.post_id] as const));
 }
 
 /** Retenus (véhicules et prestataires) : ceux qui reçoivent les consignes et lisent les entrées `participants`. */
@@ -148,6 +156,7 @@ export const announcementsService = {
           eq(eventAnnouncements.eventId, row.e.id),
           isNull(eventAnnouncements.deletedAt),
           inArray(eventAnnouncements.audience, audiences),
+          sql`not exists (select 1 from feed_posts rp where rp.legacy_announcement_id = ${eventAnnouncements.id} and rp.deleted_at is not null)`,
         ),
       )
       .orderBy(
@@ -170,7 +179,13 @@ export const announcementsService = {
       .select({ a: eventAnnouncements, pseudo: profiles.pseudo, deletedAt: profiles.deletedAt })
       .from(eventAnnouncements)
       .leftJoin(profiles, eq(profiles.userId, eventAnnouncements.authorId))
-      .where(and(eq(eventAnnouncements.eventId, e.id), isNull(eventAnnouncements.deletedAt)))
+      .where(
+        and(
+          eq(eventAnnouncements.eventId, e.id),
+          isNull(eventAnnouncements.deletedAt),
+          sql`not exists (select 1 from feed_posts rp where rp.legacy_announcement_id = ${eventAnnouncements.id} and rp.deleted_at is not null)`,
+        ),
+      )
       .orderBy(
         desc(eventAnnouncements.pinned),
         desc(eventAnnouncements.publishedAt),
@@ -302,6 +317,12 @@ export const announcementsService = {
       )
       .returning();
     if (!row) throw notFound("Entrée introuvable");
+    // Lot R8d : une annonce reprise épingle aussi sa publication (le journal est la fiche), comme `DELETE` la retire aussi.
+    const [taken] = await db
+      .select({ id: feedPosts.id })
+      .from(feedPosts)
+      .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+    if (taken) await setPostPinned(v, e.id, taken.id, pinned).catch(() => undefined);
     return serialize(row, s.name);
   },
 

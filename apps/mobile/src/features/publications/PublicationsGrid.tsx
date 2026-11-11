@@ -52,7 +52,7 @@ function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journ
           accessibilityRole="button"
           accessibilityLabel={eventJournalLabels.menuOpen}
           onPress={() => journal.onMenu?.(post)}
-          hitSlop={6}
+          hitSlop={7}
           style={[styles.dots, { backgroundColor: c.scrim }]}
           testID="journal-tile-menu"
         >

@@ -10,7 +10,7 @@ import { db, pool } from "../src/db/client";
 import {
   applications,
   eventAnnouncements,
-  type events,
+  events,
   feedPostPhotos,
   feedPosts,
   notifications,
@@ -20,6 +20,7 @@ import {
 } from "../src/db/schema";
 import { resetRateLimits } from "../src/lib/rateLimit";
 import { storage } from "../src/lib/storage";
+import { softDeletePost } from "../src/modules/feed/posts";
 import {
   call,
   createEvent,
@@ -434,6 +435,136 @@ describe("façades et Fil", () => {
     expect(res.json.items.some((c: { kind: string }) => c.kind === "announcement")).toBe(false);
     const ids = res.json.items.map((c: { id: string }) => c.id);
     expect(ids).toContain(`feed_post:${post.id}`);
+  });
+});
+
+describe("tour 2 : retrait, épingle, reprise non servie, retrait de la reprise", () => {
+  const bodies = async (u: TestUser | null, slug: string) =>
+    ((await call(u, "GET", `/events/by-slug/${slug}/announcements`)).json.items as { body: string }[]).map(
+      (i) => i.body,
+    );
+
+  it("une reprise retirée (par l'auteur ou par la modération) emporte l'annonce : plus servie, ni sans session ni à un inscrit, image effacée", async () => {
+    const ref2 = ref;
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { image: { w: 1080, h: 1350 }, body: "Annonce à retirer A" });
+    const b = await mkAnnouncement(e.id, { body: "Annonce à retirer B" });
+    const inscrit = await signUp("Retenu2_R8d");
+    const car = await createVehicle(inscrit.id, ref2);
+    await db.insert(applications).values({
+      eventId: e.id,
+      userId: inscrit.id,
+      vehicleId: car.id,
+      status: "accepted",
+      rulesAcceptedAt: new Date(),
+      followStructure: false,
+      decidedAt: new Date(),
+    });
+    await announcementsToPosts();
+    const pa = (await postOf(a.row.id))!;
+    const pb = (await postOf(b.row.id))!;
+    expect((await call(owner, "DELETE", `/me/feed-posts/${pa.id}`)).status).toBe(204);
+    // Modération : le même retrait que la décision d'un signalement.
+    const keys = await db.transaction((tx) => softDeletePost(tx, pb.id, owner.id, new Date()));
+    expect(Array.isArray(keys)).toBe(true);
+    for (const u of [null, inscrit, owner]) {
+      const list = await bodies(u, e.slug);
+      expect(list).not.toContain("Annonce à retirer A");
+      expect(list).not.toContain("Annonce à retirer B");
+    }
+    const [ann] = await db.select().from(eventAnnouncements).where(eq(eventAnnouncements.id, a.row.id));
+    expect(ann).toMatchObject({ imageKey: null });
+    expect(ann?.deletedAt).not.toBeNull();
+    expect(await storage.get(a.imageKey!)).toBeNull();
+  });
+
+  it("garde-fou : une annonce dont la reprise est retirée n'est plus servie même si l'annonce n'a pas été marquée", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Garde-fou" });
+    await announcementsToPosts();
+    await db.update(feedPosts).set({ deletedAt: new Date() }).where(eq(feedPosts.legacyAnnouncementId, a.row.id));
+    expect(await bodies(null, e.slug)).not.toContain("Garde-fou");
+  });
+
+  it("l'ancien APK épingle une annonce reprise : la publication est épinglée aussi, et désépinglée", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "À épingler" });
+    await announcementsToPosts();
+    expect((await call(owner, "PATCH", `/events/${e.id}/announcements/${a.row.id}`, { pinned: true })).status).toBe(
+      200,
+    );
+    expect((await postOf(a.row.id))?.pinnedAt).not.toBeNull();
+    expect((await call(owner, "PATCH", `/events/${e.id}/announcements/${a.row.id}`, { pinned: false })).status).toBe(
+      200,
+    );
+    expect((await postOf(a.row.id))?.pinnedAt).toBeNull();
+  });
+
+  it("une reprise qui n'est plus servie (affiche retirée) : l'annonce reste affichée (pas de migratedPostId)", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Sans affiche bientôt" });
+    await announcementsToPosts();
+    let item = (await call(null, "GET", `/events/by-slug/${e.slug}/announcements`)).json.items.find(
+      (i: { id: string }) => i.id === a.row.id,
+    );
+    expect(item.migratedPostId).toBeTruthy();
+    await db
+      .update(events)
+      .set({ posterKey: null, posterPostKey: null, posterPhotoKey: null })
+      .where(eq(events.id, e.id));
+    item = (await call(null, "GET", `/events/by-slug/${e.slug}/announcements`)).json.items.find(
+      (i: { id: string }) => i.id === a.row.id,
+    );
+    expect(item).toBeTruthy();
+    expect(item.migratedPostId).toBeUndefined();
+  });
+
+  it("reprise pendant un épinglage en direct : pas d'échec, une seule épinglée", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { pinned: true, body: "Épinglée par la reprise" });
+    const [live] = await db
+      .insert(feedPosts)
+      .values({
+        authorId: owner.id,
+        persona: "organizer",
+        structureId: structure.id,
+        eventId: e.id,
+        eventRole: "organizer",
+        caption: "En direct",
+        pinnedAt: new Date(),
+      })
+      .returning();
+    const stats = await announcementsToPosts();
+    expect(stats.failed).toBe(0);
+    expect((await postOf(a.row.id))?.pinnedAt).toBeNull();
+    expect((await db.select().from(feedPosts).where(eq(feedPosts.id, live!.id)))[0]?.pinnedAt).not.toBeNull();
+  });
+
+  it("--revert retire aussi signalements et notifications qui pointent vers les publications reprises", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "À signaler" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const reporter = await signUp("Signale_R8d");
+    await db.execute(
+      sql`insert into reports (reporter_id, target_type, target_id, reason) values (${reporter.id}, 'feed_post', ${post.id}, 'other')`,
+    );
+    await db.insert(notifications).values({
+      userId: reporter.id,
+      type: "feed_post_mention",
+      family: "social",
+      deliverAfter: new Date(),
+      title: "x",
+      body: "y",
+      data: { postId: post.id },
+    } as never);
+    await revertAnnouncementsToPosts();
+    const r = await db.execute<{ n: number }>(sql`select count(*)::int as n from reports where target_id = ${post.id}`);
+    expect(Number(r.rows[0]?.n)).toBe(0);
+    const n = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from notifications where data ->> 'postId' = ${post.id}`,
+    );
+    expect(Number(n.rows[0]?.n)).toBe(0);
   });
 });
 

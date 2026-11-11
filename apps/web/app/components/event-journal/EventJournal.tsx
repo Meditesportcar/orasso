@@ -60,6 +60,7 @@ export function EventJournal({
   signedIn,
   userId,
   initial,
+  anchorFil = false,
 }: {
   eventId: string;
   eventSlug: string;
@@ -75,6 +76,8 @@ export function EventJournal({
   userId: string | null;
   /** La première page, lue par le chargeur (rendu serveur). */
   initial: { items: FeedPostView[]; nextCursor: string | null };
+  /** L'ancien fil est caché : l'ancre `#fil` des anciens liens (notifications, espace Communication) mène ici. */
+  anchorFil?: boolean;
 }) {
   const list = useJournal(eventId, initial);
   const [mode, setMode] = useViewMode(userId);
@@ -97,7 +100,12 @@ export function EventJournal({
   }
 
   return (
-    <section className="s-section evj" id="publications" aria-labelledby="evj-title" data-testid="event-journal">
+    <section
+      className="s-section evj"
+      id={anchorFil ? "fil" : "publications"}
+      aria-labelledby="evj-title"
+      data-testid="event-journal"
+    >
       {kind !== "none" ? (
         <>
           <h2 className="s-h2" id="evj-title" data-testid="journal-title">
@@ -152,7 +160,7 @@ export function EventJournal({
           <Icon name="camera" size={28} />
           <strong>{L.inviteTitle}</strong>
           <p className="s-muted">{L.inviteText}</p>
-          <Button variant="primary" icon="camera" href={publishHref} data-testid="journal-publish">
+          <Button variant="secondary" icon="camera" href={publishHref} data-testid="journal-publish">
             {L.publishFor}
           </Button>
         </div>
