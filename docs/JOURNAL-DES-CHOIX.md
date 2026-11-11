@@ -4981,3 +4981,6 @@ Date : 11/11/2026. API seule (les écrans sont le lot R8k2). Lot sensible : vie 
 ### Tour 5 (R8k1, 11/11/2026)
 - **Migration 0078 régénérée** avec `feed_post_comments.reply_to_id` (le commentaire directement visé par une réponse, `set null`), pour que la garde de livraison ne retienne que les réponses qui visent le commentaire du groupe (regroupement par `replied.id`). Les anciennes lignes (aucune en base : lot non fusionné) auraient `reply_to_id` nul.
 - **Recherche de remplacement** : le plus récent commentaire de **chaque acteur** (`DISTINCT ON`), lisibilité testée ensuite : plus aucune limite ne cache un commentaire lisible plus ancien.
+
+### Tour 6 (R8k1, 11/11/2026)
+- **Garde de livraison** : on examine la lisibilité des commentaires de chaque acteur du plus récent au plus ancien (15 par personne au plus) et on retient le premier lisible (la racine compte) ; la recomposition se fait sous le verrou du regroupement (publication, clé de groupe, ligne relue) : un commentaire regroupé entre la réservation et la garde n est plus effacé.
