@@ -638,3 +638,38 @@ describe("tour 5 : files par compte, pages tardives", () => {
     expect(s.recent).toEqual(["new"]);
   });
 });
+
+describe("tour 6 : pages partielles et compteurs", () => {
+  it("envoyer dans une discussion de plus de 20 réponses : la première page, partielle, ne retire pas l'ajout", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 25 })], null, true);
+    s = sheetAddComment(s, at("mine", 59), "p").state; // la réponse est confirmée, la lecture part ensuite
+    const mark = s.replies.p?.recent ?? [];
+    expect(mark).toEqual(["mine"]);
+    const page = Array.from({ length: 20 }, (_, i) => at(`r${i}`, 10 + i)); // les 20 plus anciennes
+    s = sheetWithRepliesPage(s, "p", page, "cur", true, mark);
+    expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(true);
+    expect(s.replies.p?.items).toHaveLength(21);
+    // Une page complète qui ne le contient pas prouve, elle, qu'il a été supprimé.
+    s = sheetWithRepliesPage(s, "p", page, null, true, ["mine"]);
+    expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(false);
+  });
+  it("page suivante tardive contenant une ancienne version du parent : le compteur ne revient pas à zéro", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("a", 1)], "c", true);
+    s = sheetWithTopPage(s, [at("p", 2, { repliesCount: 0 })], null, false);
+    const mark = sheetMark(s); // « Voir plus » part
+    s = sheetAddComment(s, at("r", 9), "p").state; // la réponse est confirmée pendant la lecture
+    s = sheetWithTopPage(s, [at("p", 2, { repliesCount: 0 })], null, false, mark); // la page revient avec l'ancienne version
+    expect(s.items.find((c) => c.id === "p")?.repliesCount).toBe(1);
+  });
+  it("le GET compte déjà la réponse, ou pas encore : jamais deux fois, jamais zéro", () => {
+    const run = (received: number) => {
+      let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 0 })], null, true);
+      const mark = sheetMark(s);
+      s = sheetAddComment(s, at("r", 5), "p").state;
+      s = sheetWithTopPage(s, [at("p", 1, { repliesCount: received })], null, true, mark);
+      return s.items[0]?.repliesCount;
+    };
+    expect(run(0)).toBe(1); // lu avant l'enregistrement
+    expect(run(1)).toBe(1); // lu après : déjà compté
+  });
+});

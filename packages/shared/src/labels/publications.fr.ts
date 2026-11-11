@@ -35,6 +35,9 @@ export const publicationsLabels = {
   /** La petite ligne d'une carte posée dans une liste de profil (à la place de la raison du Fil), avant « il y a 3 h ». */
   cardReasonMine: "Sur ton profil",
   cardReasonOther: "Sur son profil",
+  /** Lot R8g : la même petite ligne quand l'auteur est une page (structure, fiche pro). */
+  cardReasonMinePage: "Sur ta page",
+  cardReasonOtherPage: "Sur sa page",
   /** Date et lieu sous une vignette (le lieu est facultatif). */
   tileLabel: (date: string, place: string | null) => (place ? `${date}, ${place}` : date),
   // La publication seule (`/publication/<id>`, `/app/publication/:id`).
