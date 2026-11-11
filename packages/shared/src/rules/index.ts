@@ -28,6 +28,7 @@ export * from "./feed";
 export * from "./feedAttach";
 export * from "./feedList";
 export * from "./feedPublish";
+export * from "./feedMentions";
 export * from "./follows";
 export * from "./garage";
 export * from "./invitations";

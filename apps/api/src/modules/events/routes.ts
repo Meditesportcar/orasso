@@ -17,6 +17,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import { limitSearch, visitorOf } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { eventCountsFor } from "../feed/lists";
 import { lineupService } from "./lineup";
 import { eventsService } from "./service";
 
@@ -30,11 +31,14 @@ export const eventsRoutes = new Hono<AppEnv>()
     return c.json(await eventsService.list(q, viewer), 200, { "cache-control": "private, no-cache" });
   })
   // La fiche dépend de la personne (candidatures, consignes, créneau privé des exposants) : jamais en cache partagé.
-  .get("/events/by-slug/:slug", async (c) =>
-    c.json(await eventsService.getPublic(c.req.param("slug"), await optionalUser(c)), 200, {
+  .get("/events/by-slug/:slug", async (c) => {
+    const viewer = await optionalUser(c);
+    const view = await eventsService.getPublic(c.req.param("slug"), viewer);
+    // Vague R8 (lot R8a2) : compteurs `publications` (le journal) et `mentions` (ce que ce lecteur verrait).
+    return c.json({ ...view, ...(await eventCountsFor(view.id, viewer)) }, 200, {
       "cache-control": "private, no-cache",
-    }),
-  )
+    });
+  })
   // Lot R4b : le plateau (public, limité en débit) ; la réponse dépend de la personne (pseudos, « Toi », remises).
   .get("/events/:id/lineup", async (c) => {
     const viewer = await optionalUser(c);

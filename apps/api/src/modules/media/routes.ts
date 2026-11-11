@@ -19,6 +19,7 @@ import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
 import { clientIp } from "../after-event/helpers";
+import { authorCountsFor } from "../feed/lists";
 import { registerPersonaSource } from "../profiles/personas";
 import { mediaOfUser, mediaService } from "./service";
 
@@ -64,8 +65,10 @@ export const mediaRoutes = new Hono<AppEnv>()
   })
   .delete("/me/media-profile/logo", async (c) => c.json(await mediaService.setLogo(await requireUser(c), null)))
   .get("/media/:id", async (c) => {
-    await requireUser(c);
-    return c.json(await mediaService.getPublic(uuidParam(c, "id")));
+    const v = await requireUser(c);
+    const id = uuidParam(c, "id");
+    // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un média n'a pas de slug à citer).
+    return c.json({ ...(await mediaService.getPublic(id)), ...(await authorCountsFor("media", id, v)) });
   })
   .get("/media/:id/contents", async (c) => {
     await requireUser(c);
