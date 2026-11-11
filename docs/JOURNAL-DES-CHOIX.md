@@ -5409,3 +5409,6 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 
 ### Tour 6 (R8c1, relecture Codex des tours 4 et 5, 11/11/2026)
 - **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
+
+### Tour 7 (R8c1, 11/11/2026)
+- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).

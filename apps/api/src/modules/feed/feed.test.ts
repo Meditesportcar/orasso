@@ -1426,7 +1426,7 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       zone: "A" as const,
       phase: 1 as const,
       sc: "ffffffffffff",
-      floorAt: 2 ** 47,
+      floorAt: clock.now.getTime(),
       score: Number.MAX_VALUE,
       frontier: id("event_recommended", 999),
       kinds: ["event_recommended", "sponsored"] as FeedCardKind[],

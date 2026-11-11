@@ -23,6 +23,8 @@ import type { Key } from "./sources/types";
 
 const VERSION = 3;
 const PREVIOUS_VERSION = 2;
+/** 9999-12-31T23:59:59.999Z : la plus grande date qu'un curseur peut porter. */
+const MAX_DATE_MS = 253_402_300_799_999;
 export const MAX_SOURCES = 16;
 export const MAX_DEFERRED = FEED_POOL / 2;
 /** Cartes servies au plus dans un parcours : au-delà, le curseur est forgé (400). */
@@ -147,7 +149,8 @@ class Reader {
   }
   date() {
     const d = new Date(this.u48());
-    if (Number.isNaN(d.getTime())) invalid();
+    // Au-delà de l'an 9999, PostgreSQL refuse la date ISO (500) : curseur forgé, 400.
+    if (Number.isNaN(d.getTime()) || d.getTime() > MAX_DATE_MS) invalid();
     return d;
   }
   key(): Key {
@@ -220,7 +223,8 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
     return { ...head, phase: 2, anchor };
   }
   const sc = r.bytes(6).toString("hex");
-  const floorAt = r.u48();
+  // Borne de rognage : jamais dans le futur du parcours (ramenée entre 0 et `ref`).
+  const floorAt = Math.min(r.u48(), ref.getTime());
   const score = r.f64();
   if (!Number.isFinite(score)) invalid();
   const frontier = r.cardId();

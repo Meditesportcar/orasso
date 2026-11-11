@@ -271,4 +271,43 @@ describe("tour 3", () => {
     }
     expect(new Set(got)).toEqual(new Set([...posts, extra]));
   }, 120_000);
+
+  it("tour 7 : dates énormes ou futures dans le curseur : ramenées ou 400, jamais 500", async () => {
+    const author = await person("Auteur_Date7");
+    const me = await person("Lecteur_Date7");
+    await follow(me, author);
+    for (let i = 0; i < 30; i++) await dbPost(author, at(5 + i));
+    const raw = Buffer.from((await fil(me)).next as string, "base64url");
+    expect(decodeCursor(raw.toString("base64url"))?.phase).toBe(1);
+    // Disposition : version, phase, zone, ref (6), fp (6), masque (2), offset (4), nx (1), [x], sc (6), floorAt (6), …
+    const nx = raw[1 + 1 + 1 + 6 + 6 + 2 + 4] as number;
+    const keysEnd = 1 + 1 + 1 + 6 + 6 + 2 + 4 + 1 + nx * 23;
+    const floorAt = keysEnd + 6;
+    const withU48 = (offset: number, value: number) => {
+      const b = Buffer.from(raw);
+      b.writeUIntBE(value, offset, 6);
+      return b.toString("base64url");
+    };
+    const refMs = raw.readUIntBE(3, 6);
+    // floorAt dans le futur ou énorme : ramené à ref, jamais d'erreur.
+    for (const v of [refMs + 86_400_000, 2 ** 48 - 1]) {
+      const c = withU48(floorAt, v);
+      const decoded = decodeCursor(c);
+      expect(decoded?.phase === 1 && decoded.floorAt).toBe(refMs);
+      expect((await fil(me, `?cursor=${c}`)).status).toBe(200);
+    }
+    // ref énorme (au-delà de l'an 9999) : curseur invalide, 400 propre.
+    const bigRef = withU48(3, 2 ** 48 - 1);
+    expect((await fil(me, `?cursor=${bigRef}`)).status).toBe(400);
+    // Ancre énorme en phase 2 (zone A puis B) : 400.
+    const second = await fil(me, `?filter=nearby&cursor=${(await fil(me, "?filter=nearby")).next}`);
+    expect(second.status).toBe(200);
+    const a = Buffer.from(((await fil(me, "?filter=nearby")).next as string) ?? "", "base64url");
+    if (a.length > 0) {
+      const anchorAt = a.length - 23; // dernière clé : ancre (date 6 octets + carte 17)
+      const b = Buffer.from(a);
+      b.writeUIntBE(2 ** 48 - 1, anchorAt, 6);
+      expect((await fil(me, `?filter=nearby&cursor=${b.toString("base64url")}`)).status).toBe(400);
+    }
+  }, 120_000);
 });
