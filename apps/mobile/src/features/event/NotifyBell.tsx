@@ -7,6 +7,7 @@ import { Pressable, StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { Overlay } from "@/ui/Overlay";
 import { NotifyPrefsSheet } from "./NotifyPrefsSheet";
 
 const SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
@@ -33,17 +34,20 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
       >
         <Icon name="bell" size={20} color={t.color.nightInk} />
       </Pressable>
-      <NotifyPrefsSheet
-        eventId={eventId}
-        visible={open}
-        initialNews={data.news}
-        onClose={() => {
-          setOpen(false);
-          if (gone) setLost(true);
-          else void prefs.reload();
-        }}
-        onLost={() => setGone(true)}
-      />
+      {/* La feuille couvre l'écran : elle se pose dans la zone des feuilles de la fiche, pas dans l'affiche. */}
+      <Overlay>
+        <NotifyPrefsSheet
+          eventId={eventId}
+          visible={open}
+          initialNews={data.news}
+          onClose={() => {
+            setOpen(false);
+            if (gone) setLost(true);
+            else void prefs.reload();
+          }}
+          onLost={() => setGone(true)}
+        />
+      </Overlay>
     </>
   );
 }
