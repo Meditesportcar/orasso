@@ -11,6 +11,7 @@ import {
   atMs,
   type FeedSource,
   type LoadedCard,
+  proFollowedSql,
   type SourceInput,
   type SourceResult,
   sliceRows,
@@ -49,9 +50,7 @@ export const source: FeedSource<"pro"> = {
       ...atBounds(atExpr, sql`${proProfiles.id}`, "pro", input),
     ];
     if (input.filter === "following") {
-      filters.push(
-        sql`exists (select 1 from pro_follows pf where pf.pro_id = ${proProfiles.id} and pf.user_id = ${input.userId})`,
-      );
+      filters.push(proFollowedSql(input, sql`${proProfiles.id}`));
     } else {
       const area = input.filter === "nearby" ? input.nearby : input.ctx.departments;
       // Sans département connu, pas de pro « près de chez toi » (les pros de la France entière ne sont pas un fil).

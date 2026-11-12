@@ -9,6 +9,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { readActor, writeActor } from "../../../lib/actor";
 import { type AppEnv, requireUser } from "../../../lib/session";
 import { body, query, uuidParam } from "../../../lib/validate";
 import "./batch";
@@ -23,12 +24,21 @@ export const feedCommentRoutes = new Hono<AppEnv>()
   })
   .post("/feed-posts/:id/comments", async (c) => {
     const v = await requireUser(c);
-    return c.json(await feedCommentsService.create(v, uuidParam(c, "id"), await body(c, feedCommentCreateSchema)), 201);
+    // Vague R9 (lot R9a, T7) : au nom d'une page quand l'en-tête la désigne ; le corps de la requête ne change pas.
+    const actor = await writeActor(c, v);
+    c.header("cache-control", "private, no-store");
+    return c.json(
+      await feedCommentsService.create(v, uuidParam(c, "id"), await body(c, feedCommentCreateSchema), actor),
+      201,
+    );
   })
   .get("/feed-posts/:id/mention-suggestions", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await feedCommentsService.suggestions(v, uuidParam(c, "id"), query(c, mentionSuggestionsQuery).q));
+    const actor = await readActor(c, v);
+    return c.json(
+      await feedCommentsService.suggestions(v, uuidParam(c, "id"), query(c, mentionSuggestionsQuery).q, actor),
+    );
   })
   .put("/me/feed-posts/:id/comments-off", async (c) => {
     const v = await requireUser(c);

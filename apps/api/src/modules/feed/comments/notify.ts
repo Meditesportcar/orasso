@@ -7,7 +7,13 @@
 //
 // Une ligne regroupée (plusieurs personnes) n'a **pas** d'extrait : il serait attribué à la première personne nommée alors
 // qu'il vient de la dernière. Seule la première occurrence d'une ligne cite le début du commentaire (120 caractères).
-import { ACTIVITY_MAX_ACTORS, commentExcerpt, feedCommentLabels, r8NotificationTable } from "@orasso/shared";
+import {
+  ACTIVITY_MAX_ACTORS,
+  commentExcerpt,
+  feedCommentLabels,
+  parseAuthorKey,
+  r8NotificationTable,
+} from "@orasso/shared";
 import { and, desc, eq, inArray, isNull, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
@@ -16,10 +22,10 @@ import { storage } from "../../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../../lib/tx";
 import { fillTemplate } from "../../notifications/grouped";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
-import { postWithAuthor, unavailable } from "../access";
+import { postWithAuthor } from "../access";
 import { commentReaders, readableBatch, stillReadable } from "./readers";
 import { anyOf } from "./sqlany";
-import { commentRow } from "./view";
+import { authorStateOf, commentRow } from "./view";
 
 type Actor = { userId: string; pseudo: string; avatarUrl: string | null };
 type Commenter = { userId: string; pseudo: string; avatarKey: string | null; visibility: "public" | "private" };
@@ -40,6 +46,14 @@ export type NewCommentContext = {
   rootId?: string | null;
   /** Personnes citées (en règle, ni soi-même) : seules celles qui lisent le commentaire sont prévenues. */
   mentioned: string[];
+  /**
+   * Lot R9a : le commentaire est écrit au nom d'une page. Les notifications ne citent alors **jamais** la personne
+   * (pas d'`actor`, donc rien dans `_actorIds` que le regroupement relirait) : le titre est rempli du nom de la page,
+   * `data.page` porte sa clé, son nom et son logo, et les lignes regroupées ont une clé propre à la page.
+   */
+  page?: { key: string; name: string; avatarUrl: string | null } | null;
+  /** La clé de la page qui a publié la publication, s'il y en a une (une page ne se prévient pas de son propre commentaire). */
+  postPageKey?: string | null;
 };
 
 /** Une ligne non lue de cette clé existe-t-elle déjà (la prochaine occurrence s'y ajoutera) ? */
@@ -63,25 +77,31 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
   const { tx, commenter, at } = ctx;
   const post = await postWithAuthor(ctx.postId, tx);
   if (!post) return;
-  const actor: Actor = {
-    userId: commenter.userId,
-    pseudo: commenter.pseudo,
-    avatarUrl: storage.url(commenter.avatarKey),
-  };
+  const page = ctx.page ?? null;
+  const actor: Actor | undefined = page
+    ? undefined
+    : { userId: commenter.userId, pseudo: commenter.pseudo, avatarUrl: storage.url(commenter.avatarKey) };
+  /** Titre et corps : un modèle `{name}` (une personne) ou le texte déjà rempli du nom de la page. */
+  const fill = (text: string) => (page ? fillTemplate(text, page.name) : text);
+  const pageData = page ? { page: { key: page.key, name: page.name, avatarUrl: page.avatarUrl } } : {};
+  const groupSuffix = page ? `:page:${page.key}` : "";
   const quote = feedCommentLabels.quote(commentExcerpt(ctx.text));
   const candidates = [...new Set([...ctx.mentioned, ctx.repliedTo?.authorId, ctx.postAuthorId])].filter(
     (id): id is string => !!id,
   );
   const top = ctx.rootId ? await commentRow(ctx.rootId, tx) : null;
-  const root = top
-    ? { authorId: top.c.authorId, visibility: top.p.visibility, unavailable: unavailable(top.p, at) }
-    : null;
+  const topState = top ? authorStateOf(top.c, top.p, at) : null;
+  const root =
+    top && topState
+      ? { authorId: top.c.authorId, visibility: topState.visibility, unavailable: topState.unavailable }
+      : null;
   const readers = await commentReaders(tx, post, commenter, candidates, at, root);
   const notified = new Set<string>([commenter.userId]);
   const data = (extra: Record<string, unknown> = {}) => ({
     postId: ctx.postId,
     commentId: ctx.commentId,
     link: "/app/fil",
+    ...pageData,
     ...extra,
   });
 
@@ -90,11 +110,11 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
     if (notified.has(userId) || !readers.has(userId)) continue;
     notified.add(userId);
     await notificationsService.notify(tx, userId, "feed_comment_mention", {
-      title: r8NotificationTable.feed_comment_mention.title,
+      title: fill(r8NotificationTable.feed_comment_mention.title),
       body: quote,
       data: data(),
       groupKey: `feed_comment_mention:${ctx.commentId}`,
-      actor,
+      ...(actor ? { actor } : {}),
       after: ctx.after,
     });
   }
@@ -103,29 +123,31 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
   const replied = ctx.repliedTo;
   if (replied && !notified.has(replied.authorId) && readers.has(replied.authorId)) {
     notified.add(replied.authorId);
-    const groupKey = `feed_comment_reply:${replied.id}`;
+    const groupKey = `feed_comment_reply:${replied.id}${groupSuffix}`;
     const merge = await hasOpenLine(tx, replied.authorId, groupKey);
     await notificationsService.notify(tx, replied.authorId, "feed_comment_reply", {
-      title: r8NotificationTable.feed_comment_reply.title,
-      body: merge ? r8NotificationTable.feed_comment_reply.body : quote,
+      title: fill(r8NotificationTable.feed_comment_reply.title),
+      body: merge ? fill(r8NotificationTable.feed_comment_reply.body) : quote,
       data: data({ parentId: replied.id }),
       groupKey,
-      actor,
+      ...(actor ? { actor } : {}),
       after: ctx.after,
     });
   }
 
   // 3. L'auteur de la publication : une ligne non lue par publication, les personnes s'ajoutent à la même ligne.
-  if (!notified.has(ctx.postAuthorId) && readers.has(ctx.postAuthorId)) {
+  // Une page qui commente sa propre publication ne prévient personne (lot R9a).
+  const ownPage = page !== null && ctx.postPageKey === page.key;
+  if (!ownPage && !notified.has(ctx.postAuthorId) && readers.has(ctx.postAuthorId)) {
     notified.add(ctx.postAuthorId);
-    const groupKey = `feed_comment:${ctx.postId}`;
+    const groupKey = `feed_comment:${ctx.postId}${groupSuffix}`;
     const merge = await hasOpenLine(tx, ctx.postAuthorId, groupKey);
     await notificationsService.notify(tx, ctx.postAuthorId, "feed_comment", {
-      title: r8NotificationTable.feed_comment.title,
-      body: merge ? r8NotificationTable.feed_comment.body : quote,
+      title: fill(r8NotificationTable.feed_comment.title),
+      body: merge ? fill(r8NotificationTable.feed_comment.body) : quote,
       data: data(),
       groupKey,
-      actor,
+      ...(actor ? { actor } : {}),
       after: ctx.after,
     });
   }
@@ -240,7 +262,16 @@ async function findReadable(ex: Executor, userId: string, scope: SQL, actorIds: 
   const rows = await ex
     .select({ id: c.id, authorId: c.authorId, text: c.text, createdAt: c.createdAt })
     .from(c)
-    .where(and(scope, isNull(c.deletedAt), anyOf(c.authorId, actorIds, "text"), ne(c.authorId, userId)))
+    .where(
+      and(
+        scope,
+        isNull(c.deletedAt),
+        // Jamais un commentaire de page dans la recomposition d'une ligne qui cite des personnes (lot R9a).
+        eq(c.persona, "fan"),
+        anyOf(c.authorId, actorIds, "text"),
+        ne(c.authorId, userId),
+      ),
+    )
     .orderBy(desc(c.createdAt), desc(c.id))
     .limit(400);
   // 15 récents au plus par personne, puis une seule vérification de lisibilité en lot (l'état des pages lu une fois).
@@ -275,10 +306,102 @@ function groupScope(n: typeof notifications.$inferSelect): { scope: SQL; actorId
   return scope && actorIds.length ? { scope, actorIds } : null;
 }
 
+/**
+ * Le plus récent commentaire de la page d'une ligne regroupée de page (lot R9a, tour 2) que le destinataire lit encore, avec
+ * le nombre de ceux qu'il lit : la ligne se recompose par la clé de la page et sa portée (publication, ou commentaire visé),
+ * jamais par des personnes (une ligne de page n'en cite aucune).
+ */
+export async function pageLineReadable(
+  ex: Executor,
+  userId: string,
+  n: typeof notifications.$inferSelect,
+): Promise<{ newest: { id: string; text: string }; count: number; pageName: string } | null> {
+  const data = n.data as { page?: { key?: unknown; name?: unknown }; postId?: unknown; parentId?: unknown };
+  const key = parseAuthorKey(data.page?.key);
+  if (!key || key.kind === "user") return null;
+  const c = feedPostComments;
+  const scope =
+    n.type === "feed_comment" && typeof data.postId === "string"
+      ? eq(c.postId, data.postId)
+      : n.type === "feed_comment_reply" && typeof data.parentId === "string"
+        ? eq(c.replyToId, data.parentId)
+        : null;
+  if (!scope) return null;
+  const owner =
+    key.kind === "structure"
+      ? and(eq(c.persona, "organizer"), eq(c.structureId, key.id))
+      : key.kind === "pro"
+        ? and(eq(c.persona, "pro"), eq(c.proId, key.id))
+        : key.kind === "provider"
+          ? and(eq(c.persona, "provider"), eq(c.providerId, key.id))
+          : and(eq(c.persona, "media"), eq(c.mediaId, key.id));
+  // Par tranches de 100, du plus récent au plus ancien, jusqu'à trouver un commentaire lisible : cent commentaires récents devenus
+  // illisibles ne cachent pas un plus ancien qui se lit encore. `count` : ceux qui se lisent parmi les tranches lues.
+  const BATCH = 100;
+  const MAX_BATCHES = 20;
+  let newest: { id: string; text: string } | null = null;
+  let count = 0;
+  let before: { at: Date; id: string } | null = null;
+  for (let round = 0; round < MAX_BATCHES; round++) {
+    const rows = await ex
+      .select({ id: c.id, text: c.text, createdAt: c.createdAt })
+      .from(c)
+      .where(
+        and(
+          scope,
+          owner,
+          isNull(c.deletedAt),
+          ne(c.authorId, userId),
+          before
+            ? sql`(${c.createdAt}, ${c.id}) < (${before.at.toISOString()}::timestamptz, ${before.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(c.createdAt), desc(c.id))
+      .limit(BATCH);
+    if (!rows.length) break;
+    const { readable } = await readableBatch(
+      ex,
+      userId,
+      rows.map((r) => r.id),
+    );
+    const ok = rows.filter((r) => readable.has(r.id));
+    count += ok.length;
+    newest ??= ok[0] ?? null;
+    if (newest || rows.length < BATCH) break;
+    const last = rows[rows.length - 1] as (typeof rows)[number];
+    before = { at: last.createdAt, id: last.id };
+  }
+  return newest ? { newest, count, pageName: typeof data.page?.name === "string" ? data.page.name : "" } : null;
+}
+
 async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
   if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return true;
-  const data = n.data as { commentId?: unknown; postId?: unknown; parentId?: unknown; _actorIds?: unknown };
+  const data = n.data as {
+    commentId?: unknown;
+    postId?: unknown;
+    parentId?: unknown;
+    _actorIds?: unknown;
+    page?: unknown;
+  };
   if (typeof data.commentId !== "string") return true;
+  if (data.page) {
+    // Ligne d'une page : elle reste tant qu'un commentaire de cette page se lit ; sinon elle disparaît (lot R9a, tour 2).
+    const left = await pageLineReadable(tx, n.userId, n);
+    if (!left) return false;
+    const spec = r8NotificationTable[n.type];
+    const body = left.count === 1 ? feedCommentLabels.quote(commentExcerpt(left.newest.text)) : spec.body;
+    const [updated] = await tx
+      .update(notifications)
+      .set({
+        title: fillTemplate(spec.title, left.pageName),
+        body: fillTemplate(body, left.pageName),
+        data: { ...n.data, commentId: left.newest.id, count: left.count },
+      })
+      .where(eq(notifications.id, n.id))
+      .returning();
+    return updated ?? false;
+  }
   const group = groupScope(n);
   if (!group) return stillReadable(tx, n.userId, data.commentId);
   const readable = await findReadable(tx, n.userId, group.scope, group.actorIds);

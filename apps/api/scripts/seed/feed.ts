@@ -282,7 +282,7 @@ async function seedOrassoFeed() {
 // publications rattachées.
 const LYDIA_SLUG = "rassemblement-du-lydia";
 
-async function storeFeedPhoto(postId: string, index: number, position = 0): Promise<boolean> {
+export async function storeFeedPhoto(postId: string, index: number, position = 0): Promise<boolean> {
   const photo = await reviewedNoPlateCar(index);
   if (!photo) return false;
   const out = await sharp(photo.data)

@@ -92,7 +92,16 @@ export const FEED_PHOTO_NAME_RE = /^[0-9a-f]{32}\.webp$/;
  * Publications visibles de `viewerId` parmi `ids`, dans l'ordre de `ids`. Les publications absentes, retirées, d'un
  * compte hors règle ou d'un compte privé non suivi sont omises.
  */
-export async function loadPostViews(ex: Executor, ids: string[], viewerId: string, at: Date): Promise<FeedPostView[]> {
+export async function loadPostViews(
+  ex: Executor,
+  ids: string[],
+  viewerId: string,
+  at: Date,
+  /** Lot R9a : la flamme est celle de la personne même quand la publication est lue avec le regard public d'une page. */
+  flamerId: string = viewerId,
+  /** Lot R9a : en casquette, la page active est la seule dont on a les droits (invitation de co-signature, `mine`). */
+  managedKeys?: ReadonlySet<string>,
+): Promise<FeedPostView[]> {
   if (!ids.length) return [];
   const rows = await ex
     .select({ post: feedPosts, author: profiles })
@@ -142,7 +151,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
       await ex
         .select({ id: feedPostReactions.postId })
         .from(feedPostReactions)
-        .where(and(inArray(feedPostReactions.postId, postIds), eq(feedPostReactions.userId, viewerId)))
+        .where(and(inArray(feedPostReactions.postId, postIds), eq(feedPostReactions.userId, flamerId)))
     ).map((r) => r.id),
   );
   const vehicleIds = [...new Set(visible.flatMap((r) => (r.post.vehicleId ? [r.post.vehicleId] : [])))];
@@ -167,9 +176,9 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     at,
   );
   // « Mes » publications de page : les pages que je gère (affichage seulement, sans second facteur).
-  const managed = visible.some((r) => r.post.persona !== "fan")
-    ? await managedPageKeys(viewerId, ex)
-    : new Set<string>();
+  const managed =
+    managedKeys ??
+    (visible.some((r) => r.post.persona !== "fan") ? await managedPageKeys(viewerId, ex) : new Set<string>());
 
   const commercialBy = await commercialViews(
     ex,
@@ -184,6 +193,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
       return { id: r.post.id, mine: k ? managed.has(k) : r.post.authorId === viewerId };
     }),
     viewerId,
+    managedKeys,
   );
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {

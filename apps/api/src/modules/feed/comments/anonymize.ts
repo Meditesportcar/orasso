@@ -54,7 +54,8 @@ export async function anonymizeFeedCommentsForDeletedAccount(tx: Tx, userId: str
   const mine = await tx
     .select({ id: c.id, postId: c.postId, parentId: c.parentId })
     .from(c)
-    .where(eq(c.authorId, userId));
+    // Les commentaires d'une page restent à la page : seuls ceux écrits en son nom propre partent (lot R9a).
+    .where(and(eq(c.authorId, userId), eq(c.persona, "fan")));
   const reacted = await tx
     .select({ id: feedPostCommentReactions.commentId })
     .from(feedPostCommentReactions)

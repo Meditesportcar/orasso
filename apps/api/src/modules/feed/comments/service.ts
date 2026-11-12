@@ -28,6 +28,9 @@ import {
   feedPosts,
   profiles,
 } from "../../../db/schema";
+import type { Actor } from "../../../lib/actor";
+import { isPageActor } from "../../../lib/actor";
+import { canManagePost } from "../../../lib/authorship";
 import { now } from "../../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../../lib/errors";
 import { decodeCursor, encodeCursor } from "../../../lib/pagination";
@@ -36,6 +39,8 @@ import type { Viewer } from "../../../lib/session";
 import { type Tx, withTx } from "../../../lib/tx";
 import { moderationService } from "../../moderation/service";
 import { postWithAuthor, profileOkSql, requireVisiblePost, UUID_RE } from "../access";
+import { loadPageInfo, pageKeyOf } from "../authors";
+import { PAGE_VIEWER_ID } from "../sources/types";
 import { notifyCommentLike, notifyNewComment } from "./notify";
 import { softDeleteComment } from "./remove";
 import { mentionSuggestions } from "./suggest";
@@ -107,6 +112,8 @@ async function mentionedPeople(
   commenterId: string,
   text: string,
   at: Date,
+  /** Lot R9a : une page ne cite que des comptes publics (une citation d'un compte privé est ignorée, sans notification). */
+  publicOnly = false,
 ): Promise<{ userId: string; pseudo: string }[]> {
   const pseudos = commentMentions(text);
   if (!pseudos.length) return [];
@@ -121,6 +128,7 @@ async function mentionedPeople(
         ),
         profileOkSql("profiles", at),
         sql`${profiles.userId} <> ${commenterId}`,
+        publicOnly ? sql`${profiles.visibility} = 'public'` : undefined,
       ),
     );
   // Dans l'ordre où le texte les cite.
@@ -151,13 +159,30 @@ export const feedCommentsService = {
     v: Viewer,
     postId: string,
     input: { text: string; parentId?: string | null; clientId: string },
+    /** Lot R9a (T7) : la page au nom de laquelle on commente (`writeActor` : second facteur d'une structure compris). */
+    actor?: Actor | null,
   ): Promise<FeedCommentCreated> {
     rateLimit("feedComment", v.user.id);
     const userId = v.user.id;
+    const page = actor && isPageActor(actor) ? actor : null;
+    // En casquette, on ne commente que ce qu'un membre sans aucun lien voit (lot R9a, tour 2) : la publication d'un compte
+    // public ou d'une page, la réponse au commentaire d'un compte public ou d'une page. Jamais ce que la personne voit parce
+    // qu'elle suit un compte privé : 404, comme une publication introuvable.
+    const reader: Viewer = page ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v;
+    // Les colonnes de la page : la contrainte de la table exige la persona et son identifiant, rien d'autre.
+    const pageColumns = page
+      ? {
+          persona: (page.kind === "structure" ? "organizer" : page.kind) as "organizer" | "pro" | "provider" | "media",
+          structureId: page.kind === "structure" ? page.id : null,
+          proId: page.kind === "pro" ? page.id : null,
+          providerId: page.kind === "provider" ? page.id : null,
+          mediaId: page.kind === "media" ? page.id : null,
+        }
+      : null;
     let createdId: string;
     try {
       createdId = await withTx(async (tx, after) => {
-        const post = await requireVisiblePost(v, postId, tx);
+        const post = await requireVisiblePost(reader, postId, tx);
         // Verrou de la publication : les compteurs ne se perdent pas à deux commentaires simultanés, et un second envoi
         // du même `clientId` attend le premier avant de le retrouver.
         const [locked] = await tx
@@ -184,7 +209,7 @@ export const feedCommentsService = {
         let target: { id: string; authorId: string } | null = null;
         let parentId: string | null = null;
         if (input.parentId) {
-          const asked = await requireVisibleComment(v, input.parentId, tx).catch((error: unknown) => {
+          const asked = await requireVisibleComment(reader, input.parentId, tx).catch((error: unknown) => {
             if (error instanceof AppError && error.status === 404) return null;
             throw error;
           });
@@ -208,7 +233,11 @@ export const feedCommentsService = {
           .values({
             postId: post.post.id,
             authorId: userId,
-            persona: "fan",
+            persona: pageColumns?.persona ?? "fan",
+            structureId: pageColumns?.structureId ?? null,
+            proId: pageColumns?.proId ?? null,
+            providerId: pageColumns?.providerId ?? null,
+            mediaId: pageColumns?.mediaId ?? null,
             parentId,
             replyToId: target?.id ?? null,
             text: input.text,
@@ -230,7 +259,7 @@ export const feedCommentsService = {
         }
 
         // `@pseudo` : la liste rendue est la même pour tous ; la notification ne part qu'à qui lit le commentaire.
-        const mentioned = await mentionedPeople(tx, userId, input.text, at);
+        const mentioned = await mentionedPeople(tx, userId, input.text, at, page !== null);
         if (mentioned.length) {
           await tx
             .insert(feedCommentMentions)
@@ -238,6 +267,9 @@ export const feedCommentsService = {
             .onConflictDoNothing();
         }
 
+        const pageInfo = pageColumns
+          ? (await loadPageInfo(tx, [{ ...pageColumns, authorId: userId }])).get(page?.key ?? "")
+          : null;
         await notifyNewComment({
           tx,
           after,
@@ -246,8 +278,12 @@ export const feedCommentsService = {
             userId,
             pseudo: v.profile.pseudo,
             avatarKey: v.profile.avatarKey,
-            visibility: v.profile.visibility,
+            // Une page est publique : la confidentialité du compte de qui écrit ne joue pas (lot R9a).
+            visibility: page ? "public" : v.profile.visibility,
           },
+          page:
+            page && pageInfo ? { key: page.key, name: pageInfo.view.name, avatarUrl: pageInfo.view.avatarUrl } : null,
+          postPageKey: pageKeyOf(post.post),
           postId: post.post.id,
           postAuthorId: post.post.authorId,
           commentId: row.id,
@@ -284,14 +320,27 @@ export const feedCommentsService = {
     const parentId = await withTx(async (tx) => {
       // Son propre commentaire se supprime même quand on ne voit plus la publication (rien d'autre n'est lu).
       const own = await commentRow(commentId, tx);
-      if (own && own.c.authorId === v.user.id) {
+      // Son propre commentaire de passionné se supprime même sans voir la publication. Celui d'une page passe par les droits
+      // sur la page (lot R9a) : qui n'en a plus ne peut plus le retirer.
+      if (own && own.c.authorId === v.user.id && own.c.persona === "fan") {
         if (!(await softDeleteComment(tx, own.c.id, v.user.id, now()))) {
           throw notFound(feedCommentLabels.commentNotFound);
         }
         return own.c.parentId;
       }
       const found = await requireVisibleComment(v, commentId, tx);
-      if (found.c.authorId !== v.user.id) {
+      if (found.c.persona !== "fan") {
+        // La page : `requireAuthorship` (second facteur d'une structure : son erreur remonte telle quelle) ; à défaut,
+        // qui gère la publication. Sans droit, rien n'est révélé.
+        const owns = await canManagePost(v, found.c, tx);
+        const may =
+          owns ||
+          (await managesPostStrict(v, found.post.post, tx).catch((error: unknown) => {
+            if (error instanceof AppError && error.code === "persona_forbidden") return false;
+            throw error;
+          }));
+        if (!may) throw notFound(feedCommentLabels.commentNotFound);
+      } else if (found.c.authorId !== v.user.id) {
         // Une page exige le second facteur : son erreur remonte telle quelle ; sans droit, rien n'est révélé.
         const may = await managesPostStrict(v, found.post.post, tx).catch((error: unknown) => {
           if (error instanceof AppError && error.code === "persona_forbidden") return false;
@@ -415,9 +464,9 @@ export const feedCommentsService = {
   },
 
   /** `GET /feed-posts/:id/mention-suggestions?q=` */
-  async suggestions(v: Viewer, postId: string, q: string): Promise<MentionSuggestion[]> {
+  async suggestions(v: Viewer, postId: string, q: string, actor?: Actor | null): Promise<MentionSuggestion[]> {
     rateLimit("feedRead", v.user.id);
-    return mentionSuggestions(v, postId, q);
+    return mentionSuggestions(v, postId, q, actor && isPageActor(actor) ? actor : null);
   },
 };
 
