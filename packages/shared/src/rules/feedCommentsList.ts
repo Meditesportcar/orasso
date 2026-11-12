@@ -41,6 +41,11 @@ export type SheetState = {
   recent: string[];
   /** Identifiants supprimés (par l'écran) pour la durée de la feuille : une lecture partie avant la suppression ne les fait pas réapparaître. */
   removed: string[];
+  /**
+   * Commentaires présents dans la feuille (venus d'une lecture) que la carte **n'a pas comptés** : leur confirmation d'envoi a rendu `counted` 0
+   * parce qu'ils étaient déjà là. Les supprimer ensuite ne fait pas baisser le total de la carte (petit lot API, P29). Facultatif : absent = vide.
+   */
+  uncounted?: string[];
 };
 
 export const emptySheet = (): SheetState => ({
@@ -85,17 +90,28 @@ export type SheetMark = {
   recent: string[];
   /** Le dernier commentaire de la liste **venu d'une page de l'API** (pas un ajout confirmé) : le curseur envoyé pointe juste après lui. */
   boundary?: FeedCommentView;
+  /**
+   * Le curseur envoyé avec cette lecture (celui de la feuille au départ). Une page de suite dont le curseur envoyé n'est plus celui de la
+   * feuille est jetée sans effet : deux chargements partis du même curseur ne font pas reculer le curseur ni ne laissent une borne trop loin
+   * (petit lot API, P36). Facultatif : absent = pas de contrôle.
+   */
+  cursor?: string | null;
 };
 const lastFromApi = (items: readonly FeedCommentView[], recent: readonly string[]) =>
   [...items].reverse().find((c) => !recent.includes(c.id));
 export const sheetMark = (s: SheetState): SheetMark => ({
   recent: [...s.recent],
   boundary: lastFromApi(s.items, s.recent),
+  cursor: s.cursor,
 });
 /** La marque d'une lecture de réponses d'un commentaire. */
 export const repliesMark = (s: SheetState, parentId: string): SheetMark => {
   const r = s.replies[parentId];
-  return { recent: [...(r?.recent ?? [])], boundary: r ? lastFromApi(r.items, r.recent) : undefined };
+  return {
+    recent: [...(r?.recent ?? [])],
+    boundary: r ? lastFromApi(r.items, r.recent) : undefined,
+    cursor: r?.cursor ?? null,
+  };
 };
 
 /**
@@ -149,6 +165,8 @@ export function sheetWithTopPage(
   first: boolean,
   since?: SheetMark,
 ): SheetState {
+  // Une page de suite partie d'un curseur qui n'est plus celui de la feuille (un autre chargement a abouti avant) : jetée.
+  if (!first && since?.cursor !== undefined && since.cursor !== state.cursor) return state;
   const merged = reconcilePage(items, state.items, state.recent, since, state.removed, nextCursor !== null, first);
   return { ...state, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true };
 }
@@ -163,6 +181,7 @@ export function sheetWithRepliesPage(
   since?: SheetMark,
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
+  if (!first && since?.cursor !== undefined && since.cursor !== was.cursor) return state;
   const merged = reconcilePage(items, was.items, was.recent, since, state.removed, nextCursor !== null, first);
   return {
     ...state,
@@ -184,6 +203,10 @@ const patchTop = (items: readonly FeedCommentView[], id: string, patch: (c: Feed
 
 /** Le compteur de réponses d'un commentaire de premier niveau, tel que le serveur l'a rendu (avec sa version). */
 export type ParentCount = { id: string; repliesCount: number; countedAt: string };
+
+/** `uncounted` après une confirmation : l'identifiant s'y ajoute quand la carte ne l'a pas compté (déjà là par une lecture, jamais confirmé par l'envoi). */
+const withUncounted = (state: SheetState, id: string, uncounted: boolean): string[] | undefined =>
+  uncounted && !(state.uncounted ?? []).includes(id) ? [...(state.uncounted ?? []), id] : state.uncounted;
 
 /**
  * Ajoute le commentaire que l'API vient de rendre. Premier niveau : à la suite de la liste. Réponse (`parentId`) : sous son commentaire ; le
@@ -208,6 +231,7 @@ export function sheetAddComment(
         ...state,
         items: mergeComments(state.items, [comment]),
         recent: known || state.recent.includes(comment.id) ? state.recent : [...state.recent, comment.id],
+        uncounted: withUncounted(state, comment.id, known && !state.recent.includes(comment.id)),
       },
       counted: known ? 0 : 1,
     };
@@ -217,6 +241,7 @@ export function sheetAddComment(
   return {
     state: {
       ...state,
+      uncounted: withUncounted(state, comment.id, known && !was.recent.includes(comment.id)),
       items: parent
         ? patchTop(state.items, parentId, (c) =>
             c.countedAt > parent.countedAt
@@ -260,17 +285,24 @@ export function sheetApplyParentCount(state: SheetState, parent: ParentCount | u
  */
 export function sheetRemoveComment(state: SheetState, id: string): { state: SheetState; removed: number } {
   const top = state.items.find((c) => c.id === id);
+  const uncounted = state.uncounted ?? [];
   if (top) {
     const { [id]: gone, ...replies } = state.replies;
+    const goneIds = gone?.items.map((c) => c.id) ?? [];
+    // Ce que la carte avait compté : lui (sauf s'il ne l'était pas) et ses réponses comptées (celles que la carte n'a pas comptées ne baissent rien).
+    const lost =
+      (uncounted.includes(id) ? 0 : 1) +
+      Math.max(0, top.repliesCount - goneIds.filter((x) => uncounted.includes(x)).length);
     return {
       state: {
         ...state,
         items: state.items.filter((c) => c.id !== id),
         replies,
         recent: state.recent.filter((x) => x !== id),
-        removed: [...state.removed, id, ...(gone?.items.map((c) => c.id) ?? [])],
+        removed: [...state.removed, id, ...goneIds],
+        ...(state.uncounted ? { uncounted: uncounted.filter((x) => x !== id && !goneIds.includes(x)) } : {}),
       },
-      removed: 1 + top.repliesCount,
+      removed: lost,
     };
   }
   for (const [parentId, r] of Object.entries(state.replies)) {
@@ -283,8 +315,9 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
           [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((x) => x !== id) },
         },
         removed: [...state.removed, id],
+        ...(state.uncounted ? { uncounted: uncounted.filter((x) => x !== id) } : {}),
       },
-      removed: 1,
+      removed: uncounted.includes(id) ? 0 : 1,
     };
   }
   return { state, removed: 0 };
@@ -457,7 +490,8 @@ export function postWithCommentRemoved(
   removed: number,
   sheet: SheetState | null,
 ): FeedPostView {
-  if (removed === 0) return post;
+  // `removed` 0 : un commentaire que la carte n'avait pas compté (ou inconnu) ne fait pas baisser le total ; il part quand même des deux montrés.
+  if (removed === 0 && !post.lastComments.some((c) => c.id === id)) return post;
   const kept = post.lastComments.filter((c) => c.id !== id);
   const lastComments =
     sheet?.loaded && sheet.cursor === null ? sheet.items.slice(-FEED_COMMENT_PREVIEW_COUNT).map(previewOf) : kept;

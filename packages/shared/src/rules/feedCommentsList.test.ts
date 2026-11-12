@@ -768,3 +768,141 @@ describe("tour 8 : suppression d'une réponse, confirmation tardive, curseur", (
     expect(s.items.map((c) => c.id)).toEqual(["a", "b", "d"]);
   });
 });
+
+describe("petit lot API : compteur de la carte (P29)", () => {
+  const stamp = (i: number) => new Date(Date.UTC(2026, 10, 10, 10, 0, i)).toISOString();
+  const c = (i: number, over: Partial<FeedCommentView> = {}) =>
+    at(`c${String(i).padStart(2, "0")}`, 0, { createdAt: stamp(i), ...over });
+
+  it("un commentaire déjà venu d'une lecture, confirmé ensuite, puis supprimé : la carte reste à N", () => {
+    const card = post({ commentsCount: 3, lastComments: [] });
+    // La lecture apporte le commentaire c03 avant la confirmation de l'envoi : la carte (3) ne l'a pas compté.
+    let s = sheetWithTopPage(emptySheet(), [c(1), c(2), c(3)], null, true);
+    const added = sheetAddComment(s, c(3), null);
+    expect(added.counted).toBe(0);
+    s = added.state;
+    const gone = sheetRemoveComment(s, "c03");
+    expect(gone.removed).toBe(0);
+    expect(
+      postWithCommentRemoved(postWithCommentAdded(card, c(3), null, added.counted), "c03", gone.removed, gone.state)
+        .commentsCount,
+    ).toBe(3);
+    // Rejouée : la confirmation n'est pas comptée deux fois, et la marque disparaît avec le commentaire.
+    expect(gone.state.uncounted ?? []).toEqual([]);
+  });
+
+  it("un commentaire confirmé par l'envoi (compté) puis supprimé : la carte revient à N", () => {
+    const card = post({ commentsCount: 2, lastComments: [] });
+    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
+    const added = sheetAddComment(s, c(3), null);
+    expect(added.counted).toBe(1);
+    s = added.state;
+    // Un rejeu de la confirmation (déjà confirmée par l'envoi) ne devient pas « non compté ».
+    const replay = sheetAddComment(s, c(3), null);
+    expect(replay.counted).toBe(0);
+    s = replay.state;
+    const withCard = postWithCommentAdded(card, c(3), null, added.counted);
+    const gone = sheetRemoveComment(s, "c03");
+    expect(gone.removed).toBe(1);
+    expect(postWithCommentRemoved(withCard, "c03", gone.removed, gone.state).commentsCount).toBe(2);
+  });
+
+  it("confirmation tardive d'un commentaire déjà supprimé, puis suppression : rien n'est retiré deux fois", () => {
+    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
+    const first = sheetRemoveComment(s, "c02");
+    expect(first.removed).toBe(1);
+    s = first.state;
+    const late = sheetAddComment(s, c(2), null);
+    expect(late.counted).toBe(0);
+    expect(sheetRemoveComment(late.state, "c02")).toEqual({ state: late.state, removed: 0 });
+  });
+
+  it("une réponse venue d'une lecture puis confirmée : sa suppression ne baisse pas la carte ; son parent retiré ne retire que les réponses comptées", () => {
+    let s = sheetWithTopPage(emptySheet(), [c(1, { repliesCount: 2 })], null, true);
+    s = sheetWithRepliesPage(s, "c01", [c(2), c(3)], null, true);
+    // r c02 arrive de la lecture puis sa confirmation (non comptée par la carte) ; c03 reste comptée.
+    const added = sheetAddComment(s, c(2), "c01");
+    expect(added.counted).toBe(0);
+    s = added.state;
+    expect(s.uncounted).toEqual(["c02"]);
+    const parent = sheetRemoveComment(s, "c01");
+    // Le parent (1) et sa réponse comptée c03 ; la réponse non comptée c02 ne baisse rien.
+    expect(parent.removed).toBe(2);
+    // Même suppression d'abord de la réponse : 0, puis du parent : 1 + 1 réponse restante comptée.
+    const reply = sheetRemoveComment(s, "c02");
+    expect(reply.removed).toBe(0);
+    expect(reply.state.uncounted ?? []).toEqual([]);
+  });
+
+  it("une carte dont le dernier aperçu part avec un commentaire non compté, sans baisser le total", () => {
+    const only = c(1);
+    const card = post({ commentsCount: 4, lastComments: [preview(only)] });
+    const s = sheetWithTopPage(emptySheet(), [only], null, true);
+    const added = sheetAddComment(s, only, null);
+    const gone = sheetRemoveComment(added.state, "c01");
+    const p = postWithCommentRemoved(card, "c01", gone.removed, gone.state);
+    expect(p.commentsCount).toBe(4);
+    expect(p.lastComments).toEqual([]);
+  });
+});
+
+describe("petit lot API : borne gardée avec son curseur (P36)", () => {
+  const stamp = (i: number) => new Date(Date.UTC(2026, 10, 10, 10, 0, i)).toISOString();
+  const c = (i: number) => at(`c${String(i).padStart(2, "0")}`, 0, { createdAt: stamp(i) });
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => c(from + k));
+  const ids = (s: SheetState) => s.items.map((x) => x.id);
+
+  it("deux chargements partis du même curseur : la seconde page, périmée, est jetée sans effet", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    // Deux chargements partent du commentaire 20 : leurs marques portent le même curseur.
+    const m1 = sheetMark(s);
+    const m2 = sheetMark(s);
+    expect(m1.cursor).toBe("C20");
+    s = sheetWithTopPage(s, range(21, 60), "C60", false, m1);
+    expect(s.cursor).toBe("C60");
+    const stale = sheetWithTopPage(s, range(21, 40), "C40", false, m2);
+    // Le curseur ne recule pas, la liste et la borne restent celles de la page plus longue.
+    expect(stale).toBe(s);
+    expect(stale.cursor).toBe("C60");
+    expect(sheetMark(stale).boundary?.id).toBe("c60");
+    // Le chargement suivant part du bon curseur : une page vide en fin de liste est appliquée.
+    const m3 = sheetMark(stale);
+    expect(m3.cursor).toBe("C60");
+    const end = sheetWithTopPage(stale, [], null, false, m3);
+    expect(end.cursor).toBeNull();
+    expect(ids(end)).toEqual(ids(s));
+  });
+
+  it("des chargements l'un après l'autre (chacun avec sa marque) s'appliquent tous ; une marque sans curseur ne contrôle rien", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    s = sheetWithTopPage(s, range(21, 40), "C40", false, sheetMark(s));
+    s = sheetWithTopPage(s, range(41, 60), null, false, sheetMark(s));
+    expect(ids(s)).toEqual(range(1, 60).map((x) => x.id));
+    // Compatible : une marque faite à la main, sans curseur, s'applique comme avant.
+    const old = sheetWithTopPage(s, range(41, 50), "C50", false, { recent: [], boundary: c(40) });
+    expect(old.cursor).toBe("C50");
+  });
+
+  it("une page de la première lecture (sans curseur envoyé) s'applique même si le curseur de la feuille a changé", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    const reload = sheetMark(s);
+    s = sheetWithTopPage(s, range(21, 40), "C40", false, sheetMark(s));
+    const again = sheetWithTopPage(s, range(1, 20), "C20", true, reload);
+    expect(again.cursor).toBe("C20");
+  });
+
+  it("réponses : la page périmée d'un fil est jetée aussi", () => {
+    let s = sheetWithTopPage(emptySheet(), [c(1)], null, true);
+    s = sheetWithRepliesPage(s, "c01", range(10, 29), "R29", true);
+    const m1 = repliesMark(s, "c01");
+    const m2 = repliesMark(s, "c01");
+    expect(m1.cursor).toBe("R29");
+    s = sheetWithRepliesPage(s, "c01", range(30, 49), "R49", false, m1);
+    const stale = sheetWithRepliesPage(s, "c01", range(30, 39), "R39", false, m2);
+    expect(stale).toBe(s);
+    expect(stale.replies.c01?.cursor).toBe("R49");
+    const end = sheetWithRepliesPage(stale, "c01", [], null, false, repliesMark(stale, "c01"));
+    expect(end.replies.c01?.cursor).toBeNull();
+    expect(end.replies.c01?.items.length).toBe(40);
+  });
+});
