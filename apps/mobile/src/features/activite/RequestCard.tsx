@@ -2,10 +2,11 @@
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { messagingLabels } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { errorMessage } from "@/lib/http";
 import { Avatar } from "@/ui/Avatar";
+import { buttonsSideBySide } from "./requestLayout";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -39,6 +40,8 @@ export function RequestCard({
   testID?: string;
 }) {
   const { t } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const side = buttonsSideBySide(fontScale, [acceptLabel, declineLabel]);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const run = async (which: "accept" | "decline", action: () => Promise<unknown>) => {
@@ -83,11 +86,11 @@ export function RequestCard({
           {error}
         </Text>
       ) : null}
-      <View style={styles.row}>
+      <View style={side ? styles.row : styles.stack}>
         <Button
           variant="plate"
           icon="check"
-          style={styles.half}
+          style={side ? styles.half : undefined}
           loading={busy === "accept"}
           disabled={busy !== null}
           onPress={() => void run("accept", onAccept)}
@@ -98,7 +101,7 @@ export function RequestCard({
           variant="plate"
           tone="dashed"
           icon="close"
-          style={styles.half}
+          style={side ? styles.half : undefined}
           loading={busy === "decline"}
           disabled={busy !== null}
           onPress={() => void run("decline", onDecline)}
@@ -114,7 +117,8 @@ const styles = StyleSheet.create({
   card: { gap: space3, padding: space3 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   text: { flex: 1, gap: 2 },
-  // Accepter et Refuser se partagent la ligne (maquette) ; à police agrandie les libellés passent sur deux lignes, sans déborder.
+  // Côte à côte quand la rangée tient (`buttonsSideBySide`), sinon l'un au-dessus de l'autre ; un libellé ne se coupe jamais.
   row: { flexDirection: "row", gap: space2 },
+  stack: { gap: space2 },
   half: { flex: 1, minWidth: 0, alignSelf: "stretch" },
 });

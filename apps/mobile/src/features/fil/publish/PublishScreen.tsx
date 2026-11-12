@@ -80,6 +80,7 @@ import {
   confirmNoPlateFor,
   cropAll,
   dropEventFromChoice,
+  eventShown,
   type FeedDraftPhoto,
   framesFromDetection,
   liftsUncertainty,
@@ -233,7 +234,11 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const events = eventBlock ? eventsOf(loaded, account, author.key) : [];
   const eventsLoading =
     eventBlock && (loaded.account !== account || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
-  const event = events.find((e) => e.id === choice.eventId) ?? null;
+  const listedEvent = events.find((e) => e.id === choice.eventId) ?? null;
+  // Le dernier événement connu pour ce choix : pendant un envoi figé, il reste affiché même si la liste relue ne le contient plus.
+  const lastEvent = useRef<typeof listedEvent>(null);
+  if (listedEvent) lastEvent.current = listedEvent;
+  const event = eventShown(listedEvent, lastEvent.current, choice.eventId, uncertain !== null);
   // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste. Pas tant qu'un
   // envoi est figé en attente de vérification : le corps gardé le contient, l'écran montre ce qui part (l'effet attend la fin).
   useEffect(() => {

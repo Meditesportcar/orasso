@@ -30,6 +30,7 @@ import {
   type PendingAction,
   type StaffState,
   sendOtherActions,
+  staffSendOutcome,
   type TicketScanWire,
   type VisitorItemWire,
 } from "./model";
@@ -611,9 +612,9 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
     return true;
   } catch (error) {
     const e = error instanceof ApiRequestError ? error : null;
-    if (e?.status === 401) return false;
-    const definitive = e && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
-    if (definitive) {
+    const outcome = staffSendOutcome(e ? e.status : null);
+    if (outcome === "wait") return false;
+    if (outcome === "drop" && e) {
       // Refus définitif (e-mail invalide, fenêtre fermée, photo déjà posée…) : l'action sort de la file, l'erreur
       // reste visible.
       if (action.kind === "incident_photo") await deleteLocalPhoto(String(p.fileUri));

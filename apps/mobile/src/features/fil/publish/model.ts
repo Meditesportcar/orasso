@@ -188,3 +188,17 @@ export function dropEventFromChoice(
   if (uncertain || !eventId || listedIds === null) return false;
   return !listedIds.includes(eventId);
 }
+
+/**
+ * L'événement montré à l'écran : celui de la liste relue ; pendant un envoi figé (`uncertain`), si la liste ne le contient plus, le dernier
+ * connu pour ce choix (le corps gardé le porte : « Lieu », « Info importante » et la phrase restent ceux de l'envoi).
+ */
+export function eventShown<E extends { id: string }>(
+  found: E | null,
+  lastKnown: E | null,
+  eventId: string | null,
+  uncertain: boolean,
+): E | null {
+  if (found) return found;
+  return uncertain && eventId && lastKnown?.id === eventId ? lastKnown : null;
+}

@@ -12,7 +12,7 @@ import {
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { retryCall } from "@/features/publications/retryCall";
 import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
@@ -39,6 +39,8 @@ export function PublicPublications({
   const [next, setNext] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [more, setMore] = useState(false);
+  /** La dernière lecture (relecture ou page suivante) a échoué alors que des éléments sont déjà affichés : dit sous la liste. */
+  const [failed, setFailed] = useState<"reload" | "more" | null>(null);
   const cursor = useRef<string | null>(null);
   const seq = useRef(0);
   /** Une lecture a déjà abouti pour cette page : une relecture ne remplace pas la liste par l'attente, ni par l'erreur. */
@@ -47,8 +49,10 @@ export function PublicPublications({
   const load = useCallback(
     async (first: boolean) => {
       const mine = ++seq.current;
-      if (first && !hasRead.current) setState("loading");
-      else setMore(true);
+      setFailed(null);
+      if (first) {
+        if (!hasRead.current) setState("loading");
+      } else setMore(true);
       try {
         const page = await api.publicAuthorPosts(authorKey, first ? null : cursor.current);
         if (mine !== seq.current) return;
@@ -60,6 +64,7 @@ export function PublicPublications({
       } catch (e) {
         if (mine !== seq.current) return;
         setState(hasRead.current ? "ready" : "error");
+        if (hasRead.current) setFailed(first ? "reload" : "more");
         void errorMessage(e);
       } finally {
         if (mine === seq.current) setMore(false);
@@ -134,7 +139,8 @@ export function PublicPublications({
           </Card>
         );
       })}
-      {next ? (
+      {failed ? <LoadError message={PL.error} onRetry={() => void load(retryCall(failed) === "reload")} /> : null}
+      {next && !failed ? (
         <SmButton kind="s" wide icon="down" disabled={more} onPress={() => void load(false)} testID="publications-more">
           {PL.more}
         </SmButton>

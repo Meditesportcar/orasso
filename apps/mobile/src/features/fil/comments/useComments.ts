@@ -278,11 +278,14 @@ export function useComments(
           dropRemoved(comment.id, t);
           // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
           update((s) => sheetApplyParentCount(s, done?.parent), t);
-          // 204 sans `parent` (parent devenu illisible, déjà supprimé) : rien ne met son compteur à jour ; sa discussion est relue
-          // (un 404 retire le parent comme `parentGoneRef`), et la première page avec elle.
+          // 204 sans `parent` (parent devenu illisible, déjà supprimé) : rien ne met son compteur à jour. La première page est relue
+          // d'abord (le compteur du parent est celui du serveur), puis sa discussion, si le parent y est encore (un 404 le retire
+          // comme `parentGoneRef`, qui relit lui-même la première page : jamais deux fois, ni avec l'ancien compteur).
           if (replyParent && !done?.parent) {
-            void loadReplies(replyParent);
-            void loadTop();
+            void loadTop().then(() => {
+              if (postLive.alive(t) && postLive.sheetOf(id).items.some((c) => c.id === replyParent))
+                void loadReplies(replyParent);
+            });
           }
         }
       } catch (e) {

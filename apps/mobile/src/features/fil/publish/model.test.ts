@@ -8,6 +8,7 @@ import {
   confirmNoPlateFor,
   cropAll,
   dropEventFromChoice,
+  eventShown,
   type FeedDraftPhoto,
   framesFromDetection,
   liftsUncertainty,
@@ -248,5 +249,21 @@ describe("l'incertitude d'un envoi se lève-t-elle sur cette erreur ?", () => {
   });
   it("429, 401, 5xx et réseau la gardent", () => {
     for (const status of [429, 401, 500, 503, 504, 0]) expect(liftsUncertainty({ status })).toBe(false);
+  });
+});
+
+describe("événement montré pendant un envoi figé", () => {
+  const known = { id: "e1", title: "Rassemblement" };
+  it("la liste relue le contient : celui de la liste", () => {
+    const fresh = { id: "e1", title: "Rassemblement (à jour)" };
+    expect(eventShown(fresh, known, "e1", true)).toBe(fresh);
+  });
+  it("liste relue sans l'événement et envoi figé : le dernier connu reste affiché", () => {
+    expect(eventShown(null, known, "e1", true)).toBe(known);
+  });
+  it("envoi libre, ou dernier connu d'un autre choix : rien", () => {
+    expect(eventShown(null, known, "e1", false)).toBeNull();
+    expect(eventShown(null, known, "e2", true)).toBeNull();
+    expect(eventShown(null, null, "e1", true)).toBeNull();
   });
 });

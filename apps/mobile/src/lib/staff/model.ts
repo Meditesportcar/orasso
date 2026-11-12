@@ -924,3 +924,17 @@ export async function sendOtherActions(
     if (sent && action.kind === "incident") waitingIncidents.delete(action.id);
   }
 }
+
+/** Ce qu'une réponse (ou son absence) fait d'une action « une requête chacune » : attendre la reconnexion, la retirer, la garder. */
+export type StaffSendOutcome = "wait" | "drop" | "keep";
+
+/**
+ * Le classement du résultat d'un envoi (`status` : code HTTP, `null` ou 0 sans réponse du serveur). 401 : la file attend la session ;
+ * un refus définitif (4xx sauf 408 et 429) retire l'action, l'erreur reste visible ; tout le reste (réseau, 5xx dont le 503
+ * `mail_pending`, 408, 429) garde l'action en file pour un nouvel essai.
+ */
+export function staffSendOutcome(status: number | null): StaffSendOutcome {
+  if (status === 401) return "wait";
+  if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) return "drop";
+  return "keep";
+}
