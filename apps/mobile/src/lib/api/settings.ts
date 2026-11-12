@@ -37,7 +37,8 @@ export const settingsApi = {
   rotateAccountQrSecret: () => request<AccountQrSecret>("/api/me/account-qr-secret/rotate", { method: "POST" }),
   /** Structures vérifiées (« Devenir staff ») : la recherche se fait sur l'appareil, la liste est courte. */
   verifiedStructures: () => request<Page<StructureCard>>("/api/structures?limit=100"),
-  structureBySlug: (slug: string) => request<StructurePublic>(`/api/structures/by-slug/${slug}`),
+  structureBySlug: (slug: string, actor?: string | null) =>
+    request<StructurePublic>(`/api/structures/by-slug/${slug}`, { actor }),
   /** Route du lot 24 (404 face à une API plus ancienne : l'appli renvoie alors vers la page de la structure du site). */
   requestStaff: (structureId: string, message?: string) =>
     request<unknown>(`/api/structures/${structureId}/staff-requests`, { method: "POST", body: { message } }),

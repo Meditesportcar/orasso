@@ -67,17 +67,41 @@ export const personaTabs = {
   // (dans l'Accueil), Garage et Passeport (dans le Profil) ne sont plus des onglets : voir `standalonePages`.
   fan: { explorer: "explore", fil: "feed", accueil: "home", crew: "crew", profil: "profile" },
   visitor: { explorer: "explore", fil: "feed", accueil: "home", crew: "crew", profil: "profile" },
-  pro: { scanner: "scanner", fiche: "card", accueil: "home", stats: "stats", profil: "profile" },
-  provider: {
-    missions: "missions",
-    candidatures: "applications",
-    accueil: "home",
-    vitrine: "showcase",
-    profil: "profile",
-  },
-  media: { explorer: "explore", presse: "press", accueil: "home", contenus: "contents", profil: "profile" },
-  organizer: { evenements: "events", tri: "sort", direct: "live", equipe: "team", structure: "structure" },
+  // Lot R9n (maquette R9.1) : « Le Fil » et « Page » dans les quatre casquettes ; le compte personnel n'est plus un
+  // onglet (il reste à un toucher, par « Mes casquettes »). Le troisième reste l'onglet central.
+  pro: { scanner: "scanner", fil: "feed", accueil: "home", stats: "stats", page: "page" },
+  provider: { missions: "missions", fil: "feed", accueil: "home", candidatures: "applications", page: "page" },
+  media: { explorer: "explore", fil: "feed", accueil: "home", presse: "press", page: "page" },
+  organizer: { evenements: "events", tri: "sort", direct: "live", fil: "feed", page: "page" },
 } as const satisfies Record<Exclude<AppPersonaKind, "admin">, Record<string, string>>;
+
+/**
+ * Lot R9n (point 2) : les écrans qui ont quitté la barre des quatre casquettes. Ils restent des pages du groupe, sans
+ * onglet propre (`href: null`), rangées sous l'onglet « Page » : leurs adresses ne changent pas (liens profonds des
+ * notifications, anciens favoris).
+ */
+export const personaHiddenPages = {
+  organizer: ["equipe", "structure", "bannis", "modeles", "notes"],
+  pro: ["fiche", "modifier", "publier"],
+  provider: ["vitrine"],
+  media: ["contenus"],
+} as const satisfies Partial<Record<AppPersonaKind, readonly string[]>>;
+
+/**
+ * Lot R9n : l'ancien « Profil » du pro, du prestataire et du média reste une page masquée joignable par son adresse, mais
+ * n'est plus une destination : « Profil » mène à la casquette de base (`goTab`, `destinationHref`).
+ */
+export const personaLegacyRoutes = {
+  pro: ["profil"],
+  provider: ["profil"],
+  media: ["profil"],
+} as const satisfies Partial<Record<AppPersonaKind, readonly string[]>>;
+
+/** L'écran est-il une page masquée du groupe de cette casquette (R9n) ? */
+export function isHiddenPage(kind: AppPersonaKind, route: string): boolean {
+  const pages = (personaHiddenPages as Partial<Record<AppPersonaKind, readonly string[]>>)[kind];
+  return pages ? pages.includes(route) : false;
+}
 
 /** Premier écran de chaque casquette : l'onglet central de sa barre. */
 export const personaHomes = {
@@ -132,6 +156,8 @@ export const standalonePages = {
 export function destinationHref(kind: AppPersonaKind, route: string): string | null {
   const tab = tabHref(kind, route);
   if (tab) return tab;
+  // Lot R9n : une ancienne page d'onglet (Ma fiche, Vitrine, Contenus, Équipe, Structure…) garde son adresse.
+  if (kind !== "admin" && isHiddenPage(kind, route)) return `/${personaGroups[kind]}/${route}`;
   if (kind !== "fan" && kind !== "visitor") return null;
   const pages: Record<string, string> = standalonePages[kind];
   return pages[route] ?? null;

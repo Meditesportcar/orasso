@@ -16,7 +16,8 @@ export type PeopleFilters = {
 };
 
 export const socialApi = {
-  userProfile: (pseudo: string) => request<UserProfileView>(`/api/users/${encodeURIComponent(pseudo)}`),
+  userProfile: (pseudo: string, actor?: string | null) =>
+    request<UserProfileView>(`/api/users/${encodeURIComponent(pseudo)}`, { actor }),
   otherVehicle: (id: string) => request<OtherVehicle>(`/api/vehicles/${id}`),
   ownersNearby: (id: string, cursor?: string) =>
     request<PeopleSearchPage & { sector: string[] }>(`/api/vehicles/${id}/owners-nearby${qs({ limit: 20, cursor })}`),

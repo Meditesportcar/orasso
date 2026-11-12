@@ -12,13 +12,16 @@ import {
   FAN,
   homeOf,
   isBaseKind,
+  isHiddenPage,
   kindOfSegment,
   landingOf,
   misplacedGroup,
   misplacedTarget,
   parsePersona,
   personaGroups,
+  personaHiddenPages,
   personaKindLabels,
+  personaLegacyRoutes,
   personaOfEntry,
   personaTabSets,
   personaTabs,
@@ -147,7 +150,9 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(destinationHref("fan", "profil")).toBe("/(tabs)/profil");
     expect(destinationHref("pro", "sorties")).toBeNull();
     expect(tabHref("pro", "explorer")).toBeNull();
-    expect(tabHref("organizer", "equipe")).toBe("/(orga)/equipe");
+    // Lot R9n : l'Équipe n'est plus un onglet de l'organisateur, mais une page masquée qui garde son adresse.
+    expect(tabHref("organizer", "equipe")).toBeNull();
+    expect(destinationHref("organizer", "equipe")).toBe("/(orga)/equipe");
     expect(tabHref("admin", "profil")).toBeNull();
   });
 
@@ -159,9 +164,13 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(neighbourRoute(ids("fan"), fanRoutes, "fil", -1)).toBe("explorer");
     expect(neighbourRoute(ids("fan"), fanRoutes, "explorer", -1)).toBeNull();
     expect(neighbourRoute(ids("fan"), fanRoutes, "profil", 1)).toBeNull();
-    const proRoutes = { ...personaTabs.pro, modifier: "card" } as Record<string, string>;
+    // Lot R9n : Ma fiche et Modifier sont des pages masquées rangées sous « Page » : elles ne glissent pas.
+    const proRoutes = { ...personaTabs.pro, fiche: "page", modifier: "page" } as Record<string, string>;
     expect(neighbourRoute(ids("pro"), proRoutes, "modifier", 1)).toBeNull();
-    expect(neighbourRoute(ids("pro"), proRoutes, "fiche", 1)).toBe("accueil");
+    expect(neighbourRoute(ids("pro"), proRoutes, "fiche", -1)).toBeNull();
+    expect(neighbourRoute(ids("pro"), proRoutes, "fil", 1)).toBe("accueil");
+    expect(neighbourRoute(ids("pro"), proRoutes, "page", 1)).toBeNull();
+    expect(neighbourRoute(ids("pro"), proRoutes, "page", -1)).toBe("stats");
     expect(neighbourRoute(ids("pro"), proRoutes, "inconnue", 1)).toBeNull();
   });
 
@@ -199,5 +208,89 @@ describe("mémorisation et libellés", () => {
     expect(personaKindLabels.fan).toBe("Exposant");
     expect(personaKindLabels.visitor).toBe("Visiteur");
     expect(personaKindLabels.admin).toBe("Administration");
+  });
+});
+
+describe("les quatre barres des casquettes (lot R9n, maquette R9.1)", () => {
+  const labels = (kind: Exclude<AppPersonaKind, "admin" | "fan" | "visitor">) =>
+    tabSets[personaTabSets[kind]].map((tab) => tab.label);
+
+  it("organisateur : Événements · Tri · Direct · Le Fil · Page", () => {
+    expect(labels("organizer")).toEqual(["Événements", "Tri", "Direct", "Le Fil", "Page"]);
+    expect(Object.keys(personaTabs.organizer)).toEqual(["evenements", "tri", "direct", "fil", "page"]);
+  });
+  it("pro : Scanner · Le Fil · Accueil · Stats · Page", () => {
+    expect(labels("pro")).toEqual(["Scanner", "Le Fil", "Accueil", "Stats", "Page"]);
+    expect(Object.keys(personaTabs.pro)).toEqual(["scanner", "fil", "accueil", "stats", "page"]);
+  });
+  it("prestataire : Missions · Le Fil · Accueil · Candidatures · Page", () => {
+    expect(labels("provider")).toEqual(["Missions", "Le Fil", "Accueil", "Candidatures", "Page"]);
+    expect(Object.keys(personaTabs.provider)).toEqual(["missions", "fil", "accueil", "candidatures", "page"]);
+  });
+  it("média : Explorer · Le Fil · Accueil · Presse · Page", () => {
+    expect(labels("media")).toEqual(["Explorer", "Le Fil", "Accueil", "Presse", "Page"]);
+    expect(Object.keys(personaTabs.media)).toEqual(["explorer", "fil", "accueil", "presse", "page"]);
+  });
+  it("le centre reste le troisième onglet : Direct pour l'organisateur, Accueil pour les trois autres", () => {
+    for (const kind of ["organizer", "pro", "provider", "media"] as const) {
+      expect(tabSets[personaTabSets[kind]][2]?.center).toBe(true);
+      expect(homeOf({ kind } as never)).toBe(`/${personaGroups[kind]}/${Object.keys(personaTabs[kind])[2]}`);
+    }
+    expect(homeOf({ kind: "organizer", structureId: "s" })).toBe("/(orga)/direct");
+  });
+  it("les anciennes adresses d'onglet restent joignables comme pages masquées : pas d'onglet, mais une destination", () => {
+    const olds: [Exclude<AppPersonaKind, "admin">, string, string][] = [
+      ["organizer", "equipe", "/(orga)/equipe"],
+      ["organizer", "structure", "/(orga)/structure"],
+      ["organizer", "bannis", "/(orga)/bannis"],
+      ["organizer", "modeles", "/(orga)/modeles"],
+      ["organizer", "notes", "/(orga)/notes"],
+      ["pro", "fiche", "/(pro)/fiche"],
+      ["pro", "modifier", "/(pro)/modifier"],
+      ["pro", "publier", "/(pro)/publier"],
+      ["provider", "vitrine", "/(provider)/vitrine"],
+      ["media", "contenus", "/(media)/contenus"],
+    ];
+    for (const [kind, route, href] of olds) {
+      expect(tabHref(kind, route)).toBeNull();
+      expect(isHiddenPage(kind, route)).toBe(true);
+      expect(destinationHref(kind, route)).toBe(href);
+    }
+    // L'ancien « Profil » du pro, du prestataire et du média : une page masquée (adresse valable), plus une destination.
+    for (const kind of ["pro", "provider", "media"] as const) {
+      expect(personaLegacyRoutes[kind]).toEqual(["profil"]);
+      expect(tabHref(kind, "profil")).toBeNull();
+      expect(destinationHref(kind, "profil")).toBeNull();
+    }
+    expect(personaHiddenPages.organizer).toContain("equipe");
+  });
+  it("« Profil » depuis une casquette de page : pas de Profil à elle, le repli est celui de la base (goTab)", () => {
+    for (const kind of ["organizer", "pro", "provider", "media"] as const) {
+      expect(destinationHref(kind, "profil")).toBeNull();
+      expect(destinationHref("fan", "profil")).toBe("/(tabs)/profil");
+      expect(destinationHref("visitor", "profil")).toBe("/(visitor)/profil");
+    }
+  });
+  it("une page masquée n'est ni un onglet de la barre ni une page d'une autre casquette", () => {
+    expect(isHiddenPage("pro", "vitrine")).toBe(false);
+    expect(isHiddenPage("fan", "fiche")).toBe(false);
+    expect(destinationHref("provider", "fiche")).toBeNull();
+  });
+  it("une ancienne adresse d'un autre groupe se redirige sans boucle vers la barre de la casquette active", () => {
+    // Le pro tombe sur /(provider)/vitrine : pas de « vitrine » dans sa barre, on l'envoie à son Accueil.
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(provider)", "vitrine"])).toBe("/(pro)/accueil");
+    // Le Fil existe chez les quatre casquettes : même onglet.
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(tabs)", "fil"])).toBe("/(pro)/fil");
+    expect(misplacedTarget({ kind: "organizer", structureId: "s" }, ["(media)", "fil"])).toBe("/(orga)/fil");
+    expect(misplacedTarget({ kind: "media", mediaProfileId: "m" }, ["(pro)", "page"])).toBe("/(media)/page");
+    // Dans son propre groupe, jamais de redirection (y compris sur une page masquée).
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(pro)", "fiche"])).toBeNull();
+    expect(misplacedTarget({ kind: "organizer", structureId: "s" }, ["(orga)", "equipe"])).toBeNull();
+    // Une casquette qui perd son Profil : un lien du passionné vers /(tabs)/profil ne la ramène pas à un Profil inexistant.
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(tabs)", "profil"])).toBe("/(pro)/accueil");
+  });
+  it("la barre du passionné n'a pas bougé", () => {
+    expect(Object.keys(personaTabs.fan)).toEqual(["explorer", "fil", "accueil", "crew", "profil"]);
+    expect(Object.keys(personaTabs.visitor)).toEqual(["explorer", "fil", "accueil", "crew", "profil"]);
   });
 });

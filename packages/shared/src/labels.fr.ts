@@ -12,6 +12,7 @@ export * from "./labels/adminApp.fr";
 export * from "./labels/after-event.fr";
 export * from "./labels/arrival.fr";
 export * from "./labels/arrivee.fr";
+export * from "./labels/casquettes.fr";
 export * from "./labels/coauthors.fr";
 export * from "./labels/communication.fr";
 export * from "./labels/corrections.fr";

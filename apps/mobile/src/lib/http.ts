@@ -1,6 +1,6 @@
 // Client HTTP de l'API Orasso : jeton de session en `Authorization: Bearer` (plugin `bearer` de Better Auth),
 // erreurs de l'API (`{"error":{"code","message","details"}}`) et pannes réseau rendues sous une même forme.
-import { authErrorFallback, authErrorLabels, CLOCK_OFFSET_HEADER, type ErrorCode } from "@orasso/shared";
+import { ACTOR_HEADER, authErrorFallback, authErrorLabels, CLOCK_OFFSET_HEADER, type ErrorCode } from "@orasso/shared";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
@@ -37,6 +37,12 @@ type Options = {
   timeout?: number;
   /** En-têtes en plus (`x-device-id` des lots de scans). */
   headers?: Record<string, string>;
+  /**
+   * Lot R9n : la page au nom de laquelle on lit ou on agit (clé d'auteur de la casquette active, `useActor`). Posé en
+   * `x-orasso-actor` s'il est non nul. Seuls les appels de la liste blanche de `api` (R9a, T19) le passent : une route qui
+   * lira l'acteur plus tard ne doit pas se mettre à agir au nom d'une page par accident.
+   */
+  actor?: string | null;
   /** Cookies de Better Auth (étape « code » de la double authentification) : gardés par le navigateur en recette web. */
   cookies?: boolean;
 };
@@ -54,6 +60,15 @@ export function errorMessage(error: unknown): string {
   return "Une erreur est survenue. Réessaie.";
 }
 
+/**
+ * Lot R9n : l'API a refusé l'acteur (403 `persona_forbidden` : structure quittée, fiche supprimée ou suspendue). Un seul
+ * abonné, le `PersonaProvider`, qui relit les casquettes et revient à la casquette de base avec un avis.
+ */
+let onActorForbidden: (() => void) | null = null;
+export const setActorForbiddenListener = (listener: (() => void) | null) => {
+  onActorForbidden = listener;
+};
+
 export async function request<T>(path: string, options: Options = {}): Promise<T> {
   const { data } = await requestWithHeaders<T>(path, options);
   return data;
@@ -68,12 +83,13 @@ export const mutationCount = () => mutations;
 
 export async function requestWithHeaders<T>(
   path: string,
-  { method = "GET", body, form, timeout = 15_000, headers: extra, cookies = false }: Options = {},
+  { method = "GET", body, form, timeout = 15_000, headers: extra, actor, cookies = false }: Options = {},
 ): Promise<{ data: T; headers: Headers }> {
   if (method !== "GET") mutations++;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const headers: Record<string, string> = { ...extra };
+  if (actor) headers[ACTOR_HEADER] = actor;
   // Un jeton donné par l'appelant (révocation d'une ancienne session, lot C7) prime sur celui de la session ouverte.
   if (sessionToken && !headers.authorization) headers.authorization = `Bearer ${sessionToken}`;
   // Téléphone : Better Auth exige un en-tête Origin quand des cookies accompagnent la requête (étape « code », appareil
@@ -121,6 +137,7 @@ export async function requestWithHeaders<T>(
     // Format de l'API métier, ou format de Better Auth (`{code, message}`).
     const api = (json as { error?: { code?: string; message?: string; details?: Record<string, unknown> } })?.error;
     const auth = json as { code?: string; message?: string } | null;
+    if (actor && response.status === 403 && api?.code === "persona_forbidden") onActorForbidden?.();
     throw new ApiRequestError(
       response.status,
       api?.code ?? auth?.code ?? "internal",
