@@ -294,6 +294,14 @@ export function FlowScreen({
   const [journal, setJournal] = useState(false);
   useFlowChrome(focused);
   const unread = me?.counts.unreadNotifications ?? 0;
+  // Lot R8g : un enfant `StickyHeader` (la rangée d'onglets d'une page) reste collé en haut, comme sur le Profil ; sans lui, rien ne change.
+  const flat = flatChildren(children);
+  const stickyAt = flat.findIndex((n) => isValidElement(n) && n.type === StickyHeader);
+  const inboxButton = inInbox ? (
+    <Button variant="plate" icon="bell" next fullWidth onPress={() => setJournal(true)} testID="inbox-journal">
+      {unread > 0 ? `Notifications · ${unread}` : "Notifications"}
+    </Button>
+  ) : null;
   return (
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
@@ -309,20 +317,20 @@ export function FlowScreen({
           />
           {header ? <View style={styles.flowHeader}>{header}</View> : null}
           <KeyboardSafe style={styles.fill}>
-            <Body onRefresh={onRefresh} endGate={endGate} hideEndHint={hideEndHint}>
-              {inInbox ? (
-                <Button
-                  variant="plate"
-                  icon="bell"
-                  next
-                  fullWidth
-                  onPress={() => setJournal(true)}
-                  testID="inbox-journal"
-                >
-                  {unread > 0 ? `Notifications · ${unread}` : "Notifications"}
-                </Button>
-              ) : null}
-              {children}
+            <Body
+              onRefresh={onRefresh}
+              endGate={endGate}
+              hideEndHint={hideEndHint}
+              stickyHeaderIndices={stickyAt < 0 ? undefined : [stickyAt + (inInbox ? 1 : 0)]}
+            >
+              {stickyAt < 0 ? (
+                <>
+                  {inboxButton}
+                  {children}
+                </>
+              ) : (
+                [...(inboxButton ? [inboxButton] : []), ...flat]
+              )}
             </Body>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>

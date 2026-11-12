@@ -46,10 +46,11 @@ export const staffApi = {
       timeout: 30_000,
     }),
   /** Délai court (4,5 s) : à l'entrée, sans réponse vite, la demande part en file plutôt que de faire attendre. */
-  expressInvite: (eventId: string, email: string, timeout = 4_500) =>
+  /** `clientId` : identifiant d'idempotence (la file hors ligne le garde : un rejeu ne crée pas de seconde invitation). */
+  expressInvite: (eventId: string, email: string, clientId?: string, timeout = 4_500) =>
     request<{ id: string; email: string; expiresAt: string; url: string }>(`/api/events/${eventId}/express-invites`, {
       method: "POST",
-      body: { email },
+      body: clientId ? { email, clientId } : { email },
       timeout,
     }),
   /** Alerte : la position (facultative) n'est lue qu'au moment où le staff touche le bouton, jamais gardée ensuite. */

@@ -651,7 +651,7 @@ describe("visibilité d'une publication de page", () => {
     expect((await get(owner, res.json.id)).status).toBe(404);
   });
 
-  it("une publication de page n'entre ni dans GET /fil ni dans GET /me/feed-posts", async () => {
+  it("une publication de page entre dans GET /fil (R8c1) sous le nom de la page, jamais dans GET /me/feed-posts, ni chez les abonnés de la personne qui l'a publiée dans « Abonnements »", async () => {
     // Le Fil lit `created_at` (heure de la base) : l'horloge simulée est juste après.
     clock.set(new Date(Date.now() + 10 * 60_000));
     const { owner, structure } = await orgaWithStructure();
@@ -662,12 +662,17 @@ describe("visibilité d'une publication de page", () => {
     expect(page.status).toBe(201);
     const mine = await call(owner, "GET", "/me/feed-posts");
     expect(mine.json.items.map((p: FeedPostView) => p.id)).toEqual([own.json.id]);
-    for (const filter of ["for_you", "following", "nearby"]) {
+    for (const filter of ["for_you", "nearby"]) {
       const fil = await call(follower, "GET", `/fil?filter=${filter}`);
-      expect(fil.text, filter).not.toContain(page.json.id);
+      expect(fil.text, filter).toContain(page.json.id);
+      const card = fil.json.items.find((c: { id: string }) => c.id === `feed_post:${page.json.id}`);
+      expect(card.payload.post.author.key, filter).toBe(`s:${structure.id}`);
+      expect(JSON.stringify(card), filter).not.toContain(owner.id);
     }
+    // « Abonnements » : la personne suivie, pas la page (le follower ne suit pas la structure).
     const fil = await call(follower, "GET", "/fil?filter=following");
     expect(fil.text).toContain(own.json.id);
+    expect(fil.text).not.toContain(page.json.id);
   });
 });
 

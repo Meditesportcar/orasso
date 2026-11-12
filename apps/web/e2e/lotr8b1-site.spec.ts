@@ -28,7 +28,8 @@ test("Mon compte : haut compact, quatre compteurs, Garage · N, ligne d'ajout en
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/app/moi");
+    // Lot R8b2 : « Publications » s'ouvre par défaut ; ce test veut « Garage » : il le demande par l'adresse.
+    await page.goto("/app/moi?onglet=garage");
     await expect(page.getByTestId("profil-head")).toBeVisible();
     await expect(page.getByTestId("profil-account-qr")).toHaveAccessibleName("Mon QR");
     await expect(page.getByTestId("profil-settings")).toHaveAccessibleName("Réglages");
@@ -130,7 +131,7 @@ test("visiteur sans véhicule : le Garage vide (site) propose le bouton principa
   await setTheme(page, "beton");
   await loginInBrowser(page, "paul.photo@orasso.local", undefined, "/app/moi");
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto("/app/moi");
+  await page.goto("/app/moi?onglet=garage");
   await expect(page.getByTestId("profil-tab-garage")).toHaveText("Garage · 0");
   await expect(page.getByTestId("garage-empty")).toContainText("Ton garage est vide");
   await expect(page.getByTestId("garage-empty")).toContainText(
@@ -178,7 +179,9 @@ test("profil d'un autre : « Suivre » sur la ligne du grade, « Message » et �
   await page.waitForURL(/\/p\//);
 });
 
-test("compte privé vu d'un inconnu : les nombres, « Réservé à ses abonnés », pas d'onglets", async ({ page }) => {
+test("compte privé vu d'un inconnu : les nombres, le panneau « Compte privé » (lot R8b2), « Publications » seul", async ({
+  page,
+}) => {
   await setTheme(page, "beton");
   const pseudo = `Vis${unique()}`.slice(0, 14);
   await signUpApi(pseudo);
@@ -186,8 +189,10 @@ test("compte privé vu d'un inconnu : les nombres, « Réservé à ses abonnés 
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/u/Marc_66");
   await expect(page.getByTestId("public-counts")).toBeVisible();
-  await expect(page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
-  await expect(page.getByTestId("profil-tabs")).toHaveCount(0);
+  // Lot R8b2 : plus de note « Réservé à ses abonnés » : l'onglet « Publications » (le seul) montre le panneau « Compte privé ».
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
+  await expect(page.getByTestId("profil-tabs").getByRole("tab")).toHaveText(["Publications"]);
+  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toBeVisible();
   await shot(page, "07-prive-inconnu");
 });

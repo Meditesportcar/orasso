@@ -152,6 +152,8 @@ export const feedPostReactions = pgTable(
   (t) => [
     primaryKey({ columns: [t.postId, t.userId], name: "feed_post_reactions_pkey" }),
     index("feed_post_reactions_user_idx").on(t.userId),
+    // R8c1 : flammes des 7 derniers jours (popularité, rail « Ça plaît en ce moment »).
+    index("feed_post_reactions_created_idx").on(t.createdAt),
   ],
 );
 

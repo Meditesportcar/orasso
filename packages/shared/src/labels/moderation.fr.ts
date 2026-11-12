@@ -125,6 +125,7 @@ export const reportSheetNotice: Record<ReportTarget, string> = {
   feed_post: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
 
   story: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
+  feed_comment: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
 };
 
 export const reportTargetLabels: Record<ReportTarget, string> = {
@@ -143,6 +144,7 @@ export const reportTargetLabels: Record<ReportTarget, string> = {
   feed_post: "Publication du Fil",
 
   story: "Story",
+  feed_comment: "Commentaire du Fil",
 };
 
 /** Ce qu'on signale, dans le titre de la feuille (« Signaler ce profil »). */
@@ -162,6 +164,7 @@ export const reportTargetThis: Record<ReportTarget, string> = {
   feed_post: "cette publication",
 
   story: "cette story",
+  feed_comment: "ce commentaire",
 };
 
 export const reportStatusLabels: Record<ReportStatus, string> = {

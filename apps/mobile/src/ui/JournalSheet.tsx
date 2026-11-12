@@ -1,7 +1,7 @@
 // Le Journal, derrière la cloche : le fil d'actualité des personnes suivies et les notifications de l'utilisateur dans un seul fil
 // chronologique (lot 17, ARCHITECTURE-SUITE § 2.4). Sept jours en arrière, sauf ce qui n'a pas été lu.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { SET_OUTLOOK_UNCERTAIN_ACTION, socialLabels, weatherTexts } from "@orasso/shared";
+import { publicationLinkOf, SET_OUTLOOK_UNCERTAIN_ACTION, socialLabels, weatherTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -117,7 +117,7 @@ export function JournalList({
       ) : list.data && list.data.items.length > 0 ? (
         list.data.items.map((n) => {
           const actor = actorOf(n);
-          const link = appLinkOf(n.data?.link);
+          const link = publicationLinkOf(n.data) ?? appLinkOf(n.data?.link);
           const team = teamRequestTarget(n.data);
           // Lot 35d : alerte de modération, demande d'aide d'une structure → écran de la casquette Administration.
           const admin = adminLinkOf(n.data?.link);

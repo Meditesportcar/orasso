@@ -8,6 +8,8 @@ export const errorCodes = [
   "forbidden",
   "not_found",
   "conflict",
+  // Lot R8k1 : commentaires coupés sur une publication (409).
+  "comments_off",
   "invalid_transition",
   "event_full",
   "plate_taken",

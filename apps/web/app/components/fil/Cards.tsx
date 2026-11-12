@@ -8,13 +8,15 @@ import {
   type FeedPostView,
   feedScreenLabels as L,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
-import { ShareDialog } from "../ShareSheet";
+import { FoldedCaption } from "../publications/FoldedCaption";
+import { AttachLine, AttachSeeButton } from "./AttachLine";
+import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
+import { PostActions } from "./PostActions";
 import { type CardProps, OrgLogo, Shell } from "./Shell";
 import { SponsoredCard } from "./SponsoredCard";
 import { SpotMeetupCard } from "./SpotMeetupCard";
@@ -241,26 +243,6 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
 
 function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const post = card.payload.post;
-  const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
-  const [busy, setBusy] = useState(false);
-  useEffect(
-    () => setFire({ count: post.reactionsCount, on: post.reactedByMe }),
-    [post.reactionsCount, post.reactedByMe],
-  );
-
-  async function toggle() {
-    if (busy) return;
-    const before = fire;
-    const on = !before.on;
-    setBusy(true);
-    setFire({ count: Math.max(0, before.count + (on ? 1 : -1)), on });
-    const res = await apiFetch<{ reactionsCount: number; reactedByMe: boolean }>(`/feed-posts/${post.id}/reaction`, {
-      method: on ? "PUT" : "DELETE",
-    });
-    setFire(res.ok ? { count: res.data.reactionsCount, on: res.data.reactedByMe } : before);
-    setBusy(false);
-  }
-
   return (
     <Shell
       card={card}
@@ -272,42 +254,30 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       banner={<CommercialBadge partner={post.commercialPartner} />}
       actions={
         <>
-          <button
-            type="button"
-            className={fire.on ? "fil-fire is-on" : "fil-fire"}
-            aria-pressed={fire.on}
-            aria-label={L.fireLabel(fire.count, fire.on)}
-            disabled={busy}
-            onClick={() => void toggle()}
-            data-testid="feed-post-fire"
-          >
-            <Icon name="fire" size={17} />
-            <span data-testid="feed-post-fire-count">{fire.count}</span>
-          </button>
-          <ShareDialog target={{ type: "feed_post", id: post.id }} testId="feed-post-share" />
+          <PostActions post={post} />
+          {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
         </>
       }
     >
+      {/* Lot R8c2 : l'événement rattaché est la deuxième ligne de la carte, sous l'auteur ; toute la ligne ouvre la fiche. */}
+      {post.attach ? <AttachLine attach={post.attach} /> : null}
       <FeedPhotos post={post} />
-      {post.caption ? (
-        <p className="o-t-body" data-testid="feed-post-caption">
-          {post.caption}
-        </p>
-      ) : null}
-      {post.vehicle || post.event ? (
+      {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
+      {post.vehicle || (post.event && !post.attach) ? (
         <div className="fil-pills">
           {post.vehicle ? (
             <span className="fil-pill" data-testid="feed-post-vehicle">
               <Icon name="vehicle" size={14} /> {post.vehicle.label}
             </span>
           ) : null}
-          {post.event ? (
+          {post.event && !post.attach ? (
             <a className="fil-pill" href={`/e/${post.event.slug}`} data-testid="feed-post-event">
               <Icon name="calendar" size={14} /> {post.event.title}
             </a>
           ) : null}
         </div>
       ) : null}
+      <CommentsPreview post={post} />
     </Shell>
   );
 }

@@ -1,11 +1,12 @@
 // Notifications d'un événement (lot R8n2, maquette R8.11) : les pièces communes (bloc « Essentiel », ligne « Nouveautés
 // de l'événement » à interrupteur) et la feuille de la cloche de la fiche. Les mots viennent de `eventNotifyLabels`.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { eventNotifyLabels as L } from "@orasso/shared";
-import { useCallback, useEffect, useState } from "react";
+import { createSerialWriter, eventNotifyLabels as L, type SerialWriter } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 
@@ -143,45 +144,62 @@ export function NotifyPrefsSheet({
   eventId,
   visible,
   initialNews,
+  startMessage = null,
   onClose,
   onLost,
 }: {
   eventId: string;
   visible: boolean;
   initialNews: boolean;
-  onClose: () => void;
+  /** Rend la promesse de fin des écritures (`false` : la dernière a échoué). */
+  onClose: (idle: Promise<boolean>) => void;
+  /** Message d'une écriture qui a échoué après la fermeture. */
+  startMessage?: string | null;
   onLost: () => void;
 }) {
   const { t } = useTheme();
   const [news, setNews] = useState(initialNews);
   const [message, setMessage] = useState<string | null>(null);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const lost = useRef(onLost);
+  lost.current = onLost;
+  // À chaque ouverture : un écrivain neuf à partir de la valeur lue (envois sérialisés, dernier choix gardé).
   useEffect(() => {
-    if (visible) {
-      setNews(initialNews);
-      setMessage(null);
-    }
-  }, [visible, initialNews]);
-
-  const change = useCallback(
-    async (next: boolean) => {
-      setNews(next);
-      setMessage(null);
-      try {
-        const saved = await api.setEventNotificationPrefs(eventId, next);
-        setNews(saved.news);
-      } catch (e) {
-        setNews(!next);
+    if (!visible) return;
+    setNews(initialNews);
+    setMessage(startMessage);
+    // Le compte de l'ouverture : un autre compte ensuite n'hérite jamais d'un envoi différé.
+    const guard = accountGuard();
+    writer.current = createSerialWriter<boolean>({
+      initial: initialNews,
+      alive: guard.current,
+      write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
+      onSettled: setNews,
+      onError: (confirmed, e) => {
+        setNews(confirmed);
         if (e instanceof ApiRequestError && e.status === 403 && e.code === "no_place") {
           setMessage(L.noPlace);
-          onLost();
+          lost.current();
         } else setMessage(errorMessage(e) || L.ficheSaveFailed);
-      }
-    },
-    [eventId, onLost],
-  );
+      },
+    });
+  }, [visible, initialNews, eventId, startMessage]);
+
+  // À la fermeture : on attend la fin des écritures avant que la cloche relise le réglage.
+  const closeWhenIdle = () => {
+    // Un échec déjà affiché dans la feuille a été vu : il ne la rouvre pas ; un échec qui arrive après la fermeture, si.
+    const seen = message !== null;
+    onClose((writer.current?.whenIdle() ?? Promise.resolve(true)).then((ok) => ok || seen));
+  };
+
+  const change = (next: boolean) => {
+    setNews(next);
+    setMessage(null);
+    writer.current?.set(next);
+  };
 
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
+    <AppSheet visible={visible} onClose={closeWhenIdle} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
       <Text variant="posterM" color={t.color.ink}>
         {L.bellLabel}
       </Text>
@@ -190,7 +208,7 @@ export function NotifyPrefsSheet({
         title={L.eventNewsTitle}
         help={L.eventNewsHelpOnFiche}
         on={news}
-        onChange={(v) => void change(v)}
+        onChange={change}
         testID="notify-news-switch"
       />
       {message ? (

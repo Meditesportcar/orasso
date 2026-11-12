@@ -2,18 +2,23 @@
 // une rangée : les trois filtres (« Pour toi », « Autour de moi », « Abonnements », mémorisés par compte) et le bouton icône « Publier », puis le fil
 // mélangé : une carte par genre, chacune avec sa raison et son « ⋯ ». Mode A (bande ORASSO, barre d'onglets). Liste
 // paginée par le curseur de l'API (`useFeed`) ; une erreur n'est jamais une liste vide ; un état vide par filtre.
-import { EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot R8c2 (maquette R8.3 `f-clair`) : la phrase de l'onglet et le « i » (« Comment le Fil choisit »), le rail « Ça plaît en ce
+// moment », le bandeau de ma publication, « Tu es à jour » puis « Déjà vu », la pastille « Nouvelles publications », les cartes
+// vues envoyées à l'API, et la copie gardée quand il n'y a pas de réseau.
+import { EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   CONTACT_EMAIL,
+  caughtUpIndex,
   type FeedCard,
   feedCardKindLabels,
+  feedPhrases,
   feedScreenFilters,
   feedScreenLabels as L,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
@@ -22,13 +27,19 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
+import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
-import { TabScreen } from "@/ui/Screens";
+import { StickyHeader, TabScreen } from "@/ui/Screens";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { Waiting } from "@/ui/Waiting";
 import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
+import { HotRail } from "./HotRail";
+import { HowFeedSheet } from "./HowFeedSheet";
+import { FilOfflineContext } from "./offlineContext";
+import { CardIdContext } from "./openFromCard";
 import { PublishChoice } from "./PublishChoice";
+import { noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
 
@@ -44,9 +55,32 @@ export function FilScreen() {
 function TabScreenWithFeed() {
   const feed = useFeed();
   return (
-    <TabScreen onRefresh={() => feed.reload()}>
+    <TabScreen onRefresh={() => feed.refresh()}>
+      {/* La pastille colle en haut de la zone qui défile (enfant direct de la page, sinon elle ne colle pas). */}
+      {feed.pill ? (
+        <StickyHeader style={styles.pillBox}>
+          <FreshPill onPress={() => feed.refresh()} />
+        </StickyHeader>
+      ) : null}
       <FeedBody feed={feed} />
     </TabScreen>
+  );
+}
+
+/** « Nouvelles publications » : la toucher actualise et remonte en haut (bouton secondaire : jamais le principal de l'écran). */
+function FreshPill({ onPress }: { onPress: () => Promise<void> }) {
+  const assist = useScrollAssist();
+  return (
+    <SmButton
+      kind="s"
+      icon="up"
+      onPress={() => {
+        void onPress().then(() => assist?.top());
+      }}
+      testID="fil-fresh"
+    >
+      {L.freshPill}
+    </SmButton>
   );
 }
 
@@ -62,6 +96,10 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const [notice, setNotice] = useState<string | null>(null);
   // « Publier » demande où : en story (9:16, 24 h) ou dans le Fil (4:5).
   const [choosing, setChoosing] = useState(false);
+  // « Comment le Fil choisit » (le « i » à côté de la phrase).
+  const [how, setHow] = useState(false);
+  // Le bandeau « Publié sur ton profil » se ferme pour la publication en cours (une nouvelle publication le rouvre).
+  const [bannerClosed, setBannerClosed] = useState<string | null>(null);
 
   // Un `reset` de l'API : la liste a été remplacée, on remonte en haut.
   const lastTop = useRef(feed.scrollTop);
@@ -78,16 +116,45 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
     setLessNote(null);
   }, [feed.filter]);
 
-  // Retour du réseau (hors ligne puis en ligne) : une liste en échec se relit.
+  // Retour du réseau (hors ligne puis en ligne) : une liste en échec se relit ; la copie gardée se remplace par la liste si l'on
+  // est en haut, sinon la pastille « Nouvelles publications » le propose (on ne fait pas sauter la lecture).
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
   const wasOnline = useRef(online);
   const reload = feed.reload;
+  const askPill = feed.askPill;
   const failed = feed.error !== null;
+  const offlineCopy = feed.offline;
+  const anchor = useRef<View>(null);
   useEffect(() => {
-    if (online && !wasOnline.current && failed) void reload();
+    if (online && !wasOnline.current) {
+      if (failed) void reload();
+      else if (offlineCopy) {
+        const box = anchor.current;
+        if (!box || !assist) void reload();
+        else
+          assist.visibleArea((areaTop) =>
+            box.measureInWindow((_x, y) => {
+              // En haut de la liste (au plus 36 px défilés) : on relit ; sinon la pastille.
+              if (y > areaTop - 36) void reload();
+              else askPill();
+            }),
+          );
+      }
+    }
     wasOnline.current = online;
-  }, [online, failed, reload]);
+  }, [online, failed, offlineCopy, reload, askPill, assist]);
+
+  // Les cartes vues : suivies à l'écran, envoyées par lots .
+  const listBox = useRef<View>(null);
+  const layouts = useRef(new Map<string, { y: number; h: number }>());
+  useSeenTracker({
+    list: listBox,
+    layouts,
+    cards: feed.items ?? [],
+    reset: `${feed.filter}:${feed.round}`,
+    online,
+  });
 
   const less = useCallback(async (card: FeedCard) => {
     setMenu(null);
@@ -136,8 +203,13 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
 
   const empty = L.empty[feed.filter];
   const items = feed.items;
+  // « Tu es à jour » : avant la première carte déjà vue (hors ligne, rien n'est recalculé : la copie se montre telle quelle).
+  const frontier = feed.offline || !items ? -1 : caughtUpIndex(items);
+  const showHot = feed.hot.length > 0 && feed.filter !== "for_you";
+  const publishedId = feed.published;
   return (
-    <>
+    <FilOfflineContext.Provider value={feed.offline}>
+      <View ref={anchor} collapsable={false} style={styles.anchor} />
       <StoriesBar />
       {/* Lot R8f1 (variante A1 de la maquette R8.2) : une seule rangée, le sélecteur prend la place restante et le bouton
           icône « Publier » (le bouton principal de l'écran, 48 px, sans texte) reste à droite. Police agrandie : les
@@ -164,6 +236,67 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           style={styles.publish}
         />
       </View>
+      {/* Lot R8c2 : la phrase de l'onglet (maquette `r8phr`) et le « i » qui ouvre « Comment le Fil choisit ». */}
+      <View style={styles.phrase}>
+        <Text variant="caption" color={t.color.inkMuted} style={styles.phraseText} testID="fil-phrase">
+          {feedPhrases[feed.filter]}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={L.howOpen}
+          onPress={() => setHow(true)}
+          hitSlop={4}
+          style={[styles.info, { borderColor: t.color.line }]}
+          testID="fil-how-open"
+        >
+          <Icon name="info" size={20} color={t.color.ink} />
+        </Pressable>
+      </View>
+      {feed.offline ? <Notice testID="fil-offline">{L.offline}</Notice> : null}
+      {publishedId && bannerClosed !== publishedId ? (
+        <View
+          style={[styles.banner, { backgroundColor: t.color.surface, borderColor: t.color.accent }]}
+          testID="fil-banner"
+        >
+          <Icon name="check" size={20} color={t.color.accentText} />
+          <View style={styles.bannerBody}>
+            <Text variant="caption" color={t.color.ink} style={styles.bannerText}>
+              <Text variant="caption" color={t.color.ink} style={styles.bannerTitle}>
+                {L.bannerTitle}
+              </Text>
+              {L.bannerText}
+            </Text>
+            <SmButton
+              kind="s"
+              icon="profile"
+              onPress={() => router.push("/profil?onglet=publications")}
+              testID="fil-banner-profile"
+            >
+              {L.bannerProfile}
+            </SmButton>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={L.bannerClose}
+            onPress={() => setBannerClosed(publishedId)}
+            hitSlop={6}
+            style={styles.bannerClose}
+            testID="fil-banner-close"
+          >
+            <Icon name="close" size={18} color={t.color.inkMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+      {showHot ? (
+        <HotRail
+          cards={feed.hot}
+          scope={feed.filter === "nearby" ? "nearby" : "following"}
+          onOpen={(card) => {
+            noteSeen(card.id, "open");
+            router.push(`/publication/${card.payload.post.id}`);
+          }}
+        />
+      ) : null}
       {notice ? (
         <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" selectable testID="fil-notice">
           {notice}
@@ -196,17 +329,54 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         </View>
       ) : null}
       {items?.length ? (
-        <View style={styles.list} testID="fil-list">
-          {items.map((card) => {
+        <View ref={listBox} collapsable={false} style={styles.list} testID="fil-list">
+          {items.map((card, i) => {
             const Card = cardFor(card.kind);
             return (
-              <Card
+              <View
                 key={card.id}
-                card={card}
-                onMenu={setMenu}
-                faded={Boolean(faded[card.id])}
-                onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
-              />
+                collapsable={false}
+                onLayout={(e) =>
+                  layouts.current.set(card.id, { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })
+                }
+                style={styles.item}
+              >
+                {i === frontier ? (
+                  <>
+                    <View
+                      style={[styles.upToDate, { backgroundColor: t.color.surface, borderColor: t.color.line }]}
+                      accessibilityRole="summary"
+                      testID="fil-uptodate"
+                    >
+                      <Icon name="check" size={26} color={t.color.accentText} />
+                      <View style={styles.upToDateBody}>
+                        <Text variant="bodyStrong" color={t.color.ink} style={styles.upToDateTitle}>
+                          {L.upToDate}
+                        </Text>
+                        <Text variant="caption" color={t.color.inkMuted} style={styles.upToDateText}>
+                          {L.upToDateText}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text variant="label" color={t.color.inkMuted} accessibilityRole="header" testID="fil-seen-heading">
+                      {L.seenHeading}
+                    </Text>
+                  </>
+                ) : null}
+                <View
+                  style={frontier >= 0 && i >= frontier ? styles.seenCard : undefined}
+                  testID={frontier >= 0 && i >= frontier ? "fil-card-seen" : undefined}
+                >
+                  <CardIdContext.Provider value={card.id}>
+                    <Card
+                      card={card}
+                      onMenu={setMenu}
+                      faded={Boolean(faded[card.id])}
+                      onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
+                    />
+                  </CardIdContext.Provider>
+                </View>
+              </View>
             );
           })}
         </View>
@@ -262,14 +432,55 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           onRemove={(card) => void remove(card)}
         />
         <WhyThisSheet card={why} onClose={() => setWhy(null)} />
+        <HowFeedSheet visible={how} onClose={() => setHow(false)} />
         <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
-    </>
+    </FilOfflineContext.Provider>
   );
 }
 
 const styles = StyleSheet.create({
   list: { gap: space3 },
+  item: { gap: space3 },
+  // Une carte déjà vue est atténuée (maquette \`r8seen\` : 62 %).
+  seenCard: { opacity: 0.62 },
+  // Ancre de mesure en haut du contenu : sans hauteur, et sans l'espace que la page met entre deux enfants.
+  anchor: { height: 0, marginBottom: -space3 },
+  pillBox: { alignItems: "center" },
+  phrase: { flexDirection: "row", alignItems: "center", gap: space2 },
+  phraseText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  info: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  banner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 12,
+    borderRadius: tokens.radius.radiusLg,
+    borderWidth: 1.5,
+  },
+  bannerBody: { flex: 1, gap: space2, alignItems: "flex-start" },
+  bannerText: { fontSize: 13.5, lineHeight: 19 },
+  bannerTitle: { fontFamily: "Archivo-ExtraBold", fontSize: 13.5, lineHeight: 19 },
+  bannerClose: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  upToDate: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: tokens.radius.radiusLg,
+    borderWidth: 1.5,
+  },
+  upToDateBody: { flex: 1, gap: 2 },
+  upToDateTitle: { fontSize: 15 },
+  upToDateText: { fontSize: 12.5, lineHeight: 17 },
   topRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   topSeg: { flex: 1, minWidth: 0 },
   // Carré au jeton `touch` (48 px), rayon 14 de la maquette ; sans texte, l'icône seule.
