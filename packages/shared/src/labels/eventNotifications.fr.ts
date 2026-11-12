@@ -47,6 +47,8 @@ export const eventNotifyLabels = {
   alwaysOn: "Toujours actif",
   essentialAria: "Essentiel, toujours actif",
   saveFailed: "Ton choix n'a pas pu être enregistré. Tu peux le régler par la cloche de la fiche.",
+  readFailed: "Ton réglage n'a pas pu être lu.",
+  retry: "Réessayer",
   ficheSaveFailed: "Réglage non enregistré. Réessaie dans un instant.",
   newsFamilyOff: "Coupé : tu as désactivé les notifications « Événements » ci-dessous.",
   settingsGroup: "Événements",

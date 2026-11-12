@@ -38,7 +38,7 @@ import { ApiRequestError, errorMessage, NETWORK_MESSAGE } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
-import { resetWantedPhotos, setWantedPhotos } from "./copyPhotos";
+import { dropFromCopies, resetWantedPhotos, setWantedPhotos } from "./copyPhotos";
 import { forgetMyPublished, myPublishedCards, takeFeedDirty } from "./feedSignal";
 
 const FILTER_KEY = "fil-filter";
@@ -53,18 +53,6 @@ function useAppActive(): boolean {
     return () => sub.remove();
   }, []);
   return active;
-}
-
-async function dropFromCopies(id: string): Promise<void> {
-  for (const f of feedFilters) {
-    const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(feedCopyKey(f));
-    const items = saved?.value.items;
-    if (saved && Array.isArray(items) && items.some((c) => c.id === id)) {
-      const left = items.filter((c) => c.id !== id);
-      setWantedPhotos(f, left);
-      await saveCopy(feedCopyKey(f), { ...saved.value, items: left }, new Date(saved.savedAt));
-    }
-  }
 }
 
 export function useFeed() {
@@ -311,8 +299,8 @@ export function useFeed() {
     if (online) return;
     const l = listRef.current;
     if (!l || l.filter !== filterRef.current) return;
+    // Même sans carte à garder (Fil vide, ou fait de rendez-vous au spot et de « Sponsorisé » seulement) : le Fil passe hors ligne.
     const items = feedCopyCards(l.items);
-    if (!items.length) return;
     setCopy((c) => c ?? { filter: l.filter, items, savedAt: new Date(lastOk.current || Date.now()).toISOString() });
   }, [online]);
 

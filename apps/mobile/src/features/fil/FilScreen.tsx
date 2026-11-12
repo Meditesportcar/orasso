@@ -37,6 +37,7 @@ import { cardFor } from "./cards";
 import { HotRail } from "./HotRail";
 import { HowFeedSheet } from "./HowFeedSheet";
 import { FilOfflineContext } from "./offlineContext";
+import { CardIdContext } from "./openFromCard";
 import { PublishChoice } from "./PublishChoice";
 import { noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
@@ -366,12 +367,14 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                   style={frontier >= 0 && i >= frontier ? styles.seenCard : undefined}
                   testID={frontier >= 0 && i >= frontier ? "fil-card-seen" : undefined}
                 >
-                  <Card
-                    card={card}
-                    onMenu={setMenu}
-                    faded={Boolean(faded[card.id])}
-                    onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
-                  />
+                  <CardIdContext.Provider value={card.id}>
+                    <Card
+                      card={card}
+                      onMenu={setMenu}
+                      faded={Boolean(faded[card.id])}
+                      onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
+                    />
+                  </CardIdContext.Provider>
                 </View>
               </View>
             );

@@ -2,7 +2,7 @@
 // Les règles de livraison sont celles de R8n1 (`eventNotifications.ts`, `quietHours.ts`) : rien n'est recopié ici.
 import { draftStart, type EventDraft, fromWallInput, sortedDraftDays } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
-import { ESSENTIAL_URGENT_WITHIN_MS, newsDigestType } from "./eventNotifications";
+import { essentialQuietOverride, newsDigestType } from "./eventNotifications";
 import { isQuietHour, urgentWithin } from "./quietHours";
 
 /** Ce qui, dans un événement publié, prévient ses inscrits (les mêmes champs que l'API : début, fin, adresse). */
@@ -69,10 +69,22 @@ export type NotifyTiming = "now" | "at_8";
  * Quand part le message : tout de suite hors des heures calmes (22 h – 8 h, Paris) ; la nuit, tout de suite si
  * l'événement commence dans 12 h au plus (ou a commencé), sinon à 8 h. `startsAt` : voir `notifyStart`.
  */
-export function notifyTiming(input: { now: Date; startsAt: string | number | Date | null }): NotifyTiming {
+export function notifyTiming(input: {
+  now: Date;
+  startsAt: string | number | Date | null;
+  /** Fin de l'événement : terminé, l'API ne passe plus outre les heures calmes (`essentialQuietOverride`). */
+  endsAt?: string | number | Date | null;
+}): NotifyTiming {
   if (!isQuietHour(input.now)) return "now";
+  const ends = instant(input.endsAt);
+  // La même règle que l'API : un événement terminé n'a plus d'exception, un changement d'heure part à 8 h.
+  const override = essentialQuietOverride("event_updated", {
+    endsAt: ends === null ? null : new Date(ends),
+    now: input.now,
+  });
   const starts = instant(input.startsAt);
-  return starts !== null && urgentWithin(new Date(starts), input.now, ESSENTIAL_URGENT_WITHIN_MS) ? "now" : "at_8";
+  if (!override || !("within" in override) || starts === null) return "at_8";
+  return urgentWithin(new Date(starts), input.now, override.within) ? "now" : "at_8";
 }
 
 /** Ce que la confirmation de l'organisateur dit du moment : rien de plus dans la journée, une phrase la nuit. */
@@ -118,6 +130,18 @@ export function notifyFieldsOfDraft(d: EventDraft): NotifyFields {
       endsAt: fromWallInput(`${x.date}T${x.endTime}`),
     })),
   };
+}
+
+/**
+ * Le moment d'envoi du changement qu'on vient d'enregistrer, d'après l'échéance décidée par l'API (`lastNotify` de
+ * l'événement relu) : `null` si aucun nouveau changement n'a été annoncé (date de création inchangée : rien à dire).
+ */
+export function notifyTimingOfSave(
+  beforeCreatedAt: string | null | undefined,
+  after: { createdAt: string; deferred: boolean } | null | undefined,
+): NotifyTiming | null {
+  if (!after || after.createdAt === (beforeCreatedAt ?? null)) return null;
+  return after.deferred ? "at_8" : "now";
 }
 
 /** Code porté par l'adresse de retour de l'assistant (« 148.now », « 148.at_8 », « x.now » quand le nombre est inconnu). */

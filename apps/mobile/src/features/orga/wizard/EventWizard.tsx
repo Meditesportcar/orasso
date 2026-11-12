@@ -35,6 +35,7 @@ import {
   notifyStart,
   notifyTiming,
   notifyTimingLine,
+  notifyTimingOfSave,
   posterTexts,
   reconcileDraft,
   recurrenceRuleOf,
@@ -361,7 +362,11 @@ export function EventWizard({
     return () => clearInterval(timer);
   }, [notifyShown]);
   const notifyClock = now();
-  const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+  const notifyWhen = notifyTiming({
+    now: notifyClock,
+    startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)),
+    endsAt: notifyFieldsOfDraft(d).endsAt ?? saved?.endsAt ?? null,
+  });
   const formatsOn = useEventFormats();
   const formats = useMemo<EventFormat[]>(
     () => (formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format]),
@@ -544,6 +549,7 @@ export function EventWizard({
   async function finish(mode: "draft" | "publish" | "preview" | "save") {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
+    const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
     setBusy(true);
     setError(null);
     try {
@@ -573,9 +579,9 @@ export function EventWizard({
       let fait = mode === "draft" ? "cree" : "modifie";
       // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lue sur l'événement (EventPage) avec le même code.
       if (mode === "save" && notifyShown) {
-        // Le moment se calcule à l'enregistrement, pas au dernier rendu.
-        const when = notifyTiming({ now: now(), startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
-        fait = `prevenus:${notifySavedCode(previewCount, when)}`;
+        // Le moment décidé par l'API (pas un calcul local) : une échéance franchie pendant l'enregistrement ne trompe pas.
+        const when = notifyTimingOfSave(notifiedBefore, s.lastNotify);
+        if (when) fait = `prevenus:${notifySavedCode(previewCount, when)}`;
       }
       const warnings: string[] = [];
       if (mode === "publish") {

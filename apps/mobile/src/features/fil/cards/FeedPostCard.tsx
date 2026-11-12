@@ -3,13 +3,12 @@
 // est en tête de la carte, avant l'en-tête.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { FeedPostView } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { Avatar } from "@/ui/Avatar";
 import { FeedPhotos } from "../FeedPhotos";
 import { useFilOffline } from "../offlineContext";
+import { useCardRouter } from "../openFromCard";
 import { noteSeen } from "../seenTracker";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CardShell } from "./CardShell";
@@ -22,7 +21,7 @@ import type { CardProps } from "./types";
 export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const { t } = useTheme();
   const c = t.color;
-  const router = useRouter();
+  const router = useCardRouter();
   const post: FeedPostView = card.payload.post;
   const offline = useFilOffline();
   return (

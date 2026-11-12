@@ -1,14 +1,15 @@
 // « Ce que tu recevras pour cet événement » (lot R8n2, maquette R8.11, vue « insc ») : le bloc de l'écran de fin d'une
-// candidature. L'Essentiel (cadenas), « Nouveautés de l'événement » à la valeur déjà enregistrée (activé par défaut),
-// enregistrée au changement de l'interrupteur (comme la feuille de la cloche : quitter l'écran n'en perd rien), puis
-// « C'est noté », qui ferme. Un échec rend l'interrupteur à sa valeur, sans jamais remettre la candidature en cause.
+// candidature. L'Essentiel (cadenas), « Nouveautés de l'événement » à la valeur déjà enregistrée, enregistrée au
+// changement (envois sérialisés, dernier choix gardé), puis « C'est noté », qui attend la fin de l'écriture avant de
+// fermer. Une lecture impossible n'est jamais présentée comme « activé » : erreur et « Réessayer ».
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { eventNotifyLabels as L } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { createSerialWriter, eventNotifyLabels as L, type SerialWriter } from "@orasso/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
+import { accountGuard } from "@/lib/kv";
 import { Muted } from "@/ui/Muted";
 import { EssentialBlock, SwitchRow } from "./NotifyPrefsSheet";
 
@@ -17,33 +18,63 @@ const { space2, space3 } = tokens.spacing;
 export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () => void }) {
   const { t } = useTheme();
   const [news, setNews] = useState(true);
-  // Tant que le réglage enregistré n'est pas lu, l'interrupteur est à son défaut et ne se touche pas.
-  const [loaded, setLoaded] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const alive = useRef(true);
+  // Un échec d'écriture pas encore « vu » à l'appui : le premier appui le montre, le suivant ferme.
+  const unseenFailure = useRef(false);
 
   useEffect(() => {
-    let alive = true;
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  const load = useCallback(() => {
+    setStatus("loading");
     api
       .eventNotificationPrefs(eventId)
-      .then((prefs) => alive && setNews(prefs.news))
-      .catch(() => undefined)
-      .finally(() => alive && setLoaded(true));
-    return () => {
-      alive = false;
-    };
+      .then((prefs) => {
+        if (!alive.current) return;
+        const guard = accountGuard();
+        writer.current = createSerialWriter<boolean>({
+          initial: prefs.news,
+          alive: guard.current,
+          write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
+          onSettled: (value) => {
+            // La dernière intention est enregistrée : un ancien échec n'a plus rien à montrer.
+            unseenFailure.current = false;
+            if (alive.current) setNews(value);
+          },
+          onError: (confirmed) => {
+            unseenFailure.current = true;
+            if (!alive.current) return;
+            setNews(confirmed);
+            setMessage(L.saveFailed);
+          },
+        });
+        setNews(prefs.news);
+        setStatus("ready");
+      })
+      .catch(() => alive.current && setStatus("error"));
   }, [eventId]);
+  useEffect(load, [load]);
 
-  async function change(next: boolean) {
-    const previous = news;
-    setNews(next);
-    setMessage(null);
-    try {
-      const saved = await api.setEventNotificationPrefs(eventId, next);
-      setNews(saved.news);
-    } catch {
-      setNews(previous);
-      setMessage(L.saveFailed);
+  async function noted() {
+    if (busy) return;
+    setBusy(true);
+    await writer.current?.whenIdle();
+    if (!alive.current) return;
+    setBusy(false);
+    // Un échec reste visible : un second appui ferme quand même (la candidature n'est jamais remise en cause).
+    if (unseenFailure.current) {
+      unseenFailure.current = false;
+      return;
     }
+    onDone();
   }
 
   return (
@@ -52,14 +83,29 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
         {L.signupTitle}
       </Text>
       <EssentialBlock />
-      <SwitchRow
-        title={L.eventNewsTitle}
-        help={L.eventNewsHelpOnSignup}
-        on={news}
-        disabled={!loaded}
-        onChange={(v) => void change(v)}
-        testID="notify-signup-news"
-      />
+      {status === "error" ? (
+        <View style={styles.box} testID="notify-signup-read-error">
+          <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
+            {L.readFailed}
+          </Text>
+          <SmButton kind="s" icon="undo" onPress={load} testID="notify-signup-retry">
+            {L.retry}
+          </SmButton>
+        </View>
+      ) : (
+        <SwitchRow
+          title={L.eventNewsTitle}
+          help={L.eventNewsHelpOnSignup}
+          on={news}
+          disabled={status !== "ready"}
+          onChange={(v) => {
+            setNews(v);
+            setMessage(null);
+            writer.current?.set(v);
+          }}
+          testID="notify-signup-news"
+        />
+      )}
       {message ? (
         <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="notify-signup-message">
           {message}
@@ -67,7 +113,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       ) : (
         <Muted variant="caption">{L.signupNote}</Muted>
       )}
-      <SmButton kind="p" big wide icon="check" onPress={onDone} testID="notify-noted">
+      <SmButton kind="p" big wide icon="check" onPress={() => void noted()} disabled={busy} testID="notify-noted">
         {L.noted}
       </SmButton>
     </View>
