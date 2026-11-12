@@ -7,6 +7,7 @@ import type {
   FeedCommentReaction,
   FeedCommentView,
   MentionSuggestion,
+  ParentCount,
 } from "@orasso/shared";
 
 import { request } from "../http";
@@ -19,7 +20,9 @@ export const feedCommentsApi = {
     request<FeedCommentPage>(`/api/feed-comments/${commentId}/replies${qs({ cursor })}`),
   createFeedComment: (postId: string, body: FeedCommentCreateInput) =>
     request<FeedCommentCreated>(`/api/feed-posts/${postId}/comments`, { method: "POST", body }),
-  removeFeedComment: (commentId: string) => request<unknown>(`/api/feed-comments/${commentId}`, { method: "DELETE" }),
+  // 204 ; une réponse supprimée rend 200 avec le compteur de son parent (version comprise).
+  removeFeedComment: (commentId: string) =>
+    request<{ parent?: ParentCount } | null | undefined>(`/api/feed-comments/${commentId}`, { method: "DELETE" }),
   fireFeedComment: (commentId: string, on: boolean) =>
     request<FeedCommentReaction>(`/api/feed-comments/${commentId}/reaction`, { method: on ? "PUT" : "DELETE" }),
   setFeedCommentsOff: (postId: string, off: boolean) =>

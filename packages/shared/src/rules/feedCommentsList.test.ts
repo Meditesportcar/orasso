@@ -20,8 +20,10 @@ import {
   postWithCommentRemoved,
   reactionGuess,
   repliesLine,
+  repliesMark,
   type SheetState,
   sheetAddComment,
+  sheetApplyParentCount,
   sheetMark,
   sheetRemoveComment,
   sheetReopen,
@@ -125,7 +127,8 @@ describe("compteurs au retrait", () => {
   it("retirer une réponse : la carte perd 1, le parent aussi", () => {
     const { state, removed } = sheetRemoveComment(base(), "r1");
     expect(removed).toBe(1);
-    expect(state.items.find((c) => c.id === "a")?.repliesCount).toBe(1);
+    // Le compteur du parent vient du serveur (réponse du DELETE), jamais d'un décrément local.
+    expect(state.items.find((c) => c.id === "a")?.repliesCount).toBe(2);
     expect(state.replies.a?.items.map((c) => c.id)).toEqual(["r2"]);
   });
   it("un commentaire inconnu ne change rien, et le total ne passe jamais sous zéro", () => {
@@ -593,14 +596,14 @@ describe("tour 6 : pages partielles et compteurs", () => {
   it("envoyer dans une discussion de plus de 20 réponses : la première page, partielle, ne retire pas l'ajout", () => {
     let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 25 })], null, true);
     s = sheetAddComment(s, at("mine", 59), "p").state; // la réponse est confirmée, la lecture part ensuite
-    const mark = s.replies.p?.recent ?? [];
-    expect(mark).toEqual(["mine"]);
+    const mark = repliesMark(s, "p");
+    expect(mark.recent).toEqual(["mine"]);
     const page = Array.from({ length: 20 }, (_, i) => at(`r${i}`, 10 + i)); // les 20 plus anciennes
     s = sheetWithRepliesPage(s, "p", page, "cur", true, mark);
     expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(true);
     expect(s.replies.p?.items).toHaveLength(21);
     // Une page complète qui ne le contient pas prouve, elle, qu'il a été supprimé.
-    s = sheetWithRepliesPage(s, "p", page, null, true, ["mine"]);
+    s = sheetWithRepliesPage(s, "p", page, null, true, { recent: ["mine"] });
     expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(false);
   });
 });
@@ -694,12 +697,74 @@ describe("tour 7 : le serveur fait foi, avec sa version", () => {
     let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 25 })], null, true);
     s = sheetAddComment(s, at("mine", 59), "p", parentCount("p", 26, 5)).state;
     const first = Array.from({ length: 20 }, (_, i) => at(`r${i}`, 10 + i));
-    s = sheetWithRepliesPage(s, "p", first, "cur", true, ["mine"]);
+    s = sheetWithRepliesPage(s, "p", first, "cur", true, { recent: ["mine"] });
     expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(true); // hors de la portion couverte : conservé
     // L'auteur de la publication le supprime ; la dernière page (complète) ne le contient plus.
     const last = Array.from({ length: 5 }, (_, i) => at(`s${i}`, 30 + i));
-    s = sheetWithRepliesPage(s, "p", last, null, false, ["mine"]);
+    s = sheetWithRepliesPage(s, "p", last, null, false, { recent: ["mine"], boundary: first[19] });
     expect(s.replies.p?.items.some((c) => c.id === "mine")).toBe(false);
     expect(s.replies.p?.recent).toEqual([]);
+  });
+});
+
+describe("tour 8 : suppression d'une réponse, confirmation tardive, curseur", () => {
+  const parentCount = (id: string, repliesCount: number, n: number) => ({ id, repliesCount, countedAt: T(n) });
+  const base = () => {
+    let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 1, countedAt: T(0) })], null, true);
+    s = sheetWithRepliesPage(s, "p", [at("r1", 2)], null, true);
+    return s;
+  };
+  it("supprimer R1 pendant que R2 est en route : la confirmation de R2 (1 à t1) puis celle du DELETE (1 à t2) donnent 1, dans les deux ordres", () => {
+    const afterDelete = (s: SheetState) =>
+      sheetApplyParentCount(sheetRemoveComment(s, "r1").state, parentCount("p", 1, 6));
+    const afterPost = (s: SheetState) => sheetAddComment(s, at("r2", 5), "p", parentCount("p", 2, 3)).state; // lu avant la suppression : 2
+    // POST confirmé (2 à t3), puis DELETE (1 à t6) : le plus récent gagne.
+    let s = afterDelete(afterPost(base()));
+    expect(s.items[0]?.repliesCount).toBe(1);
+    // Ordre inverse : le DELETE (1 à t6) arrive d'abord, puis la confirmation tardive du POST (2 à t3, plus ancienne) : ignorée.
+    s = afterPost(afterDelete(base()));
+    expect(s.items[0]?.repliesCount).toBe(1);
+    // Un GET parti après la suppression pose 1, puis la confirmation du DELETE (même valeur) : jamais 0.
+    s = sheetWithTopPage(
+      sheetRemoveComment(base(), "r1").state,
+      [at("p", 1, { repliesCount: 1, countedAt: T(7) })],
+      null,
+      true,
+    );
+    s = sheetApplyParentCount(s, parentCount("p", 1, 6));
+    expect(s.items[0]?.repliesCount).toBe(1);
+  });
+  it("une confirmation tardive ne ressuscite pas un commentaire supprimé, la carte ne remonte pas", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("x", 1)], null, true);
+    s = sheetWithTopPage(s, [at("x", 1), at("mine", 5)], null, true); // un GET me montre mon commentaire avant la confirmation
+    s = sheetRemoveComment(s, "mine").state; // je le supprime
+    const late = sheetAddComment(s, at("mine", 5), null); // la confirmation du POST arrive
+    expect(late.state.items.map((c) => c.id)).toEqual(["x"]);
+    expect(late.counted).toBe(0);
+    // Une réponse dont le parent a été supprimé entre-temps.
+    let t = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 1 })], null, true);
+    t = sheetRemoveComment(t, "p").state;
+    const reply = sheetAddComment(t, at("r", 9), "p", parentCount("p", 2, 4));
+    expect(reply.counted).toBe(0);
+    expect(reply.state.replies.p).toBeUndefined();
+  });
+  it("dernière page vide après une suppression distante : l'ajout situé après le curseur s'en va", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("p", 1)], "c", true);
+    const first = Array.from({ length: 3 }, (_, i) => at(`a${i}`, 10 + i));
+    s = sheetWithTopPage(s, first, "c", true);
+    s = sheetAddComment(s, at("mine", 40), null).state;
+    const mark = sheetMark(s); // la lecture suivante part ; l'auteur de la publication supprime « mine » ensuite
+    expect(mark.boundary?.id).toBe("a2");
+    s = sheetWithTopPage(s, [], null, false, { recent: ["mine"], boundary: mark.boundary });
+    expect(s.items.some((c) => c.id === "mine")).toBe(false);
+  });
+  it("suppression distante d'un élément placé avant le premier élément reçu : la page suivante le retire", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("a", 1), at("b", 2)], "c", true);
+    s = sheetWithTopPage(s, [at("a", 1), at("b", 2), at("z", 3)], "c", true); // « z » venu du serveur (pas un ajout)
+    const mark = sheetMark(s);
+    expect(mark.boundary?.id).toBe("z");
+    // « z » est supprimé ailleurs ; la page suivante commence à « d » (après le curseur) : z est avant elle, la borne le couvre.
+    s = sheetWithTopPage(s, [at("d", 4)], null, false, { recent: [], boundary: at("y", 2) });
+    expect(s.items.map((c) => c.id)).toEqual(["a", "b", "d"]);
   });
 });

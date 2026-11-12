@@ -277,16 +277,19 @@ export const feedCommentsService = {
   },
 
   /** `DELETE /feed-comments/:id` : son auteur, ou qui gère la publication. Le reste répond 404. */
-  async remove(v: Viewer, commentId: string): Promise<void> {
+  async remove(
+    v: Viewer,
+    commentId: string,
+  ): Promise<{ parent?: { id: string; repliesCount: number; countedAt: string } }> {
     rateLimit("feedWrite", v.user.id);
-    await withTx(async (tx) => {
+    const parentId = await withTx(async (tx) => {
       // Son propre commentaire se supprime même quand on ne voit plus la publication (rien d'autre n'est lu).
       const own = await commentRow(commentId, tx);
       if (own && own.c.authorId === v.user.id) {
         if (!(await softDeleteComment(tx, own.c.id, v.user.id, now()))) {
           throw notFound(feedCommentLabels.commentNotFound);
         }
-        return;
+        return own.c.parentId;
       }
       const found = await requireVisibleComment(v, commentId, tx);
       if (found.c.authorId !== v.user.id) {
@@ -300,7 +303,11 @@ export const feedCommentsService = {
       if (!(await softDeleteComment(tx, found.c.id, v.user.id, now()))) {
         throw notFound(feedCommentLabels.commentNotFound);
       }
+      return found.c.parentId;
     });
+    // Une réponse supprimée : le compteur de son parent, lu **après** la suppression (même lecture que le POST) ; l'écran ne décrémente rien.
+    const parent = parentId ? await readableParentCount(v, parentId) : undefined;
+    return parent ? { parent } : {};
   },
 
   /** `PUT|DELETE /feed-comments/:id/reaction` : la flamme (idempotent). */
@@ -407,6 +414,21 @@ export const feedCommentsService = {
   },
 };
 
+/** Le compteur de réponses d'un commentaire de premier niveau, lu maintenant, **si** ce commentaire se lit encore pour `v` (sinon `undefined`). */
+async function readableParentCount(
+  v: Viewer,
+  parentId: string,
+): Promise<{ id: string; repliesCount: number; countedAt: string } | undefined> {
+  try {
+    await requireVisibleComment(v, parentId);
+  } catch (error) {
+    if (error instanceof AppError && error.status === 404) return undefined;
+    throw error;
+  }
+  const counted = (await repliesCountsOf(db, [parentId])).get(parentId);
+  return counted ? { id: parentId, repliesCount: counted.n, countedAt: counted.at } : undefined;
+}
+
 /** Le commentaire que je viens d'écrire, tel que je le relis (mêmes champs que la liste). */
 async function ownView(v: Viewer, id: string): Promise<FeedCommentCreated> {
   const row = await commentRow(id);
@@ -416,9 +438,7 @@ async function ownView(v: Viewer, id: string): Promise<FeedCommentCreated> {
   const [view] = await toViews(db, [row], v, manages, now());
   if (!view) throw notFound(feedCommentLabels.commentNotFound);
   // Une réponse : le compteur de son commentaire de premier niveau, lu **après** l'enregistrement, avec l'instant de sa lecture (l'écran n'ajoute rien).
-  if (row.c.parentId) {
-    const parent = (await repliesCountsOf(db, [row.c.parentId])).get(row.c.parentId);
-    if (parent) return { ...view, parent: { id: row.c.parentId, repliesCount: parent.n, countedAt: parent.at } };
-  }
-  return view;
+  // Seulement si ce commentaire se lit encore pour moi (compte privé qui m'a retiré de ses abonnés : le rejeu rend la réponse sans `parent`).
+  const parent = row.c.parentId ? await readableParentCount(v, row.c.parentId) : undefined;
+  return parent ? { ...view, parent } : view;
 }

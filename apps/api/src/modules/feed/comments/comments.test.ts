@@ -299,7 +299,7 @@ describe("suppression et compteurs", () => {
     await comment(kenji, id, "Réponse 2", { parentId: top.json.id });
     expect((await post(id)).commentsCount).toBe(4);
     // Supprimer une réponse : le parent baisse d'une réponse.
-    expect((await call(nina, "DELETE", `/feed-comments/${r1.json.id}`)).status).toBe(204);
+    expect((await call(nina, "DELETE", `/feed-comments/${r1.json.id}`)).status).toBe(200);
     expect((await row(top.json.id)).repliesCount).toBe(1);
     expect((await post(id)).commentsCount).toBe(3);
     expect((await call(lea, "DELETE", `/feed-comments/${top.json.id}`)).status).toBe(204);
@@ -327,7 +327,7 @@ describe("suppression et compteurs", () => {
     expect((await row(target)).repliesCount).toBe(10);
     expect((await post(id)).commentsCount).toBe(20);
     const removed = await Promise.all(people.map((p, i) => call(p, "DELETE", `/feed-comments/${replies[i]?.json.id}`)));
-    expect(removed.every((r) => r.status === 204)).toBe(true);
+    expect(removed.every((r) => r.status === 200)).toBe(true);
     expect((await row(target)).repliesCount).toBe(0);
     expect((await post(id)).commentsCount).toBe(10);
   });

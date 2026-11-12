@@ -81,8 +81,22 @@ export function mergeComments(
 }
 
 /** Ce que la feuille savait au départ d'une lecture : seuls les ajouts **postérieurs** doivent survivre à la page qui en revient. */
-export type SheetMark = { recent: string[] };
-export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent] });
+export type SheetMark = {
+  recent: string[];
+  /** Le dernier commentaire de la liste **venu d'une page de l'API** (pas un ajout confirmé) : le curseur envoyé pointe juste après lui. */
+  boundary?: FeedCommentView;
+};
+const lastFromApi = (items: readonly FeedCommentView[], recent: readonly string[]) =>
+  [...items].reverse().find((c) => !recent.includes(c.id));
+export const sheetMark = (s: SheetState): SheetMark => ({
+  recent: [...s.recent],
+  boundary: lastFromApi(s.items, s.recent),
+});
+/** La marque d'une lecture de réponses d'un commentaire. */
+export const repliesMark = (s: SheetState, parentId: string): SheetMark => {
+  const r = s.replies[parentId];
+  return { recent: [...(r?.recent ?? [])], boundary: r ? lastFromApi(r.items, r.recent) : undefined };
+};
 
 /**
  * Une page (de premier niveau ou de réponses) qui arrive, réconciliée avec ce que la feuille garde. Une page ne prouve l'absence que pour **la
@@ -91,7 +105,7 @@ export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent] 
  * - un ajout confirmé depuis le départ de la lecture (`since`) reste toujours : la page ne pouvait pas le connaître ;
  * - la première page couvre tout ce qui la précède jusqu'à sa dernière ligne (ou tout si elle est complète) : un ajout plus ancien que le départ
  *   qu'elle ne contient pas a été supprimé ; au-delà de sa dernière ligne (page partielle) son absence ne prouve rien et il reste ;
- * - une page suivante couvre de sa première à sa dernière ligne (ou jusqu'à la fin si elle est complète) : un commentaire local de cette portion
+ * - une page suivante couvre **depuis le curseur envoyé** (la borne, dernier élément venu de la page précédente ; à défaut sa première ligne) jusqu'à sa dernière ligne (ou jusqu'à la fin si elle est complète, même vide) : un commentaire local de cette portion
  *   qu'elle ne contient pas a été supprimé ; le reste de la liste (pages précédentes) ne bouge pas ;
  * - un identifiant supprimé par l'écran (`removed`) ne revient jamais d'une lecture tardive.
  */
@@ -99,7 +113,7 @@ function reconcilePage(
   page: readonly FeedCommentView[],
   local: readonly FeedCommentView[],
   recent: readonly string[],
-  sinceRecent: readonly string[],
+  since: SheetMark | undefined,
   removed: readonly string[],
   partial: boolean,
   isFirst: boolean,
@@ -107,15 +121,16 @@ function reconcilePage(
   const inPage = new Set(page.map((c) => c.id));
   const first = page[0];
   const last = page[page.length - 1];
+  const sinceRecent = since?.recent ?? [];
+  const boundary = since?.boundary;
   const keep = local.filter((c) => {
     if (inPage.has(c.id) || removed.includes(c.id)) return false;
     const mine = recent.includes(c.id);
     if (mine && !sinceRecent.includes(c.id)) return true;
     if (isFirst) return mine && partial && last !== undefined && chronological(c, last) > 0;
-    const covered =
-      first !== undefined &&
-      chronological(c, first) >= 0 &&
-      (!partial || (last !== undefined && chronological(c, last) <= 0));
+    const started =
+      boundary !== undefined ? chronological(c, boundary) > 0 : first !== undefined && chronological(c, first) >= 0;
+    const covered = started && (!partial || (last !== undefined && chronological(c, last) <= 0));
     return !covered;
   });
   const localById = new Map(local.map((c) => [c.id, c]));
@@ -134,15 +149,7 @@ export function sheetWithTopPage(
   first: boolean,
   since?: SheetMark,
 ): SheetState {
-  const merged = reconcilePage(
-    items,
-    state.items,
-    state.recent,
-    since?.recent ?? [],
-    state.removed,
-    nextCursor !== null,
-    first,
-  );
+  const merged = reconcilePage(items, state.items, state.recent, since, state.removed, nextCursor !== null, first);
   return { ...state, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true };
 }
 
@@ -153,10 +160,10 @@ export function sheetWithRepliesPage(
   items: readonly FeedCommentView[],
   nextCursor: string | null,
   first: boolean,
-  since?: string[],
+  since?: SheetMark,
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
-  const merged = reconcilePage(items, was.items, was.recent, since ?? [], state.removed, nextCursor !== null, first);
+  const merged = reconcilePage(items, was.items, was.recent, since, state.removed, nextCursor !== null, first);
   return {
     ...state,
     replies: {
@@ -190,6 +197,10 @@ export function sheetAddComment(
   parentId: string | null,
   parent?: ParentCount,
 ): { state: SheetState; counted: number } {
+  // Une confirmation tardive ne ressuscite rien : le commentaire (ou son parent) a été supprimé entre-temps.
+  if (state.removed.includes(comment.id) || (parentId !== null && state.removed.includes(parentId))) {
+    return { state, counted: 0 };
+  }
   if (!parentId) {
     const known = state.items.some((c) => c.id === comment.id);
     return {
@@ -228,10 +239,24 @@ export function sheetAddComment(
 }
 
 /**
+ * Le compteur d'un commentaire de premier niveau tel que le serveur le rend avec sa version (réponse du POST d'une réponse, réponse du DELETE
+ * d'une réponse) : il ne remplace qu'une valeur plus ancienne. L'écran ne calcule jamais le compteur.
+ */
+export function sheetApplyParentCount(state: SheetState, parent: ParentCount | undefined): SheetState {
+  if (!parent) return state;
+  return {
+    ...state,
+    items: patchTop(state.items, parent.id, (c) =>
+      c.countedAt > parent.countedAt ? c : { ...c, repliesCount: parent.repliesCount, countedAt: parent.countedAt },
+    ),
+  };
+}
+
+/**
  * Retire un commentaire de l'affichage (et note son identifiant : une lecture partie avant ne le fait pas revenir). Un commentaire de premier
- * niveau emporte ses réponses (l'API les retire de la vue) : `removed` est ce que le compteur de la carte perd (1 + ses réponses). Une réponse : 1,
- * et le compteur de son parent baisse (sa version ne change pas : une lecture plus ancienne ne le remonte pas). Un commentaire inconnu ne change
- * rien (`removed` 0).
+ * niveau emporte ses réponses (l'API les retire de la vue) : `removed` est ce que le compteur de la carte perd (1 + ses réponses). Une réponse : 1 ;
+ * le compteur de son parent vient de la réponse du DELETE (`sheetApplyParentCount`), jamais d'un décrément local. Un commentaire inconnu ne
+ * change rien (`removed` 0).
  */
 export function sheetRemoveComment(state: SheetState, id: string): { state: SheetState; removed: number } {
   const top = state.items.find((c) => c.id === id);
@@ -253,7 +278,6 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
     return {
       state: {
         ...state,
-        items: patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: Math.max(0, c.repliesCount - 1) })),
         replies: {
           ...state.replies,
           [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((x) => x !== id) },
