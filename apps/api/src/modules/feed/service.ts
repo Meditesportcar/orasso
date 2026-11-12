@@ -325,6 +325,9 @@ export const feedService = {
     const nearby = nearbyDepartments(ctx.departments);
     const base = { viewer: v, userId: v.user.id, ref, filter: q.filter, ctx, nearby, until: ref, seenFloor } as const;
     const keep = (c: LoadedCard) => allowed(c, q.filter, ctx, nearby, v.user.id);
+    /** Identifiants déjà servis par cette page : jamais deux fois la même carte dans une réponse (un rognage peut la changer de zone). */
+    const servedIds = new Set<string>();
+    const keepNew = (c: LoadedCard) => keep(c) && !servedIds.has(c.id);
     const offset = cursor?.offset ?? 0;
     const phase1 = cursor?.phase === 1 ? cursor : null;
     const anchor: Key | null = cursor?.phase === 2 ? cursor.anchor : null;
@@ -349,7 +352,7 @@ export const feedService = {
      * page est pleine, on regarde seulement s'il reste quelque chose (`more`) ; la suite commence alors sans clé.
      */
     const dateStep = async (zone: Zone, before: (kind: FeedCardKind) => Key[], need: number) => {
-      const { page, next: from } = await olderPage({ ...base, zone }, before, keep, Math.max(need, 1));
+      const { page, next: from } = await olderPage({ ...base, zone }, before, keepNew, Math.max(need, 1));
       if (need > 0) return { page, more: from !== null, resume: from };
       return { page: [] as LoadedCard[], more: page.length > 0, resume: null as Key | null };
     };
@@ -376,8 +379,27 @@ export const feedService = {
           .sort(compareByScore);
         // Empreinte des flammes des seules cartes déjà consommées (au-dessus de la frontière) : seules elles peuvent être servies
         // deux fois si leur score change. Une flamme retirée plus bas dans le classement ne renvoie personne en haut.
+        // Calculée sur les publications **des deux zones** (la B lue aussi) : un rognage qui fait passer une carte vue de B en A (sa
+        // ligne évincée) ne change pas l'ensemble des cartes comptées, donc pas l'empreinte.
+        const feedPostSource = rankedSources.find((src) => src.kind === "feed_post");
+        const viewedPosts = feedPostSource
+          ? (
+              await feedPostSource.load({
+                ...base,
+                zone: "B",
+                seenFloor: p1Floor,
+                since: boundary,
+                limit: WINDOW_CAP,
+                before: [],
+                floor: null,
+              })
+            ).cards
+              .filter(keep)
+              .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
+          : [];
+        const counted = [...ranked, ...viewedPosts];
         const consumedDigest = (edge: { score: number; id: string }) =>
-          flamesDigest(ranked.filter((c) => compareByScore(c, edge) <= 0));
+          flamesDigest(counted.filter((c) => compareByScore(c, edge) <= 0));
         if (phase1 && phase1.sc !== consumedDigest({ score: phase1.score, id: phase1.frontier })) {
           // Des flammes ont changé depuis la page précédente : les scores ne sont plus ceux du parcours.
           return { ...(await feedService.feed(v, { filter: q.filter }, false)), reset: true as const };
@@ -394,7 +416,10 @@ export const feedService = {
         const ordered = diversify([...carried, ...fresh], phase1?.kinds ?? []);
         const shown = ordered.slice(0, FEED_PAGE);
         const deferred = ordered.slice(FEED_PAGE);
-        for (const c of shown) served.push({ c, seen: false });
+        for (const c of shown) {
+          served.push({ c, seen: false });
+          servedIds.add(c.id);
+        }
         const edge = fresh.at(-1) ?? (phase1 ? { score: phase1.score, id: phase1.frontier } : null);
         if (edge && (deferred.length > 0 || rest.length > fresh.length)) {
           next = {
@@ -424,7 +449,10 @@ export const feedService = {
         ...(forYou ? [cutoffs.get(kind) ?? sinceBoundary] : []),
       ];
       const step = await dateStep("A", before, need);
-      for (const c of step.page) served.push({ c, seen: false });
+      for (const c of step.page) {
+        served.push({ c, seen: false });
+        servedIds.add(c.id);
+      }
       if (step.more) next = { ...head("A"), phase: 2, anchor: step.resume };
       else runB = true;
     }
@@ -434,7 +462,10 @@ export const feedService = {
       const bAnchor = zone === "B" ? anchor : null;
       const need = FEED_PAGE - served.length;
       const step = await dateStep("B", () => (bAnchor ? [bAnchor] : []), need);
-      for (const c of step.page) served.push({ c, seen: true });
+      for (const c of step.page) {
+        served.push({ c, seen: true });
+        servedIds.add(c.id);
+      }
       if (step.more) next = { ...head("B"), phase: 2, anchor: step.resume };
     }
 

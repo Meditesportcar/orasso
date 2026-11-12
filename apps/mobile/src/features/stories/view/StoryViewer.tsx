@@ -27,6 +27,7 @@ import {
   storyPlayable,
   storyPlayerKey,
   storyPrev,
+  storyReplyable,
   storyShareLabels,
   storyStartIndex,
   tapTarget,
@@ -481,7 +482,7 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
     else router.push(tag.kind === "structure" ? `/o/${tag.slug}` : `/p/${tag.slug}`);
   };
   const iAmTagged = Boolean(story && me && story.tags.some((x) => x.kind === "user" && x.id === me.user.id));
-  const canReply = Boolean(author && author.persona !== "pro");
+  const canReply = Boolean(author && storyReplyable(author.persona));
 
   // --- États sans story --------------------------------------------------------------------------------------------------
   const emptyScreen = (message: string, retry?: () => void, testID = "story-unavailable") => (

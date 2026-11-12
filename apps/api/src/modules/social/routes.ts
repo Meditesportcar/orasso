@@ -9,6 +9,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { isPageActor, noStore, readActor, writeActor } from "../../lib/actor";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
@@ -18,6 +19,7 @@ import { inboxService } from "../messaging/inbox";
 import { decorateOtherVehicle, decorateProfile } from "../partnerships/decorate";
 import { accountQrFollow } from "./account-qr";
 import { followsService } from "./follows";
+import { followUserAsPage, isFollowingAs } from "./pageFollows";
 import { outingsCount, socialProfile } from "./profile";
 import { peopleSearch } from "./search";
 
@@ -40,9 +42,24 @@ export const socialRoutes = new Hono<AppEnv>()
   .get("/users/:pseudo", async (c) => {
     const v = await requireUser(c);
     // Lot R7m1 : « Partenaires » et « Proposer un partenariat » (pro vérifié qui regarde).
+    const actor = await readActor(c, v);
+    noStore(c); // `follow` est personnel (ou celui de la page)
     const view = await decorateProfile(v, await socialProfile.view(v, c.req.param("pseudo")));
     // Vague R8 (lot R8a2) : `publications`, nul quand la liste est restreinte (compte privé non suivi).
-    return c.json({ ...view, ...(await personCountsFor(c.req.param("pseudo"), v)) });
+    const counts = await personCountsFor(c.req.param("pseudo"), v);
+    if (!isPageActor(actor)) return c.json({ ...view, ...counts });
+    // Vague R9 (lot R9a) : lu en tant que page, l'état « suivi » est celui de la page (jamais une demande en attente :
+    // une page ne suit qu'un compte public, T6) ; le reste du profil reste celui que voit la personne.
+    const following = await isFollowingAs(actor, { kind: "user", id: view.userId });
+    return c.json({
+      ...view,
+      ...counts,
+      follow: {
+        canFollow: view.follow.canFollow && view.visibility === "public",
+        mine: following ? "accepted" : "none",
+        followsMe: false,
+      },
+    });
   })
   // Fiche d'un véhicule d'un autre : complète (compte public ou abonné accepté) ou réduite (compte privé, lot R4b :
   // `privateVehicleFields`). Jamais la plaque.
@@ -58,10 +75,21 @@ export const socialRoutes = new Hono<AppEnv>()
   // Lot R4c, R6b : suivre (compte public) ou demander à suivre (compte privé) ; ne plus suivre ou annuler la demande.
   .post("/users/:pseudo/follow", async (c) => {
     const v = await requireUser(c);
+    // Vague R9 (lot R9a) : avec l'en-tête d'une page, la ligne va dans `page_follows` (jamais un abonnement personnel).
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      return c.json(await followUserAsPage(v, actor, c.req.param("pseudo"), true));
+    }
     return c.json(await followsService.follow(v, c.req.param("pseudo")));
   })
   .delete("/users/:pseudo/follow", async (c) => {
     const v = await requireUser(c);
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      return c.json(await followUserAsPage(v, actor, c.req.param("pseudo"), false));
+    }
     return c.json(await followsService.unfollow(v, c.req.param("pseudo")));
   })
   // Lot R6b : le QR de compte et le lien de profil (`/ami/:jeton`) servent à suivre la personne.

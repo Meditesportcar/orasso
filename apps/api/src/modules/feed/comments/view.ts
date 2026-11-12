@@ -113,6 +113,25 @@ export async function requireVisibleComment(v: Viewer, id: string, ex: Executor 
   return { ...row, post, manages };
 }
 
+/**
+ * Le compteur de réponses de commentaires, relu **dans une seule requête** avec l'instant de sa lecture (`statement_timestamp()`, l'horloge de
+ * la base, borne basse de l'instant où le compteur a été vu), en texte à largeur fixe : deux lectures se comparent comme du texte.
+ */
+export async function repliesCountsOf(ex: Executor, ids: string[]): Promise<Map<string, { n: number; at: string }>> {
+  const out = new Map<string, { n: number; at: string }>();
+  if (!ids.length) return out;
+  const rows = await ex
+    .select({
+      id: feedPostComments.id,
+      n: feedPostComments.repliesCount,
+      at: sql<string>`to_char(statement_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+    })
+    .from(feedPostComments)
+    .where(inArray(feedPostComments.id, ids));
+  for (const r of rows) out.set(r.id, { n: r.n, at: r.at });
+  return out;
+}
+
 /** Les commentaires rendus, dans l'ordre reçu : flammes de `v`, pseudos cités (en règle), `mine`, `canDelete`. */
 export async function toViews(
   ex: Executor,
@@ -136,6 +155,7 @@ export async function toViews(
     .from(feedCommentMentions)
     .innerJoin(profiles, eq(profiles.userId, feedCommentMentions.userId))
     .where(and(inArray(feedCommentMentions.commentId, ids), profileOkSql("profiles", at)));
+  const counted = await repliesCountsOf(ex, ids);
   const mentions = new Map<string, string[]>();
   for (const m of mentionRows) mentions.set(m.id, [...(mentions.get(m.id) ?? []), m.pseudo]);
   return rows.map(({ c, p }) => ({
@@ -146,7 +166,8 @@ export async function toViews(
     mentions: mentions.get(c.id) ?? [],
     reactionsCount: c.reactionsCount,
     reactedByMe: reacted.has(c.id),
-    repliesCount: c.repliesCount,
+    repliesCount: counted.get(c.id)?.n ?? c.repliesCount,
+    countedAt: counted.get(c.id)?.at ?? c.createdAt.toISOString(),
     mine: c.authorId === v.user.id,
     canDelete: c.authorId === v.user.id || manages,
   }));

@@ -2,7 +2,13 @@
 // retirer, « Signaler » pour une publication d'un autre. Les droits viennent de l'API (`manage.canDelete` sur la page seule ;
 // dans une liste, ma propre publication) ; chaque écriture revérifie les siens côté serveur.
 import { Button, Icon } from "@orasso/design-system/web";
-import { feedScreenLabels as F, type FeedPostView, publicationsLabels as L, coauthorLabels as T } from "@orasso/shared";
+import {
+  eventJournalLabels as EL,
+  feedScreenLabels as F,
+  type FeedPostView,
+  publicationsLabels as L,
+  coauthorLabels as T,
+} from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
@@ -20,6 +26,8 @@ export function PostMenu({
   post,
   canDelete,
   canCommentsOff = false,
+  pin,
+  hide,
   onClose,
   onRemoved,
 }: {
@@ -28,6 +36,10 @@ export function PostMenu({
   canDelete: boolean;
   /** `manage.canCommentsOff` : « Couper les commentaires » / « Rétablir les commentaires ». */
   canCommentsOff?: boolean;
+  /** Lot R8d (journal d'un événement) : « Épingler en tête » / « Retirer l'épingle » pour un responsable de la fiche. */
+  pin?: { pinned: boolean; onToggle: () => Promise<string | null> };
+  /** Lot R8d (mentions d'un événement) : « Masquer de la fiche » / « Remettre sur la fiche ». */
+  hide?: { hidden: boolean; onToggle: () => Promise<string | null> };
   onClose: () => void;
   /** Supprimée : la liste la retire (le signal) ; la page seule revient en arrière. */
   onRemoved?: (post: FeedPostView) => void;
@@ -79,6 +91,20 @@ export function PostMenu({
     });
     if (!res.ok) return setError(res.error.message);
     postLive.set(target, { ...postLive.apply(target), commentsOff: res.data.commentsOff });
+    onClose();
+  }
+
+  async function toggleHide() {
+    setError(null);
+    const failed = await hide?.onToggle();
+    if (failed) return setError(failed);
+    onClose();
+  }
+
+  async function togglePin() {
+    setError(null);
+    const failed = await pin?.onToggle();
+    if (failed) return setError(failed);
     onClose();
   }
 
@@ -162,6 +188,32 @@ export function PostMenu({
               </span>
             </button>
           ) : null}
+          {pin ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void togglePin()}
+              data-testid="publication-menu-pin"
+            >
+              <Icon name="star" size={20} />
+              <span>
+                <strong>{pin.pinned ? EL.unpin : EL.pin}</strong>
+              </span>
+            </button>
+          ) : null}
+          {hide ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void toggleHide()}
+              data-testid="mention-menu-hide"
+            >
+              <Icon name={hide.hidden ? "undo" : "eye"} size={20} />
+              <span>
+                <strong>{hide.hidden ? EL.unhide : EL.hide}</strong>
+              </span>
+            </button>
+          ) : null}
           {canDelete ? (
             <button
               type="button"
@@ -188,7 +240,7 @@ export function PostMenu({
               </span>
             </button>
           ) : null}
-          {post.mine ? null : (
+          {post.mine || hide ? null : (
             <div className="fil-menu__report" data-testid="publication-menu-report">
               <ReportDialog targetType="feed_post" targetId={post.id} label={F.report} look="link" />
             </div>

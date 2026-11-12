@@ -155,6 +155,8 @@ export async function removeOrRetry(key: string): Promise<void> {
 const RETRY_REMOVABLE = [
   /^private\/feed\/[0-9a-f-]{36}\/[0-9a-f]{32}\.webp$/,
   /^private\/feed-posts\/[0-9a-f-]{36}\.webp$/,
+  // Lot R8d : l'image publique d'une annonce retirée (ou de sa reprise) dont la suppression avait échoué. Motif strict.
+  /^announcements\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/,
   /^vehicles\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
   /^private\/crew-banners\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
   /^crews\/[0-9a-f-]{36}\/banner-[0-9a-f]{16}\.webp$/,

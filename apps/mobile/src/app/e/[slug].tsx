@@ -32,14 +32,16 @@ import {
   mediaAppLabels as M,
   type MyApplication,
   nearCountdown,
+  type PageCounts,
   registrationBlock,
+  remainingFil,
   shareLabels,
   type VendorTypeCode,
   withYear,
   wizardEndLabels,
 } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
@@ -51,6 +53,7 @@ import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
 import { InvitationMenu, InviteBanner, WhoGoes } from "@/features/event/invite/InviteParts";
 import { InviteSheet } from "@/features/event/invite/InviteSheet";
+import { JournalSection } from "@/features/event/journal/JournalSection";
 import { LineupBlock } from "@/features/event/Lineup";
 import { LiveBlock } from "@/features/event/LiveBlock";
 import { MediaContents } from "@/features/event/MediaContents";
@@ -141,6 +144,8 @@ export default function EventPage() {
     enabled: status !== "loading",
   });
   const e = event.data;
+  // Compteurs de la fiche (lot R8d) : `publications` (le journal) et `mentions` (absent sans session), posés par l'API.
+  const counts: PageCounts = (e ?? {}) as PageCounts;
   // Lot M3 : la carte touchée (aperçu immédiat) et la place de son affiche (transition, une seule fois).
   // Tour 2 : suit le `slug` (fiche réutilisée pour un autre événement).
   const [opened, setOpened] = useState(() => ({ slug, preview: eventPreview(slug), from: takePosterRect(slug) }));
@@ -152,6 +157,20 @@ export default function EventPage() {
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   // Fil de l'événement (lot 20) : public, enrichi pour les retenus (consignes, annonces réservées).
   const feed = useApi(() => api.eventAnnouncements(slug), [slug, status], { enabled: status !== "loading" });
+  // Le journal est-il lu ? Sinon l'ancien fil reste complet (une panne du journal ne fait pas disparaître les annonces reprises).
+  const [journalRead, setJournalRead] = useState(false);
+  const [journalTick, setJournalTick] = useState(0);
+  // Retour sur la fiche (après « Publier pour cet événement ») : la fiche et son journal se relisent.
+  const focused = useIsFocused();
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (focused && !wasFocused.current) {
+      void event.reload();
+      setJournalTick((t) => t + 1);
+    }
+    wasFocused.current = focused;
+  }, [focused, event.reload]);
+  const fil = remainingFil(feed.data?.items ?? [], journalRead);
   const structure = useApi(() => api.structureBySlug(e?.structure.slug ?? ""), [e?.structure.slug, status], {
     enabled: Boolean(e) && status !== "loading",
   });
@@ -520,7 +539,10 @@ export default function EventPage() {
       }
       liftHero
       onClose={close}
-      onRefresh={event.reload}
+      onRefresh={async () => {
+        setJournalTick((t) => t + 1);
+        await event.reload();
+      }}
       overlays={
         <>
           {status === "in" ? <WriteSheet event={e} visible={writing} onClose={() => setWriting(false)} /> : null}
@@ -749,7 +771,23 @@ export default function EventPage() {
         </>
       ) : null}
       {action === "providerApply" && providerError ? <Notice tone="error">{providerError}</Notice> : null}
-      {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
+      {/* Lot R8d : le journal de l'événement (publications de l'organisateur) et « Mentions · N » ; dessous, ce qui reste de l'ancien fil. */}
+      <JournalSection
+        eventId={e.id}
+        eventSlug={e.slug}
+        structureId={e.structure.id}
+        structureName={e.structure.name}
+        count={counts.publications?.count}
+        mentions={counts.mentions?.count}
+        hiddenMentions={counts.hiddenMentions?.count}
+        manager={Boolean(me?.personas?.some((p) => p.kind === "organizer" && p.id === e.structure.id))}
+        signedIn={status === "in"}
+        onRead={setJournalRead}
+        refreshKey={journalTick}
+      />
+      {feed.data && (fil.length > 0 || (counts.publications?.count ?? 0) === 0) ? (
+        <EventFeed items={fil} reportable={status === "in"} />
+      ) : null}
       {e.instructions ? <Info label="Consignes de l'équipe organisatrice">{e.instructions}</Info> : null}
       {/* Lot M4 : écrire à l'organisateur passe par le ✉ de la bande (avec le contexte de l'événement). */}
       {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}

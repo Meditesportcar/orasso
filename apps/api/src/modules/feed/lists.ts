@@ -19,6 +19,7 @@ import { and, eq, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { mediaProfiles, profiles, proProfiles, providerProfiles, structures } from "../../db/schema";
+import { managedPageKeys } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
@@ -434,7 +435,16 @@ export async function listJournal(
 export async function eventCountsFor(eventId: string, viewer: Viewer | null): Promise<PageCounts> {
   const e = (await attachEventsByIds(db, [eventId])).get(eventId);
   if (!e || (!viewer && !(await structureVerified(e.structureId)))) return {};
-  return countsForEvent(db, e, viewer?.user.id ?? null, now());
+  const counts = await countsForEvent(db, e, viewer?.user.id ?? null, now());
+  // Lot R8d : un responsable de la fiche voit aussi combien de mentions il a masquées (la ligne « Mentions » reste tant qu'il en
+  // a, pour qu'il retrouve « Masquées » et puisse les remettre). Jamais pour un autre lecteur.
+  if (viewer && (await managedPageKeys(viewer.user.id)).has(authorKeyOf("structure", e.structureId))) {
+    const res = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n ${visibleMentionsFrom("event", e.id, now(), { section: "all", includeHidden: true })} and m.hidden_at is not null`,
+    );
+    return { ...counts, hiddenMentions: { count: Number(res.rows[0]?.n ?? 0) } };
+  }
+  return counts;
 }
 
 /** Compteurs de la page d'une structure, d'un pro, d'un prestataire ou d'un média. */

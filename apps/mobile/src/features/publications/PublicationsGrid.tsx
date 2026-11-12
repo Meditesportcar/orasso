@@ -2,13 +2,21 @@
 // à un événement se lit dans la publication ouverte). Toucher une vignette ouvre la publication seule. Les images ne se chargent
 // que près de l'écran (`useNearScreen`) ; la publication « affiche » (`visual: "event_poster"`) montre l'affiche de son événement.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedPostView, publicationsLabels as L, publicationPath, tileMeta, withLabel } from "@orasso/shared";
+import {
+  eventJournalLabels,
+  type FeedPostView,
+  publicationsLabels as L,
+  publicationPath,
+  tileMeta,
+  withLabel,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { now } from "@/lib/clock";
+import { JournalBadges, type JournalOptions } from "./JournalBadges";
 import { useNearScreen, useScrollTick } from "./useNearScreen";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
@@ -16,7 +24,17 @@ const { radiusMd } = tokens.radius;
 /** La vignette est un 4:5 (largeur sur hauteur). */
 const TILE_RATIO = 4 / 5;
 
-function Tile({ post, tick, authorKey }: { post: FeedPostView; tick: number; authorKey?: string }) {
+function Tile({
+  post,
+  tick,
+  authorKey,
+  journal,
+}: {
+  post: FeedPostView;
+  tick: number;
+  authorKey?: string;
+  journal?: JournalOptions;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -33,7 +51,8 @@ function Tile({ post, tick, authorKey }: { post: FeedPostView; tick: number; aut
         ref={box}
         accessibilityRole="button"
         accessibilityLabel={label}
-        onPress={() => router.push(publicationPath(post.id) as never)}
+        onPress={journal?.readOnly ? undefined : () => router.push(publicationPath(post.id) as never)}
+        disabled={journal?.readOnly}
         style={({ pressed }) => [styles.photo, { backgroundColor: c.surface }, pressed && styles.pressed]}
         testID="publication-tile-open"
       >
@@ -47,6 +66,20 @@ function Tile({ post, tick, authorKey }: { post: FeedPostView; tick: number; aut
           </View>
         ) : null}
       </Pressable>
+      {/* Lot R8d (journal d'un événement) : « Épinglée » et « Inscrits prévenus » sur la photo, le menu « … » de l'organisateur. */}
+      {journal ? <JournalBadges post={post} floating /> : null}
+      {journal?.onMenu ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={eventJournalLabels.menuOpen}
+          onPress={() => journal.onMenu?.(post)}
+          hitSlop={7}
+          style={[styles.dots, { backgroundColor: c.scrim }]}
+          testID="journal-tile-menu"
+        >
+          <Icon name="more" size={18} color={c.nightInk} />
+        </Pressable>
+      ) : null}
       <View style={[styles.caption, { backgroundColor: c.surface, borderColor: c.line }]}>
         <Text variant="bodyStrong" color={c.ink} testID="publication-tile-date">
           {meta.date}
@@ -64,7 +97,15 @@ function Tile({ post, tick, authorKey }: { post: FeedPostView; tick: number; aut
   );
 }
 
-export function PublicationsGrid({ posts, authorKey }: { posts: readonly FeedPostView[]; authorKey?: string }) {
+export function PublicationsGrid({
+  posts,
+  authorKey,
+  journal,
+}: {
+  posts: readonly FeedPostView[];
+  authorKey?: string;
+  journal?: JournalOptions;
+}) {
   const tick = useScrollTick();
   const rows: FeedPostView[][] = [];
   for (let i = 0; i < posts.length; i += 2) rows.push(posts.slice(i, i + 2));
@@ -73,7 +114,7 @@ export function PublicationsGrid({ posts, authorKey }: { posts: readonly FeedPos
       {rows.map((row) => (
         <View key={row[0]?.id} style={styles.row}>
           {row.map((post) => (
-            <Tile key={post.id} post={post} tick={tick} authorKey={authorKey} />
+            <Tile key={post.id} post={post} tick={tick} authorKey={authorKey} journal={journal} />
           ))}
           {row.length === 1 ? <View style={styles.tile} /> : null}
         </View>
@@ -88,6 +129,17 @@ const styles = StyleSheet.create({
   tile: { flex: 1, minWidth: 0, gap: space2 },
   photo: { width: "100%", aspectRatio: TILE_RATIO, borderRadius: radiusMd, overflow: "hidden" },
   image: { width: "100%", height: "100%" },
+  // Le « … » de la maquette (`.r8dots`) : 30 px sur fond sombre translucide, la zone de toucher est portée à 44 px par hitSlop.
+  dots: {
+    position: "absolute",
+    top: space1 + 2,
+    right: space1 + 2,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pressed: { opacity: 0.85 },
   // La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px).
   caption: {

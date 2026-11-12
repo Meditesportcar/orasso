@@ -24,9 +24,14 @@ import {
   eventLastDayInstant,
   eventPageLabels,
   formatDayDate,
+  eventJournalLabels as JL,
+  lastJournalNotice,
+  lastLegacyNotice,
+  latestNotice,
   liveAt,
   openVotesIn,
   presenceLabels,
+  remainingFil,
   votePassTexts,
   wholeEventEntered,
   wholeEventEntryHolds,
@@ -127,10 +132,17 @@ function JourJScreen() {
   const votesList = useVotesList(votesEnabled ? (app?.event.id ?? kit?.event.id ?? null) : null);
   const votesOpen = openVotesIn(votesList.data?.items ?? []);
   const onSiteNow = liveGuarded?.phase === "running" ? (liveGuarded.onSiteCount ?? null) : null;
-  const lastAnnouncement =
-    [...(feed.data?.items ?? [])]
-      .filter((i) => i.kind === "announcement")
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0] ?? null;
+  // Lot R8d : la dernière nouvelle = la plus récente entre la dernière publication du journal (gardée sur le téléphone comme le
+  // reste, l'écran marche sans réseau) et la dernière annonce non reprise.
+  const journalEventId = app?.event.id ?? kit?.event.id ?? "";
+  const journal = useApi(() => api.eventJournal(journalEventId, null), [journalEventId, online], {
+    enabled: Boolean(journalEventId) && online,
+    cacheKey: journalEventId ? `journal.${journalEventId}` : undefined,
+  });
+  const lastAnnouncement = latestNotice(
+    lastJournalNotice(journal.data?.items ?? [], JL.newsPhoto, { now, timeZone: kit?.event.timezone }),
+    lastLegacyNotice(remainingFil(feed.data?.items ?? [], Boolean(journal.data))),
+  );
 
   // 1. Le kit enregistré s'affiche tout de suite, sans réseau.
   useEffect(() => {
@@ -354,10 +366,11 @@ function JourJScreen() {
       {lastAnnouncement ? (
         <Plate style={styles.block} testID="last-announcement">
           <Text variant="label" color={c.plateMuted}>
-            {communicationLabels.lastAnnouncement} · {formatDayHour(lastAnnouncement.publishedAt, tz)}
+            {lastAnnouncement.source === "journal" ? JL.lastNews : communicationLabels.lastAnnouncement} ·{" "}
+            {formatDayHour(lastAnnouncement.at, tz)}
           </Text>
           <Text variant="body" color={c.plateInk}>
-            {lastAnnouncement.body}
+            {lastAnnouncement.text}
           </Text>
         </Plate>
       ) : null}

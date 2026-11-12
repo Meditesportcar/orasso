@@ -32,7 +32,6 @@ import {
   feedPostBodyR8,
   importantAvailable,
   importantImmediate,
-  initialPublishChoice,
   feedScreenLabels as L,
   noCommercialDraft,
   type PublishChoice,
@@ -41,6 +40,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  publishStartChoice,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -119,12 +119,15 @@ async function uploadPhoto(photo: PickedPhoto, i: number): Promise<string> {
 }
 
 /** Le formulaire est isolé par compte : un autre compte repart d'un brouillon vide (aucune liste ni présence de l'ancien). */
-export function PublishScreen() {
+export function PublishScreen({ start }: { start?: PublishStart } = {}) {
   const { me } = useSession();
-  return <PublishForm key={me?.user.id ?? "none"} />;
+  return <PublishForm key={me?.user.id ?? "none"} start={start} />;
 }
 
-function PublishForm() {
+/** Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis (`?structure=&evenement=`). */
+export type PublishStart = { structure?: string; evenement?: string };
+
+function PublishForm({ start }: { start?: PublishStart }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -137,11 +140,11 @@ function PublishForm() {
   const [caption, setCaption] = useState("");
   // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
   const { me } = useSession();
-  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
   const authors = useMemo(
     () => publishAuthors(me?.personas ?? [], me?.profile.pseudo ?? "", me?.profile.avatarUrl ?? null),
     [me?.personas, me?.profile.pseudo, me?.profile.avatarUrl],
   );
+  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const account = me?.user.id ?? "";
