@@ -5562,3 +5562,7 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Tour 11 (R8k1, 12/11/2026) : tests seulement
+- `comments-tour10.test.ts` : le responsable actuel vérifié est celui qui a publié (le destinataire) ; la page est suspendue **après** le commentaire (heures calmes, livraison le matin).
+- `comments-batch.test.ts` : l horloge simulée avance entre les commentaires du test (deux commentaires de la même milliseconde se départageaient au hasard, d où l échec en suite) ; les fichiers qui livrent des notifications posent `quietHours(false)` pour ne pas dépendre de l heure réelle.
