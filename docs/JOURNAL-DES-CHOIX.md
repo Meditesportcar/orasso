@@ -5955,3 +5955,8 @@ Points de `petit-lot-appli.md`, tous dans `apps/mobile` (aucune dépendance nati
 - **Ligne regroupée d'une page** : recomposée par la clé de la page et sa portée (publication ou commentaire visé), pas par des personnes ; retirer le dernier commentaire laisse la ligne avec le plus récent de ceux qui se lisent encore (garde de livraison et lecture en lot), elle disparaît quand il n'en reste aucun.
 - **Suggestions** : la racine d'une réponse suit les règles d'une page (`commentPageOkSqlFor`), pas la confidentialité du compte derrière elle.
 - **Curseur** : le changement d'empreinte (autre casquette) est traité avant la validation phase/onglet : `reset: true` et première page, même combiné à un autre onglet.
+
+### Partie 2, tour 3 (R9a, 12/11/2026) : corrections de la relecture Codex du tour 2
+- **Journal** : quand la recomposition d'une ligne de page retombe sur un autre commentaire lisible, la lecture en lot rend `commentReadable: false` avec `readableCommentId` (comme le chemin des personnes) : l'ancien identifiant et l'ancien extrait ne sont plus servis, même sans passage par la garde de livraison.
+- **Invitation de co-signature en casquette** : le lecteur public (visibilité, aperçus) est distinct de l'identité de gestion. `loadPostViews` et `loadCoAuthors` reçoivent les droits de la page active (`managedKeys`) : l'invitation en attente et `mine` d'une publication de la page restent visibles de la page.
+- **Recomposition d'une ligne de page** : lue par tranches de 100, du plus récent au plus ancien, jusqu'à trouver un commentaire lisible (20 tranches au plus) : cent commentaires récents illisibles ne cachent plus un plus ancien encore lisible.

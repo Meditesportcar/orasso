@@ -98,6 +98,8 @@ export async function loadPostViews(
   at: Date,
   /** Lot R9a : la flamme est celle de la personne même quand la publication est lue avec le regard public d'une page. */
   flamerId: string = viewerId,
+  /** Lot R9a : en casquette, la page active est la seule dont on a les droits (invitation de co-signature, `mine`). */
+  managedKeys?: ReadonlySet<string>,
 ): Promise<FeedPostView[]> {
   if (!ids.length) return [];
   const rows = await ex
@@ -173,9 +175,9 @@ export async function loadPostViews(
     at,
   );
   // « Mes » publications de page : les pages que je gère (affichage seulement, sans second facteur).
-  const managed = visible.some((r) => r.post.persona !== "fan")
-    ? await managedPageKeys(viewerId, ex)
-    : new Set<string>();
+  const managed =
+    managedKeys ??
+    (visible.some((r) => r.post.persona !== "fan") ? await managedPageKeys(viewerId, ex) : new Set<string>());
 
   const commercialBy = await commercialViews(
     ex,
@@ -190,6 +192,7 @@ export async function loadPostViews(
       return { id: r.post.id, mine: k ? managed.has(k) : r.post.authorId === viewerId };
     }),
     viewerId,
+    managedKeys,
   );
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {

@@ -169,6 +169,8 @@ export async function postCards(
         page ? PAGE_VIEWER_ID : userId,
         ref,
         userId,
+        // Les droits sont ceux de la page active (invitation de co-signature en attente, ses publications).
+        page ? new Set([page.key]) : undefined,
       )
     ).map((v) => [v.id, v]),
   );

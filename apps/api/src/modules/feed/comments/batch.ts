@@ -118,7 +118,7 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
         out.set(
           n.id,
           left
-            ? { shown: true, commentReadable: true, readableCommentId: left.newest.id }
+            ? { shown: true, commentReadable: false, readableCommentId: left.newest.id }
             : { shown: false, commentReadable: false },
         );
         continue;

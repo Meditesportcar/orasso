@@ -335,23 +335,44 @@ export async function pageLineReadable(
         : key.kind === "provider"
           ? and(eq(c.persona, "provider"), eq(c.providerId, key.id))
           : and(eq(c.persona, "media"), eq(c.mediaId, key.id));
-  const rows = await ex
-    .select({ id: c.id, text: c.text })
-    .from(c)
-    .where(and(scope, owner, isNull(c.deletedAt), ne(c.authorId, userId)))
-    .orderBy(desc(c.createdAt), desc(c.id))
-    .limit(100);
-  if (!rows.length) return null;
-  const { readable } = await readableBatch(
-    ex,
-    userId,
-    rows.map((r) => r.id),
-  );
-  const ok = rows.filter((r) => readable.has(r.id));
-  const newest = ok[0];
-  return newest
-    ? { newest, count: ok.length, pageName: typeof data.page?.name === "string" ? data.page.name : "" }
-    : null;
+  // Par tranches de 100, du plus récent au plus ancien, jusqu'à trouver un commentaire lisible : cent commentaires récents devenus
+  // illisibles ne cachent pas un plus ancien qui se lit encore. `count` : ceux qui se lisent parmi les tranches lues.
+  const BATCH = 100;
+  const MAX_BATCHES = 20;
+  let newest: { id: string; text: string } | null = null;
+  let count = 0;
+  let before: { at: Date; id: string } | null = null;
+  for (let round = 0; round < MAX_BATCHES; round++) {
+    const rows = await ex
+      .select({ id: c.id, text: c.text, createdAt: c.createdAt })
+      .from(c)
+      .where(
+        and(
+          scope,
+          owner,
+          isNull(c.deletedAt),
+          ne(c.authorId, userId),
+          before
+            ? sql`(${c.createdAt}, ${c.id}) < (${before.at.toISOString()}::timestamptz, ${before.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(c.createdAt), desc(c.id))
+      .limit(BATCH);
+    if (!rows.length) break;
+    const { readable } = await readableBatch(
+      ex,
+      userId,
+      rows.map((r) => r.id),
+    );
+    const ok = rows.filter((r) => readable.has(r.id));
+    count += ok.length;
+    newest ??= ok[0] ?? null;
+    if (newest || rows.length < BATCH) break;
+    const last = rows[rows.length - 1] as (typeof rows)[number];
+    before = { at: last.createdAt, id: last.id };
+  }
+  return newest ? { newest, count, pageName: typeof data.page?.name === "string" ? data.page.name : "" } : null;
 }
 
 async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {

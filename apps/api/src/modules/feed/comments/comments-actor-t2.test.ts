@@ -8,7 +8,8 @@ import { callAs } from "../../../../test/actor-call";
 import { resetDb, signUp, useClock, viewerOf } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedCommentMentions, feedPostComments, notifications, profiles, providerProfiles } from "../../../db/schema";
-import { guardCommentNotification } from "./notify";
+import { commentNotificationVerdicts } from "./batch";
+import { guardCommentNotification, pageLineReadable } from "./notify";
 import { dbPost, follow, person, type TestUser } from "./testkit";
 import { toViews } from "./view";
 
@@ -124,5 +125,61 @@ describe("lignes regroupées, suggestions, repli", () => {
       new Date(),
     );
     expect(views).toEqual([]);
+  });
+});
+
+describe("tour 3 : ligne de page dans le Journal, lisibilité avant la limite", () => {
+  it("le dernier commentaire retiré : la lecture du Journal (sans garde de livraison) rend commentReadable false et le commentaire encore lisible", async () => {
+    const w = await world();
+    const first = await say(w.sofia, w.as, w.post, "Premier mot de la page");
+    const second = await say(w.sofia, w.as, w.post, "Deuxième mot de la page");
+    await callAs(w.sofia, null, "DELETE", `/feed-comments/${second.json.id}`);
+    const rows = (await db.select().from(notifications).where(eq(notifications.userId, w.kenji.id))).filter(
+      (n) => n.type === "feed_comment",
+    );
+    const verdicts = await commentNotificationVerdicts(w.kenji.id, rows);
+    const verdict = verdicts.get(rows[0]?.id ?? "");
+    expect(verdict).toMatchObject({ shown: true, commentReadable: false, readableCommentId: first.json.id });
+    // Servi par l'Activité : ni l'ancien identifiant ni l'ancien extrait.
+    const activity = await callAs(w.kenji, null, "GET", "/me/activity");
+    expect(activity.text).not.toContain(second.json.id);
+    expect(activity.text).not.toContain("Deuxième mot");
+  });
+
+  it("cent commentaires récents devenus illisibles, un plus ancien lisible : la ligne le reprend", async () => {
+    const w = await world();
+    const old = await say(w.sofia, w.as, w.post, "Le plus ancien, toujours lisible");
+    const line = (await db.select().from(notifications).where(eq(notifications.userId, w.kenji.id))).find(
+      (n) => n.type === "feed_comment",
+    );
+    // Une racine supprimée et 100 réponses de la page, plus récentes : elles ne se lisent pas (leur premier niveau a disparu).
+    const at = Date.now();
+    const [root] = await db
+      .insert(feedPostComments)
+      .values({
+        postId: w.post,
+        authorId: w.marie.id,
+        text: "Racine retirée",
+        clientId: crypto.randomUUID(),
+        createdAt: new Date(at + 500),
+        updatedAt: new Date(at + 500),
+        deletedAt: new Date(at + 600),
+      })
+      .returning({ id: feedPostComments.id });
+    await db.insert(feedPostComments).values(
+      Array.from({ length: 100 }, (_, i) => ({
+        postId: w.post,
+        parentId: root?.id ?? null,
+        authorId: w.sofia.id,
+        persona: "provider" as const,
+        providerId: w.brasa.id,
+        text: `Illisible ${i}`,
+        clientId: crypto.randomUUID(),
+        createdAt: new Date(at + 1000 + i),
+        updatedAt: new Date(at + 1000 + i),
+      })),
+    );
+    const found = await pageLineReadable(db, w.kenji.id, line as NonNullable<typeof line>);
+    expect(found?.newest.id).toBe(old.json.id);
   });
 });

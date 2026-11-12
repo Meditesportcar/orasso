@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { callAs } from "../../../test/actor-call";
 import { addMember, createStructure, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { mediaProfiles, pageFollows, providerProfiles } from "../../db/schema";
+import { feedPostCoauthors, mediaProfiles, pageFollows, providerProfiles } from "../../db/schema";
 import { dbPost, flames, follow, HOUR, person, postId } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -121,5 +121,34 @@ describe("rail et curseur", () => {
     const cross = await filAs(w.sofia, w.as, `?filter=following&cursor=${encodeURIComponent(first.next as string)}`);
     expect(cross.status, cross.text).toBe(200);
     expect(cross.json.reset).toBe(true);
+  });
+});
+
+describe("tour 3 : l'invitation de co-signature d'une publication de la page", () => {
+  it("une invitation en attente sur une publication de la page reste visible de la page en casquette", async () => {
+    const w = await world();
+    const pagePost = await dbPost(w.sofia, new Date(clock.now.getTime() - 2 * HOUR), {
+      persona: "provider",
+      providerId: w.brasa.id,
+    });
+    await db.insert(feedPostCoauthors).values({
+      postId: pagePost,
+      coauthorKind: "user",
+      coauthorId: w.kenji.id,
+      status: "pending",
+      invitedBy: w.sofia.id,
+    });
+    for (const actor of [w.as, null]) {
+      const res = await filAs(w.sofia, actor, "?filter=for_you");
+      const card = res.items.find((c) => c.kind === "feed_post" && postId(c) === pagePost);
+      const post = card?.payload as { post: { coAuthorInvite: { status: string } | null; mine: boolean } } | undefined;
+      expect(post?.post.coAuthorInvite, String(actor)).toMatchObject({ status: "pending" });
+      expect(post?.post.mine, String(actor)).toBe(true);
+    }
+    // Un autre lecteur, sans droit sur la page, ne voit pas l'invitation.
+    const other = await person("Autre_Lecteur");
+    const res = await filAs(other, null, "?filter=for_you");
+    const card = res.items.find((c) => c.kind === "feed_post" && postId(c) === pagePost);
+    expect((card?.payload as { post: { coAuthorInvite: unknown } } | undefined)?.post.coAuthorInvite).toBeNull();
   });
 });
