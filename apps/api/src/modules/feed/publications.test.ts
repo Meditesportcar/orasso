@@ -735,6 +735,7 @@ describe("retirer, gérer, lire", () => {
       "important",
       "lastComments",
       "mine",
+      "offer",
       "photos",
       "pinned",
       "placeLabel",

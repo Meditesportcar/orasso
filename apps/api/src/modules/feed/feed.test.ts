@@ -602,6 +602,7 @@ describe("publier", () => {
         "important",
         "lastComments",
         "mine",
+        "offer",
         "photos",
         "pinned",
         "placeLabel",

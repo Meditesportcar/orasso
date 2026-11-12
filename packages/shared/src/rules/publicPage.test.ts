@@ -26,9 +26,23 @@ describe("pageTabs : les onglets d'une page", () => {
     expect(items.map((t) => t.label)).toEqual(["Événements", "Publications", "Mentions"]);
     expect(items[2]?.count).toBe(2);
   });
-  it("pro : Présentation, Publications, Mentions · N", () => {
-    expect(ids("pro", true, 0)).toEqual(["presentation", "publications", "mentions"]);
-    expect(pageTabs("pro", { session: true, mentionsCount: 0 })[2]?.count).toBe(0);
+  it("pro (R9c) : Présentation, Publications, Offres, Mentions · N", () => {
+    expect(ids("pro", true, 0)).toEqual(["presentation", "publications", "offers", "mentions"]);
+    const items = pageTabs("pro", { session: true, mentionsCount: 0 });
+    expect(items.map((t) => t.label)).toEqual(["Présentation", "Publications", "Offres", "Mentions"]);
+    expect(items[3]?.count).toBe(0);
+    expect(items[2]?.count).toBeNull();
+  });
+  it("R9c : une structure n'a pas d'onglet « Offres » ; sans session, un pro non plus (ni Publications ni Mentions)", () => {
+    expect(ids("structure", true, 1)).not.toContain("offers");
+    expect(ids("pro", false)).not.toContain("offers");
+  });
+  it("R9c : `?onglet=offres` ouvre l'onglet pour un pro avec session, est ignoré sinon", () => {
+    expect(pageShownTab("pro", { raw: "offres", counts: { publications: 0 }, session: true })).toBe("offers");
+    expect(pageShownTab("pro", { raw: "offres", counts: { publications: 0 }, session: false })).toBe("presentation");
+    expect(pageShownTab("structure", { raw: "offres", counts: { publications: 2 }, session: true })).toBe(
+      "publications",
+    );
   });
   it("sans session : pas de « Mentions » ; un pro n'a pas non plus de « Publications »", () => {
     expect(ids("structure", false)).toEqual(["events", "publications"]);

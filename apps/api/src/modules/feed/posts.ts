@@ -31,6 +31,7 @@ import { factsOf } from "./access";
 import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
 import { loadPageInfo, pageKeyOf } from "./authors";
 import { dropCoauthorNotifications, loadCoAuthors } from "./coauthors";
+import { offerView } from "./offers";
 import { eventSummariesByIds } from "./summary";
 
 export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">): FeedPerson => ({
@@ -231,6 +232,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
         commentsCount: r.post.commentsCount,
         commentsOff: r.post.commentsOff,
         lastComments: lastComments.get(r.post.id) ?? [],
+        offer: offerView(r.post, at),
       },
     ];
   });

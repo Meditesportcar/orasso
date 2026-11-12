@@ -12,6 +12,7 @@ import {
   feedListErrors,
   type PageCounts,
   type ProfileCounts,
+  parisDayOf,
   parseAuthorKey,
   proVisibility,
 } from "@orasso/shared";
@@ -226,8 +227,15 @@ function ownPostsWhere(key: AuthorKey): SQL {
   }
 }
 
-const filterSql = (f: AuthorPostsFilter): SQL =>
-  f === "event" ? sql`p.event_id is not null` : f === "no_event" ? sql`p.event_id is null` : sql`true`;
+/**
+ * Le filtre d'une liste. `offer` (R9c) : les offres **non terminées** (à venir et en cours : le jour de fin est compris, jour civil
+ * de Paris) d'une fiche pro ; pour toute autre clé, rien.
+ */
+const filterSql = (f: AuthorPostsFilter, key: AuthorKey, at: Date): SQL => {
+  if (f === "offer")
+    return key.kind === "pro" ? sql`(p.tag = 'offer' and p.offer_ends_on >= ${parisDayOf(at)}::date)` : sql`false`;
+  return f === "event" ? sql`p.event_id is not null` : f === "no_event" ? sql`p.event_id is null` : sql`true`;
+};
 
 /** Identifiants des publications d'un auteur, du plus récent au plus ancien (20 + 1 pour savoir s'il y en a d'autres). */
 export async function authorPostIds(
@@ -243,7 +251,7 @@ export async function authorPostIds(
   const created = msSql("p.created_at");
   const res = await ex.execute<{ id: string; at: Date }>(sql`select p.id as id, ${created} as at
     from feed_posts p join profiles a on a.user_id = p.author_id
-    where ${authorPostsWhere(key, viewerId)} and ${filterSql(filter)} and ${postOkSql(at)} and ${beforeSql(created, "p.id", cursor)}
+    where ${filter === "offer" ? ownPostsWhere(key) : authorPostsWhere(key, viewerId)} and ${filterSql(filter, key, at)} and ${postOkSql(at)} and ${beforeSql(created, "p.id", cursor)}
     order by ${created} desc, p.id desc limit ${limit}`);
   return res.rows.map((r) => ({ id: r.id, at: new Date(r.at) }));
 }

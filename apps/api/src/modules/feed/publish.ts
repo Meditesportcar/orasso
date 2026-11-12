@@ -54,6 +54,7 @@ import { pageDepartment } from "./authors";
 import { authorCard, prepareInvite, reserveInvite, writeInvite } from "./coauthors";
 import { reserveImportant, sendImportant } from "./important";
 import { materializeMentions } from "./mentions";
+import { offerColumns } from "./offers";
 import { FEED_PHOTO_NAME_RE, feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
 
 const PAGE = 20;
@@ -188,6 +189,8 @@ export const feedPostsService = {
       const ok = event && eventRole && input.caption && eventVisualKey(event);
       if (!ok) throw new AppError(400, "photo_required", publicationErrors.photo_required);
     }
+    // Étiquette « Offre » (R9c) : fiche pro seulement, titre et jours valides (après la photo : l'écran dit la photo d'abord).
+    const offer = offerColumns(persona, input.offer, at);
     // « Info importante » : la casquette organisateur, pour un événement de sa structure.
     if (input.important && !(persona === "organizer" && event && eventRole === "organizer")) {
       throw new AppError(400, "important_requires_event", publicationErrors.important_requires_event);
@@ -361,6 +364,7 @@ export const feedPostsService = {
           // Le lieu libre ne vaut que sans événement (sinon c'est la ville de l'événement).
           placeLabel: eventId ? null : (input.placeLabel ?? null),
           importantReason: input.important?.reason ?? null,
+          ...(offer ?? {}),
         });
         if (photos.length) {
           await tx.insert(feedPostPhotos).values(

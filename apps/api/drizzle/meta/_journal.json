@@ -610,6 +610,13 @@
       "when": 1794503233371,
       "tag": "0086_weather-places",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794507211591,
+      "tag": "0087_pro-offers",
+      "breakpoints": true
     }
   ]
 }

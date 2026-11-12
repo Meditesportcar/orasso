@@ -659,3 +659,66 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
     expect(draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey).toBe("me");
   });
 });
+
+describe("l'étiquette « Offre » (R9c)", () => {
+  const NOW = new Date("2026-11-10T09:00:00Z");
+  const proAuthor = () => byKey("pro:p1");
+  const offer = { on: true, title: "Polish complet", startsOn: "2026-11-10", endsOn: "2026-11-30" };
+  const draft = (over: Partial<PublishDraft> = {}): PublishDraft => ({
+    photos: [decided],
+    caption: "",
+    author: proAuthor(),
+    event: null,
+    important: { on: false, reason: null },
+    offer,
+    ...over,
+  });
+  it("une offre sans photo est bloquée, la photo d'abord", () => {
+    expect(publishIssueR8(draft({ photos: [], offer: { ...offer, title: "" } }), NOW)).toBe(
+      "Ajoute au moins une photo.",
+    );
+  });
+  it("titre manquant, fin manquante, fin passée : la ligne dit lequel", () => {
+    expect(publishIssueR8(draft({ offer: { ...offer, title: " " } }), NOW)).toBe(
+      "Donne un titre à ton offre (2 caractères au moins).",
+    );
+    expect(publishIssueR8(draft({ offer: { ...offer, endsOn: "" } }), NOW)).toBe("Choisis la date de fin de l'offre.");
+    expect(publishIssueR8(draft({ offer: { ...offer, endsOn: "2026-11-09" } }), NOW)).toBe(
+      "La date de fin de l'offre est déjà passée.",
+    );
+    expect(publishIssueR8(draft(), NOW)).toBeNull();
+  });
+  it("l'étiquette non choisie ou une autre casquette : aucune règle d'offre", () => {
+    expect(publishIssueR8(draft({ offer: { ...offer, on: false, title: "" } }), NOW)).toBeNull();
+    expect(publishIssueR8(draft({ author: byKey("me"), offer: { ...offer, title: "" } }), NOW)).toBeNull();
+  });
+  const photo = { rects: [frame], noPlate: false, uploadKey: "k1" } as never;
+  const body = (author: PublishAuthor, o = offer) =>
+    feedPostBodyR8({
+      photos: [photo],
+      caption: "x",
+      aspect: "portrait_4_5",
+      clientId: "c1",
+      author,
+      eventId: null,
+      vehicleId: null,
+      placeLabel: "",
+      important: { on: false, reason: null },
+      offer: o,
+    }) as Record<string, unknown>;
+  it("le corps porte `offer` pour la casquette pro et l'étiquette choisie seulement", () => {
+    expect(body(proAuthor())).toMatchObject({
+      persona: "pro",
+      offer: { title: "Polish complet", startsOn: "2026-11-10", endsOn: "2026-11-30" },
+    });
+    expect(body(proAuthor(), { ...offer, on: false })).not.toHaveProperty("offer");
+    for (const key of ["me", "structure:s1", "provider:v1", "media:m1"]) {
+      expect(body(byKey(key))).not.toHaveProperty("offer");
+    }
+  });
+  it("« Ce que verront les autres » : l'étiquette « Offre » à droite du nom, seulement pour une fiche pro", () => {
+    expect(publishSays(proAuthor(), null, false, true).tag).toBe("Offre");
+    expect(publishSays(proAuthor(), null, false).tag).toBeNull();
+    expect(publishSays(byKey("me"), null, false, true).tag).toBeNull();
+  });
+});
