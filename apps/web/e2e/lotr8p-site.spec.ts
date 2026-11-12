@@ -429,7 +429,8 @@ test("site : un contrôle du compte qui tarde après le succès ne rouvre pas le
   test.setTimeout(240_000);
   await openAs(page, "damien@orasso.local");
   await addPhoto(page);
-  await page.getByTestId("fil-publish-caption").fill(`Succès ${Date.now()}`);
+  const successCaption = `Succès ${Date.now()}`;
+  await page.getByTestId("fil-publish-caption").fill(successCaption);
   let calls = 0;
   await page.route("**/api/me", async (route) => {
     calls += 1;
@@ -440,6 +441,10 @@ test("site : un contrôle du compte qui tarde après le succès ne rouvre pas le
   await page.getByTestId("fil-publish-send").click();
   await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("fil-publish-caption")).toHaveCount(0);
+  // La publication est déjà transmise au Fil (rangée par compte) alors que le contrôle du compte n'est jamais revenu : un retour
+  // immédiat au Fil la montre en tête.
+  const kept = await page.evaluate(() => window.sessionStorage.getItem("orasso:fil:mes-publications"));
+  expect(kept).toContain(successCaption);
 });
 
 test("site : la reprise après rechargement rend le brouillon fidèle (structure, événement, légende) et le garde quand il redevient modifiable", async ({
