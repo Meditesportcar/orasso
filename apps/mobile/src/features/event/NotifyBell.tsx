@@ -2,7 +2,7 @@
 // une place (`hasPlace`, lue avec la fiche quand elle est connectée). Elle ouvre « Notifications de cet événement ».
 import { Icon, tokens, useTheme } from "@orasso/design-system/native";
 import { eventNotifyLabels as L } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
@@ -17,13 +17,16 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
   const [open, setOpen] = useState(false);
   const [lost, setLost] = useState(false);
   // Place perdue : le message reste lisible dans la feuille ouverte, la cloche disparaît à sa fermeture.
-  const [gone, setGone] = useState(false);
+  const gone = useRef(false);
+  // Une écriture qui échoue après la fermeture : la feuille se rouvre avec le message (rien n'est perdu en silence).
+  const [lateMessage, setLateMessage] = useState<string | null>(null);
   // `stamp` : l'état des candidatures de la fiche ; il change à l'envoi d'une candidature ou à un retrait, la place est relue.
   // Une nouvelle candidature (l'état des candidatures change) rend la cloche : la place est relue.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la remise à zéro, il n'est pas lu.
   useEffect(() => {
     setLost(false);
-    setGone(false);
+    gone.current = false;
+    setLateMessage(null);
   }, [stamp]);
   const prefs = useApi(() => api.eventNotificationPrefs(eventId), [eventId, signedIn, stamp], { enabled: signedIn });
   const data = prefs.data;
@@ -45,12 +48,24 @@ export function NotifyBell({ eventId, signedIn, stamp }: { eventId: string; sign
           eventId={eventId}
           visible={open}
           initialNews={data.news}
-          onClose={() => {
+          startMessage={lateMessage}
+          // La feuille se ferme tout de suite ; seule la relecture de la cloche attend la fin des écritures.
+          onClose={(idle) => {
             setOpen(false);
-            if (gone) setLost(true);
-            else void prefs.reload();
+            setLateMessage(null);
+            void idle.then(async (ok) => {
+              if (!ok) {
+                setLateMessage(gone.current ? L.noPlace : L.ficheSaveFailed);
+                setOpen(true);
+                return;
+              }
+              if (gone.current) setLost(true);
+              else await prefs.reload();
+            });
           }}
-          onLost={() => setGone(true)}
+          onLost={() => {
+            gone.current = true;
+          }}
         />
       </Overlay>
     </>
