@@ -17,7 +17,8 @@ describe("site : la file des cartes vues suit la session", () => {
     vi.resetModules();
     env.sent = [];
     t = await import("./seenTracker");
-  });
+    // Import à froid du module et du paquet partagé : lent quand toute la suite du site tourne en parallèle.
+  }, 30_000);
 
   it("envoi lent de A, déconnexion : l'échec ne repart pas, aucun lot suivant avec la session de B", async () => {
     for (let i = 1; i <= 120; i++) t.noteSeenAction("a", id(i), "view");
