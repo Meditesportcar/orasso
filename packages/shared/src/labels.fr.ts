@@ -53,6 +53,7 @@ export * from "./labels/partnerships.fr";
 export * from "./labels/passport.fr";
 export * from "./labels/plural.fr";
 export * from "./labels/points.fr";
+export * from "./labels/practical.fr";
 export * from "./labels/preferences.fr";
 export * from "./labels/presence.fr";
 export * from "./labels/pro-presta.fr";

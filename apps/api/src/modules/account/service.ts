@@ -38,6 +38,7 @@ import {
   proFollows,
   profileInterests,
   profiles,
+  profileWeatherPlaces,
   proPhotos,
   proProfiles,
   session,
@@ -489,6 +490,8 @@ export const accountService = {
         })
         .where(eq(profiles.userId, userId));
       await tx.delete(profileInterests).where(eq(profileInterests.userId, userId));
+      // Lot R8m : les villes choisies pour « Ma météo ».
+      await tx.delete(profileWeatherPlaces).where(eq(profileWeatherPlaces.userId, userId));
       // Traces de l'adresse et de la plaque ailleurs : file des e-mails, inscriptions express, invitations, transferts.
       if (oldEmail) {
         const sent = await tx

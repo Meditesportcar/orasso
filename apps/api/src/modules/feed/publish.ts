@@ -104,7 +104,9 @@ export const feedPostsService = {
   async create(v: Viewer, raw: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
     // Un UUID s'écrit en minuscules avant toute comparaison (le même partenaire, de casses différentes, n'est pas un conflit).
-    const input = raw.commercialPartnerId ? { ...raw, commercialPartnerId: raw.commercialPartnerId.toLowerCase() } : raw;
+    const input = raw.commercialPartnerId
+      ? { ...raw, commercialPartnerId: raw.commercialPartnerId.toLowerCase() }
+      : raw;
     const userId = v.user.id;
     // Le compte attendu par le formulaire : avant toute lecture ou écriture (une session changée dans un autre onglet).
     if (input.expectedUserId && input.expectedUserId !== userId) {

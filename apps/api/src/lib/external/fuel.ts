@@ -1,5 +1,5 @@
 // Prix des carburants (lot 30, S35) : données ouvertes « prix des carburants en France, flux instantané » de
-// data.economie.gouv.fr (licence ouverte, sans clé). Un appel par département et par heure au plus (cache
+// data.economie.gouv.fr (licence ouverte, sans clé). Un chargement par département et par jour au plus (cache
 // `fuel:<département>`). Sans réseau ou désactivé : aucun résultat, jamais d'erreur.
 // Tout le département est chargé (filtre `code_departement`, pagination de 100) : un filtre géographique autour du
 // centre manquerait les stations des villes éloignées du centre (Perpignan est à 33 km de celui du 66). Vérifié le
@@ -15,9 +15,11 @@ import {
 import { env } from "../../env";
 import { cachedSource, externalRequest, readBoundedJson } from "./cache";
 
-export const FUEL_TTL_MS = 3_600_000;
-/** Des prix vieux d'un jour ne sont plus servis. */
-const FUEL_MAX_STALE_MS = 24 * 3_600_000;
+// Lot R8q : « Pratique » n'affiche aucun prix, seulement où sont les stations : un chargement par département et par jour
+// suffit (au plus 101 par jour pour toute la plateforme), et une liste vieille d'une semaine vaut mieux que rien.
+export const FUEL_TTL_MS = 24 * 3_600_000;
+/** Une liste vieille de plus d'une semaine n'est plus servie. */
+export const FUEL_MAX_STALE_MS = 7 * 24 * 3_600_000;
 
 type FuelRecord = {
   adresse?: string | null;
@@ -89,7 +91,7 @@ export function fuelUrl(base: string, department: string, offset = 0): string {
   return `${base}?${params}`;
 }
 
-/** Stations-service de tout un département (cache 1 heure), `[]` si la source ne répond pas. */
+/** Stations-service de tout un département (cache 24 heures), `[]` si la source ne répond pas. */
 export async function fuelNear(department: string): Promise<CachedFuelStation[]> {
   if (!departmentCentroids[department]) return [];
   const data = await cachedSource<CachedFuelStation[]>({

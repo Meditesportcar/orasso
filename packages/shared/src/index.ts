@@ -14,6 +14,7 @@ export * from "./moderation";
 export * from "./notifications/r7";
 export * from "./notifications/r8";
 export * from "./notifications/r9";
+export * from "./prefectures";
 export * from "./preferences";
 export * from "./privacy";
 export * from "./provider";
