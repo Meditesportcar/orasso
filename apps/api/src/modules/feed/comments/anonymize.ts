@@ -23,14 +23,28 @@ import type { Tx } from "../../../lib/tx";
 import { dropCommentNotifications } from "./notify";
 
 /**
- * Verrou des publications où ce compte reçoit ou a reçu des notifications de commentaires (les siennes, et celles où il a
- * commenté), **avant toute mutation de ses notifications** : un commentaire en cours prend la publication puis la ligne de
- * notification regroupée ; l'anonymisation doit les prendre dans le même ordre (publication, puis notification).
+ * Verrou, **en une seule requête triée par identifiant et au tout début** de l'anonymisation, de toutes les publications que ce
+ * compte touche (petit lot API, tour 2) : les siennes, celles où il a commenté, celles qu'il cosigne, celles où il a mis une
+ * flamme. Deux comptes supprimés en même temps (co-auteurs mutuels, flammes croisées, commentaires croisés) prennent donc leurs
+ * verrous dans le même ordre et ne s'interbloquent pas (40P01). Avant toute mutation, notamment celle de ses notifications : un
+ * commentaire en cours prend la publication puis la ligne de notification regroupée, même ordre ici.
  */
 export async function lockPostsOfDeletedAccount(tx: Tx, userId: string): Promise<void> {
   await tx.execute(
     sql`select id from feed_posts where author_id = ${userId}
       or id in (select post_id from feed_post_comments where author_id = ${userId})
+      or id in (select post_id from feed_post_coauthors where coauthor_kind = 'user' and coauthor_id = ${userId})
+      or id in (select post_id from feed_post_reactions where user_id = ${userId})
+      or id in (select c.post_id from feed_post_comments c join feed_post_comment_reactions r on r.comment_id = c.id where r.user_id = ${userId})
+      order by id for update`,
+  );
+  // Puis, toujours dans l'ordre des identifiants, les lignes de commentaires que l'anonymisation écrira : les siens, les réponses
+  // des autres dessous, leurs parents, et ceux où il a mis une flamme.
+  await tx.execute(
+    sql`select id from feed_post_comments where author_id = ${userId}
+      or parent_id in (select id from feed_post_comments where author_id = ${userId})
+      or id in (select parent_id from feed_post_comments where author_id = ${userId} and parent_id is not null)
+      or id in (select comment_id from feed_post_comment_reactions where user_id = ${userId})
       order by id for update`,
   );
 }

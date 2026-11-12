@@ -83,6 +83,19 @@ async function replayed(userId: string, clientId: string, event: Awaited<ReturnT
 const STALE_QUEUED_MS = 2 * 60_000;
 
 /**
+ * La dernière trace d'e-mail d'une invitation express. Le prédicat est celui, mot pour mot, de l'index partiel
+ * `email_outbox_express_invite_idx` (nom du modèle écrit en littéral, jamais en paramètre : sinon le planificateur ne peut
+ * pas le rapprocher de l'index). Exportée pour que le test lise le plan de la requête réelle.
+ */
+export const lastMailTraceQuery = (executor: Pick<typeof db, "select">, inviteId: string) =>
+  executor
+    .select({ status: emailOutbox.status, createdAt: emailOutbox.createdAt })
+    .from(emailOutbox)
+    .where(and(sql`${emailOutbox.template} = 'express_invite'`, sql`${emailOutbox.payload}->>'inviteId' = ${inviteId}`))
+    .orderBy(desc(emailOutbox.createdAt))
+    .limit(1);
+
+/**
  * Envoie l'e-mail de l'invitation **sauf s'il est parti ou en route** : la dernière trace de la boîte d'envoi est « envoyé »,
  * « écarté par le budget » ou « en attente » depuis moins de 2 minutes (« en route » : `pending`). Pas de trace, un échec (`failed`) ou une attente
  * trop ancienne : il repart. Sous un verrou propre à l'invitation, la ligne d'envoi est écrite **dans la transaction** (donc
@@ -105,12 +118,7 @@ async function ensureMail(
   );
   const queued = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`express-mail:${row.id}`}))`);
-    const [last] = await tx
-      .select({ status: emailOutbox.status, createdAt: emailOutbox.createdAt })
-      .from(emailOutbox)
-      .where(and(eq(emailOutbox.template, "express_invite"), sql`${emailOutbox.payload}->>'inviteId' = ${row.id}`))
-      .orderBy(desc(emailOutbox.createdAt))
-      .limit(1);
+    const [last] = await lastMailTraceQuery(tx, row.id);
     const onItsWay =
       last &&
       (last.status === "sent" ||

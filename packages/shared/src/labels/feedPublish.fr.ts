@@ -1,4 +1,5 @@
 import { BUSINESS_TIMEZONE } from "../enums";
+import { attachPhrase } from "../rules/attachPhrase";
 import type { FeedAttachPhase, FeedEventRole } from "../rules/feedAttach";
 import { wallTime } from "../rules/time";
 
@@ -134,9 +135,9 @@ export function attachVerb(role: FeedEventRole | null, phase: FeedAttachPhase): 
   return "";
 }
 
-/** « sera au Nocturne de Canet » : le verbe puis le titre, jamais tronqué. */
+/** « sera à la Nocturne de Canet » : le verbe puis le titre, accordés (règle `attachPhrase`), jamais tronqué ; sans rôle, le titre seul. */
 export const attachPhraseOf = (role: FeedEventRole | null, phase: FeedAttachPhase, title: string): string =>
-  role ? `${attachVerb(role, phase)} ${title}` : title;
+  attachPhrase(role, phase, title);
 
 const DAYS = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."] as const;
 const MONTHS = [
