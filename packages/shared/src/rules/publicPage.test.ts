@@ -162,6 +162,20 @@ describe("mentionLine : la ligne d'une mention", () => {
       "présent au Rassemblement du Lydia",
     );
   });
+  it("le titre accorde la phrase : féminin, élision, pluriel et « h » aspiré", () => {
+    const titled = (title: string, role: "on_site" | "attendee" | "organizer", phase: "before" | "after") => ({
+      ...attach(role, phase),
+      event: { id: "e", slug: "e", title, startsAt: "", endsAt: "", city: null },
+    });
+    const line = (title: string, role: "on_site" | "attendee" | "organizer", phase: "before" | "after") =>
+      mentionLine({ post: post(titled(title, role, phase)), source: "attach", hidden: false }, "RL66").text;
+    expect(line("Nocturne de Canet", "attendee", "after")).toBe("était à la Nocturne de Canet");
+    expect(line("Balade de Prades", "organizer", "before")).toBe("pour la Balade de Prades");
+    expect(line("Exposition d'automne", "on_site", "after")).toBe("présent à l'Exposition d'automne");
+    expect(line("Les Rencontres de Prades", "attendee", "before")).toBe("sera aux Rencontres de Prades");
+    // « h » aspiré (mot anglais) : reste au masculin, pas d'élision.
+    expect(line("Hot Rod Day", "attendee", "before")).toBe("sera au Hot Rod Day");
+  });
   it("une collaboration commerciale : la pastille, pas de phrase", () => {
     expect(mentionLine({ post: post(null), source: "commercial", hidden: false }, "ATD")).toEqual({
       text: "",

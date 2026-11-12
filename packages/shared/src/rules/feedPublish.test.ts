@@ -354,7 +354,7 @@ describe("« Ce que verront les autres »", () => {
     const past = publishSays(byKey("me"), { title: "Rassemblement du Lydia", role: "attendee", phase: "after" }, false);
     expect(past).toMatchObject({ phrase: "était au Rassemblement du Lydia", stamp: true });
     const soon = publishSays(byKey("me"), { title: "Nocturne de Canet", role: "attendee", phase: "before" }, false);
-    expect(soon).toMatchObject({ phrase: "sera au Nocturne de Canet", stamp: false });
+    expect(soon).toMatchObject({ phrase: "sera à la Nocturne de Canet", stamp: false });
     expect(
       publishSays(byKey("provider:v1"), { title: "Nocturne", role: "on_site", phase: "before" }, false).phrase,
     ).toBe("présent au Nocturne");
@@ -396,7 +396,9 @@ describe("libellés d'un événement rattachable", () => {
     expect(attachStateLabel("organizer", "after")).toBe("30 derniers jours");
     expect(attachStateLabel("organizer", "before")).toBe("à venir");
     expect(attachStateLabel("attendee", "running")).toBe("en cours");
-    expect(attachPhraseOf("organizer", "before", "Balade de Prades")).toBe("pour le Balade de Prades");
+    expect(attachPhraseOf("organizer", "before", "Balade de Prades")).toBe("pour la Balade de Prades");
+    expect(attachPhraseOf("organizer", "before", "Rassemblement du Lydia")).toBe("pour le Rassemblement du Lydia");
+    expect(attachPhraseOf("attendee", "before", "Nocturne de Canet")).toBe("sera à la Nocturne de Canet");
     expect(attachPhraseOf(null, "after", "Rassemblement du Lydia")).toBe("Rassemblement du Lydia");
   });
 });
