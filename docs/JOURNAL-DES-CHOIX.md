@@ -5077,6 +5077,43 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **B4** : un échec d'écriture du stock après une réponse du fournisseur pose `departmentFailures` (retenue de 10 minutes) puis relance l'erreur.
 - **B5** : `commercial.test.ts` : horloge à l'heure réelle, remise à l'heure juste avant la lecture du Fil (la publication est datée par le système) ; `r1Events` : `removeR1Events` en `afterAll` des deux recettes ; avertissements `useOptionalChain` corrigés ; outils de captures : `phaseDir` (`relais.ts`) respecte `CAPTURES_DIR`, refuse d'écraser un dossier `avant` rempli (`CAPTURES_OVERWRITE_AVANT=1` pour forcer), `capture-lotr8s` passe à `PHASE=apres` par défaut ; `lot36`, `lot38`, `lot39` lisent aussi `CAPTURES_DIR`. Les recettes `lotr8e1` remettent les réglages d'Accueil de Kenji (elles les laissaient masquer le garage favori, ce qui faisait échouer `lotr1-site`).
 
+## Lot R8m : « Ma météo » (appli et site, D40, 11/11/2026)
+
+- **Migration** (générée `0077_weather-places`, le coordinateur la renumérote 0089) : deux tables neuves, aucun `ALTER` de `profiles`. `profile_weather_places` (PK `(user_id, slot)`, slot 0 ou 1, libellé 1 à 80, `lat`/`lng` à 0,01°, cascade avec le compte) ; `weather_places_cache` (PK `cell` = position à 0,1°, jamais de compte). Vérifiée sur base neuve et sur une base au niveau 0076.
+- **Position jamais enregistrée ni journalisée** : `POST /weather/at` (corps de requête, pas d'adresse) arrondit à 0,1° dès la première ligne ; fournisseur, cache et géocodeur n'ont que la case ; aucune écriture liée au compte. Test : aucune ligne d'aucune table, aucune adresse envoyée, aucun journal ne porte la position reçue. Conséquence assumée : l'arrondi à 0,1° peut nommer la commune voisine.
+- **Écart à la fiche** : les lieux de `GET /me/weather/places` portent aussi `lat` et `lng` (ceux de la **ville** à 0,01°, jamais une position) : sans eux, retirer ou changer un lieu sur deux obligerait à réenvoyer l'autre sans ses coordonnées (le `PUT` remplace tout).
+- **La position prend la place du premier lieu**, le second lieu choisi reste à côté (deux cartes au plus) ; elle est gardée en mémoire de l'écran seulement (appli : module en mémoire lié au compte ; site : mémoire de la page, navigation sans rechargement ; recharger l'oublie). Demandée à l'appui du bouton seulement.
+- **« Second lieu » sur la ville par défaut** : la préfecture est enregistrée avec lui (sinon le second lieu prendrait sa place). Règles communes dans `rules/myWeather.ts` (`weatherCards`, `placesAfterChange/Add/Remove`), testées.
+- **Libellé d'une ville choisie** : « Argelès-sur-Mer » (le « (66) » de la recherche est retiré à l'enregistrement, comme la maquette). Sans département ni lieu : carte « Choisis ta ville » qui ouvre le détail.
+- **Guyane** : le test des préfectures tolère 200 km (centre du département en forêt) au lieu de 120.
+- **Accueil lu du cache** (`myWeather`) : case manquante ou vieille rafraîchie sans être attendue ; la tâche `weather.refresh` rafraîchit aussi les cases des lieux choisis et des préfectures utilisées (≤ 300 par passage) et purge celles de plus de 7 jours. Limite de débit unique `myWeather` (120 par minute) pour les quatre routes.
+- **Fichiers hors liste** : `modules/account/service.ts` (suppression du compte : ses lieux partent, 2 lignes), `scripts/seed.ts` (une ligne), `e2e/meteo` non touché ; recettes R8e1 adaptées (le bloc ne dit plus « Dép. 66 »).
+- **À revoir avec Damien** : `POST /weather/at` est refusé à un compte suspendu (écriture) alors que c'est une lecture ; à ajouter à la liste des écritures permises dans `lib/session.ts` (hors de ce lot).
+
+### Lot R8m : Tour 2 (relectures Opus et Codex, 11/11/2026)
+
+- **Fusion de `main`** (retouches R8r) : le bloc « Ma météo » porte l'attente « Météo en cours de chargement » et la relecture unique. `MyWeatherPlaces.pending` (lieu sans météo en stock, rafraîchissement réellement parti) remplace `weatherPending` pour ce bloc ; après `WEATHER_PROVIDER_TIMEOUT_MS + 2 s`, une seule relecture de `GET /me/weather/places`, puis « Météo indisponible ». Le champ `weatherPending` et `GET /me/weather?place=1` restent servis (APK en ligne). Les tests de `home-r8e1.test.ts` qui comptent les appels tiennent compte de la case de la préfecture.
+- **Session (bloquants 1 et 2)** : règles communes dans `rules/positionStore.ts` (testées) : la session est lue au départ et revérifiée avant d'appliquer toute réponse, la position est liée au compte et vidée quand la session change. Site : annonce de session (`sessionChannel`) ; appli : `cacheScope`.
+- **Coût (3)** : `POST /weather/at` limité à 10 par minute et 30 par heure et par compte ; plafond de 300 cases nouvelles par heure pour toute la plateforme, au-delà la case fraîche la plus proche (≤ 0,5°), sinon « indisponible » sans appel ; la commune d'une case est gardée dans `external_cache` (clé `reverse-city:<case>`, 30 jours ; un échec 1 h).
+- **Hors ligne (4)** : le bloc de l'Accueil écrit sa copie dans la clé du détail ; le détail s'ouvre donc avec les prévisions.
+- **Position figée (5)** : relue au focus, au retour au premier plan, à l'actualisation manuelle (appli et site), au plus toutes les 10 minutes (sauf geste manuel).
+- **Second lieu (6)** : la position est la première carte ; elle remplace la ville par défaut et le premier de deux lieux choisis ; un seul lieu choisi reste à côté d'elle. « Changer de lieu » sur la carte de la position garde l'éventuel lieu choisi comme second.
+- **Jetons (7)** : plus de taille de police, de rayon ni de largeur en dur ; les chiffres prennent le jeton `numberNarrow` (34) au lieu de 28 et 44 de la maquette, les heures `bodyStrong`, la tuile d'heure 4 × `space4`, les rayons `radiusMd`/`radiusLg`. Écart assumé à la maquette (chiffre de la carte plus grand, du grand chiffre du détail plus petit).
+- **Autres** : attribution « Open-Meteo » sur les cartes (8) ; « Retirer ce lieu » ne revient en arrière qu'en cas de succès, la ville choisie n'oublie la position qu'une fois enregistrée (9) ; l'export des données personnelles inclut les villes choisies (10).
+
+### Lot R8m : Tour 3 (relecture Codex du tour 2, 11/11/2026)
+
+- **Position et GPS (bloquant)** : `positionStore.begin()` capture compte et génération dès le geste ; `valid()` est revérifié après la permission, le GPS et le réseau, avant tout envoi et toute écriture (appli et site). Test partagé : changement de compte pendant l'attente du GPS.
+- **Plafond** : `cellForAt` (plafond horaire commun, repli sur la case proche) sert `GET`/`PUT places`, « Utiliser ma position » et le préchauffage de `/me/home` ; seule la tâche planifiée appelle `cellForecast`. La météo du département de R8r garde son propre chemin.
+- **Garde R8r complète** : une ligne n'est « exploitable » que si `placeWeather(row)` donne aujourd'hui et l'heure en cours ; sinon elle est renouvelée (même récente) et `pending` est vrai si aucune météo exploitable n'existe.
+- **Détail hors ligne** : la copie du détail est la valeur AFFICHÉE (relecture comprise). **Site** : le formulaire transmet le type de carte (la position remplacée garde le second lieu) ; la position n'est oubliée qu'après l'enregistrement (`?remplace=position`), appli : seulement si la carte remplacée est la position. **Détail de l'appli** relu au retour au premier plan (10 minutes). `fromStorage` met à jour le dernier compte annoncé ; le repli du site affiche l'attente R8r.
+
+### Lot R8m : Tour 4 (relectures Opus et Codex du tour 3, 11/11/2026)
+
+- **Sessions** : chaque fin de session invalide les demandes de position en cours (nouvelle génération) : appli par `onCacheScopeDropped`, site par l'annonce de session (« aucun compte » invalide les demandes sans effacer la position, un autre compte l'efface). `positionStore.invalidate()` ajouté (paramètres facultatifs seulement, signatures inchangées).
+- **Plafond** : retenue après échec et regroupement avant de réserver ; seul un appel réellement parti au fournisseur compte (`cellForecast(cell, force, onCall)`) ; une réponse inexploitable est retenue 10 minutes comme un échec.
+- **Copie du détail** : conditionnée à la valeur affichée ; l'abonnement `AppState` du détail dépend de `places.reload`.
+
 ## Lot R8c1 : API du Fil (publications des pages, cartes vues, popularité et rail, ordre par date, « ma sortie », mes publications dans « Abonnements », nouveautés) (API seule, migration « feed-seen », D40, 11/11/2026)
 
 ### Choix
@@ -5738,6 +5775,12 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
 
+### Lot R8m : Tour 5 (relecture Codex du tour 4, 12/11/2026)
+
+- **Plafond avec demandes simultanées** : `cellForecast(cell, force, reserve)` prend la place du plafond horaire au moment exact où l'appel part (contrôle et ajout sans attente entre eux) ; refusée, `cellForAt` applique le repli (case proche en stock, sinon le stock, sinon rien). Test : 299 places prises, dix cases distinctes en même temps, un seul appel au fournisseur, neuf replis.
+- **Fusion de `vague-r8`** : migration renumérotée `0083_weather-places` (les 0077 à 0082 sont ceux de la vague).
+- **Site, annonce « aucun compte »** : la mise en page l'annonce brièvement pendant une revalidation : elle invalide les demandes en cours (sans effacer la position gardée) ; seul un autre compte non nul l'efface. Recettes : « Second lieu » attend sa navigation avant la recherche ; le `PUT` des lieux (10 par minute, 30 par heure) borne le nombre de passes de recette par heure sur une même API.
+
 ### Tour 3 (lot R8o, 12/11/2026) : relecture Codex du tour 2
 - **Notifications d'invitation** : retirées par les notifications réellement écrites (type `coauthor_*` et `postId`), plus par des destinataires recalculés : un ancien responsable retiré depuis ne garde rien. Index partiel d'expression `notifications_coauthor_post_idx` ajouté **à la main** à la fin de ma migration (la table `notifications` n'est pas à moi, le schéma Drizzle ne le connaît pas). Migration régénérée en `0083_feed-coauthors` (la vague a pris 0082) ; le coordinateur renumérote.
 - **« Demandes »** : `pendingRequests` garde l'exclusion (ancienne appli) ; champ `pendingCoauthors` du résumé, que `inboxRowCounts` ajoute côté nouveaux clients (l'ancienne appli l'ignore). La ligne « Demandes · 1 » se montre avec la seule invitation.
@@ -5768,15 +5811,15 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Info importante d'hier** : déjà corrigée par le coordinateur (3c7efc20) ; vérifié : `important` n'est posé que pour une importante d'aujourd'hui, test « importante d'hier + annonce d'aujourd'hui » présent et vert.
 
 ### Tour 5 (lot R8d, 12/11/2026)
-- **Site, mentions** : un changement de session signal� par le canal (listenSession) incr�mente la g�n�ration, vide les pages lues, remet usy � nul et revalide le chargeur : une pagination en vol d'un autre compte est jet�e.
-- **Appli, mentions** : load() remet loadingMore � nul au d�marrage (le inally d'une pagination p�rim�e ne le fait plus) : � Voir plus � ne reste plus bloqu�.
-- **�pingle de la fa�ade** : une reprise sur 40P01, comme setPinned de pin.ts.
-- **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une r�ponse retard�e, et l'appli n'a pas de test d'�cran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
+- **Site, mentions** : un changement de session signalé par le canal (listenSession) incrémente la génération, vide les pages lues, remet usy à nul et revalide le chargeur : une pagination en vol d'un autre compte est jetée.
+- **Appli, mentions** : load() remet loadingMore à nul au démarrage (le inally d'une pagination périmée ne le fait plus) : « Voir plus » ne reste plus bloqué.
+- **Épingle de la façade** : une reprise sur 40P01, comme setPinned de pin.ts.
+- **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une réponse retardée, et l'appli n'a pas de test d'écran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
 
 ### Tour 6 (lot R8d, 12/11/2026)
-- **Site, mentions** : un �tat � session chang�e � remplace listes, filtre, menus et � Voir plus � par le chargement jusqu'� la fin de la revalidation (lev� par le chargeur ou par la fin de la revalidation). Le m�me compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant � l'hydratation (vu en recette). Pas de test automatique (aucun mod�le de test d'�cran du site pour ce canal) ; recette du site 7/7.
-- **Appli, mentions** : � Voir plus � est refus� tant que load() n'a pas install� ses listes et ses curseurs (drapeau eading), le d�blocage apr�s une pagination jet�e est gard�.
-- **�pingle de la fa�ade** : la limite eedWrite est compt�e une fois, avant le rejeu sur 40P01 ; test (58 �critures, 40P01 simul�, l'�pingle passe).
+- **Site, mentions** : un état « session changée » remplace listes, filtre, menus et « Voir plus » par le chargement jusqu'à la fin de la revalidation (levé par le chargeur ou par la fin de la revalidation). Le même compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant à l'hydratation (vu en recette). Pas de test automatique (aucun modèle de test d'écran du site pour ce canal) ; recette du site 7/7.
+- **Appli, mentions** : « Voir plus » est refusé tant que load() n'a pas installé ses listes et ses curseurs (drapeau eading), le déblocage après une pagination jetée est gardé.
+- **Épingle de la façade** : la limite eedWrite est comptée une fois, avant le rejeu sur 40P01 ; test (58 écritures, 40P01 simulé, l'épingle passe).
 
 ### Tour 3 (R9a partie 1, 12/11/2026) : corrections de la relecture Codex
 - **Après `git merge vague-r8`** : le journal et `labels.fr.ts` gardent les deux côtés ; la migration reste `0079_persona-follows` (entrée ajoutée en fin de `_journal.json`, après les migrations de la vague) et le snapshot 0079 est celui de la vague : à renuméroter et régénérer à la fusion.
@@ -5792,14 +5835,21 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur présents avant la fin de gratuité, absents pour un autre lecteur après, maintenus pour le propriétaire).
 - **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors décision, à noter : une publication d'un pro qui cite une structure ou un événement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` après la fin de gratuité.
 
+### Lot R8m : Tour 6 (relecture Codex du tour 5, 12/11/2026)
+
+- **Position du site et déconnexion** : retour à la portée nulle sans session (`scope: currentSession`) et effacement de la position sur toute annonce qui change le compte, « aucun compte » comprise. Le changement du tour 5 (portée sur le dernier compte non nul) est retiré : il gardait la position de A après sa déconnexion.
+- **L'annonce « aucun compte » transitoire n'existe pas** (recherche faite) : les annonces `null` observées viennent des pages publiques (connexion), sans session ; la mise en page de l'espace connecté n'annonce jamais `null` en cours de navigation. Le rechargement de la position vu aux tours 4 et 5 était une course dans la recette (le bouton « Second lieu » cliqué avant sa navigation) : les recettes attendent maintenant cette navigation.
+- **Test du branchement réel** : `apps/web/app/components/weather/position.test.ts` (annonce de session → magasin) : déconnexion, position effacée, aucune coordonnée ne repart ni en relecture forcée ; un autre compte ne la voit pas.
+- **Repli sous concurrence** : `cellForAt` partage une promesse par case, repli compris : quota plein, trois demandes simultanées sur la même case, trois replis.
+
 ### Tour 4 (lot R8o, 12/11/2026) : relecture Codex du tour 3
 - **Index partiel** : la requête et l'index portent maintenant le même prédicat, mot pour mot (`type in ('coauthor_invited', 'coauthor_accepted', 'coauthor_withdrawn')`) ; avant, un `like` non échappé d'un côté et échappé de l'autre empêchait PostgreSQL de s'en servir. Plan vérifié par un test (`EXPLAIN (FORMAT JSON)` de la requête réelle, paramètres compris, 4 000 notifications, `enable_seqscan = off` pour montrer que l'index est utilisable) : le plan cite `notifications_coauthor_post_idx` (scan par index de l'expression `data ->> 'postId'`). Index corrigé dans la migration `0083_feed-coauthors` (renumérotée par le coordinateur).
 - **Compteur de `GET /me`** : `pendingCoauthorCount` est un comptage (les invitations en attente, puis les mêmes contrôles de visibilité que la liste : publication servie, auteur en règle, compte privé suivi), plus aucune carte construite. Test : même nombre que la liste dans quatre cas (publication supprimée, auteur privé non suivi, auteur banni) ; nombre de requêtes identique pour 1 et 7 invitations.
 - **Tests** : l'UUID en majuscules exige 201 et le bon partenaire ; scénario heures calmes (notification différée) puis anonymisation de l'auteur : ni ligne ni livraison ensuite. Le test de forme du résumé de la Boîte (`activity.test.ts`) accepte `pendingCoauthors`.
 
 ### Tour 7 (lot R8d, 12/11/2026)
-- **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (r�f�rence mise � jour � chaque donn�e) : A ? B ? A dans une page rest�e mont�e n'ignore plus la derni�re annonce. Pas de test A ? B ? A (il faut deux comptes dans une m�me fen�tre annonc�s par le canal) ; recette du site non rejou�e ce tour.
-- **�pingle de la fa�ade** : l'�criture est compt�e � la d�tection de la reprise dans la transaction, une fois par requ�te (drapeau gard� entre les tentatives) ; le test pr�charge 59 �critures et l�ve le 40P01 apr�s le corps.
+- **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (référence mise à jour à chaque donnée) : A ? B ? A dans une page restée montée n'ignore plus la dernière annonce. Pas de test A ? B ? A (il faut deux comptes dans une même fenêtre annoncés par le canal) ; recette du site non rejouée ce tour.
+- **Épingle de la façade** : l'écriture est comptée à la détection de la reprise dans la transaction, une fois par requête (drapeau gardé entre les tentatives) ; le test précharge 59 écritures et lève le 40P01 après le corps.
 
 ## Petit lot appli (12/11/2026)
 

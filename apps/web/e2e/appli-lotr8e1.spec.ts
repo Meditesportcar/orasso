@@ -135,8 +135,9 @@ test("le bloc « Météo » ne dit que le département ; « Météo de l'événe
   const { ctx, page } = await open(browser);
   const block = page.getByTestId("home-weather");
   await expect(block).toBeVisible({ timeout: 30_000 });
-  await expect(block).toContainText("Météo du jour");
-  await expect(block).toContainText("Dép. 66");
+  // Lot R8m : « Ma météo » (la ville du département, « Perpignan · ta ville »), plus « Météo du jour » ni « Dép. 66 ».
+  await expect(block).toContainText("Ma météo");
+  await expect(block).toContainText("Perpignan · ta ville");
   await expect(block).not.toContainText(/jour J/);
   await expect(page.getByTestId("home-outing-weather")).toHaveCount(2);
 
@@ -153,7 +154,7 @@ test("le bloc « Météo » ne dit que le département ; « Météo de l'événe
   await afterOpening(page);
   await expect(page.getByTestId("home-outing").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("home-outing-weather")).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66");
+  await expect(page.getByTestId("home-weather")).toContainText("Perpignan · ta ville");
   await ctx.close();
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["live", ...DEFAULT_HIDDEN] });
 });
@@ -212,18 +213,21 @@ test("lot R8r : stock vide → « Météo en cours de chargement », puis la rel
     const res = await route.fetch();
     if (!route.request().url().includes("blocks=app") || reads++ > 0) return route.fulfill({ response: res });
     const json = (await res.json()) as Record<string, unknown>;
-    return route.fulfill({ response: res, json: { ...json, weather: null, weatherPending: true } });
+    // Lot R8m : « Ma météo » porte l'attente (`myWeather.pending`) ; le stock vide est simulé sur ses lieux.
+    const mine = json.myWeather as { places: Record<string, unknown>[] };
+    const myWeather = { ...mine, pending: true, places: mine.places.map((pl) => ({ ...pl, weather: null })) };
+    return route.fulfill({ response: res, json: { ...json, weather: null, weatherPending: true, myWeather } });
   });
   await page.goto("/accueil");
   await afterOpening(page);
   const pending = page.getByTestId("home-weather-pending");
   await expect(pending).toBeVisible({ timeout: 30_000 });
   await expect(pending).toContainText("Météo en cours de chargement");
-  await expect(pending).toContainText("Dép. 66");
+  await expect(page.getByTestId("home-weather")).toContainText("Perpignan · ta ville");
   await expect(page.getByTestId("home-outing").first()).toBeVisible();
   await page.screenshot({ path: `${DIR}/appli-meteo-chargement-384.png` });
   // L'état reste jusqu'à la relecture unique de la seule météo du département (après le délai du fournisseur), puis la carte.
-  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66", { timeout: 45_000 });
+  await expect(page.getByTestId("home-weather")).toContainText(/Vent \d+\s*km\/h/, { timeout: 45_000 });
   await expect(pending).toHaveCount(0);
   await ctx.close();
 });

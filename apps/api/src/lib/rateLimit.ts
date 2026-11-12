@@ -37,6 +37,14 @@ export const rateRules = {
   registryCheck: { max: 10, windowMs: 3_600_000, message: "Trop de contrôles : réessaie dans une heure." },
   /** Recherche d'adresse de l'assistant d'événement (service de géocodage public). */
   geocode: { max: 60, windowMs: 60_000, message: "Trop de recherches d'adresse : réessaie dans une minute." },
+  /** Lot R8m : « Ma météo » (lieux, position, recherche d'une commune à la frappe). */
+  myWeather: { max: 120, windowMs: 60_000, message: "Trop de demandes de météo : réessaie dans une minute." },
+  /** Lot R8m : « Utiliser ma position » (chaque case nouvelle est un appel au fournisseur) : par compte, à la minute et à l'heure. */
+  weatherAt: { max: 10, windowMs: 60_000, message: "Trop de demandes de position : réessaie dans une minute." },
+  weatherAtHour: { max: 30, windowMs: 3_600_000, message: "Trop de demandes de position : réessaie plus tard." },
+  /** Lot R8m : enregistrer ses villes (chaque lieu nouveau peut demander une case au fournisseur). */
+  weatherPut: { max: 10, windowMs: 60_000, message: "Trop de changements de lieu : réessaie dans une minute." },
+  weatherPutHour: { max: 30, windowMs: 3_600_000, message: "Trop de changements de lieu : réessaie plus tard." },
   /** Envoi de justificatifs, logos et affiches. */
   fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
   /** Galerie de 30 photos, avec de la marge pour remplacer les photos retirées du formulaire. */

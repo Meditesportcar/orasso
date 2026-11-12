@@ -1,0 +1,83 @@
+// « Utiliser ma position » de « Ma météo » sur le site (lot R8m). Comme dans l'appli : demandée au clic seulement, arrondie à
+// 0,1° AVANT l'envoi, envoyée en corps de requête (jamais dans l'adresse), gardée EN MÉMOIRE de la page (jamais dans le
+// stockage du navigateur) : recharger la page l'oublie. Tour 2 : liée au compte de la session (annonce de session déjà en
+// place, `sessionChannel`) et vidée dès que la session change ou disparaît (expiration, déconnexion, autre compte, dans
+// n'importe quelle fenêtre) ; une réponse lancée sous l'ancienne session est jetée (règles dans `positionStore` partagé).
+import { coarsePosition, createPositionStore, type WeatherAt } from "@orasso/shared";
+import { useSyncExternalStore } from "react";
+
+import { apiFetch } from "../../lib/api.client";
+import { currentSession, listenSession } from "../../lib/sessionChannel";
+
+const store = createPositionStore({
+  // Le dernier compte annoncé par la mise en page ; `null` sans session (la position n'a alors aucune portée).
+  scope: currentSession,
+  now: () => Date.now(),
+  weatherAt: async (position) => {
+    const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: position });
+    if (!res.ok) throw new Error(res.error.message);
+    return res.data;
+  },
+});
+
+if (typeof window !== "undefined") {
+  // Toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface la position et
+  // invalide les demandes en cours : A → déconnexion → A pendant le GPS ne ramène rien. (Aucune annonce « aucun compte » ne
+  // survient en cours de navigation : seules les pages publiques, sans session, l'annoncent.)
+  let seen: string | null = currentSession();
+  listenSession((userId) => {
+    if (userId !== seen) store.forget();
+    seen = userId;
+  });
+}
+
+/** La position visible pour la session courante (tests, et lecture sans React). */
+export const peekWeatherPosition = () => store.view();
+
+const EMPTY = { at: null, busy: false } as const;
+let last = store.view();
+const snapshot = () => {
+  const next = store.view();
+  if (next.at !== last.at || next.busy !== last.busy) last = next;
+  return last;
+};
+
+/** La météo de la position donnée à l'instant (ou `null`) et si la demande est en cours. */
+export function useWeatherPosition() {
+  // Le rendu serveur et l'hydratation partent de la même valeur vide ; la position gardée apparaît juste après.
+  return useSyncExternalStore(store.subscribe, snapshot, () => EMPTY);
+}
+
+function readPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      reject(new Error("indisponible"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, { maximumAge: 300_000, timeout: 10_000 });
+  });
+}
+
+/** Demande la position à l'appareil puis la météo de sa case. `false` si refusée ou indisponible (la ville reste). */
+export async function askMyPosition(): Promise<boolean> {
+  if (store.getState().busy) return false;
+  // Le compte et la génération sont capturés DÈS LE GESTE et revérifiés après chaque attente (GPS, réseau).
+  const ticket = store.begin();
+  if (!ticket) return false;
+  store.setBusy(true);
+  try {
+    const fix = await readPosition();
+    if (!store.valid(ticket)) return false;
+    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }), ticket);
+  } catch {
+    return false;
+  } finally {
+    store.setBusy(false);
+  }
+}
+
+/** Relit la météo de la position gardée (retour sur la page, actualisation) : au plus toutes les dix minutes, sauf `force`. */
+export const refreshMyPosition = (force = false) => store.refresh(force);
+
+/** Oublie la position (une ville choisie la remplace). */
+export const forgetMyPosition = () => store.forget();
