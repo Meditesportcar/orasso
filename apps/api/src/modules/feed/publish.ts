@@ -9,6 +9,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   type AttachableEventItem,
   aspectMatches,
+  coauthorLabels,
   FEED_ASPECT_RATIOS,
   FEED_CAPTION_MAX,
   type FeedEventRole,
@@ -50,6 +51,7 @@ import {
   notAttachable,
 } from "./attach";
 import { pageDepartment } from "./authors";
+import { authorCard, prepareInvite, reserveInvite, writeInvite } from "./coauthors";
 import { reserveImportant, sendImportant } from "./important";
 import { materializeMentions } from "./mentions";
 import { FEED_PHOTO_NAME_RE, feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
@@ -99,8 +101,10 @@ class Replayed extends Error {
 
 export const feedPostsService = {
   /** `POST /me/feed-posts` */
-  async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
+  async create(v: Viewer, raw: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
+    // Un UUID s'écrit en minuscules avant toute comparaison (le même partenaire, de casses différentes, n'est pas un conflit).
+    const input = raw.commercialPartnerId ? { ...raw, commercialPartnerId: raw.commercialPartnerId.toLowerCase() } : raw;
     const userId = v.user.id;
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {
@@ -113,6 +117,10 @@ export const feedPostsService = {
       if (again) return ownView(v, again.id);
     }
 
+    // Une « Info importante » ne se co-signe pas (R8o) : refusé avant tout le reste.
+    if (input.coAuthor && input.important) {
+      throw new AppError(400, "coauthor_important", coauthorLabels.errors.coauthor_important);
+    }
     // 0. Au nom de qui : une casquette exige ses droits (403 `persona_forbidden`), la structure le second facteur.
     const persona = input.persona;
     const authorship = await requireAuthorship(v, input);
@@ -179,8 +187,24 @@ export const feedPostsService = {
       throw new AppError(400, "important_requires_event", publicationErrors.important_requires_event);
     }
 
+    // Collaboration (R8o) : un seul co-auteur invité, vérifié avant d'écrire quoi que ce soit (rien n'est montré tant qu'il
+    // n'a pas accepté).
+    const invite = input.coAuthor
+      ? await prepareInvite(
+          db,
+          v,
+          input.coAuthor,
+          { authorKey: authorship.key, persona, important: Boolean(input.important) },
+          at,
+        )
+      : null;
     // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite, pour une
-    // publication personnelle seulement.
+    // publication personnelle seulement. Un co-auteur pro partenaire actif de l'auteur la pose aussi (choix explicite) : elle
+    // ne se retire jamais, quel que soit le sort de l'invitation.
+    // Le pro partenaire co-auteur est une source imposée : un autre pro choisi à la main est un conflit, comme une légende qui en désigne un autre.
+    if (invite?.partnerProId && input.commercialPartnerId && input.commercialPartnerId !== invite.partnerProId) {
+      throw new AppError(400, "commercial_conflict", partnershipLabels.errors.commercial_conflict);
+    }
     const commercialPartnerId =
       persona !== "fan"
         ? null
@@ -189,9 +213,10 @@ export const feedPostsService = {
               authorId: userId,
               tagProIds: [],
               caption: input.caption,
-              explicit: input.commercialPartnerId,
+              explicit: input.commercialPartnerId ?? invite?.partnerProId,
             })
           )?.proId ?? null);
+    const inviteAuthor = invite ? await authorCard(db, v, authorship) : null;
     const department =
       persona === "fan"
         ? (v.profile.departments[0] ?? "")
@@ -300,6 +325,7 @@ export const feedPostsService = {
         // Fiche pro : même limite mensuelle et même verrou que `POST /pros/:id/posts`.
         const proAt = persona === "pro" ? await lockProPostQuota(tx, authorship.id, replayed) : null;
         if (input.important && event) await reserveImportant(tx, event.id, at, replayed);
+        if (invite) await reserveInvite(tx, { inviterId: userId, at, replayed });
         for (const p of photos) {
           if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
             const again = await findReplay(tx, userId, input.clientId);
@@ -355,10 +381,15 @@ export const feedPostsService = {
             event,
           });
         }
+        if (invite && inviteAuthor) {
+          await writeInvite(tx, { postId, invite, inviterId: userId, author: inviteAuthor, at });
+        }
         if (commercialPartnerId) {
           await notifyPartnerMention(tx, {
             proId: commercialPartnerId,
             authorUserId: userId,
+            // Le titulaire du pro reçoit déjà l'invitation : pas de seconde notification pour la même publication.
+            already: invite?.partnerProId === commercialPartnerId ? invite.recipients : undefined,
             kind: "post",
             // Le titulaire ne voit la publication que d'un compte public, ou qu'il suit (règle du Fil).
             sees: async (ownerId) =>

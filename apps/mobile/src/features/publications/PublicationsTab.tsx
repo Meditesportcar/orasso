@@ -209,7 +209,11 @@ function PublicationsBody({
         ) : null}
         <ViewToggle value={mode} onChange={setMode} />
       </View>
-      {mode === "one" ? <PublicationsOneByOne posts={list.items} /> : <PublicationsGrid posts={list.items} />}
+      {mode === "one" ? (
+        <PublicationsOneByOne posts={list.items} />
+      ) : (
+        <PublicationsGrid posts={list.items} authorKey={authorKey} />
+      )}
       {list.error ? (
         <LoadError message={L.error} onRetry={() => void (list.nextCursor ? list.more() : list.reload())} />
       ) : null}

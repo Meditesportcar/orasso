@@ -8,6 +8,7 @@ import {
   publicationsLabels as L,
   publicationPath,
   tileMeta,
+  withLabel,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useRef } from "react";
@@ -23,7 +24,17 @@ const { radiusMd } = tokens.radius;
 /** La vignette est un 4:5 (largeur sur hauteur). */
 const TILE_RATIO = 4 / 5;
 
-function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journal?: JournalOptions }) {
+function Tile({
+  post,
+  tick,
+  authorKey,
+  journal,
+}: {
+  post: FeedPostView;
+  tick: number;
+  authorKey?: string;
+  journal?: JournalOptions;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -31,7 +42,9 @@ function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journ
   const near = useNearScreen(box, tick);
   const meta = tileMeta(post, now());
   const photo = post.photos[0];
-  const label = `${L.openPost}, ${L.tileLabel(meta.date, meta.place)}`;
+  // Collaboration (R8o) : sur le profil de l'un, « Avec <l'autre> ».
+  const with_ = authorKey ? withLabel(authorKey, post) : null;
+  const label = `${L.openPost}, ${L.tileLabel(meta.date, meta.place)}${with_ ? `, ${with_}` : ""}`;
   return (
     <View style={styles.tile} testID="publication-tile">
       <Pressable
@@ -44,6 +57,14 @@ function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journ
         testID="publication-tile-open"
       >
         {photo && near ? <CrewPhotoImage url={photo.url} style={styles.image} resizeMode="cover" /> : null}
+        {with_ ? (
+          <View style={[styles.pin, { backgroundColor: `${c.night}d9` }]} testID="publication-tile-with">
+            <Icon name="crew" size={12} color={c.nightInk} />
+            <Text variant="caption" color={c.nightInk} style={styles.pinText}>
+              {with_}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
       {/* Lot R8d (journal d'un événement) : « Épinglée » et « Inscrits prévenus » sur la photo, le menu « … » de l'organisateur. */}
       {journal ? <JournalBadges post={post} floating /> : null}
@@ -76,7 +97,15 @@ function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journ
   );
 }
 
-export function PublicationsGrid({ posts, journal }: { posts: readonly FeedPostView[]; journal?: JournalOptions }) {
+export function PublicationsGrid({
+  posts,
+  authorKey,
+  journal,
+}: {
+  posts: readonly FeedPostView[];
+  authorKey?: string;
+  journal?: JournalOptions;
+}) {
   const tick = useScrollTick();
   const rows: FeedPostView[][] = [];
   for (let i = 0; i < posts.length; i += 2) rows.push(posts.slice(i, i + 2));
@@ -85,7 +114,7 @@ export function PublicationsGrid({ posts, journal }: { posts: readonly FeedPostV
       {rows.map((row) => (
         <View key={row[0]?.id} style={styles.row}>
           {row.map((post) => (
-            <Tile key={post.id} post={post} tick={tick} journal={journal} />
+            <Tile key={post.id} post={post} tick={tick} authorKey={authorKey} journal={journal} />
           ))}
           {row.length === 1 ? <View style={styles.tile} /> : null}
         </View>
@@ -119,6 +148,21 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusMd,
     borderWidth: 1.5,
   },
+  // L'étiquette « Avec … » posée sur la photo (maquette R8.13 `r8pin`) : un nom ne se tronque jamais, elle passe à la ligne.
+  pin: {
+    position: "absolute",
+    left: space2,
+    top: space2,
+    right: space2,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space1,
+    paddingHorizontal: space2,
+    paddingVertical: space1,
+    borderRadius: tokens.radius.radiusSm,
+  },
+  pinText: { flexShrink: 1 },
   placeRow: { flexDirection: "row", alignItems: "center", gap: space1 },
   place: { flexShrink: 1 },
 });

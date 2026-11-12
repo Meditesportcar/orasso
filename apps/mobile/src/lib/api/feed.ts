@@ -27,6 +27,8 @@ export type FeedPostBody = {
   proId?: string;
   placeLabel?: string;
   important?: { reason: ImportantReason };
+  /** Vague R8 (lot R8o) : un co-auteur invité (personne, structure, fiche pro, média). */
+  coAuthor?: { kind: "user" | "structure" | "pro" | "media"; id: string };
   commercialPartnerId?: string | null;
   aspect: "portrait_4_5" | "square" | "landscape";
   clientId: string;

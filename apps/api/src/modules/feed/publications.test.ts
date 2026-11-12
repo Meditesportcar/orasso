@@ -724,6 +724,8 @@ describe("retirer, gérer, lire", () => {
       "author",
       "caption",
       "coAuthor",
+      "coAuthorInvite",
+      "coAuthoredByMe",
       "commentsCount",
       "commentsOff",
       "commercialPartner",

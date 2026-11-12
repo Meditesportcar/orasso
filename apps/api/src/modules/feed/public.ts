@@ -150,7 +150,7 @@ export async function publicStructurePosts(
   ) {
     throw notFound(feedListErrors.authorNotFound);
   }
-  const rows = await authorPostIds(db, key, q.filter, decodeCursor(q.cursor), at);
+  const rows = await authorPostIds(db, key, q.filter, decodeCursor(q.cursor), at, null);
   const { page, nextCursor } = pageOf(rows);
   return {
     items: await loadPublicViews(

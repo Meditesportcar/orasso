@@ -21,6 +21,7 @@ import type { FeedAttachPhase, FeedEventRole, ImportantReason } from "../rules/f
 import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, importantReasons } from "../rules/feedAttach";
 import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
+import { coAuthorInputSchema, type FeedCoAuthorInvite } from "./feedCoauthors";
 import type { MemoryCardPayload } from "./memories";
 import type { SpotFeedPayload } from "./spotMeetup";
 import type { CommercialPartnerView } from "./stories";
@@ -90,6 +91,8 @@ export const feedPostCreateSchema = z
     placeLabel: optionalText(FEED_PLACE_LABEL_MAX),
     /** « Info importante » (organisateur, événement rattaché) : le motif est obligatoire. Le rôle n'est jamais reçu. */
     important: z.object({ reason: z.enum(importantReasons) }).nullish(),
+    /** Collaboration (R8o) : un seul co-auteur invité. Tant qu'il n'a pas accepté, la publication n'est que chez son auteur. */
+    coAuthor: coAuthorInputSchema.nullish(),
   })
   .refine((v) => !(v.photos.length > 0 && v.linked), {
     message: "Une carte partagée n'a pas de photo envoyée",
@@ -206,6 +209,10 @@ export type FeedPostView = {
   commercialPartner: CommercialPartnerView | null;
   /** Vague R8 : co-auteur accepté (R8o), sinon `null`. */
   coAuthor: FeedAuthorView | null;
+  /** R8o : à l'auteur d'origine seulement, l'état de son invitation (en attente, refusée, retirée) ; `null` pour tout autre. */
+  coAuthorInvite: FeedCoAuthorInvite | null;
+  /** R8o : je suis le co-auteur accepté (moi, ou une page que je gère) : le menu propose « Me retirer de la publication ». */
+  coAuthoredByMe: boolean;
   /** Rattachement à un événement (rôle déduit) ; `null` sans événement ou si l'événement n'existe plus. */
   attach: FeedAttachView | null;
   /** La ville de l'événement quand il y en a un, sinon le lieu libre de la publication. */

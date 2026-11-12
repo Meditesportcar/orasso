@@ -170,6 +170,8 @@ export function publicToFeedPost(p: PublicPostView): FeedPostView {
     mine: false,
     commercialPartner: null,
     coAuthor: null,
+    coAuthorInvite: null,
+    coAuthoredByMe: false,
     attach: p.attach,
     placeLabel: p.placeLabel,
     visual: p.visual,
