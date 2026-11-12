@@ -35,6 +35,16 @@ export async function lockPostsOfDeletedAccount(tx: Tx, userId: string): Promise
       or id in (select post_id from feed_post_comments where author_id = ${userId})
       or id in (select post_id from feed_post_coauthors where coauthor_kind = 'user' and coauthor_id = ${userId})
       or id in (select post_id from feed_post_reactions where user_id = ${userId})
+      or id in (select c.post_id from feed_post_comments c join feed_post_comment_reactions r on r.comment_id = c.id where r.user_id = ${userId})
+      order by id for update`,
+  );
+  // Puis, toujours dans l'ordre des identifiants, les lignes de commentaires que l'anonymisation écrira : les siens, les réponses
+  // des autres dessous, leurs parents, et ceux où il a mis une flamme.
+  await tx.execute(
+    sql`select id from feed_post_comments where author_id = ${userId}
+      or parent_id in (select id from feed_post_comments where author_id = ${userId})
+      or id in (select parent_id from feed_post_comments where author_id = ${userId} and parent_id is not null)
+      or id in (select comment_id from feed_post_comment_reactions where user_id = ${userId})
       order by id for update`,
   );
 }

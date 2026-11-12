@@ -22,10 +22,8 @@ import { db, pool } from "../../db/client";
 import { feedPostCoauthors, feedPostReactions, feedPosts, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
-import { withTx } from "../../lib/tx";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
-import { anonymizeFeedForDeletedAccount } from "./anonymize";
 import { coauthorNotificationsWhere, pendingCoauthorCount, pendingCoauthorRequests } from "./coauthors";
 import { follow, person } from "./fil-test-helpers";
 
@@ -161,8 +159,43 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
   });
 });
 
-describe("anonymisation : un seul verrouillage trié au début (petit lot API, P44, tour 2)", () => {
-  it("deux anonymisations complètes qui se chevauchent, avec co-signatures et flammes mutuelles : aucune 40P01, les deux aboutissent", async () => {
+describe("anonymisation : un seul verrouillage trié au début (petit lot API, P44, tours 2 et 3)", () => {
+  /**
+   * Chevauchement forcé : une transaction tient `lockedId` ; les deux anonymisations démarrent et attendent toutes les deux ce
+   * verrou (sondage de la base), puis tout est relâché : elles se disputent alors tous leurs verrous en même temps.
+   */
+  async function overlap(a: TestUser, b: TestUser, lockedId: string) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from feed_posts where id = ${lockedId} for update`);
+      await gate;
+    });
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      first = accountService.anonymize(a.id, null, {});
+      second = accountService.anonymize(b.id, null, {});
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const seen = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`,
+        );
+        if (Number(seen.rows[0]?.n) >= 2) break;
+        if (Date.now() > deadline) throw new Error("Les deux anonymisations n'attendent pas le verrou");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    } finally {
+      release();
+      await holder;
+    }
+    return Promise.allSettled([first, second]);
+  }
+
+  it("co-signatures et flammes mutuelles : aucune 40P01, les deux aboutissent", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
     const posts: { k: string[]; d: string[] } = { k: [], d: [] };
@@ -173,43 +206,35 @@ describe("anonymisation : un seul verrouillage trié au début (petit lot API, P
       posts.k.push(pk.json.id);
       posts.d.push(pd.json.id);
     }
-    // Flammes mutuelles : chacun a mis une flamme sur les publications de l'autre.
     await db
       .insert(feedPostReactions)
       .values([
         ...posts.d.map((postId) => ({ postId, userId: kenji.id })),
         ...posts.k.map((postId) => ({ postId, userId: damien.id })),
       ]);
-    // Chevauchement forcé : une transaction tient la plus petite publication ; les deux anonymisations démarrent et attendent
-    // toutes les deux ce verrou (sondage de la base), puis tout est relâché : elles se disputent alors tous leurs verrous en même temps.
-    const lowest = [...posts.k, ...posts.d].sort()[0]!;
-    let release!: () => void;
-    const gate = new Promise<void>((r) => {
-      release = r;
-    });
-    const holder = db.transaction(async (tx) => {
-      await tx.execute(sql`select 1 from feed_posts where id = ${lowest} for update`);
-      await gate;
-    });
-    await new Promise((r) => setTimeout(r, 0));
-    const first = accountService.anonymize(kenji.id, null, {});
-    const second = accountService.anonymize(damien.id, null, {});
-    const deadline = Date.now() + 8000;
-    for (;;) {
-      const seen = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`,
-      );
-      if (Number(seen.rows[0]?.n) >= 2) break;
-      if (Date.now() > deadline) throw new Error("Les deux anonymisations n'attendent pas le verrou");
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    release();
-    await holder;
-    const results = await Promise.allSettled([first, second]);
+    const results = await overlap(kenji, damien, [...posts.k, ...posts.d].sort()[0]!);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
     const alive = await db.select({ id: feedPosts.id }).from(feedPosts).where(sql`${feedPosts.deletedAt} is null`);
     expect(alive).toHaveLength(0);
     expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
+  });
+
+  it("chacun a commenté sa propre publication et mis une flamme au commentaire de l'autre : aucune 40P01", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    const pk = (await publishWith(kenji, { kind: "user", id: damien.id })).json.id as string;
+    const pd = (await publishWith(damien, { kind: "user", id: kenji.id })).json.id as string;
+    const ck = await call(kenji, "POST", `/feed-posts/${pk}/comments`, {
+      text: "Mon commentaire",
+      clientId: randomUUID(),
+    });
+    const cd = await call(damien, "POST", `/feed-posts/${pd}/comments`, { text: "Le mien", clientId: randomUUID() });
+    expect([ck.status, cd.status]).toEqual([201, 201]);
+    // Croisé : chacun met sa flamme au commentaire de l'autre (sur une publication que l'autre possède).
+    expect((await call(kenji, "PUT", `/feed-comments/${cd.json.id}/reaction`)).status).toBe(200);
+    expect((await call(damien, "PUT", `/feed-comments/${ck.json.id}/reaction`)).status).toBe(200);
+    const results = await overlap(kenji, damien, [pk, pd].sort()[0]!);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
   });
 });
 

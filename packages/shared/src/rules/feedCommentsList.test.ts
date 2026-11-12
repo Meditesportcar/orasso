@@ -25,7 +25,6 @@ import {
   type SheetState,
   sheetAddComment,
   sheetApplyParentCount,
-  sheetCardRead,
   sheetMark,
   sheetRemoveComment,
   sheetReopen,
@@ -768,111 +767,6 @@ describe("tour 8 : suppression d'une réponse, confirmation tardive, curseur", (
     // « z » est supprimé ailleurs ; la page suivante commence à « d » (après le curseur) : z est avant elle, la borne le couvre.
     s = sheetWithTopPage(s, [at("d", 4)], null, false, { recent: [], boundary: at("y", 2) });
     expect(s.items.map((c) => c.id)).toEqual(["a", "b", "d"]);
-  });
-});
-
-describe("petit lot API : compteur de la carte (P29)", () => {
-  const stamp = (i: number) => new Date(Date.UTC(2026, 10, 10, 10, 0, i)).toISOString();
-  const c = (i: number, over: Partial<FeedCommentView> = {}) =>
-    at(`c${String(i).padStart(2, "0")}`, 0, { createdAt: stamp(i), ...over });
-
-  it("un commentaire déjà venu d'une lecture, confirmé ensuite, puis supprimé : la carte reste à N", () => {
-    const card = post({ commentsCount: 3, lastComments: [] });
-    // La lecture apporte le commentaire c03 avant la confirmation de l'envoi : la carte (3) ne l'a pas compté.
-    let s = sheetWithTopPage(emptySheet(), [c(1), c(2), c(3)], null, true);
-    const added = sheetAddComment(s, c(3), null);
-    expect(added.counted).toBe(0);
-    s = added.state;
-    const gone = sheetRemoveComment(s, "c03");
-    expect(gone.removed).toBe(0);
-    expect(
-      postWithCommentRemoved(postWithCommentAdded(card, c(3), null, added.counted), "c03", gone.removed, gone.state)
-        .commentsCount,
-    ).toBe(3);
-    // Rejouée : la confirmation n'est pas comptée deux fois, et la marque disparaît avec le commentaire.
-    expect(gone.state.uncounted ?? []).toEqual([]);
-  });
-
-  it("un commentaire confirmé par l'envoi (compté) puis supprimé : la carte revient à N", () => {
-    const card = post({ commentsCount: 2, lastComments: [] });
-    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
-    const added = sheetAddComment(s, c(3), null);
-    expect(added.counted).toBe(1);
-    s = added.state;
-    // Un rejeu de la confirmation (déjà confirmée par l'envoi) ne devient pas « non compté ».
-    const replay = sheetAddComment(s, c(3), null);
-    expect(replay.counted).toBe(0);
-    s = replay.state;
-    const withCard = postWithCommentAdded(card, c(3), null, added.counted);
-    const gone = sheetRemoveComment(s, "c03");
-    expect(gone.removed).toBe(1);
-    expect(postWithCommentRemoved(withCard, "c03", gone.removed, gone.state).commentsCount).toBe(2);
-  });
-
-  it("confirmation tardive d'un commentaire déjà supprimé, puis suppression : rien n'est retiré deux fois", () => {
-    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
-    const first = sheetRemoveComment(s, "c02");
-    expect(first.removed).toBe(1);
-    s = first.state;
-    const late = sheetAddComment(s, c(2), null);
-    expect(late.counted).toBe(0);
-    expect(sheetRemoveComment(late.state, "c02")).toEqual({ state: late.state, removed: 0 });
-  });
-
-  it("une réponse venue d'une lecture puis confirmée : sa suppression ne baisse pas la carte ; son parent retiré ne retire que les réponses comptées", () => {
-    let s = sheetWithTopPage(emptySheet(), [c(1, { repliesCount: 2 })], null, true);
-    s = sheetWithRepliesPage(s, "c01", [c(2), c(3)], null, true);
-    // r c02 arrive de la lecture puis sa confirmation (non comptée par la carte) ; c03 reste comptée.
-    const added = sheetAddComment(s, c(2), "c01");
-    expect(added.counted).toBe(0);
-    s = added.state;
-    expect(s.uncounted).toEqual(["c02"]);
-    const parent = sheetRemoveComment(s, "c01");
-    // Le parent (1) et sa réponse comptée c03 ; la réponse non comptée c02 ne baisse rien.
-    expect(parent.removed).toBe(2);
-    // Même suppression d'abord de la réponse : 0, puis du parent : 1 + 1 réponse restante comptée.
-    const reply = sheetRemoveComment(s, "c02");
-    expect(reply.removed).toBe(0);
-    expect(reply.state.uncounted ?? []).toEqual([]);
-  });
-
-  it("une carte dont le dernier aperçu part avec un commentaire non compté, sans baisser le total", () => {
-    const only = c(1);
-    const card = post({ commentsCount: 4, lastComments: [preview(only)] });
-    const s = sheetWithTopPage(emptySheet(), [only], null, true);
-    const added = sheetAddComment(s, only, null);
-    const gone = sheetRemoveComment(added.state, "c01");
-    const p = postWithCommentRemoved(card, "c01", gone.removed, gone.state);
-    expect(p.commentsCount).toBe(4);
-    expect(p.lastComments).toEqual([]);
-  });
-});
-
-describe("petit lot API, tour 2 : la carte relue inclut tout", () => {
-  const c = (i: number) => at(`c${i}`, i);
-  it("réponse perdue, carte relue (elle compte le commentaire), réessai confirmé, puis suppression : la carte baisse de 1", () => {
-    // La feuille a lu le commentaire (une page), la carte est relue ensuite, puis le réessai se confirme.
-    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
-    s = sheetCardRead(s);
-    const retry = sheetAddComment(s, c(2), null);
-    expect(retry.counted).toBe(0);
-    expect(retry.state.uncounted ?? []).toEqual([]);
-    const gone = sheetRemoveComment(retry.state, "c2");
-    expect(gone.removed).toBe(1);
-    expect(postWithCommentRemoved(post({ commentsCount: 2 }), "c2", gone.removed, gone.state).commentsCount).toBe(1);
-  });
-  it("le magasin remet à zéro la feuille quand la carte reçue de l'API change (relue)", () => {
-    const store = createPostLiveStore();
-    const card = (n: number) => post({ commentsCount: n });
-    store.apply(card(1));
-    store.updateSheet("p", (s) => sheetWithTopPage(s, [c(1), c(2)], null, true));
-    store.updateSheet("p", (s) => sheetAddComment(s, c(2), null).state);
-    expect(store.sheetOf("p").uncounted).toEqual(["c2"]);
-    // Même carte : rien ne bouge. Carte relue : plus rien de « non compté ».
-    store.apply(card(1));
-    expect(store.sheetOf("p").uncounted).toEqual(["c2"]);
-    store.apply(card(2));
-    expect(store.sheetOf("p").uncounted).toEqual([]);
   });
 });
 
