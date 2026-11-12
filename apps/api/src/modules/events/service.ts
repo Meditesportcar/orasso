@@ -541,12 +541,15 @@ export const eventsService = {
         const what = datesChanged ? `nouvelle date : ${formatDateTime(row.startsAt)}` : "nouvelle adresse";
         // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
         for (const userId of await eventPlaceHolderIds(tx, id)) {
+          // Celui qui modifie ne se prévient pas lui-même (l'aperçu « N inscrits seront prévenus » l'exclut de même).
+          if (userId === v.user.id) continue;
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
             // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
             eventStartsAt: earliest(current.startsAt, row.startsAt),
+            eventEndsAt: row.endsAt,
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -649,12 +652,15 @@ export const eventsService = {
           : `nouvelle date : ${formatDateTime(row.startsAt)}`;
         // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
         for (const userId of await eventPlaceHolderIds(tx, id)) {
+          // Celui qui modifie ne se prévient pas lui-même (l'aperçu « N inscrits seront prévenus » l'exclut de même).
+          if (userId === v.user.id) continue;
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
             // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
             eventStartsAt: earliest(current.startsAt, row.startsAt),
+            eventEndsAt: row.endsAt,
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -763,6 +769,7 @@ export const eventsService = {
         .where(and(eq(orders.eventId, id), eq(orders.status, "pending")));
       for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
+          eventEndsAt: row.endsAt,
           title: "Événement annulé",
           body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'équipe organisatrice"}.`,
           eventId: id,

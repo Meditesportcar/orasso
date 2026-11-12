@@ -61,7 +61,10 @@ async function shot(page: Page, name: string) {
 /** La carte de la publication commentée de Kenji_66 (celle qui montre ses derniers commentaires). */
 async function commentedCard(page: Page): Promise<Locator> {
   const cards = page.getByTestId("feed-card-feed_post").filter({ has: page.getByTestId("feed-post-last-comments") });
-  for (let i = 0; i < 14 && (await cards.count()) === 0; i++) {
+  // R8c2 : une carte déjà vue est rangée après les autres (« Déjà vu ») : on tourne les pages jusqu'à la trouver.
+  for (let i = 0; i < 24 && (await cards.count()) === 0; i++) {
+    const more = page.getByTestId("fil-more");
+    if (await more.isVisible().catch(() => false)) await more.click();
     await page.mouse.wheel(0, 900);
     await page.waitForTimeout(400);
   }
@@ -321,13 +324,23 @@ test("un 404 de commentaire n'est pas une publication disparue : seule la ligne 
   test.setTimeout(240_000);
   const lea = await login("lea@orasso.local");
   const damien = await login("damien@orasso.local");
-  const fil = await apiCall<{ items: { kind: string; payload: { post: { id: string; commentsCount: number } } }[] }>(
-    damien,
-    "GET",
-    "/fil?filter=for_you",
-  );
-  const postId = fil.data.items.find((c) => c.kind === "feed_post" && c.payload.post.commentsCount > 3)?.payload.post
-    .id;
+  // R8c2 : une carte déjà vue est rangée après les autres (« Déjà vu ») : on lit les pages jusqu'à la publication commentée.
+  type FilPage = {
+    items: { kind: string; payload: { post: { id: string; commentsCount: number } } }[];
+    nextCursor: string | null;
+  };
+  let postId: string | undefined;
+  let next: string | null = null;
+  for (let i = 0; i < 12 && !postId; i++) {
+    const page: { data: FilPage } = await apiCall<FilPage>(
+      damien,
+      "GET",
+      `/fil?filter=for_you${next ? `&cursor=${encodeURIComponent(next)}` : ""}`,
+    );
+    postId = page.data.items.find((c) => c.kind === "feed_post" && c.payload.post.commentsCount > 3)?.payload.post.id;
+    next = page.data.nextCursor;
+    if (!next) break;
+  }
   expect(postId).toBeTruthy();
   const make = async (cookie: string, text: string, parentId?: string) => {
     const r = await apiCall<{ id: string }>(cookie, "POST", `/feed-posts/${postId}/comments`, {

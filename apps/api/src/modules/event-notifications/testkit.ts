@@ -8,6 +8,7 @@ import { db } from "../../db/client";
 import {
   applications,
   eventNotificationPrefs,
+  feedPostPhotos,
   feedPosts,
   orders,
   profiles,
@@ -97,6 +98,16 @@ export async function organizerPost(
     department: "66",
     createdAt,
     ...over,
+  });
+  // Un visuel (le journal ne sert que les publications qui en ont un).
+  await db.insert(feedPostPhotos).values({
+    postId: id,
+    storageKey: `feed/${id}/photo.jpg`,
+    width: 1080,
+    height: 1350,
+    position: 0,
+    plateBlurred: false,
+    noPlateConfirmed: true,
   });
   return id;
 }
