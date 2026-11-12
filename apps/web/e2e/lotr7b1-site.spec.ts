@@ -68,7 +68,7 @@ test("profil d'un autre : onglets Garage et Sorties ; compte privé : nombres se
   // Compte privé vu d'un inconnu.
   await page.goto("/u/Marc_66");
   await expect(page.getByTestId("public-counts")).toBeVisible();
-  await expect(page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
   // Tour 2 (maquette R7.12) : plus de liste « Ses véhicules · marque et modèle » pour un inconnu.
   await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);
@@ -84,6 +84,8 @@ test("profil d'un autre : onglets Garage et Sorties ; compte privé : nombres se
   await p2.goto("/u/Marc_66");
   await expect(p2.getByTestId("profil-tab-garage")).toBeVisible();
   await expect(p2.getByTestId("profile-private-note")).toHaveCount(0);
+  // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
+  await p2.getByTestId("profil-tab-garage").click();
   await expect(p2.getByTestId("profile-car")).toBeVisible();
   await expect(p2.locator("body")).not.toContainText(/[A-Z]{2}-\d{3}-[A-Z]{2}/);
   await ctx.close();

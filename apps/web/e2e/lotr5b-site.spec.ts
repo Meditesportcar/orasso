@@ -158,8 +158,8 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
       await expect(pb.getByTestId("profile-together")).toContainText("Toi aussi : vous y serez tous les deux");
       // Compte privé.
       await pb.goto(`/u/${cPseudo}`);
-      await expect(pb.getByTestId("profile-private-note")).toContainText(
-        "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
+      await expect(pb.getByTestId("publications-private")).toContainText(
+        "ne sont visibles que de ses abonnés acceptés.",
       );
       // Lot R6b : un compte privé se suit sur demande.
       await expect(pb.getByTestId("follow-button")).toContainText("Demander à suivre");
@@ -270,8 +270,6 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await page.getByTestId("follow-button").click();
   await page.getByTestId("follow-confirm-yes").click();
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
-  await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
-  );
+  await expect(page.getByTestId("publications-private")).toContainText("ne sont visibles que de ses abonnés acceptés.");
   await ctx.close();
 });

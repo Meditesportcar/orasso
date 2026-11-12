@@ -127,8 +127,11 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   // Privé, inconnu : nombres, bouton, « Réservé à ses abonnés », ni onglets ni photo.
   await go(a.page, "/u/Marc_66");
   await expect(a.page.getByTestId("public-counts")).toBeVisible({ timeout: 30_000 });
-  await expect(a.page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
-  await expect(a.page.getByTestId("profil-tabs")).toHaveCount(0);
+  await expect(a.page.getByTestId("publications-private")).toContainText("Compte privé");
+  // Depuis R8b2, la rangée ne garde que « Publications » pour un compte privé vu d'un inconnu (ni Garage ni Sorties).
+  await expect(a.page.getByTestId("profil-tab-publications")).toBeVisible();
+  await expect(a.page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await expect(a.page.getByTestId("profil-tab-sorties")).toHaveCount(0);
   // Tour 2 (maquette R7.12) : plus de liste « Ses véhicules · marque et modèle » pour un inconnu.
   await expect(a.page.getByTestId("profile-vehicles-private")).toHaveCount(0);
   await expect(a.page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
@@ -144,6 +147,8 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await go(b.page, "/u/Marc_66");
   await expect(b.page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
   await expect(b.page.getByTestId("profile-private-note")).toHaveCount(0);
+  // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
+  await b.page.getByTestId("profil-tab-garage").click();
   await expect(b.page.getByTestId("profile-car")).toBeVisible();
   await shot(b.page, "04-prive-abonne");
   await b.ctx.close();

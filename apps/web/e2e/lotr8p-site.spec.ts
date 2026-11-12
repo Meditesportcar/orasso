@@ -53,7 +53,7 @@ test("une seule casquette : pas de « Publier en tant que » ; un passionné pub
   await expect(missing(d)).toHaveText("Ajoute au moins une photo.");
   await addPhoto(d);
   await eventByTitle(d, "Nocturne de Canet").click();
-  await expect(d.getByTestId("fil-publish-says-phrase")).toContainText("sera au Nocturne de Canet");
+  await expect(d.getByTestId("fil-publish-says-phrase")).toContainText("sera à la Nocturne de Canet");
   await expect(d.getByTestId("fil-publish-stamp")).toHaveCount(0);
   await expect(d.getByTestId("fil-publish-place")).toHaveCount(0);
   await shot(d, "moi-evenement");
@@ -78,7 +78,7 @@ test("une structure publie sans photo : l'affiche est le visuel ; hors événeme
   await expect(page.getByTestId("fil-publish-poster")).toContainText(
     "Sans photo : l'affiche de l'événement sera le visuel.",
   );
-  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour le Expo Rivesaltes");
+  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour l'Expo Rivesaltes");
   await expect(missing(page)).toHaveCount(0);
   expect(await cutWords(page, "fil-publish-events")).toEqual([]);
   await shot(page, "structure-affiche-visuel");

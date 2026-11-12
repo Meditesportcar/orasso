@@ -5800,3 +5800,17 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 ### Tour 7 (lot R8d, 12/11/2026)
 - **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (r�f�rence mise � jour � chaque donn�e) : A ? B ? A dans une page rest�e mont�e n'ignore plus la derni�re annonce. Pas de test A ? B ? A (il faut deux comptes dans une m�me fen�tre annonc�s par le canal) ; recette du site non rejou�e ce tour.
 - **�pingle de la fa�ade** : l'�criture est compt�e � la d�tection de la reprise dans la transaction, une fois par requ�te (drapeau gard� entre les tentatives) ; le test pr�charge 59 �critures et l�ve le 40P01 apr�s le corps.
+
+## Petit lot site (12/11/2026)
+
+- **P24, garde de compte** (`lib/sessionGuard.ts`, `useSessionGuard(userId)`) : le compte de référence est le `userId` de la page (chargeur de la fiche et de la candidature, qui le renvoie désormais), pas la première annonce du canal. Le dernier compte annoncé décide : une annonce de B refuse, un retour de A rend l'accord (plus de refus définitif). L'écoute survit au démontage tant que l'écrivain n'a pas fini (`guard.watch`). Cloche : le message d'erreur s'efface à la fermeture de la fenêtre, plus à l'ouverture, pour qu'un échec tardif arrivé fenêtre fermée reste à lire. Fichiers : `NotifySignup.tsx`, `NotifyBell.tsx`, `routes/candidater.tsx`, `routes/event.tsx`.
+- **P14a** : la règle est dans `components/fil/eventDrop.ts` (`mustDropChosenEvent`) ; `PublishForm.tsx` ne retire plus l'événement tant qu'un envoi est figé.
+- **P26b** : `lib/retryTracker.ts` retient quel appel a échoué ; `usePublications` expose `retry()`, `PageMentions` l'utilise (les éléments déjà lus restent affichés).
+- **P30b** : `components/fil/commentParent.ts` retrouve le parent avant le retrait ; sans `parent` dans la réponse, `useComments.remove` relit les réponses du parent (404 : retiré par `parentGoneRef`) puis la première page (compteur).
+- **P41** : `afterPostChanged` (`publications/signal.ts`) annule son minuteur au démontage et avant d'en poser un nouveau.
+- **P45** : `lib/sessionGeneration.ts` extrait la génération de `event-mentions.tsx`, comportement inchangé.
+- **P09** : les recettes lisent le panneau `publications-private` (« Compte privé », « ne sont visibles que de ses abonnés acceptés. », puis `publications-private-ask` « Demande envoyée à »). Les recettes du site (`lotr5b-site`, `lotr6b-site`, `lotr7b1-site`, `social`) cherchaient aussi `profile-private-note` : adaptées de la même façon.
+- **P12** : le bouton « Publier » de l'état vide du profil est un `.o-button` de 48 px (hauteur du kit), plus un lien `.fil-publish` de 50 : le seuil du test passe de 50 à 48.
+- **P39** : les deux recettes cliquent `page-tab-presentation` avant de lire `pro-partners`.
+- **Accord du rattachement (demande du coordinateur)** : les recettes `appli-lotr8p` et `lotr8p-site` attendent « sera à la Nocturne de Canet » et « pour l'Expo Rivesaltes » (le petit lot API corrige `attachPhraseOf`). Non lancées dans ce lot : elles passent à la vérification d'ensemble, une fois les deux lots fusionnés.
+- **Assertions voisines de P09** : pour un compte privé vu d'un inconnu, la rangée d'onglets existe avec « Publications » seul (R8b2) : `appli-lotr7b1` vérifie l'absence de Garage et Sorties au lieu de `profil-tabs` absent. Pour l'abonné accepté, le profil s'ouvre sur « Publications » : les recettes `appli-lotr7b1` et `lotr7b1-site` cliquent « Garage » avant de lire `profile-car`.

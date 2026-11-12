@@ -83,8 +83,8 @@ test("appli : personnes, profil, véhicule, suivre, QR de compte, Ton réseau, J
     await expect(page.getByTestId("profil")).toBeVisible({ timeout: 30_000 });
     // Lot R5b (maquette R5.6) : « Compte privé » dans la tête, et la ligne « Ses photos, … sont pour ses abonnés ».
     await expect(page.getByTestId("public-head")).toContainText("Compte privé");
-    await expect(page.getByTestId("profile-private-note")).toContainText(
-      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
+    await expect(page.getByTestId("publications-private")).toContainText(
+      "ne sont visibles que de ses abonnés acceptés.",
     );
     // Lot R6b : un compte privé se suit sur demande.
     await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
