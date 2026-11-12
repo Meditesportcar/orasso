@@ -79,8 +79,10 @@ import {
   blurInstead,
   confirmNoPlateFor,
   cropAll,
+  dropEventFromChoice,
   type FeedDraftPhoto,
   framesFromDetection,
+  liftsUncertainty,
   mergeRecropped,
   newDraftPhoto,
   plateBadge,
@@ -232,12 +234,19 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const eventsLoading =
     eventBlock && (loaded.account !== account || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
   const event = events.find((e) => e.id === choice.eventId) ?? null;
-  // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste.
+  // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste. Pas tant qu'un
+  // envoi est figé en attente de vérification : le corps gardé le contient, l'écran montre ce qui part (l'effet attend la fin).
   useEffect(() => {
-    if (choice.eventId && loaded.items && loaded.account === account && loaded.key === author.key) {
-      if (!loaded.items.some((e) => e.id === choice.eventId)) setChoice((c) => chooseEvent(c, null));
-    }
-  }, [loaded, choice.eventId, account, author.key]);
+    if (!choice.eventId || !loaded.items || loaded.account !== account || loaded.key !== author.key) return;
+    if (
+      dropEventFromChoice(
+        choice.eventId,
+        loaded.items.map((e) => e.id),
+        uncertain !== null,
+      )
+    )
+      setChoice((c) => chooseEvent(c, null));
+  }, [loaded, choice.eventId, account, author.key, uncertain]);
   const showImportant = importantAvailable(author, event);
   // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
   // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.
@@ -470,10 +479,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
       if (!guard.current()) return;
       // Un refus définitif prouve que rien n'a été créé : on sort de l'état incertain (429 et 401 ne prouvent rien : le contrôle
       // de rejeu de l'API vient après ; le corps incertain est gardé).
-      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.status !== 429 && e.status !== 401) {
-        // 409 `account_changed` : l'incertitude reste (une première tentative sous le bon compte a pu aboutir).
-        if (e.code !== "account_changed") setUncertain(null);
-      }
+      // 409 `account_changed` : l'incertitude reste (une première tentative sous le bon compte a pu aboutir).
+      if (e instanceof ApiRequestError && liftsUncertainty(e)) setUncertain(null);
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.status === 401) setError(errorMessage(e));
       else if (sending && e instanceof ApiRequestError && (e.isNetwork || e.status >= 500)) {

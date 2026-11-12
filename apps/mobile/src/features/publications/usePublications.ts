@@ -13,6 +13,7 @@ import { cacheScope } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
 import { onPostChanged, onPostRemoved } from "./publicationsSignal";
+import { type FailedCall, retryCall } from "./retryCall";
 
 export type PublicationsState = {
   items: FeedPostView[];
@@ -54,9 +55,12 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
   const [state, setState] = useState<PublicationsState>(EMPTY);
   const gate = useRef(createRequestGate(cacheScope)).current;
   const cursorRef = useRef<string | null>(null);
+  /** Quel appel a échoué en dernier : « Réessayer » relance celui-là (une relecture garde son ancien curseur). */
+  const failedRef = useRef<FailedCall | null>(null);
 
   const reload = useCallback(async () => {
     const ticket = gate.start();
+    failedRef.current = null;
     setState((s) => ({ ...s, loading: !s.loaded, error: null }));
     try {
       const page = await api.authorPosts(authorKey, null, filter);
@@ -90,6 +94,7 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
         });
         return;
       }
+      failedRef.current = "reload";
       setState((s) => ({ ...s, loading: false, loadingMore: false, error: errorMessage(e) }));
     }
   }, [authorKey, filter, gate, offline]);
@@ -132,6 +137,7 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     const cursor = cursorRef.current;
     if (!cursor) return;
     const ticket = gate.follow();
+    failedRef.current = null;
     setState((s) => (s.loadingMore ? s : { ...s, loadingMore: true, error: null }));
     try {
       const page = await api.authorPosts(authorKey, cursor, filter);
@@ -142,9 +148,13 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
       setState((s) => ({ ...s, ...applyNextPage(s, page), loadingMore: false, error: null }));
     } catch (e) {
       if (!ticket.current()) return;
+      failedRef.current = "more";
       setState((s) => ({ ...s, loadingMore: false, error: errorMessage(e) }));
     }
   }, [authorKey, filter, gate]);
+
+  /** « Réessayer » : relit après l'échec d'une relecture, redemande la page suivante après l'échec d'une page suivante. */
+  const retry = useCallback(() => (retryCall(failedRef.current) === "more" ? more() : reload()), [more, reload]);
 
   // Une publication supprimée ailleurs (sa page seule) : elle sort de la liste sans relecture.
   useEffect(
@@ -159,5 +169,5 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     setState((s) => ({ ...s, items: s.items.map((p) => (p.id === post.id ? post : p)) }));
   }, []);
 
-  return { ...state, reload, more, change };
+  return { ...state, reload, more, retry, change };
 }

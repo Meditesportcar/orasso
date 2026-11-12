@@ -39,6 +39,7 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { postLive } from "./live";
+import { replyParentOf } from "./replyParent";
 
 const statusOf = (e: unknown) => (e instanceof ApiRequestError ? e.status : -1);
 
@@ -269,12 +270,20 @@ export function useComments(
       if (!(await confirmRemove(hasReplies ? L.deleteConfirm : L.deleteReplyConfirm))) return;
       const t = postLive.ticket(id);
       setActionError(null);
+      // Le parent d'une réponse se retrouve avant son retrait de la feuille.
+      const replyParent = replyParentOf(postLive.sheetOf(id), comment.id);
       try {
         const done = await api.removeFeedComment(comment.id);
         if (postLive.alive(t)) {
           dropRemoved(comment.id, t);
           // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
           update((s) => sheetApplyParentCount(s, done?.parent), t);
+          // 204 sans `parent` (parent devenu illisible, déjà supprimé) : rien ne met son compteur à jour ; sa discussion est relue
+          // (un 404 retire le parent comme `parentGoneRef`), et la première page avec elle.
+          if (replyParent && !done?.parent) {
+            void loadReplies(replyParent);
+            void loadTop();
+          }
         }
       } catch (e) {
         if (!postLive.alive(t)) return;
@@ -288,6 +297,7 @@ export function useComments(
     [
       id,
       dropRemoved,
+      loadReplies,
       loadTop, // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
       update,
     ],

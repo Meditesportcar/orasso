@@ -24,7 +24,16 @@ import { Waiting } from "@/ui/Waiting";
 
 const { space2, space3 } = tokens.spacing;
 
-export function PublicPublications({ authorKey, name }: { authorKey: string; name: string }) {
+export function PublicPublications({
+  authorKey,
+  name,
+  reloadToken = 0,
+}: {
+  authorKey: string;
+  name: string;
+  /** Change à chaque relecture de la page (geste, retour) : la liste se relit sans être démontée, ses éléments restent affichés. */
+  reloadToken?: number;
+}) {
   const { t } = useTheme();
   const [items, setItems] = useState<PublicPostView[]>([]);
   const [next, setNext] = useState<string | null>(null);
@@ -32,11 +41,13 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
   const [more, setMore] = useState(false);
   const cursor = useRef<string | null>(null);
   const seq = useRef(0);
+  /** Une lecture a déjà abouti pour cette page : une relecture ne remplace pas la liste par l'attente, ni par l'erreur. */
+  const hasRead = useRef(false);
 
   const load = useCallback(
     async (first: boolean) => {
       const mine = ++seq.current;
-      if (first) setState("loading");
+      if (first && !hasRead.current) setState("loading");
       else setMore(true);
       try {
         const page = await api.publicAuthorPosts(authorKey, first ? null : cursor.current);
@@ -44,27 +55,38 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
         cursor.current = page.nextCursor;
         setNext(page.nextCursor);
         setItems((list) => (first ? page.items : appendUnique(list, page.items)));
+        hasRead.current = true;
         setState("ready");
       } catch (e) {
         if (mine !== seq.current) return;
-        setState(first || items.length === 0 ? "error" : "ready");
+        setState(hasRead.current ? "ready" : "error");
         void errorMessage(e);
       } finally {
         if (mine === seq.current) setMore(false);
       }
     },
-    [authorKey, items.length],
+    [authorKey],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: seule une autre page relance la première lecture
   useEffect(() => {
     cursor.current = null;
+    hasRead.current = false;
     setItems([]);
     void load(true);
     return () => {
       seq.current++;
     };
   }, [authorKey]);
+
+  // Un nouveau jeton (page relue) : la liste se relit, les éléments déjà lus restent affichés pendant la lecture et après un échec.
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nouveau jeton relance la lecture
+  useEffect(() => {
+    if (seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void load(true);
+  }, [reloadToken]);
 
   if (state === "loading") return <Waiting blocks={[260, 260]} label={PL.loading} testID="publications-loading" />;
   if (state === "error") return <LoadError message={PL.error} onRetry={() => void load(true)} />;

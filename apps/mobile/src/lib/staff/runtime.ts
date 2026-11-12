@@ -16,7 +16,6 @@ import {
   type ActionKind,
   applyResults,
   applyTicketResults,
-  BATCH_KINDS,
   type BatchItemWire,
   backoffMs,
   buildState,
@@ -30,6 +29,7 @@ import {
   mergeSync,
   type PendingAction,
   type StaffState,
+  sendOtherActions,
   type TicketScanWire,
   type VisitorItemWire,
 } from "./model";
@@ -421,19 +421,9 @@ async function doFlush(userId: string) {
       await sendShopBatch(store, userId, kind, eventId, batch);
     }
   }
-  const waitingIncidents = new Set(unsent.filter((a) => a.kind === "incident").map((a) => a.id));
-  for (const action of unsent) {
-    if (BATCH_KINDS.includes(action.kind) || SHOP_KINDS.includes(action.kind)) continue;
-    if (Date.parse(action.nextAttemptAt) > now.getTime()) continue;
-    // La photo suit son incident : tant que l'incident n'est pas parti, elle attend.
-    if (action.kind === "incident_photo" && waitingIncidents.has(String(action.payload.incidentId))) continue;
-    const sent = await sendOther(store, action);
-    if (sent && action.kind === "incident") waitingIncidents.delete(action.id);
-  }
+  await sendOtherActions(unsent, now, (action) => sendOther(store, action));
   emit();
 }
-
-const SHOP_KINDS: readonly ActionKind[] = ["ticket_scan", "visitor"];
 
 /** Lot de billets ou de touchers du compteur : mêmes règles d'erreur que les lots de scans (jamais perdus). */
 async function sendShopBatch(

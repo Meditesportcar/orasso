@@ -7,8 +7,10 @@ import {
   confirmNoPlate,
   confirmNoPlateFor,
   cropAll,
+  dropEventFromChoice,
   type FeedDraftPhoto,
   framesFromDetection,
+  liftsUncertainty,
   mergeRecropped,
   newDraftPhoto,
   plateBadge,
@@ -218,5 +220,33 @@ describe("opérations tardives du composeur (lot R7e2, tour 4)", () => {
     expect(confirmNoPlateFor([one, two], "one")[0]?.noPlate).toBe(true);
     expect(confirmNoPlateFor([one, two], "one")[1]).toBe(two);
     expect(confirmNoPlateFor([one, two], null)).toEqual([one, two]);
+  });
+});
+
+describe("événement repris pendant un envoi figé", () => {
+  it("liste relue sans l'événement et envoi figé : l'événement reste", () => {
+    expect(dropEventFromChoice("e1", ["e2"], true)).toBe(false);
+  });
+  it("envoi libre : l'événement qui n'est plus dans la liste part", () => {
+    expect(dropEventFromChoice("e1", ["e2"], false)).toBe(true);
+    expect(dropEventFromChoice("e1", ["e1", "e2"], false)).toBe(false);
+  });
+  it("sans événement choisi ou sans liste relue : rien à retirer", () => {
+    expect(dropEventFromChoice(null, ["e2"], false)).toBe(false);
+    expect(dropEventFromChoice("e1", null, false)).toBe(false);
+  });
+});
+
+describe("l'incertitude d'un envoi se lève-t-elle sur cette erreur ?", () => {
+  it("le 409 account_changed la garde", () => {
+    expect(liftsUncertainty({ status: 409, code: "account_changed" })).toBe(false);
+  });
+  it("un refus 4xx définitif la lève (autre 409 compris)", () => {
+    expect(liftsUncertainty({ status: 400, code: "validation" })).toBe(true);
+    expect(liftsUncertainty({ status: 409, code: "event_not_attachable" })).toBe(true);
+    expect(liftsUncertainty({ status: 403 })).toBe(true);
+  });
+  it("429, 401, 5xx et réseau la gardent", () => {
+    for (const status of [429, 401, 500, 503, 504, 0]) expect(liftsUncertainty({ status })).toBe(false);
   });
 });

@@ -31,7 +31,7 @@ export function PagePublications({
   /** Change à chaque relecture de la page (geste, retour) : la liste se relit sans être démontée. */
   reloadToken?: number;
 }) {
-  if (!session) return <PublicPublications key={reloadToken} authorKey={authorKey} name={name} />;
+  if (!session) return <PublicPublications authorKey={authorKey} name={name} reloadToken={reloadToken} />;
   const header = withFilter ? (
     <ChipRow>
       {pageFilters.map((f) => (

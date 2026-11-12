@@ -87,6 +87,7 @@ export function RequestCard({
         <Button
           variant="plate"
           icon="check"
+          style={styles.half}
           loading={busy === "accept"}
           disabled={busy !== null}
           onPress={() => void run("accept", onAccept)}
@@ -97,6 +98,7 @@ export function RequestCard({
           variant="plate"
           tone="dashed"
           icon="close"
+          style={styles.half}
           loading={busy === "decline"}
           disabled={busy !== null}
           onPress={() => void run("decline", onDecline)}
@@ -112,5 +114,7 @@ const styles = StyleSheet.create({
   card: { gap: space3, padding: space3 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   text: { flex: 1, gap: 2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  // Accepter et Refuser se partagent la ligne (maquette) ; à police agrandie les libellés passent sur deux lignes, sans déborder.
+  row: { flexDirection: "row", gap: space2 },
+  half: { flex: 1, minWidth: 0, alignSelf: "stretch" },
 });

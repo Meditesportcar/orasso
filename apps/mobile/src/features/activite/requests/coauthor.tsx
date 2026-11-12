@@ -95,6 +95,7 @@ export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
           <Button
             variant="plate"
             icon="check"
+            style={styles.half}
             loading={busy === "accept"}
             disabled={busy !== null}
             onPress={() => void reply("accept")}
@@ -105,6 +106,7 @@ export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
             variant="plate"
             tone="dashed"
             icon="close"
+            style={styles.half}
             loading={busy === "decline"}
             disabled={busy !== null}
             onPress={() => void reply("decline")}
@@ -125,5 +127,7 @@ const styles = StyleSheet.create({
   thumb: { width: THUMB, aspectRatio: 0.8, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   thumbImage: { width: THUMB, height: THUMB / 0.8 },
   confirm: { flexDirection: "row", alignItems: "center", gap: space2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  // Accepter et Refuser se partagent la ligne (comme `RequestCard`) ; à police agrandie les libellés passent sur deux lignes.
+  row: { flexDirection: "row", gap: space2 },
+  half: { flex: 1, minWidth: 0, alignSelf: "stretch" },
 });

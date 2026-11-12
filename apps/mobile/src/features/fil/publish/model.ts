@@ -164,3 +164,27 @@ export const mergeRecropped = (
  */
 export const confirmNoPlateFor = (list: readonly FeedDraftPhoto[], key: string | null): FeedDraftPhoto[] =>
   list.map((p) => (key !== null && p.key === key ? confirmNoPlate(p) : p));
+
+/**
+ * Un envoi figé en attente de vérification (`uncertain`) : l'erreur reçue lève-t-elle l'incertitude ? Seul un refus définitif du serveur
+ * (4xx) prouve que rien n'a été créé. 429 et 401 ne prouvent rien (le contrôle de rejeu de l'API vient après), le 409 `account_changed`
+ * non plus (une première tentative sous le bon compte a pu aboutir) ; 5xx et réseau gardent le corps incertain.
+ */
+export function liftsUncertainty(e: { status: number; code?: string | null }): boolean {
+  if (e.status < 400 || e.status >= 500) return false;
+  if (e.status === 429 || e.status === 401) return false;
+  return e.code !== "account_changed";
+}
+
+/**
+ * L'événement choisi doit-il être retiré de la saisie parce que la liste relue ne le contient plus ? Pas tant qu'un envoi est figé
+ * (`uncertain`) : le corps gardé le contient encore, l'écran doit montrer ce qui part.
+ */
+export function dropEventFromChoice(
+  eventId: string | null,
+  listedIds: readonly string[] | null,
+  uncertain: boolean,
+): boolean {
+  if (uncertain || !eventId || listedIds === null) return false;
+  return !listedIds.includes(eventId);
+}
