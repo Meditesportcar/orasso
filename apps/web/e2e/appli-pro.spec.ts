@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { accountQr, apiCall, createPublishedPro, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { accountQr, apiCall, createPublishedPro, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Parcours 6 (docs/02), côté appli : le pro lit le QR de compte du passionné dans la casquette Pro (version web de
@@ -100,11 +100,26 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {
-      await page.getByLabel("Titre").fill("Offre appli");
-      await page.getByLabel("Texte").fill("Nouvelle offre publiée depuis l'appli.");
-      await page.getByRole("button", { name: "Publier", exact: true }).click();
-      await expect(page.getByText("Publié : tes abonnés la voient sur ta fiche.")).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByTestId("pro-posts-counter")).toHaveText("1 / 4");
+      // Lot R9c : plus de formulaire de texte ; une offre est une publication avec l'étiquette « Offre » (photo, titre, fin).
+      await page.getByTestId("pro-publish-offer").click();
+      await expect(page.getByTestId("fil-publish-offer-title")).toBeVisible({ timeout: 30_000 });
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByTestId("fil-publish-add").click();
+      await (await chooser).setFiles([
+        { name: "offre.png", mimeType: "image/png", buffer: samplePhoto([40, 90, 140]) },
+      ]);
+      await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+      await page.getByTestId("fil-publish-photo").first().click();
+      await page.getByTestId("fil-publish-none").click();
+      await page.getByTestId("fil-publish-none-yes").click();
+      await page.getByTestId("fil-publish-offer-title").fill("Offre appli");
+      await page
+        .getByTestId("fil-publish-offer-end")
+        .fill(new Date(Date.now() + 15 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));
+      await page.getByTestId("fil-publish-send").click();
+      await expect(page.getByTestId("fil-publish-done-offer")).toContainText("offre jusqu'au", { timeout: 60_000 });
+      await page.goto("/publier");
+      await expect(page.getByTestId("pro-posts-counter")).toHaveText("1 / 4", { timeout: 30_000 });
     }
     await shot(page, `05-publier-${theme}`);
 

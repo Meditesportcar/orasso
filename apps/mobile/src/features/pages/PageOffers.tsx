@@ -84,8 +84,11 @@ export function useOffers(authorKey: string | null, reloadToken = 0) {
     void read(true);
   }, [reloadToken]);
 
+  // Des fonctions stables : un écran peut les mettre dans les dépendances d'un effet de focus sans le relancer à chaque rendu.
+  const reload = useCallback(() => read(true), [read]);
+  const more = useCallback(() => read(false), [read]);
   const retry = () => (retryCall(failed.current) === "more" ? read(false) : read(true));
-  return { ...state, reload: () => read(true), more: () => read(false), retry };
+  return { ...state, reload, more, retry };
 }
 
 /** Une offre : vignette, étiquette, titre (jamais tronqué), légende sur deux lignes, dates. La ligne ouvre la publication. */
