@@ -370,12 +370,13 @@ export const feedService = {
     // Un curseur de la version précédente (APK en ligne en plein parcours) n'est jamais une erreur : première page, `reset`.
     const previous = isPreviousCursor(q.cursor);
     let cursor = previous ? null : decodeCursor(q.cursor);
-    // La phase classée n'existe que dans « Pour toi » : un tel curseur avec un autre onglet est un curseur forgé.
-    if (cursor?.phase === 1 && !forYou) throw validation("Curseur invalide : recharge le Fil.");
-    // Le contexte a changé en plein parcours (nouvel abonnement, nouveau département…) : le parcours repart de la
-    // première page, et le client remplace sa liste (`reset`).
+    // Le contexte a changé en plein parcours (nouvel abonnement, nouveau département, autre casquette…) : le parcours repart
+    // de la première page, et le client remplace sa liste (`reset`). Avant toute validation du curseur (lot R9a, tour 2) :
+    // un curseur d'une autre casquette n'est jamais une erreur, même combiné à un autre onglet.
     const reset = previous || (cursor !== null && cursor.fp !== fp);
     if (reset) cursor = null;
+    // La phase classée n'existe que dans « Pour toi » : un tel curseur avec un autre onglet est un curseur forgé.
+    if (cursor?.phase === 1 && !forYou) throw validation("Curseur invalide : recharge le Fil.");
     // « Moins de ce genre » : lu à la première page, figé dans le curseur pour tout le parcours.
     const less = cursor ? cursor.less : new Set(feedCardKinds.filter((k) => viewerCtx.lessKinds.has(k)));
     const ctx: FeedViewerContext = { ...viewerCtx, lessKinds: less };

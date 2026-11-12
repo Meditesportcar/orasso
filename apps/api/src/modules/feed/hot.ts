@@ -48,8 +48,8 @@ export async function hotCards(args: {
         lte(feedPosts.createdAt, ref),
         gt(feedPostReactions.createdAt, from),
         lte(feedPostReactions.createdAt, ref),
-        sql`${feedPosts.authorId} <> ${userId}`,
-        ...(args.page ? [sql`not ${ownPageSql(args.page)}`] : []),
+        // Sans casquette : jamais la mienne. En casquette : seulement la page active (pas la personne derrière elle).
+        args.page ? sql`not ${ownPageSql(args.page)}` : sql`${feedPosts.authorId} <> ${userId}`,
         profileOkSql("fl", ref),
         ...feedPostScopeSql({
           userId,

@@ -12,7 +12,7 @@ import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
 import { registerJournalGuard } from "../../notifications/service";
 import { profileOkSql, unavailable } from "../access";
-import { COMMENT_TYPES, groupScopeKeys } from "./notify";
+import { COMMENT_TYPES, groupScopeKeys, pageLineReadable } from "./notify";
 import { readableBatch } from "./readers";
 import { anyOf } from "./sqlany";
 
@@ -112,6 +112,17 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
     }
     const cands = byGroup.get(n.id);
     if (!cands) {
+      // Une ligne de page dont le dernier commentaire est retiré tient avec le plus récent de ceux qui se lisent encore.
+      if (!readable.has(id) && (n.data as { page?: unknown }).page) {
+        const left = await pageLineReadable(db, userId, n);
+        out.set(
+          n.id,
+          left
+            ? { shown: true, commentReadable: true, readableCommentId: left.newest.id }
+            : { shown: false, commentReadable: false },
+        );
+        continue;
+      }
       out.set(n.id, { shown: readable.has(id), commentReadable: readable.has(id) });
       continue;
     }

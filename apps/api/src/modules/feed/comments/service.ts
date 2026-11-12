@@ -41,6 +41,7 @@ import { type Tx, withTx } from "../../../lib/tx";
 import { moderationService } from "../../moderation/service";
 import { postWithAuthor, profileOkSql, requireVisiblePost, UUID_RE } from "../access";
 import { loadPageInfo, pageKeyOf } from "../authors";
+import { PAGE_VIEWER_ID } from "../sources/types";
 import { notifyCommentLike, notifyNewComment } from "./notify";
 import { softDeleteComment } from "./remove";
 import { mentionSuggestions } from "./suggest";
@@ -112,6 +113,8 @@ async function mentionedPeople(
   commenterId: string,
   text: string,
   at: Date,
+  /** Lot R9a : une page ne cite que des comptes publics (une citation d'un compte privé est ignorée, sans notification). */
+  publicOnly = false,
 ): Promise<{ userId: string; pseudo: string }[]> {
   const pseudos = commentMentions(text);
   if (!pseudos.length) return [];
@@ -126,6 +129,7 @@ async function mentionedPeople(
         ),
         profileOkSql("profiles", at),
         sql`${profiles.userId} <> ${commenterId}`,
+        publicOnly ? sql`${profiles.visibility} = 'public'` : undefined,
       ),
     );
   // Dans l'ordre où le texte les cite.
@@ -162,6 +166,10 @@ export const feedCommentsService = {
     rateLimit("feedComment", v.user.id);
     const userId = v.user.id;
     const page = actor && isPageActor(actor) ? actor : null;
+    // En casquette, on ne commente que ce qu'un membre sans aucun lien voit (lot R9a, tour 2) : la publication d'un compte
+    // public ou d'une page, la réponse au commentaire d'un compte public ou d'une page. Jamais ce que la personne voit parce
+    // qu'elle suit un compte privé : 404, comme une publication introuvable.
+    const reader: Viewer = page ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v;
     // Les colonnes de la page : la contrainte de la table exige la persona et son identifiant, rien d'autre.
     const pageColumns = page
       ? {
@@ -175,7 +183,7 @@ export const feedCommentsService = {
     let createdId: string;
     try {
       createdId = await withTx(async (tx, after) => {
-        const post = await requireVisiblePost(v, postId, tx);
+        const post = await requireVisiblePost(reader, postId, tx);
         // Verrou de la publication : les compteurs ne se perdent pas à deux commentaires simultanés, et un second envoi
         // du même `clientId` attend le premier avant de le retrouver.
         const [locked] = await tx
@@ -202,7 +210,7 @@ export const feedCommentsService = {
         let target: { id: string; authorId: string } | null = null;
         let parentId: string | null = null;
         if (input.parentId) {
-          const asked = await requireVisibleComment(v, input.parentId, tx).catch((error: unknown) => {
+          const asked = await requireVisibleComment(reader, input.parentId, tx).catch((error: unknown) => {
             if (error instanceof AppError && error.status === 404) return null;
             throw error;
           });
@@ -252,7 +260,7 @@ export const feedCommentsService = {
         }
 
         // `@pseudo` : la liste rendue est la même pour tous ; la notification ne part qu'à qui lit le commentaire.
-        const mentioned = await mentionedPeople(tx, userId, input.text, at);
+        const mentioned = await mentionedPeople(tx, userId, input.text, at, page !== null);
         if (mentioned.length) {
           await tx
             .insert(feedCommentMentions)

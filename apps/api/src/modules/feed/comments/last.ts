@@ -76,6 +76,8 @@ export async function loadLastComments(
     const list = out.get(r.postId) ?? [];
     // Un commentaire de page se montre sous la page, jamais sous le compte de qui l'a écrit.
     const pageView = r.persona !== "fan" ? pages.get(pageKeyOf(r) ?? "")?.view : undefined;
+    // Une page introuvable : le commentaire est écarté, jamais montré sous le compte de la personne.
+    if (r.persona !== "fan" && !pageView) continue;
     list.push({
       id: r.id,
       author: pageView ?? personAuthorView(r.authorId, r),

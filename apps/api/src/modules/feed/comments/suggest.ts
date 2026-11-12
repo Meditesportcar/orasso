@@ -16,7 +16,7 @@ import { followSets } from "../../social/pageFollows";
 import { authorVisibleSql, profileOkSql, requireVisiblePost } from "../access";
 import { PAGE_VIEWER_ID } from "../sources/types";
 import { postFactsOf } from "./pagefacts";
-import { commentVisibleSql, managesPost } from "./view";
+import { commentPageOkSqlFor, commentVisibleSql, managesPost } from "./view";
 
 /** Lignes lues par source avant de retirer ceux qui ne verraient pas la publication. */
 const PER_SOURCE = 40;
@@ -44,7 +44,9 @@ export async function mentionSuggestions(
   );
   const pick = { userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey };
 
-  const rootVisible = manages ? profileOkSql("rp", at) : authorVisibleSql("rp", sql`rc.author_id`, viewerId, at);
+  const rootPerson = manages ? profileOkSql("rp", at) : authorVisibleSql("rp", sql`rc.author_id`, viewerId, at);
+  // Une racine de page suit les règles d'une page (comme commentVisibleSql), pas la confidentialité du compte derrière elle.
+  const rootVisible = sql`(case when rc.persona <> 'fan' then (rp.banned_at is null and ${commentPageOkSqlFor("rc")}) else ${rootPerson} end)`;
   // Ceux qui ont déjà commenté cette publication et dont je peux lire les commentaires, les plus récents d'abord.
   const thread: Candidate[] = await db
     .select(pick)

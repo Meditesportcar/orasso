@@ -165,8 +165,10 @@ export async function postCards(
       await loadPostViews(
         db,
         rows.map((r) => r.post.id),
-        userId,
+        // En casquette : le regard public de la page (visibilité, aperçu des derniers commentaires) ; la flamme reste celle de la personne.
+        page ? PAGE_VIEWER_ID : userId,
         ref,
+        userId,
       )
     ).map((v) => [v.id, v]),
   );
@@ -191,6 +193,7 @@ export async function postCards(
     if (!view) return [];
     const isPage = r.post.persona !== "fan";
     const owner = coOwners.get(r.post.id);
+    const mineOnPage = page ? ownPage(r.post) : false;
     return [
       {
         id: `feed_post:${r.post.id}`,
@@ -209,7 +212,8 @@ export async function postCards(
         flames7d: counts.get(r.post.id) ?? 0,
         authorPseudo: owner ? owner.name : isPage ? view.author.name : r.author.pseudo,
         official: owner ? false : isPage ? false : r.author.official,
-        payload: { post: view },
+        // Le regard public d'une page ne sait pas qu'elle gère ses publications : elles restent « les siennes ».
+        payload: { post: mineOnPage ? { ...view, mine: true } : view },
       },
     ];
   });

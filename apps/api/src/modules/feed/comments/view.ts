@@ -50,6 +50,17 @@ export function commentVisibleSql(viewerId: string, manages: boolean, at: Date):
   return sql`(case when ${feedPostComments.persona} <> 'fan' then (profiles.banned_at is null and ${commentPageOkSql}) else ${person} end)`;
 }
 
+/** Comme commentPageOkSql, pour une ligne de commentaire sous un alias SQL (suggestions : la racine d'une réponse). */
+export function commentPageOkSqlFor(alias: string): SQL {
+  const a = sql.raw(alias);
+  return sql`(
+    (${a}.persona = 'organizer' and exists (select 1 from structures st where st.id = ${a}.structure_id
+      and st.deleted_at is null and st.verification <> 'suspended'))
+    or (${a}.persona = 'pro' and exists (select 1 from pro_profiles pp where pp.id = ${a}.pro_id and pp.deleted_at is null))
+    or (${a}.persona = 'provider' and exists (select 1 from provider_profiles pv where pv.id = ${a}.provider_id and pv.deleted_at is null))
+    or (${a}.persona = 'media' and exists (select 1 from media_profiles mp where mp.id = ${a}.media_id and mp.deleted_at is null)))`;
+}
+
 /** La page d'un commentaire est en règle (structure ni supprimée ni suspendue, fiche pro, prestataire ou média non supprimé), en SQL. */
 export const commentPageOkSql = sql`(
   (${feedPostComments.persona} = 'organizer' and exists (select 1 from structures st where st.id = ${feedPostComments.structureId}
@@ -207,21 +218,26 @@ export async function toViews(
       )
     : new Map();
   const managed = pageRows.length ? await managedPageKeys(v.user.id, ex) : new Set<string>();
-  return rows.map(({ c, p }) => {
+  return rows.flatMap(({ c, p }) => {
     const key = c.persona === "fan" ? null : pageKeyOf(c);
+    // Une page introuvable : le commentaire est écarté, jamais montré sous le compte de la personne.
+    const pageView = key ? pages.get(key)?.view : undefined;
+    if (c.persona !== "fan" && !pageView) return [];
     const mine = key ? managed.has(key) : c.authorId === v.user.id;
-    return {
-      id: c.id,
-      author: key ? (pages.get(key)?.view ?? personAuthorView(c.authorId, p)) : personAuthorView(c.authorId, p),
-      text: c.text,
-      createdAt: c.createdAt.toISOString(),
-      mentions: mentions.get(c.id) ?? [],
-      reactionsCount: c.reactionsCount,
-      reactedByMe: reacted.has(c.id),
-      repliesCount: counted.get(c.id)?.n ?? c.repliesCount,
-      countedAt: counted.get(c.id)?.at ?? c.createdAt.toISOString(),
-      mine,
-      canDelete: mine || manages,
-    };
+    return [
+      {
+        id: c.id,
+        author: pageView ?? personAuthorView(c.authorId, p),
+        text: c.text,
+        createdAt: c.createdAt.toISOString(),
+        mentions: mentions.get(c.id) ?? [],
+        reactionsCount: c.reactionsCount,
+        reactedByMe: reacted.has(c.id),
+        repliesCount: counted.get(c.id)?.n ?? c.repliesCount,
+        countedAt: counted.get(c.id)?.at ?? c.createdAt.toISOString(),
+        mine,
+        canDelete: mine || manages,
+      },
+    ];
   });
 }

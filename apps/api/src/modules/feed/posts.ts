@@ -91,7 +91,14 @@ export const FEED_PHOTO_NAME_RE = /^[0-9a-f]{32}\.webp$/;
  * Publications visibles de `viewerId` parmi `ids`, dans l'ordre de `ids`. Les publications absentes, retirées, d'un
  * compte hors règle ou d'un compte privé non suivi sont omises.
  */
-export async function loadPostViews(ex: Executor, ids: string[], viewerId: string, at: Date): Promise<FeedPostView[]> {
+export async function loadPostViews(
+  ex: Executor,
+  ids: string[],
+  viewerId: string,
+  at: Date,
+  /** Lot R9a : la flamme est celle de la personne même quand la publication est lue avec le regard public d'une page. */
+  flamerId: string = viewerId,
+): Promise<FeedPostView[]> {
   if (!ids.length) return [];
   const rows = await ex
     .select({ post: feedPosts, author: profiles })
@@ -141,7 +148,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
       await ex
         .select({ id: feedPostReactions.postId })
         .from(feedPostReactions)
-        .where(and(inArray(feedPostReactions.postId, postIds), eq(feedPostReactions.userId, viewerId)))
+        .where(and(inArray(feedPostReactions.postId, postIds), eq(feedPostReactions.userId, flamerId)))
     ).map((r) => r.id),
   );
   const vehicleIds = [...new Set(visible.flatMap((r) => (r.post.vehicleId ? [r.post.vehicleId] : [])))];

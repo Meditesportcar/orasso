@@ -7,7 +7,13 @@
 //
 // Une ligne regroupée (plusieurs personnes) n'a **pas** d'extrait : il serait attribué à la première personne nommée alors
 // qu'il vient de la dernière. Seule la première occurrence d'une ligne cite le début du commentaire (120 caractères).
-import { ACTIVITY_MAX_ACTORS, commentExcerpt, feedCommentLabels, r8NotificationTable } from "@orasso/shared";
+import {
+  ACTIVITY_MAX_ACTORS,
+  commentExcerpt,
+  feedCommentLabels,
+  parseAuthorKey,
+  r8NotificationTable,
+} from "@orasso/shared";
 import { and, desc, eq, inArray, isNull, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
@@ -300,10 +306,81 @@ function groupScope(n: typeof notifications.$inferSelect): { scope: SQL; actorId
   return scope && actorIds.length ? { scope, actorIds } : null;
 }
 
+/**
+ * Le plus récent commentaire de la page d'une ligne regroupée de page (lot R9a, tour 2) que le destinataire lit encore, avec
+ * le nombre de ceux qu'il lit : la ligne se recompose par la clé de la page et sa portée (publication, ou commentaire visé),
+ * jamais par des personnes (une ligne de page n'en cite aucune).
+ */
+export async function pageLineReadable(
+  ex: Executor,
+  userId: string,
+  n: typeof notifications.$inferSelect,
+): Promise<{ newest: { id: string; text: string }; count: number; pageName: string } | null> {
+  const data = n.data as { page?: { key?: unknown; name?: unknown }; postId?: unknown; parentId?: unknown };
+  const key = parseAuthorKey(data.page?.key);
+  if (!key || key.kind === "user") return null;
+  const c = feedPostComments;
+  const scope =
+    n.type === "feed_comment" && typeof data.postId === "string"
+      ? eq(c.postId, data.postId)
+      : n.type === "feed_comment_reply" && typeof data.parentId === "string"
+        ? eq(c.replyToId, data.parentId)
+        : null;
+  if (!scope) return null;
+  const owner =
+    key.kind === "structure"
+      ? and(eq(c.persona, "organizer"), eq(c.structureId, key.id))
+      : key.kind === "pro"
+        ? and(eq(c.persona, "pro"), eq(c.proId, key.id))
+        : key.kind === "provider"
+          ? and(eq(c.persona, "provider"), eq(c.providerId, key.id))
+          : and(eq(c.persona, "media"), eq(c.mediaId, key.id));
+  const rows = await ex
+    .select({ id: c.id, text: c.text })
+    .from(c)
+    .where(and(scope, owner, isNull(c.deletedAt), ne(c.authorId, userId)))
+    .orderBy(desc(c.createdAt), desc(c.id))
+    .limit(100);
+  if (!rows.length) return null;
+  const { readable } = await readableBatch(
+    ex,
+    userId,
+    rows.map((r) => r.id),
+  );
+  const ok = rows.filter((r) => readable.has(r.id));
+  const newest = ok[0];
+  return newest
+    ? { newest, count: ok.length, pageName: typeof data.page?.name === "string" ? data.page.name : "" }
+    : null;
+}
+
 async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
   if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return true;
-  const data = n.data as { commentId?: unknown; postId?: unknown; parentId?: unknown; _actorIds?: unknown };
+  const data = n.data as {
+    commentId?: unknown;
+    postId?: unknown;
+    parentId?: unknown;
+    _actorIds?: unknown;
+    page?: unknown;
+  };
   if (typeof data.commentId !== "string") return true;
+  if (data.page) {
+    // Ligne d'une page : elle reste tant qu'un commentaire de cette page se lit ; sinon elle disparaît (lot R9a, tour 2).
+    const left = await pageLineReadable(tx, n.userId, n);
+    if (!left) return false;
+    const spec = r8NotificationTable[n.type];
+    const body = left.count === 1 ? feedCommentLabels.quote(commentExcerpt(left.newest.text)) : spec.body;
+    const [updated] = await tx
+      .update(notifications)
+      .set({
+        title: fillTemplate(spec.title, left.pageName),
+        body: fillTemplate(body, left.pageName),
+        data: { ...n.data, commentId: left.newest.id, count: left.count },
+      })
+      .where(eq(notifications.id, n.id))
+      .returning();
+    return updated ?? false;
+  }
   const group = groupScope(n);
   if (!group) return stillReadable(tx, n.userId, data.commentId);
   const readable = await findReadable(tx, n.userId, group.scope, group.actorIds);
