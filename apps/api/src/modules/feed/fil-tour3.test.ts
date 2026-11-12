@@ -78,33 +78,52 @@ describe("tour 3", () => {
     expect(got.length).toBe(50);
   });
 
-  it("des flammes retirées entre deux pages : le parcours repart (reset), aucune carte servie deux fois", async () => {
+  it("des flammes retirées ou ajoutées entre deux pages (« Pour toi ») : aucun reset, aucun doublon dans une page, tout est servi sauf peut-être des cartes montées au-dessus de la frontière", async () => {
     const author = await person("Auteur_Retrait");
     const me = await person("Lecteur_Retrait");
     const fan = await person("Fan_Retrait");
+    const fan2 = await person("Fan2_Retrait");
     const posts: string[] = [];
     for (let i = 0; i < 60; i++) posts.push(await dbPost(author, at(5 + i)));
     for (const p of posts.slice(0, 30)) await flames(p, [fan], at(1));
     const first = await fil(me);
     expect(first.items.length).toBe(20);
-    // Les flammes sont retirées : les scores changent, la frontière du curseur ne tient plus.
+    // Des flammes sont retirées, d'autres ajoutées : le classement bouge, le parcours continue.
     await db.delete(feedPostReactions).where(eq(feedPostReactions.userId, fan.id));
-    const second = await fil(me, `?cursor=${first.next}`);
-    expect(second.status).toBe(200);
-    expect(second.json.reset).toBe(true);
-    const got = [...postIds(second.items)];
-    let cursor = second.next;
+    for (const p of posts.slice(40, 50)) await flames(p, [fan2], at(1));
+    const got = [...postIds(first.items)];
+    let cursor = first.next;
     while (cursor) {
       const page = await fil(me, `?cursor=${cursor}`);
+      expect(page.status).toBe(200);
       expect(page.json.reset).toBeUndefined();
+      expect(page.items.length).toBe(new Set(ids(page.items)).size);
       got.push(...postIds(page.items));
       cursor = page.next;
     }
-    expect(got.length).toBe(60);
-    expect(new Set(got).size).toBe(60);
-    // Sans changement de flammes, aucun reset.
+    for (const g of got) expect(posts).toContain(g);
+    // Au pire quelques cartes manquent à ce parcours (elles montent au-dessus de la frontière) : au suivant elles sont là.
+    expect(new Set(got).size).toBeGreaterThanOrEqual(45);
     const pages = await walk(me, "for_you");
     expect(pages.flat().length).toBe(60);
+  }, 120_000);
+
+  it("une flamme retirée sur une publication restée en zone B ne renvoie pas en haut", async () => {
+    const author = await person("Auteur_ZoneB9");
+    const me = await person("Lecteur_ZoneB9");
+    const fan = await person("Fan_ZoneB9");
+    const posts: string[] = [];
+    for (let i = 0; i < 25; i++) posts.push(await dbPost(author, at(5 + i)));
+    const popular = await dbPost(author, at(200));
+    await flames(popular, [fan], at(1));
+    await view(me, [popular]);
+    clock.advance(60_000);
+    const first = await fil(me);
+    expect(first.items.length).toBe(20);
+    await db.delete(feedPostReactions).where(eq(feedPostReactions.userId, fan.id));
+    const second = await fil(me, `?cursor=${first.next}`);
+    expect(second.status).toBe(200);
+    expect(second.json.reset).toBeUndefined();
   }, 120_000);
 
   it("fresh : 60 publications à moi devant une publication suivie nouvelle : le compte est 1, pas 0", async () => {
@@ -282,7 +301,7 @@ describe("tour 3", () => {
     // Disposition : version, phase, zone, ref (6), fp (6), masque (2), offset (4), nx (1), [x], sc (6), floorAt (6), …
     const nx = raw[1 + 1 + 1 + 6 + 6 + 2 + 4] as number;
     const keysEnd = 1 + 1 + 1 + 6 + 6 + 2 + 4 + 1 + nx * 23;
-    const floorAt = keysEnd + 6;
+    const floorAt = keysEnd;
     const withU48 = (offset: number, value: number) => {
       const b = Buffer.from(raw);
       b.writeUIntBE(value, offset, 6);
