@@ -5174,6 +5174,12 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 
 
 
+### Tour 6 (R8p, 12/11/2026) : corrections de la relecture Codex du tour 5
+- **Invitation express : l'e-mail n'est plus oublié** : `mail.send` écrit déjà la ligne de `email_outbox` puis livre, mais rien ne relit les lignes « en attente » ; au lieu d'une file de reprise, `ensureMail` (dans `modules/checkins/express.ts`) envoie l'e-mail **s'il n'a laissé aucune trace** (en attente, envoyé ou écarté par le budget) pour cette invitation, sous un verrou propre à l'invitation, à la création comme à chaque rejeu : une panne entre l'invitation et l'e-mail est réparée au rejeu, un rejeu simultané ou tardif ne l'envoie jamais deux fois, un envoi en échec (transport) est retenté au rejeu. Aucune migration. Test : panne avant la boîte d'envoi (500), puis trois rejeux simultanés et un de plus → un seul e-mail.
+- **`ExpressSheet`** : l'identifiant d'un envoi incertain (réseau, 5xx) est gardé par adresse (`expressIdFor`, `isUncertainSend`) pour le nouvel essai et pour la file de reprise (qui n'est alimentée qu'une fois) ; une réponse du serveur (succès, 4xx) le libère. Un 502/504 est traité comme une réponse perdue : la demande est gardée et partira avec le même identifiant.
+- **Site, la publication confirmée est transmise au Fil avant toute navigation** : `rememberPublished` est écrit tout de suite à la réponse du POST (l'entrée porte l'identifiant du compte ; le contrôle du compte qui précède l'envoi suffit, un autre compte du même onglet n'en voit jamais rien) ; plus de contrôle détaché. Test : `/me` qui ne revient jamais, l'entrée du Fil est déjà dans l'onglet.
+- **Ancienne clé du `sessionStorage`** (`orasso:fil:publish-uncertain`) : migrée sous la clé de son compte au premier chargement de ce compte (un autre compte la laisse à son propriétaire), effacée aussi par `purgeUncertain` ; un contenu illisible est écarté. Test de la transition.
+
 ## Lot R8k1 : API des commentaires d'une publication du Fil (migration 0078 `feed-comments`, D40, 11/11/2026)
 
 
@@ -5479,7 +5485,7 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
 
 ### Tour 7 (R8c1, 11/11/2026)
-- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
+- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
 
 ### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
 - **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
