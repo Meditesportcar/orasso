@@ -19,8 +19,18 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { feedPostCoauthors, feedPostReactions, feedPosts, notifications, profiles, user } from "../../db/schema";
+import {
+  adminAuditLog,
+  emailOutbox,
+  feedPostCoauthors,
+  feedPostReactions,
+  feedPosts,
+  notifications,
+  profiles,
+  user,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
+import { mail } from "../../lib/mail";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
@@ -296,6 +306,75 @@ describe("anonymisation : un seul verrouillage trié au début (petit lot API, P
     } finally {
       boom.mockRestore();
     }
+  });
+});
+
+describe("reprise de l'anonymisation : limitée à la transaction (petit lot API, tour 5)", () => {
+  const deadlock = (code: string) => Object.assign(new Error("interblocage simulé"), { code });
+  const audits = async (userId: string) =>
+    (await db.select().from(adminAuditLog)).filter((a) => a.targetId === userId && a.action === "user.self_delete");
+
+  it.each(["40P01", "40001"])(
+    "%s au premier essai avec confirm : un seul audit, un seul envoi, trace anonymisée, rien d'un essai annulé",
+    async (code) => {
+      const kenji = await person("Kenji_66");
+      const [before] = await db.select({ email: user.email }).from(user).where(eq(user.id, kenji.id));
+      const send = vi.spyOn(mail, "send");
+      const spy = vi
+        .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+        .mockImplementationOnce(async () => {
+          throw deadlock(code);
+        });
+      try {
+        await accountService.anonymize(kenji.id, null, { confirm: true });
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(send.mock.calls.filter((c) => c[0] === "account_deleted")).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+        send.mockRestore();
+      }
+      expect(await audits(kenji.id)).toHaveLength(1);
+      const traces = await db.select().from(emailOutbox).where(eq(emailOutbox.template, "account_deleted"));
+      expect(traces.filter((t) => t.to === before?.email)).toHaveLength(0);
+      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+      expect(profile?.deletedAt).not.toBeNull();
+    },
+  );
+
+  it("trois interblocages de suite : l'erreur remonte, rien n'est écrit, aucun envoi", async () => {
+    const kenji = await person("Kenji_66");
+    const send = vi.spyOn(mail, "send");
+    const spy = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockRejectedValue(deadlock("40P01"));
+    try {
+      await expect(accountService.anonymize(kenji.id, null, { confirm: true })).rejects.toMatchObject({
+        code: "40P01",
+      });
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      send.mockRestore();
+    }
+    expect(await audits(kenji.id)).toHaveLength(0);
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+    expect(profile?.deletedAt).toBeNull();
+  });
+
+  it("un interblocage après la validation (envoi de confirmation) n'est pas repris : l'envoi n'est tenté qu'une fois", async () => {
+    const kenji = await person("Kenji_66");
+    const send = vi.spyOn(mail, "send").mockRejectedValue(deadlock("40P01"));
+    try {
+      await expect(accountService.anonymize(kenji.id, null, { confirm: true })).rejects.toMatchObject({
+        code: "40P01",
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      send.mockRestore();
+    }
+    // La suppression est validée une seule fois (pas de faux succès d'un second essai).
+    expect(await audits(kenji.id)).toHaveLength(1);
   });
 });
 
