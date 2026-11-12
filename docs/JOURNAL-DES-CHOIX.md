@@ -5516,3 +5516,10 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **`share`** : `PostActions` reçoit `onShared` (facultatif) ; le Fil note `share` à l'ouverture du partage (la feuille n'a pas de retour de réussite : c'est l'intention de partager, pas son aboutissement). `open` : `isRealTap` (moins de 10 px) testé.
 - **« Pas de réseau »** : `PostActions` reçoit `offline` (facultatif, porté par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent « Pas de réseau » avant toute mutation (recette).
 - **`attachPhrase`** : l'élision l'emporte aussi pour un nom féminin (« pour l'Exposition », « à l'Expo »).
+
+### Tour 5 (R8c2, relecture Codex des tours 2 à 4, 12/11/2026)
+- **Retrait d'une carte des copies** : `dropFromCopies` (désormais dans `copyPhotos.ts`) capture le compte avant toute lecture et le passe à chaque `readCopy` et `saveCopy` ; rien n'est écrit sous un autre compte (test A → B entre la lecture et l'écriture).
+- **Photo refusée dans le repli** : `CrewPhotoImage` reçoit `onFailed` ; un 401, 403, 404 ou 410 reçu par le repli efface aussi la photo gardée (`forgetIfRefused`, testé : 500 sans effet, puis 404 efface).
+- **`open`** : `useCardRouter` (appli) note `open` pour la carte courante avant toute navigation partie d'une carte (fiche, profil, plateau, vote, souvenir, annonce, pro, ligne rattachée) ; « Voir les commentaires » aussi. Contexte `CardIdContext` posé par le Fil ; hors du Fil, rien n'est noté ; jamais pour « Sponsorisé ». Recette : défilement puis changement d'onglet = aucun `open` ; ligne rattachée = `open`.
+- **Site, file des cartes vues** : `send` vérifie que sa file est toujours celle du module ; `resetSeen()` à la déconnexion (`clientAction`) ; test d'un envoi lent de A puis déconnexion.
+- **Hors ligne sans carte** : le Fil passe hors ligne même si la copie filtrée est vide (liste vide, ou faite de rendez-vous au spot et de « Sponsorisé » seulement).
