@@ -27,6 +27,7 @@ import {
   draftFromBody,
   type EventsLoad,
   emptyEventsLoad,
+  emptyOfferForm,
   eventsOf,
   eventsStale,
   FEED_ASPECT_RATIOS,
@@ -47,6 +48,9 @@ import {
   loadUncertain,
   type NotifyPreview,
   noCommercialDraft,
+  proOffersLabels as OF,
+  type OfferForm,
+  offerDatesPhrase,
   type PersonaEntry,
   type PlateRect,
   type PublishChoice,
@@ -56,6 +60,7 @@ import {
   publishIssueR8,
   publishSays,
   publishStartChoice,
+  publishStartOffer,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -67,6 +72,8 @@ import {
   withImportantLeft,
 } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+import { OfferBlock } from "./OfferBlock";
 
 import "../../styles/fil.css";
 import "../../styles/fil-publish.css";
@@ -143,7 +150,7 @@ export function PublishForm({
   vehicles: { id: string; label: string }[];
   optionsFailed: boolean;
   /** Lot R8d : « Publier pour cet événement » (`?structure=&evenement=`) pose la structure et l'événement de départ. */
-  start?: { structure?: string | null; evenement?: string | null };
+  start?: { structure?: string | null; evenement?: string | null; fiche?: string | null; etiquette?: string | null };
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
@@ -154,7 +161,20 @@ export function PublishForm({
   const [caption, setCaption] = useState("");
   // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
   const authors = useMemo(() => publishAuthors(personas, pseudo, avatarUrl), [personas, pseudo, avatarUrl]);
-  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
+  // Lot R9c : `?fiche=<identifiant>&etiquette=offre` ouvre l'écran réglé sur la fiche pro, avec l'étiquette « Offre ».
+  // biome-ignore lint/correctness/useExhaustiveDependencies: valeurs de départ lues une seule fois
+  const startOffer = useMemo(
+    () => publishStartOffer({ fiche: start?.fiche, etiquette: start?.etiquette }, authors),
+    [],
+  );
+  const [choice, setChoice] = useState<PublishChoice>(() =>
+    startOffer
+      ? { ...publishStartChoice({}, authors), authorKey: startOffer.authorKey }
+      : publishStartChoice(start ?? {}, authors),
+  );
+  // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
+  const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
+  const [doneOffer, setDoneOffer] = useState<string | null>(null);
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
@@ -389,6 +409,7 @@ export function PublishForm({
     );
   }
   const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
+  const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
       photos: items,
@@ -398,6 +419,7 @@ export function PublishForm({
       event,
       important,
       forbidden: eventBlock ? loaded.forbidden : null,
+      offer: offerOn ? offer : null,
     }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   /** Le compte de la session : le même, un autre, plus de session (401), ou rien de sûr (réseau, 5xx). */
@@ -496,6 +518,7 @@ export function PublishForm({
         vehicleId: choice.vehicleId,
         placeLabel: choice.placeLabel,
         important,
+        offer: offerOn ? offer : null,
         ...(fan ? commercialField(commercialLine) : {}),
       }),
       // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
@@ -520,6 +543,9 @@ export function PublishForm({
       rememberPublished(userId, res.data as FeedPostView);
       setUncertain(null);
       setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
+      // La confirmation d'une offre : « Publié : <fiche> · offre du 10 au 30 nov. » (maquette R9.2b).
+      const posted = (res.data as FeedPostView).offer;
+      setDoneOffer(posted ? OF.published(author.name, offerDatesPhrase(posted)) : null);
       setDone(true);
       setBusy(false);
       setProgress(null);
@@ -578,6 +604,11 @@ export function PublishForm({
       <div className="fil" data-testid="fil-publish-done">
         <FicheBar title={L.published} back="/app/fil" />
         <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        {doneOffer ? (
+          <p className="o-t-body" data-testid="fil-publish-done-offer">
+            <strong>{doneOffer}</strong>
+          </p>
+        ) : null}
         {invitedName ? (
           <p className="o-t-body" data-testid="fil-publish-invited">
             {CO.sent(invitedName)}
@@ -817,6 +848,7 @@ export function PublishForm({
         />
         <span className="o-t-caption">{fan ? L.captionHint : T.captionHintPage}</span>
       </label>
+      {author.persona === "pro" ? <OfferBlock value={offer} onChange={setOffer} disabled={frozen} /> : null}
 
       <p className="fp-note" data-testid="fil-publish-gesture">
         <Icon name="info" size={16} />
@@ -967,7 +999,7 @@ export function PublishForm({
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
       {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
-      <SaysBlock says={publishSays(author, event, important.on)} />
+      <SaysBlock says={publishSays(author, event, important.on, offerOn)} />
 
       {error ? (
         <p className="s-error" role="alert">
@@ -1128,6 +1160,11 @@ function SaysBlock({ says }: { says: ReturnType<typeof publishSays> }) {
           <b>{says.authorName}</b>
           <small data-testid="fil-publish-says-phrase">{says.phrase ?? T.sayNow}</small>
         </span>
+        {says.tag ? (
+          <span className="fp-stamp" data-testid="fil-publish-says-tag">
+            <Icon name="ticket" size={14} /> {says.tag}
+          </span>
+        ) : null}
         {says.stamp ? (
           <span className="fp-stamp" data-testid="fil-publish-stamp">
             <Icon name="stamp" size={14} /> {T.stamp}

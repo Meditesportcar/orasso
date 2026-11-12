@@ -26,6 +26,7 @@ import { Form, redirect } from "react-router";
 import { PageHead } from "../components/pages/PageHead";
 import { PageMentions } from "../components/pages/PageMentions";
 import { PageMore } from "../components/pages/PageMore";
+import { PageOffers } from "../components/pages/PageOffers";
 import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ProPresentation } from "../components/pages/ProPresentation";
@@ -131,6 +132,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
     followers: pro.followersCount,
     partners: pro.memberPartnersTotal,
     organizers: pro.partners.length,
+    offers: pro.offers?.current,
   });
   const key = authorKeyOf("pro", pro.id);
   const ring = connected ? profileRingState(pro.stories) : null;
@@ -212,7 +214,14 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
       <PageTabs value={tab} items={tabs} path={path} />
 
       {tab === "presentation" ? (
-        <ProPresentation pro={pro} origin={origin} onTrack={(kind) => track(pro.slug, kind)} />
+        <ProPresentation pro={pro} origin={origin} onTrack={(kind) => track(pro.slug, kind)} session={connected} />
+      ) : tab === "offers" ? (
+        <PageOffers
+          authorKey={key}
+          pro={pro}
+          owner={pro.isOwner}
+          publishHref={`/app/fil/publier?fiche=${encodeURIComponent(pro.id)}&etiquette=offre`}
+        />
       ) : tab === "publications" ? (
         <PagePublications
           authorKey={key}

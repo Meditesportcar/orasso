@@ -15,6 +15,7 @@ import { useState } from "react";
 import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
 import { FoldedCaption } from "../publications/FoldedCaption";
+import { OfferLine } from "../publications/OfferLine";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
@@ -294,6 +295,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
         </p>
       ) : null}
       <FeedPhotos post={post} />
+      {post.offer ? <OfferLine offer={post.offer} /> : null}
       {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
       {post.vehicle || (post.event && !post.attach) ? (
         <div className="fil-pills">
