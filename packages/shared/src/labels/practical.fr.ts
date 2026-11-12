@@ -34,6 +34,8 @@ export const practicalTexts = {
   noOrigin: "Donne ta position pour voir les lieux proches.",
   nothingNear: keepUnits("Rien à moins de 30 km."),
   loading: "Recherche des lieux proches…",
+  /** Première lecture en échec : une nouvelle tentative sans quitter l'écran. */
+  retry: "Réessayer",
   /** Les deux sources n'ont pas répondu : le bloc se replie sur cette ligne, sans erreur. */
   unavailable: "Lieux proches indisponibles pour le moment.",
   /** Sous le nom d'un lieu : « Station-service · 1,2 km ». */

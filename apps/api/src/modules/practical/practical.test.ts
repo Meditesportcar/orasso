@@ -474,3 +474,23 @@ describe("Overpass : la requête n'excède pas le délai du client", () => {
     expect(overpassQuery("66")).not.toContain("timeout:60");
   });
 });
+
+describe("POST /practical : tous les départements qui coupent la zone (suite R8q)", () => {
+  it("autour de Paris : les lieux du 93 et du 94 sont lus et servis, pas seulement ceux des deux départements aux centres les plus proches", async () => {
+    const stub = practicalSources({
+      wash: { "93": [{ name: "Lavage de Bobigny", lat: 48.87, lon: 2.45 }] },
+      fuel: { "94": [{ adresse: "Avenue de Paris", ville: "Créteil", cp: "94000", lat: 48.78, lon: 2.46 }] },
+    });
+    const res = await call(await fan("Fan_Paris"), "POST", "/practical", { near: "position", lat: 48.8, lng: 2.4 });
+    expect(res.status).toBe(200);
+    const queried = new Set(stub.calls.map((c) => c.department));
+    expect(queried.has("93")).toBe(true);
+    expect(queried.has("94")).toBe(true);
+    expect(res.json.places.map((p: { name: string }) => p.name).sort()).toEqual([
+      "Lavage de Bobigny",
+      "Station-service",
+    ]);
+    // Les sources n'ont reçu que des codes de département (jamais la position).
+    for (const c of stub.calls) expect(c.department).toMatch(/^[0-9][0-9AB]$/);
+  });
+});

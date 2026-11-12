@@ -104,9 +104,18 @@ export function PracticalScreen() {
       {read.offline && data ? <p className="o-t-caption s-muted">{L.offlineWeb}</p> : null}
 
       {!data ? (
-        <p className="o-t-caption s-muted" data-testid="practical-state">
-          {read.loading ? L.loading : L.unavailable}
-        </p>
+        <>
+          <p className="o-t-caption s-muted" data-testid="practical-state">
+            {read.loading ? L.loading : L.unavailable}
+          </p>
+          {read.offline && !read.loading ? (
+            <div className="pq-gps">
+              <Button type="button" variant="secondary" icon="undo" onClick={read.retry} data-testid="practical-retry">
+                {L.retry}
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : list.length === 0 ? (
         <p className="o-t-caption s-muted" data-testid="practical-empty">
           {data.partial && data.places.length === 0 ? L.unavailable : L.nothingNear}

@@ -1,7 +1,7 @@
 // Lot R8q : règles pures de « Pratique » (maquette R8.12) : la station-service et le lavage les plus proches, de moi ou d'une
 // sortie. Aucune règle ici ne lit l'heure. La position d'une personne n'est jamais une donnée du serveur : l'API ne connaît
 // que la case de 0,1° (`weatherCell`), le téléphone calcule les distances avec sa position exacte, qui ne le quitte pas.
-import { departmentCentroids, distanceKm, type LatLng } from "../geo";
+import { departmentCentroids, distanceKm, type LatLng, nearestDepartment } from "../geo";
 import { NBSP } from "../labels/units.fr";
 
 /** Les deux sortes de lieu : station-service (`fuel`) et lavage (`wash`). */
@@ -71,6 +71,43 @@ export function nearestDepartments(point: LatLng, count = PRACTICAL_DEPARTMENTS)
     .map((d) => d.code);
 }
 
+/**
+ * Les départements qui coupent la zone recherchée (le cercle de `radiusKm` autour du point, plus une marge) : on ne connaît que le
+ * centre de chaque département, un département est donc celui dont le centre est le plus proche d'au moins un point du cercle (échantillon
+ * de points à au plus 6 km les uns des autres). Aucun plafond arbitraire : autour de Paris, les départements de la petite couronne y sont
+ * tous ; en rase campagne, souvent deux ou trois. Les `minimum` plus proches du point y sont toujours.
+ */
+export function departmentsAround(
+  point: LatLng,
+  radiusKm = PRACTICAL_RADIUS_KM,
+  marginKm = 6,
+  minimum = PRACTICAL_DEPARTMENTS,
+): string[] {
+  const found = new Set<string>(nearestDepartments(point, minimum));
+  const reach = radiusKm + marginKm;
+  const kmPerDegLat = 111.2;
+  const kmPerDegLng = kmPerDegLat * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180));
+  const at = (dxKm: number, dyKm: number): LatLng => ({
+    lat: point.lat + dyKm / kmPerDegLat,
+    lng: point.lng + dxKm / kmPerDegLng,
+  });
+  const note = (p: LatLng) => {
+    const code = nearestDepartment(p);
+    if (code) found.add(code);
+  };
+  note(point);
+  const step = 6;
+  for (let r = step; r <= reach + step / 2; r += step) {
+    const radius = Math.min(r, reach);
+    const count = Math.max(8, Math.ceil((2 * Math.PI * radius) / step));
+    for (let i = 0; i < count; i++) {
+      const angle = (2 * Math.PI * i) / count;
+      note(at(radius * Math.cos(angle), radius * Math.sin(angle)));
+    }
+  }
+  return [...found].sort();
+}
+
 /** Les lieux à `radiusKm` de l'origine au plus, les `max` plus proches (sans doublon d'identifiant). */
 export function placesAround<T extends { id: string; lat: number; lng: number }>(
   places: readonly T[],
@@ -95,11 +132,12 @@ export function placesAround<T extends { id: string; lat: number; lng: number }>
 
 const tenth = (n: number) => Math.round(n * 10) / 10;
 
-/** Les lieux avec leur distance à `from` (arrondie au dixième de km), du plus proche au plus éloigné. */
+/** Les lieux avec leur distance à `from`, du plus proche au plus éloigné : le tri se fait sur la distance exacte, l'arrondi (au dixième de km) n'est que pour l'affichage. */
 export function withDistance(places: readonly PracticalPlace[], from: LatLng): PracticalPlaceAt[] {
   return places
-    .map((p) => ({ ...p, distanceKm: tenth(distanceKm(from, p)) }))
-    .sort((a, b) => a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
+    .map((p) => ({ place: p, exact: distanceKm(from, p) }))
+    .sort((a, b) => a.exact - b.exact || a.place.id.localeCompare(b.place.id))
+    .map(({ place, exact }) => ({ ...place, distanceKm: tenth(exact) }));
 }
 
 /** La plus proche de chaque sorte (station-service d'abord, lavage ensuite), `null` quand il n'y en a pas. */

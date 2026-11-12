@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { departmentCentroids } from "../geo";
 import { practicalInput } from "../schemas/practical";
 import {
+  departmentsAround,
   filterKind,
   formatKm,
   nearestDepartments,
@@ -131,5 +132,42 @@ describe("règles de Pratique (R8q)", () => {
       expect(practicalInput.safeParse({ near: "outing", eventId: "x" }).success).toBe(false);
       expect(practicalInput.safeParse({ near: "elsewhere" }).success).toBe(false);
     });
+  });
+});
+
+describe("départements autour d'un point et tri exact (suite R8q)", () => {
+  it("Paris : la petite couronne est lue, pas seulement les deux départements aux centres les plus proches", () => {
+    const around = departmentsAround({ lat: 48.85, lng: 2.35 });
+    for (const code of ["75", "92", "93", "94"]) expect(around, code).toContain(code);
+    expect(around.length).toBeGreaterThan(nearestDepartments({ lat: 48.85, lng: 2.35 }).length);
+  });
+
+  it("près d'une limite des Pyrénées-Orientales : le département voisin est lu, en rase campagne le nombre reste petit", () => {
+    // Côté Aude de la limite avec le 66 (Salses, Leucate) : les deux départements sont dans la zone.
+    const border = departmentsAround({ lat: 42.85, lng: 2.85 });
+    expect(border).toContain("66");
+    expect(border).toContain("11");
+    // Au cœur du 66, loin des limites de la zone de 30 km : pas de département inutile des autres régions.
+    const inside = departmentsAround({ lat: 42.6, lng: 2.5 });
+    expect(inside).toContain("66");
+    expect(inside.length).toBeLessThanOrEqual(5);
+  });
+
+  it("le plancher des deux plus proches est conservé, sans doublon", () => {
+    const point = { lat: 46.6, lng: 2.4 };
+    const around = departmentsAround(point);
+    for (const code of nearestDepartments(point, 2)) expect(around).toContain(code);
+    expect(new Set(around).size).toBe(around.length);
+  });
+
+  it("trier sur la distance exacte : deux lieux dans le même dixième de kilomètre restent dans l'ordre exact", () => {
+    const from = { lat: 42.7, lng: 2.9 };
+    // 0,04 km d'écart (même dixième : 1,0 km), le plus proche est listé en second dans l'entrée.
+    const farther = place("fuel", 42.70898, 2.9, { id: "a" });
+    const nearer = place("fuel", 42.70862, 2.9, { id: "b" });
+    const sorted = withDistance([farther, nearer], from);
+    expect(sorted.map((p) => p.id)).toEqual(["b", "a"]);
+    expect(sorted[0]?.distanceKm).toBe(sorted[1]?.distanceKm);
+    expect(String(sorted[0]?.distanceKm).split(".")[1]?.length ?? 0).toBeLessThanOrEqual(1);
   });
 });

@@ -4,10 +4,9 @@
 // département. La position d'une personne n'arrive ici qu'arrondie à la case de 0,1° (`weatherCell`, dès la route) ; elle
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
+  departmentsAround,
   homeLabels,
   myWeatherPlaces,
-  nearestDepartments,
-  PRACTICAL_DEPARTMENTS,
   type PracticalData,
   type PracticalKind,
   type PracticalOrigin,
@@ -136,7 +135,8 @@ export const practicalService = {
     origin: PracticalOrigin,
     budgetMs: number,
   ): Promise<{ places: PracticalPlace[]; partial: boolean }> {
-    const departments = nearestDepartments(origin, PRACTICAL_DEPARTMENTS);
+    // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
+    const departments = departmentsAround(origin);
     type Listed = {
       kind: PracticalKind;
       key: string;

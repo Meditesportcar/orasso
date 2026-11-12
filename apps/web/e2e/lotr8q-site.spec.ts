@@ -44,15 +44,17 @@ test.afterAll(async () => {
 
 async function openHome(
   browser: Browser,
-  opts: { width?: number; theme?: string; geo?: boolean; email?: string } = {},
+  opts: { width?: number; theme?: string; geo?: boolean; email?: string; offline?: boolean } = {},
 ) {
-  const { width = 390, theme = "beton", geo = false, email = NO_OUTING } = opts;
+  const { width = 390, theme = "beton", geo = false, email = NO_OUTING, offline = false } = opts;
   const ctx = await browser.newContext({
     viewport: { width, height: width === 390 ? 844 : 900 },
     ...(geo ? { geolocation: GEO, permissions: ["geolocation"] } : {}),
   });
   // Le fond de carte (tuiles d'OpenFreeMap, d'OpenStreetMap) ne sort jamais en recette : les épingles sont du DOM.
   await ctx.route(/(openfreemap|openstreetmap)\.org/, (route) => route.abort());
+  // Réseau absent pour « Pratique » au départ : la première lecture échoue, puis reprend quand on le rétablit.
+  if (offline) await ctx.route(/\/api\/practical/, (route) => route.abort());
   await ctx.addInitScript((t) => localStorage.setItem("orasso.theme", t), theme);
   const page = await ctx.newPage();
   await loginInBrowser(page, email, undefined, "/app");
@@ -296,4 +298,24 @@ test("tour 2 : A lance une lecture, B se connecte : rien de A n'apparaît sous B
   // Compte B : pas de sélecteur « Près de ma sortie » (la sortie de A ne lui appartient pas).
   await expect(b.getByTestId("practical-choice")).toHaveCount(0);
   await ctx.close();
+});
+
+test("suite : une première panne puis le retour en ligne : le bloc reparaît sans recharger ; « Réessayer » sur l'écran", async ({
+  browser,
+}) => {
+  const { ctx, page } = await openHome(browser, { offline: true });
+  await expect(page.getByTestId("widget-practical").getByTestId("practical-fuel")).toHaveCount(0);
+  await ctx.unroute(/\/api\/practical/);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByTestId("widget-practical").getByTestId("practical-fuel")).toBeVisible({ timeout: 20_000 });
+  await ctx.close();
+
+  // L'écran détaillé : sans données, « Réessayer » relance la lecture.
+  const second = await openHome(browser, { offline: true });
+  await second.page.goto("/app/pratique");
+  await expect(second.page.getByTestId("practical-retry")).toBeVisible({ timeout: 20_000 });
+  await second.ctx.unroute(/\/api\/practical/);
+  await second.page.getByTestId("practical-retry").click();
+  await expect(second.page.getByTestId("practical-list")).toBeVisible({ timeout: 20_000 });
+  await second.ctx.close();
 });

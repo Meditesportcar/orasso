@@ -9,6 +9,7 @@ import {
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  practicalRetryDelay,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -35,7 +36,7 @@ const remembered = (near: string): PracticalData | null => {
   return key ? (memory.get(key) ?? null) : null;
 };
 
-type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
+type Read = { data: PracticalData | null; loading: boolean; offline: boolean; retry: () => void };
 
 /** Le compte et la génération de session sont capturés au départ d'une lecture et revérifiés à son arrivée (lot R8q, tour 2). */
 const guard = createSessionGuard(currentSession);
@@ -57,11 +58,23 @@ function useSessionId(): string | null {
 function useRead(near: "city" | "outing", enabled: boolean): Read {
   // Le rendu serveur et l'hydratation partent de la même valeur vide ; la mémoire de la séance est reprise après.
   const who = useSessionId();
-  const [state, setState] = useState<Read>({ data: null, loading: enabled, offline: false });
+  const [state, setState] = useState<Omit<Read, "retry">>({ data: null, loading: enabled, offline: false });
+  // Une nouvelle lecture sur demande (« Réessayer », retour en ligne) : le chargement repart, le compteur de relance aussi.
+  const reload = useRef<() => void>(() => undefined);
+  const retry = useCallback(() => reload.current(), []);
+  const failed = useRef(false);
   const retried = useRef(false);
   // Une seule relance de lieux partiels, annulée au démontage (tour 3).
   const partialTimer = useRef(createSingleTimer()).current;
-  useEffect(() => () => partialTimer.cancel(), [partialTimer]);
+  const retryTimer = useRef(createSingleTimer()).current;
+  const attempts = useRef(0);
+  useEffect(
+    () => () => {
+      partialTimer.cancel();
+      retryTimer.cancel();
+    },
+    [partialTimer, retryTimer],
+  );
 
   // Sans identité connue, rien ne part (la lecture attend l'annonce de la session, `who` change alors et relance l'effet).
   const load = useCallback(async () => {
@@ -72,20 +85,34 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     // Une réponse devenue étrangère (autre compte, autre génération de session) est jetée.
     if (!guard.valid(ticket)) return;
     if (!res.ok) {
+      failed.current = true;
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
+      // Panne réseau (statut 0) : relance espacée, seulement page visible ; sans données, le retour en ligne la reprend aussi.
+      if (res.status === 0) {
+        retryTimer.schedule(
+          () => {
+            if (typeof document === "undefined" || document.visibilityState === "visible") void load();
+          },
+          practicalRetryDelay(attempts.current++),
+        );
+      }
       return;
     }
+    attempts.current = 0;
+    failed.current = false;
     memory.set(`${ticket.who}|${near}`, res.data);
     setState({ data: res.data, loading: false, offline: false });
     if (res.data.partial && !retried.current) {
       retried.current = true;
       partialTimer.schedule(() => void load(), PRACTICAL_PARTIAL_RETRY_MS);
     }
-  }, [enabled, near, who, partialTimer]);
+  }, [enabled, near, who, partialTimer, retryTimer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {
     retried.current = false;
+    attempts.current = 0;
+    retryTimer.cancel();
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return undefined;
@@ -93,9 +120,22 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     // Un autre compte (ou aucun) : les données de l'ancien disparaissent tout de suite.
     setState({ data: who ? remembered(near) : null, loading: true, offline: false });
     void load();
-    return undefined;
+    reload.current = () => {
+      attempts.current = 0;
+      setState((s) => ({ ...s, loading: s.data === null }));
+      void load();
+    };
+    // Retour en ligne et retour sur la page : une lecture qui n'a jamais réussi est reprise tout de suite.
+    const resume = () => {
+      if (!failed.current) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      reload.current();
+    };
+    const onlineHandler = () => resume();
+    window.addEventListener("online", onlineHandler);
+    return () => window.removeEventListener("online", onlineHandler);
   }, [load]);
-  return state;
+  return { ...state, retry };
 }
 
 export type PracticalSources = {
@@ -117,7 +157,7 @@ export function usePracticalSources(): PracticalSources {
   }, [partial]);
   return {
     me: at
-      ? { data: at.data, loading: false, offline: false, exact: at.exact, onPosition: true }
+      ? { data: at.data, loading: false, offline: false, retry: city.retry, exact: at.exact, onPosition: true }
       : { ...city, exact: null, onPosition: false },
     outing,
     busy,
