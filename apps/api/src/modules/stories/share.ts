@@ -38,6 +38,7 @@ import {
   type StoryRow,
   selectStories,
   setsFor,
+  storyKeyOfRecord,
   viewerOf,
 } from "./common";
 import { purgeStoryFiles } from "./expire";
@@ -208,7 +209,7 @@ export const storiesShare = {
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, structureId))
           : proId
             ? and(eq(stories.persona, "pro"), eq(stories.proId, proId))
-            : and(sql`${stories.persona} not in ('organizer','pro')`, eq(stories.authorId, v.user.id));
+            : and(eq(stories.persona, "fan"), eq(stories.authorId, v.user.id));
         const [already] = await tx
           .select({ id: stories.id })
           .from(stories)
@@ -250,7 +251,8 @@ export const storiesShare = {
           updatedAt: at,
         });
         // L'auteur est prévenu ; jamais d'image dans la notification.
-        const authorKey = storyAuthorKeyOf("user", source.authorId);
+        // La clé de la page de l'originale (`s: p: v: m:`), sinon celle de la personne : le lien ouvre la bonne visionneuse.
+        const authorKey = storyKeyOfRecord(source)?.key ?? storyAuthorKeyOf("user", source.authorId);
         await notificationsService.notify(tx, source.authorId, "story_shared_by_organizer", {
           title: storyShareLabels.sharedTitle(sharerName),
           body: storyShareLabels.activityShared(sharerName),

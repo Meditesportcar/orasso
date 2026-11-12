@@ -382,7 +382,7 @@ describe("audiences × regards", () => {
     await addMember(structure.id, staff.id, "staff");
     expect((await publish(stranger, { persona: "organizer", structureId: structure.id })).status).toBe(403);
     expect((await publish(staff, { persona: "organizer", structureId: structure.id })).status).toBe(403);
-    await ok(co, { persona: "organizer", structureId: structure.id, audience: "followers" });
+    await ok(co, { persona: "organizer", structureId: structure.id, audience: "public" });
     await db.insert(structureFollows).values({ structureId: structure.id, userId: fan.id, source: "manual" });
     const bar = (await req(fan, "GET", "/stories/bar")).json;
     expect(bar.authors).toHaveLength(1);
@@ -477,8 +477,8 @@ describe("barre", () => {
     const orga = await signUp("OrgaMine", { twoFactor: true });
     const structure = await createStructure(orga.id);
     const pro = await createPro(orga.id);
-    await ok(orga, { persona: "organizer", structureId: structure.id, audience: "followers" });
-    await ok(orga, { persona: "pro", proId: pro.id, audience: "followers" });
+    await ok(orga, { persona: "organizer", structureId: structure.id, audience: "public" });
+    await ok(orga, { persona: "pro", proId: pro.id, audience: "public" });
     // Que des stories au nom d'une structure ou d'un pro : « Ta story » reste vide (sinon elle ouvrirait `u:<moi>`, vide).
     let bar = (await req(orga, "GET", "/stories/bar")).json;
     expect(bar.mine).toBeNull();

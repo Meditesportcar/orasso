@@ -122,10 +122,14 @@ describe("migration persona-follows sur une base avec données", () => {
         { k: "user", author_id: "u-media" },
         { k: "user", author_id: "u-prov" },
       ]);
-      // D38 : la story « Mes abonnés » d'une page au titulaire privé est close ; les autres restent vivantes.
-      const closed = await pool.query(`select deleted_at is not null as gone from stories where id = $1`, [sFollowers]);
-      expect(closed.rows[0].gone).toBe(true);
-      expect((await pool.query(`select deleted_at from stories where id = $1`, [sProv])).rows[0].deleted_at).toBeNull();
+      // D38 : avant le lot, une story « publique » d'un compte privé se lisait déjà comme « Mes abonnés » ; devenue publique avec la
+      // page, elle serait ouverte à tous. Les stories vivantes de page (publiques ou d'abonnés) d'un titulaire PRIVÉ sont closes ;
+      // celles d'un titulaire public restent vivantes.
+      const goneOf = async (id: string) =>
+        (await pool?.query(`select deleted_at is not null as gone from stories where id = $1`, [id]))?.rows[0].gone;
+      expect(await goneOf(sFollowers)).toBe(true);
+      expect(await goneOf(sProv)).toBe(true);
+      expect(await goneOf(sMedia)).toBe(false);
       await pool.query(
         `insert into story_mutes (user_id, author_kind, author_id) values ('u-fan', 'provider', 'x'), ('u-fan', 'media', 'y')`,
       );

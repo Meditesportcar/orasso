@@ -11,6 +11,7 @@ import { callAs } from "../../../test/actor-call";
 import {
   addMember,
   createEvent,
+  createPro,
   createStructure,
   createVehicle,
   resetDb,
@@ -523,5 +524,102 @@ describe("la barre lue en tant que page", () => {
     // Le titulaire lit : son propre pseudo n'a pas à être servi à la barre de sa page.
     expect(bar.text).not.toContain(w.brasaHolder.pseudo);
     expect(bar.text).not.toContain(w.brasaHolder.id);
+  });
+});
+
+describe("tour 3 : l'ancien client, le repartage, les en-têtes", () => {
+  it("l'envoi exact de l'ancien client (casquette prestataire, « Mes abonnés », compte privé) : 400, aucune story, le fichier repart en « public »", async () => {
+    const w = await world();
+    const form = new FormData();
+    form.append("purpose", "story");
+    form.append("file", new File([new Uint8Array(await photo())], "photo.jpg", { type: "image/jpeg" }));
+    const up = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: w.brasaHolder.cookie },
+      body: form,
+    });
+    const key = ((await up.json()) as { key: string }).key;
+    for (const persona of ["provider", "media"] as const) {
+      const old = await req(w.brasaHolder, "POST", "/me/stories", {
+        uploadKey: key,
+        noPlateConfirmed: true,
+        persona,
+        audience: "followers",
+      });
+      expect(old.status, JSON.stringify(old.json)).toBe(400);
+      expect(old.json.error.message).toContain("Mets à jour l'appli");
+    }
+    expect(await db.select().from(stories)).toHaveLength(0);
+    const again = await req(w.brasaHolder, "POST", "/me/stories", {
+      uploadKey: key,
+      noPlateConfirmed: true,
+      persona: "provider",
+      audience: "public",
+    });
+    expect(again.status, JSON.stringify(again.json)).toBe(201);
+  });
+
+  it("50 stories de prestataire vivantes : le repartage personnel passe", async () => {
+    const w = await world();
+    const host = await signUp("Hote_Story");
+    const s = await ok(host, { audience: "public", tags: [{ kind: "user", id: w.brasaHolder.id }] });
+    const first = await ok(w.brasaHolder, { persona: "provider" });
+    const [model] = await db.select().from(stories).where(eq(stories.id, first.id));
+    const { id: _id, ...rest } = model as NonNullable<typeof model>;
+    await db.insert(stories).values(Array.from({ length: 49 }, () => ({ ...rest })));
+    const shared = await req(w.brasaHolder, "POST", `/stories/${s.id}/share-to-mine`, {});
+    expect(shared.status, JSON.stringify(shared.json)).toBe(201);
+  });
+
+  it("la notification de repartage ouvre la visionneuse de l'auteur : s:, p:, v:, m:, u:", async () => {
+    const w = await world();
+    const sharer = await signUp("Repartage_Kenji");
+    const orgaOwner = await signUp("Orga_Lien", { twoFactor: true });
+    const structure = await createStructure(orgaOwner.id);
+    const proOwner = await signUp("Pro_Lien");
+    const pro = await createPro(proOwner.id);
+    const tag = { tags: [{ kind: "user", id: sharer.id }] };
+    const cases: { author: TestUser; over: Record<string, unknown>; key: string }[] = [
+      { author: orgaOwner, over: { persona: "organizer", structureId: structure.id }, key: `s:${structure.id}` },
+      { author: proOwner, over: { persona: "pro", proId: pro.id }, key: `p:${pro.id}` },
+      { author: w.brasaHolder, over: { persona: "provider" }, key: `v:${w.brasa.id}` },
+      { author: w.mediaHolder, over: { persona: "media" }, key: `m:${w.media.id}` },
+      { author: w.damien, over: {}, key: `u:${w.damien.id}` },
+    ];
+    for (const c of cases) {
+      const s = await ok(c.author, { ...c.over, ...tag });
+      const res = await req(sharer, "POST", `/stories/${s.id}/share-to-mine`, {});
+      expect(res.status, `${c.key} ${JSON.stringify(res.json)}`).toBe(201);
+      const notes = await db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, c.author.id), eq(notifications.type, "story_shared_by_organizer")));
+      expect(
+        notes.map((n) => (n.data as { link: string }).link),
+        c.key,
+      ).toContain(`/app/story/${c.key}`);
+    }
+  });
+
+  it("Cache-Control private, no-store sur les fiches et le profil, avec et sans en-tête d'acteur", async () => {
+    const w = await world();
+    const owner = await signUp("Orga_Cache", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    const pro = await createPro(w.damien.id);
+    const paths = [
+      `/providers/${w.brasa.id}`,
+      `/media/${w.media.id}`,
+      `/structures/by-slug/${structure.slug}`,
+      `/pros/by-slug/${pro.slug}`,
+      `/users/${w.kenji.pseudo}`,
+    ];
+    for (const path of paths) {
+      const plain = await callAs(w.kenji, null, "GET", path);
+      expect(plain.status, path).toBe(200);
+      expect(plain.headers.get("cache-control"), path).toBe("private, no-store");
+      const asPage = await callAs(w.brasaHolder, `v:${w.brasa.id}`, "GET", path);
+      expect(asPage.status, path).toBe(200);
+      expect(asPage.headers.get("cache-control"), path).toBe("private, no-store");
+    }
   });
 });

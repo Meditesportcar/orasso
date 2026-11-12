@@ -322,7 +322,7 @@ describe("création idempotente (tour 2)", () => {
 });
 
 describe("prestataire et média : l'audience réelle d'un compte privé (tour 2)", () => {
-  it("compte privé : même publiée en « abonnés », la story d'une page est celle d'une page publique ; sous le compte, rien (lot R9a)", async () => {
+  it("compte privé : « abonnés » est refusé à une page (400), « public » passe ; sous le compte, rien (lot R9a)", async () => {
     const owner = await signUp("Presta");
     const fan = await signUp("Abonne");
     const stranger = await signUp("Inconnu");
@@ -334,7 +334,8 @@ describe("prestataire et média : l'audience réelle d'un compte privé (tour 2)
     const [med] = await db.insert(mediaProfiles).values({ userId: owner.id, name: "Média Presta" }).returning();
     await follow(fan, owner);
     for (const persona of ["provider", "media"] as const) {
-      const res = await publish(owner, { persona, audience: "followers" });
+      expect((await publish(owner, { persona, audience: "followers" })).status).toBe(400);
+      const res = await publish(owner, { persona, audience: "public" });
       expect(res.status, JSON.stringify(res.json)).toBe(201);
     }
     // Sous le compte du titulaire : jamais ses stories de page, même pour son abonné accepté.

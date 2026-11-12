@@ -15,7 +15,7 @@ import {
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { isPageActor, noStore, readActor } from "../../lib/actor";
+import { noStore, readActor } from "../../lib/actor";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
@@ -71,7 +71,7 @@ export const mediaRoutes = new Hono<AppEnv>()
     const id = uuidParam(c, "id").toLowerCase();
     // Vague R9 (lot R9a) : `followersCount` (personnes et pages) et `isFollowing` pour l'acteur (en-tête d'une page).
     const actor = await readActor(c, v);
-    if (isPageActor(actor)) noStore(c);
+    noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un média n'a pas de slug à citer).
     return c.json({
       ...(await mediaService.getPublic(id)),

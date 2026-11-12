@@ -6,5 +6,6 @@ export const pageFollowErrors = {
   selfFollow: "Tu ne peux pas suivre ta propre page.",
   notFound: "Page ou profil introuvable.",
   privateAccount: "Ce compte est privé : une page ne peut pas le suivre.",
+  pageStoryPublic: "Mets à jour l'appli : une story de page est publique.",
   invalidTarget: "Clé de page ou de compte invalide.",
 } as const;

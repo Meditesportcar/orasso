@@ -10,6 +10,7 @@ import {
   canTag,
   directKey,
   type Frame,
+  pageFollowErrors,
   STORY_LIVE_MAX,
   STORY_TAGS_MAX,
   STORY_VIEWERS_MAX,
@@ -25,6 +26,7 @@ import {
   storyDenial,
   storyExpiresAt,
   storyLabels,
+  storyReplyable,
   type UploadPurpose,
 } from "@orasso/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -208,6 +210,12 @@ async function seesStory(
 /** Rend l'`Authorship` de la casquette (la page au nom de laquelle on publie), `null` pour un passionné. */
 async function checkPersona(v: Viewer, input: StoryCreate): Promise<Authorship | null> {
   const { persona, audience } = input;
+  // D38 (lot R9a) : la story d'une casquette est publique. L'ancien client propose « Mes abonnés » seul à un prestataire ou à
+  // un média au compte privé : l'accepter la rendrait publique contre ce que l'écran a dit. Refus avant toute écriture, le
+  // fichier envoyé reste réutilisable.
+  if (persona !== "fan" && audience !== "public" && audience !== "crew") {
+    throw validation(pageFollowErrors.pageStoryPublic, { field: "audience" });
+  }
   if (audience === "crew") {
     if (persona !== "fan") throw validation(storyLabels.crewAudiencePersona);
     if (!input.crewId) throw validation("Choisis le crew", { field: "crewId" });
@@ -955,7 +963,7 @@ export const storiesService = {
     const context = { storyId: id };
 
     // Une fiche pro, un prestataire, un média : aucune messagerie de page, et jamais le compte de son titulaire (lot R9a).
-    if (story.persona === "pro" || story.persona === "provider" || story.persona === "media") throw unavailable();
+    if (!storyReplyable(story.persona)) throw unavailable();
     // Reprise réseau : un message ou une demande portant déjà ce `clientId` (pour cette story) est rendu tel quel, avant
     // tout choix entre message direct et demande de contact (la relation a pu changer entre deux envois).
     const [sent] = await db

@@ -5594,3 +5594,11 @@ API seule (aucun écran). Partie 2 (le Fil et les commentaires « en tant que »
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Tour 3 (R9a partie 1, 12/11/2026) : corrections de la relecture Codex
+- **Après `git merge vague-r8`** : le journal et `labels.fr.ts` gardent les deux côtés ; la migration reste `0079_persona-follows` (entrée ajoutée en fin de `_journal.json`, après les migrations de la vague) et le snapshot 0079 est celui de la vague : à renuméroter et régénérer à la fusion.
+- **Ancien client et « Mes abonnés »** : une casquette autre que passionné n'accepte plus que `audience: "public"` (400 « Mets à jour l'appli : une story de page est publique. », refus avant toute écriture, le fichier envoyé reste réutilisable). Vaut pour organisateur et pro aussi (leurs écrans n'ont jamais proposé autre chose) ; les anciens tests qui publiaient une structure ou un pro en « abonnés » passent en « public ».
+- **Migration** : sont closes les stories vivantes `public` **et** `followers` d'un prestataire ou d'un média dont le titulaire est privé (avant le lot, une story « publique » d'un compte privé se lisait déjà comme « Mes abonnés »). Celles d'un titulaire public restent.
+- **`Cache-Control: private, no-store`** dès qu'il y a une session (fiches prestataire, média, structure, pro, `GET /users/:pseudo`), casquette ou non.
+- **Réponse à une story** : règle partagée `storyReplyable(persona)` (faux pour pro, prestataire, média), utilisée par l'API et les deux visionneuses (appli et site).
+- **Repartage** : le plafond personnel ne compte que les stories `fan` ; le lien de la notification « repartagée » est la clé de l'originale (`s: p: v: m: u:`).

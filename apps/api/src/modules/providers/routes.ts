@@ -15,7 +15,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
-import { isPageActor, noStore, readActor } from "../../lib/actor";
+import { noStore, readActor } from "../../lib/actor";
 import { AppError, validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
@@ -85,7 +85,7 @@ export const providersRoutes = new Hono<AppEnv>()
     const id = uuidParam(c, "id").toLowerCase();
     // Vague R9 (lot R9a) : `followersCount` (personnes et pages) et `isFollowing` pour l'acteur (en-tête d'une page).
     const actor = await readActor(c, v);
-    if (isPageActor(actor)) noStore(c);
+    noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un prestataire n'a pas de slug à citer).
     return c.json({
       ...(await providersService.getPublic(id)),

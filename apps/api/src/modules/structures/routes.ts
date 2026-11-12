@@ -78,7 +78,7 @@ export const structuresRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     // Vague R9 (lot R9a) : `isFollowing` se lit pour l'acteur (en-tête d'une page), sans session il n'y en a pas.
     const actor = viewer ? await readActor(c, viewer) : undefined;
-    if (actor && isPageActor(actor)) noStore(c);
+    if (viewer) noStore(c); // `isFollowing` est personnel (ou celui de la page)
     const view = await structuresService.getPublic(c.req.param("slug"), viewer, actor);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
     return c.json({

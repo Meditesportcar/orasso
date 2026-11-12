@@ -39,8 +39,8 @@ INSERT INTO "story_mutes" ("user_id", "author_kind", "author_id", "created_at")
 SELECT m."user_id", 'media'::"story_author_kind", p."id"::text, m."created_at" FROM "story_mutes" m
 JOIN "media_profiles" p ON p."user_id" = m."author_id" AND p."deleted_at" IS NULL
 WHERE m."author_kind" = 'user' ON CONFLICT DO NOTHING;--> statement-breakpoint
--- D38 : une page est publique. Les stories vivantes « Mes abonnés » d'un prestataire ou d'un média dont le titulaire a un
--- compte privé deviendraient visibles de tous : elles sont closes (suppression douce, les fichiers partent au balayage).
+-- D38 : une page est publique. Les stories vivantes d'un prestataire ou d'un média dont le titulaire a un compte privé (avant
+-- le lot, une story « publique » d'un compte privé se lisait déjà comme « Mes abonnés ») deviendraient visibles de tous : closes (suppression douce, les fichiers partent au balayage).
 UPDATE "stories" s SET "deleted_at" = now(), "updated_at" = now()
-WHERE s."persona" IN ('provider', 'media') AND s."audience" = 'followers' AND s."deleted_at" IS NULL AND s."expires_at" > now()
+WHERE s."persona" IN ('provider', 'media') AND s."audience" IN ('public', 'followers') AND s."deleted_at" IS NULL AND s."expires_at" > now()
   AND EXISTS (SELECT 1 FROM "profiles" pr WHERE pr."user_id" = s."author_id" AND pr."visibility" = 'private');

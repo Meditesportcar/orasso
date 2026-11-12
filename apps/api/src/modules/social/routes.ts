@@ -43,13 +43,13 @@ export const socialRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     // Lot R7m1 : « Partenaires » et « Proposer un partenariat » (pro vérifié qui regarde).
     const actor = await readActor(c, v);
+    noStore(c); // `follow` est personnel (ou celui de la page)
     const view = await decorateProfile(v, await socialProfile.view(v, c.req.param("pseudo")));
     // Vague R8 (lot R8a2) : `publications`, nul quand la liste est restreinte (compte privé non suivi).
     const counts = await personCountsFor(c.req.param("pseudo"), v);
     if (!isPageActor(actor)) return c.json({ ...view, ...counts });
     // Vague R9 (lot R9a) : lu en tant que page, l'état « suivi » est celui de la page (jamais une demande en attente :
     // une page ne suit qu'un compte public, T6) ; le reste du profil reste celui que voit la personne.
-    noStore(c);
     const following = await isFollowingAs(actor, { kind: "user", id: view.userId });
     return c.json({
       ...view,

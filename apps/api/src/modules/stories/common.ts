@@ -244,7 +244,11 @@ export const accountActive = (p: Pick<StoryRow["author"], "deletedAt" | "bannedA
  * ou la personne. Une story de casquette sans page n'a pas de clé (elle n'est pas servie) : jamais la clé du compte.
  */
 export function authorKeyOf(row: StoryRow): { kind: StoryAuthorKind; id: string; key: string } | null {
-  const { story } = row;
+  return storyKeyOfRecord(row.story);
+}
+
+/** La même clé, depuis la ligne de la story seule. */
+export function storyKeyOfRecord(story: StoryRecord): { kind: StoryAuthorKind; id: string; key: string } | null {
   if (story.persona === "organizer") {
     return story.structureId
       ? { kind: "structure", id: story.structureId, key: storyAuthorKeyOf("structure", story.structureId) }
