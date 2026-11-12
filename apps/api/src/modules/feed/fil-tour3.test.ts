@@ -7,7 +7,7 @@ import { call, createStructure, resetDb, seedReference, useClock } from "../../.
 import { db, pool } from "../../db/client";
 import { feedPostReactions, feedSeen, feedSeenFloor, profiles, structures } from "../../db/schema";
 import { decodeCursor } from "./cursor";
-import { dbPost, fil, flames, follow, HOUR, person, postIds, seen, view, walk } from "./fil-test-helpers";
+import { dbPost, fil, flames, follow, HOUR, ids, person, postIds, seen, view, walk } from "./fil-test-helpers";
 
 afterAll(async () => {
   await pool.end();
@@ -308,6 +308,73 @@ describe("tour 3", () => {
       const b = Buffer.from(a);
       b.writeUIntBE(2 ** 48 - 1, anchorAt, 6);
       expect((await fil(me, `?filter=nearby&cursor=${b.toString("base64url")}`)).status).toBe(400);
+    }
+  }, 120_000);
+
+  it("tour 8 : « Pour toi » : une carte populaire vue (zone B) dont la ligne est évincée entre deux pages ne renvoie pas en haut", async () => {
+    const author = await person("Auteur_Zb8");
+    const me = await person("Lecteur_Zb8");
+    const fan = await person("Fan_Zb8");
+    const posts: string[] = [];
+    for (let i = 0; i < 25; i++) posts.push(await dbPost(author, at(5 + i)));
+    const popular = await dbPost(author, at(200));
+    await flames(popular, [fan], at(1));
+    // Sa vue est la plus ancienne du compte ; 5 000 autres vues plus récentes.
+    await db.insert(feedSeen).values({ userId: me.id, cardId: `feed_post:${popular}`, seenAt: at(300) });
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'lineup:' || gen_random_uuid()::text, ${at(10).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 4999) g`);
+    clock.advance(60_000);
+    const first = await fil(me);
+    expect(first.items.length).toBe(20);
+    expect(postIds(first.items)).not.toContain(popular);
+    // Dépassement réel du plafond : sa ligne part.
+    await view(me, [await dbPost(author, at(0))]);
+    expect(
+      (
+        await db
+          .select()
+          .from(feedSeen)
+          .where(eq(feedSeen.cardId, `feed_post:${popular}`))
+      ).length,
+    ).toBe(0);
+    clock.advance(60_000);
+    const got = [...postIds(first.items)];
+    let cursor = first.next;
+    while (cursor) {
+      const page = await fil(me, `?cursor=${cursor}`);
+      expect(page.json.reset).toBeUndefined();
+      expect(page.items.length).toBe(new Set(ids(page.items)).size);
+      got.push(...postIds(page.items));
+      cursor = page.next;
+    }
+    for (const p of posts) expect(got).toContain(p);
+  }, 120_000);
+
+  it("tour 8 : un rognage entre deux pages ne fait jamais servir deux fois la même carte dans une réponse", async () => {
+    const author = await person("Auteur_Dup8");
+    const me = await person("Lecteur_Dup8");
+    for (let i = 0; i < 25; i++) await dbPost(author, at(5 + i));
+    const old = await dbPost(author, at(100));
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'lineup:' || gen_random_uuid()::text, ${at(10).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 5000) g`);
+    clock.advance(60_000);
+    const first = await fil(me);
+    expect(first.items.length).toBe(20);
+    // Plafond dépassé : la borne passe au-dessus de la carte de 100 min, servie en zone A avec l'ancienne borne.
+    await view(me, [await dbPost(author, at(0))]);
+    clock.advance(60_000);
+    const second = await fil(me, `?cursor=${first.next}`);
+    expect(second.json.reset).toBeUndefined();
+    expect(second.items.length).toBe(new Set(ids(second.items)).size);
+    const all = [...postIds(first.items), ...postIds(second.items)];
+    expect(all).toContain(old);
+    let cursor = second.next;
+    while (cursor) {
+      const page = await fil(me, `?cursor=${cursor}`);
+      expect(page.items.length).toBe(new Set(ids(page.items)).size);
+      cursor = page.next;
     }
   }, 120_000);
 });
