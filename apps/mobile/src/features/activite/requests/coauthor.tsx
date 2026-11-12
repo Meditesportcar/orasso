@@ -6,7 +6,7 @@
 import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { coauthorLabels as L } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { markFeedDirty } from "@/features/fil/feedSignal";
@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { Avatar } from "@/ui/Avatar";
 
+import { buttonsSideBySide } from "../requestLayout";
 import { fromOf, payloadObject, payloadString, type RequestCardProps, textOf } from "./types";
 
 const { space2, space3 } = tokens.spacing;
@@ -25,6 +26,8 @@ const CONFIRM_MS = 2500;
 export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
   const { t } = useTheme();
   const c = t.color;
+  const { fontScale } = useWindowDimensions();
+  const side = buttonsSideBySide(fontScale, [L.accept, L.decline]);
   const { name, imageUrl } = fromOf(item);
   const forName = payloadString(item, "forName");
   const caption = payloadString(item, "caption");
@@ -91,10 +94,11 @@ export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
           </Text>
         </View>
       ) : (
-        <View style={styles.row}>
+        <View style={side ? styles.row : styles.stack}>
           <Button
             variant="plate"
             icon="check"
+            style={side ? styles.half : undefined}
             loading={busy === "accept"}
             disabled={busy !== null}
             onPress={() => void reply("accept")}
@@ -105,6 +109,7 @@ export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
             variant="plate"
             tone="dashed"
             icon="close"
+            style={side ? styles.half : undefined}
             loading={busy === "decline"}
             disabled={busy !== null}
             onPress={() => void reply("decline")}
@@ -125,5 +130,8 @@ const styles = StyleSheet.create({
   thumb: { width: THUMB, aspectRatio: 0.8, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   thumbImage: { width: THUMB, height: THUMB / 0.8 },
   confirm: { flexDirection: "row", alignItems: "center", gap: space2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  // Côte à côte quand la rangée tient (`buttonsSideBySide`), sinon l'un au-dessus de l'autre ; un libellé ne se coupe jamais.
+  row: { flexDirection: "row", gap: space2 },
+  stack: { gap: space2 },
+  half: { flex: 1, minWidth: 0, alignSelf: "stretch" },
 });

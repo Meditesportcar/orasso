@@ -214,9 +214,7 @@ function PublicationsBody({
       ) : (
         <PublicationsGrid posts={list.items} authorKey={authorKey} />
       )}
-      {list.error ? (
-        <LoadError message={L.error} onRetry={() => void (list.nextCursor ? list.more() : list.reload())} />
-      ) : null}
+      {list.error ? <LoadError message={L.error} onRetry={() => void list.retry()} /> : null}
       {list.nextCursor && !list.error ? (
         <SmButton
           kind="s"

@@ -107,6 +107,8 @@ export type ActionKind =
   | "visitor"
   | "incident_photo";
 export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate", "drive"];
+/** Rôle boutique : billets du public lus et touchers du compteur (un lot par événement, hors des lots de scans). */
+export const SHOP_KINDS: readonly ActionKind[] = ["ticket_scan", "visitor"];
 /** Les actions dont l'identifiant (clé d'idempotence côté serveur) voyage aussi dans le corps. */
 export const ID_IN_PAYLOAD: readonly ActionKind[] = [...BATCH_KINDS, "ticket_scan", "visitor"];
 
@@ -900,4 +902,39 @@ export function serverReport(actions: readonly PendingAction[]): { duplicates: R
       (a) => (typeof a.payload.scannedAt === "string" ? a.payload.scannedAt : a.createdAt),
     ),
   };
+}
+
+/**
+ * Les actions qui partent une requête chacune (présence, express, incident, photo d'incident, alerte), dans l'ordre de la file. Une
+ * action dont l'essai est repoussé (`nextAttemptAt`) ou dont l'envoi échoue sans être réglé (503 `mail_pending`, réseau : `send` rend
+ * `false`) reste en file **sans retarder** les suivantes : une alerte placée derrière une invitation part tout de suite. La photo suit
+ * son incident : tant que l'incident n'est pas parti, elle attend.
+ */
+export async function sendOtherActions(
+  unsent: readonly PendingAction[],
+  now: Date,
+  send: (action: PendingAction) => Promise<boolean>,
+): Promise<void> {
+  const waitingIncidents = new Set(unsent.filter((a) => a.kind === "incident").map((a) => a.id));
+  for (const action of unsent) {
+    if (BATCH_KINDS.includes(action.kind) || SHOP_KINDS.includes(action.kind)) continue;
+    if (Date.parse(action.nextAttemptAt) > now.getTime()) continue;
+    if (action.kind === "incident_photo" && waitingIncidents.has(String(action.payload.incidentId))) continue;
+    const sent = await send(action);
+    if (sent && action.kind === "incident") waitingIncidents.delete(action.id);
+  }
+}
+
+/** Ce qu'une réponse (ou son absence) fait d'une action « une requête chacune » : attendre la reconnexion, la retirer, la garder. */
+export type StaffSendOutcome = "wait" | "drop" | "keep";
+
+/**
+ * Le classement du résultat d'un envoi (`status` : code HTTP, `null` ou 0 sans réponse du serveur). 401 : la file attend la session ;
+ * un refus définitif (4xx sauf 408 et 429) retire l'action, l'erreur reste visible ; tout le reste (réseau, 5xx dont le 503
+ * `mail_pending`, 408, 429) garde l'action en file pour un nouvel essai.
+ */
+export function staffSendOutcome(status: number | null): StaffSendOutcome {
+  if (status === 401) return "wait";
+  if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) return "drop";
+  return "keep";
 }

@@ -5,11 +5,18 @@
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedAuthorView, type FeedCard, type FeedPostView, feedAgo, coauthorLabels as T } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { now } from "@/lib/clock";
 import { Avatar } from "@/ui/Avatar";
 
+/** Les noms gardent leur taille de texte ; la zone de toucher grandit autour (jeton `touch` = 48 : 24 de ligne + 2 × 12). */
+const HIT = {
+  top: tokens.spacing.space3,
+  bottom: tokens.spacing.space3,
+  left: tokens.spacing.space2,
+  right: tokens.spacing.space2,
+};
 const OVERLAP = tokens.spacing.space2 + tokens.spacing.space1 / 2;
 
 /** Deux ronds qui se chevauchent : l'auteur, puis le co-auteur. */
@@ -33,33 +40,37 @@ export function TwoAvatars({
   );
 }
 
-/** « Kenji_66 et Wrap 66 » : les deux noms, chacun son lien. */
+/** « Kenji_66 et Wrap 66 » : les deux noms, chacun son lien (une zone de toucher d'au moins 44 px, sans changer l'apparence). */
 export function CoAuthorSignature({ author, coAuthor }: { author: FeedAuthorView; coAuthor: FeedAuthorView }) {
   const { t } = useTheme();
   const router = useRouter();
   const open = (a: FeedAuthorView) =>
     a.kind === "user" ? () => router.push(`/u/${encodeURIComponent(a.pseudo)}`) : undefined;
+  const name = (a: FeedAuthorView) => {
+    const onPress = open(a);
+    return (
+      <Pressable
+        accessibilityRole={onPress ? "link" : undefined}
+        disabled={!onPress}
+        onPress={onPress}
+        hitSlop={HIT}
+        style={styles.name}
+      >
+        <Text variant="bodyStrong" color={t.color.ink}>
+          {a.name}
+        </Text>
+      </Pressable>
+    );
+  };
   return (
     <View style={styles.titleBox}>
-      <Text variant="bodyStrong" color={t.color.ink} testID="feed-card-signature">
-        <Text
-          variant="bodyStrong"
-          color={t.color.ink}
-          accessibilityRole={open(author) ? "link" : undefined}
-          onPress={open(author)}
-        >
-          {author.name}
+      <View style={styles.signature} testID="feed-card-signature">
+        {name(author)}
+        <Text variant="bodyStrong" color={t.color.ink}>
+          {" et "}
         </Text>
-        {" et "}
-        <Text
-          variant="bodyStrong"
-          color={t.color.ink}
-          accessibilityRole={open(coAuthor) ? "link" : undefined}
-          onPress={open(coAuthor)}
-        >
-          {coAuthor.name}
-        </Text>
-      </Text>
+        {name(coAuthor)}
+      </View>
     </View>
   );
 }
@@ -87,5 +98,8 @@ const styles = StyleSheet.create({
     borderWidth: tokens.spacing.space1 / 2,
   },
   // Les noms sont des liens : la ligne de titre garde une zone de toucher de la hauteur du jeton `touch`.
+  signature: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" },
+  // Un nom ne se tronque jamais : il peut passer sur deux lignes plutôt que de déborder.
+  name: { flexShrink: 1 },
   titleBox: { minHeight: tokens.spacing.touch, justifyContent: "center" },
 });

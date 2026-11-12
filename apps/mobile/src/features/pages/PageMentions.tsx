@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { SetList, SetRow } from "@/features/profil/parts";
+import { type FailedCall, retryCall } from "@/features/publications/retryCall";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";
@@ -41,10 +42,13 @@ function useMentions(pageKey: string, manage: boolean) {
   const mode = useRef(false);
   const cursor = useRef<string | null>(null);
   const seq = useRef(0);
+  /** Quel appel a échoué en dernier : « Réessayer » relance celui-là (P26a). */
+  const failed = useRef<FailedCall | null>(null);
 
   const read = useCallback(
     async (first: boolean) => {
       const mine = first ? ++seq.current : seq.current;
+      failed.current = null;
       setState((s) => ({ ...s, loading: true, error: false }));
       try {
         let page: MentionsPage;
@@ -72,6 +76,7 @@ function useMentions(pageKey: string, manage: boolean) {
         }));
       } catch {
         if (mine !== seq.current) return;
+        failed.current = first ? "reload" : "more";
         setState((s) => ({ ...s, loading: false, error: true }));
       }
     },
@@ -96,7 +101,10 @@ function useMentions(pageKey: string, manage: boolean) {
         : s.items.filter((i) => i.post.id !== postId),
     }));
 
-  return { ...state, reload: () => read(true), more: () => read(false), setHidden, seeHidden };
+  const reload = () => read(true);
+  const more = () => read(false);
+  const retry = () => (retryCall(failed.current) === "more" ? more() : reload());
+  return { ...state, reload, more, retry, setHidden, seeHidden };
 }
 
 function Row({
@@ -247,7 +255,7 @@ export function PageMentions({
           }}
         />
       ))}
-      {list.error ? <LoadError message={L.mentionsError} onRetry={() => void list.more()} /> : null}
+      {list.error ? <LoadError message={L.mentionsError} onRetry={() => void list.retry()} /> : null}
       {list.next && !list.error ? (
         <SmButton
           kind="s"
