@@ -621,7 +621,9 @@ function EventPage({
                 {formatWhen(event.startsAt, event.endsAt)}
                 {place ? ` · ${place}` : ""}
               </div>
-              {connected && <NotifyBell eventId={event.id} stamp={mine.map((a) => a.status).join(",")} />}
+              {connected && (
+                <NotifyBell key={event.id} eventId={event.id} stamp={mine.map((a) => a.status).join(",")} />
+              )}
             </div>
             <div className="ev__poster-frame" data-testid="event-poster">
               <PosterFace event={{ ...event, generatedPosterUrl: event.poster?.postUrl ?? null }} />

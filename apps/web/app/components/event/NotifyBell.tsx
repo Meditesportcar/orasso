@@ -1,10 +1,17 @@
 import { Icon } from "@orasso/design-system/web";
-import { type EventNotificationPrefsView, eventNotifyLabels as L } from "@orasso/shared";
+import {
+  createSerialWriter,
+  type EventNotificationPrefsView,
+  eventNotifyLabels as L,
+  type SerialWriter,
+} from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import "../../styles/event-notify.css";
-import { EssentialBlock, NotifySwitch } from "./NotifySignup";
+import { EssentialBlock, NotifySwitch, useSessionGuard } from "./NotifySignup";
+
+class NoPlaceError extends Error {}
 
 /**
  * La cloche de la fiche (lot R8n2, maquette R8.11, vue « fiche ») : visible seulement quand la personne a une place
@@ -18,6 +25,30 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
   const [message, setMessage] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const accountAlive = useSessionGuard();
+  const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
+  // Un écrivain neuf à chaque lecture de la place : envois sérialisés, dernier choix gardé, réponses périmées ignorées.
+  const startWriter = (initial: boolean) => {
+    writer.current = createSerialWriter<boolean>({
+      initial,
+      alive: accountAlive,
+      write: async (value) => {
+        const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
+        if (saved.ok) return saved.data.news;
+        if (saved.status === 403 && saved.error.code === "no_place") throw new NoPlaceError();
+        throw new Error(saved.error.message || L.ficheSaveFailed);
+      },
+      onSettled: setNews,
+      onError: (confirmed, e) => {
+        setNews(confirmed);
+        if (e instanceof NoPlaceError) {
+          setMessage(L.noPlace);
+          setGone(true);
+        } else setMessage(e instanceof Error && e.message ? e.message : L.ficheSaveFailed);
+      },
+    });
+  };
 
   // `stamp` : l'état des candidatures de la fiche (la place est relue quand il change).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la lecture, il n'est pas lu.
@@ -28,6 +59,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         if (!alive || !res.ok) return;
         setHasPlace(res.data.hasPlace);
         setNews(res.data.news);
+        startWriter(res.data.news);
         setGone(false);
       },
     );
@@ -38,19 +70,10 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
 
   if (!hasPlace) return null;
 
-  async function change(next: boolean) {
+  function change(next: boolean) {
     setNews(next);
     setMessage(null);
-    const res = await apiFetch<EventNotificationPrefsView>(
-      `/me/events/${encodeURIComponent(eventId)}/notification-prefs`,
-      { method: "PUT", json: { news: next } },
-    );
-    if (res.ok) return setNews(res.data.news);
-    setNews(!next);
-    if (res.status === 403 && res.error.code === "no_place") {
-      setMessage(L.noPlace);
-      setGone(true);
-    } else setMessage(res.error.message || L.ficheSaveFailed);
+    writer.current?.set(next);
   }
 
   return (
@@ -90,7 +113,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
             title={L.eventNewsTitle}
             help={L.eventNewsHelpOnFiche}
             checked={news}
-            onChange={(v) => void change(v)}
+            onChange={change}
             testId="notify-news-switch"
           />
           {message ? (

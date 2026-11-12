@@ -1,5 +1,5 @@
 {
-  "id": "4002d741-2063-4753-8f4d-5398f58d65f7",
+  "id": "fe8b94d0-edcb-42a7-917a-32e72dce5418",
   "prevId": "d5a81ec3-280a-4679-b2d9-d7ff5f91565f",
   "version": "7",
   "dialect": "postgresql",
@@ -6839,12 +6839,6 @@
           "notNull": true,
           "default": false
         },
-        "legacy_announcement_id": {
-          "name": "legacy_announcement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "aspect": {
           "name": "aspect",
           "type": "feed_aspect",
@@ -7133,21 +7127,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_legacy_announcement_key": {
-          "name": "feed_posts_legacy_announcement_key",
-          "columns": [
-            {
-              "expression": "legacy_announcement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -11194,6 +11173,28 @@
           "where": "\"notifications\".\"group_key\" is not null",
           "concurrently": false,
           "method": "gin",
+          "with": {}
+        },
+        "notifications_event_updated_idx": {
+          "name": "notifications_event_updated_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"notifications\".\"type\" = 'event_updated'",
+          "concurrently": false,
+          "method": "btree",
           "with": {}
         },
         "notifications_undelivered_idx": {

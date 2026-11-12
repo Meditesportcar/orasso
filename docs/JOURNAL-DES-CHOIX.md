@@ -5532,6 +5532,25 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Reprise et épinglage en direct** : la reprise prend le verrou `pin:<événement>` de `pin.ts` avant de lire l'état de l'épingle ; test (une épinglée en direct est gardée, rien n'échoue).
 - **`--revert`** retire aussi les signalements (`reports`) et les notifications (`data.postId`) qui pointent vers les publications reprises. **Perdu avec elles** : les flammes et les commentaires reçus depuis la reprise. Test.
 - **« … » de la grille (appli)** : `hitSlop` 7 (44 px). **Un seul bouton principal** : l'invitation « Publier pour cet événement » devient secondaire (appli et site) ; le pied de la fiche garde le principal. **Liens `#fil`** : quand l'ancien fil est caché, l'ancre `#fil` est posée sur la section « Publications » (site).
+
+### Tour 3 (R8n2, 11/11/2026) : corrections de la relecture Codex
+- **Écritures sérialisées** (`packages/shared/src/rules/serialWriter.ts`, partagé appli et site, testé avec réponses désordonnées) : les envois d'un interrupteur ne se chevauchent jamais, le dernier choix est celui qui est enregistré, la réponse d'un envoi dépassé n'est jamais affichée. Utilisé par la cloche (appli et site) et par le bloc d'inscription (appli et site).
+- **« C'est noté » attend la fin de l'écriture** (`whenIdle`) ; en cas d'échec l'écran reste, le message est visible et l'interrupteur revient à sa dernière valeur confirmée ; un second appui ferme quand même (la candidature n'est jamais remise en cause).
+- **Lecture impossible** : le bloc d'inscription n'affiche plus l'interrupteur, mais « Ton réglage n'a pas pu être lu. » et « Réessayer » ; « C'est noté » reste possible. La cloche, elle, n'apparaît pas sans lecture réussie (comme sans place).
+- **Message d'après enregistrement** : l'API ajoute à la réponse de l'organisateur (`GET/PATCH /events/:id` et suites, `getForOrganizer`) un champ `lastNotify: { id, deferred }` (champ ajouté seulement : le dernier `event_updated` de l'événement et s'il est encore différé, d'après `deliver_after`). L'assistant compare l'identifiant avant et après l'enregistrement : nouveau → « tout de suite » ou « à 8 h » selon `deferred`, jamais d'après un calcul local ; identifiant inchangé : aucun message de prévenance. La phrase affichée avant l'enregistrement reste une estimation locale (c'est l'annonce, pas le résultat). Test API `event-notifications/lastNotify.test.ts`.
+
+### Tour 4 (R8n2, 11/11/2026) : micro-tour avant la fusion
+- **Index** : `notifications_event_updated_idx` (`event_id`, `created_at desc`, partiel `where type = 'event_updated'`), migration `0081_event-updated-notify-idx` (générée ; ne crée que cet index, à renuméroter à la fusion) : la requête de `lastNotify` ne lit plus toute la table.
+- **`lastNotify`** expose `{ createdAt, deferred }` (plus l'identifiant d'une notification d'inscrit) ; l'assistant compare la date de création avant et après l'enregistrement.
+- **Cloche (appli)** : à la fermeture, la feuille attend la fin des écritures (`whenIdle`) avant que la cloche relise le réglage.
+- **« C'est noté »** : un échec d'écriture survenu avant l'appui est montré par le premier appui (le suivant ferme) ; idem pour un échec survenu pendant l'attente.
+- **Noté sans correction** : un second enregistrement de l'assistant après un `PATCH` déjà passé (échec d'une étape suivante, puis nouvel appui) peut ne pas annoncer de nouvelle prévenance : `lastNotify` n'a pas changé au second passage, et le message « Enregistré : N inscrits prévenus » n'apparaît alors pas.
+
+### Tour 9 (R8k1, 11/11/2026)
+- **Activité** : `/me/activity` et son compteur (`unseenCount`) passent par les mêmes gardes de lecture que le Journal, en lot (`journalVerdicts`, `applyJournalVerdict` exportés par `notifications/service.ts`) : acteurs non lisibles non nommés, corps générique si le commentaire cité ne se lit plus, ligne masquée si rien ne se lit, sans double retrait dans la pastille.
+- **Pages** : `feed/comments/pagefacts.ts` résout l état réel de la page (structure, pro, prestataire, média) avant `canSeeFeedPost` (notifications, garde, lot, suggestions) ; avant, `factsOf` sans cet état refusait tout le monde sur une publication de page.
+- Points 3 et 7 de Codex (acteurs recomposés après livraison, double retrait de la pastille) : déjà réglés aux tours 7 et 8 ; tests `comments-batch.test.ts` (« un acteur passé en privé… », « une ligne exclue deux fois… »).
+- **Acteurs (relecture t6, points 2 et 4)** : toutes les personnes en règle d une ligne regroupée sont filtrées par lisibilité **avant** la limite d affichage de trois (le titre, le corps générique et le compte ne reprennent plus un pseudo caché ; le compte retire les cachés) ; la garde renvoie les avatars des lisibles. Les candidats de la lecture en lot sont bornés **en SQL** par portée et par acteur (15 récents, fenêtre `row_number`) : plus de plafond global de 2 000.
 ### Tour 3 bis (lot R8b2, hors ligne)
 - **Hors ligne (point 7, outil `lib/offlineCopy.ts` de R8c2, commit 95d091dc fusionné seul)** : `usePublications(…, offline)` (passé par `PublicationsTab` quand `mine`) garde la première page dans la copie du compte (`publications.mine`, sans filtre) après chaque lecture réussie ; si la lecture échoue, la copie s'affiche (liste sans « Voir plus ») avec la phrase de l'Accueil « Hors ligne : voici ce que ton téléphone a gardé. » ; au passage hors ligne → en ligne, la liste se recharge seule. Jamais pour le profil d'un autre. Recette : copie, retour du réseau, profil d'un autre sans copie.
 
@@ -5562,6 +5581,23 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **`share`** : `PostActions` reçoit `onShared` (facultatif) ; le Fil note `share` à l'ouverture du partage (la feuille n'a pas de retour de réussite : c'est l'intention de partager, pas son aboutissement). `open` : `isRealTap` (moins de 10 px) testé.
 - **« Pas de réseau »** : `PostActions` reçoit `offline` (facultatif, porté par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent « Pas de réseau » avant toute mutation (recette).
 - **`attachPhrase`** : l'élision l'emporte aussi pour un nom féminin (« pour l'Exposition », « à l'Expo »).
+
+### Tour 5 (R8n2, 12/11/2026) : relectures Codex et Opus des tours 3 et 4
+- **Écriture liée au compte** : `createSerialWriter` reçoit `alive` (vérifiée avant chaque envoi ; fausse : la file s'arrête sans rien envoyer ni afficher). Appli : `accountGuard()` capturée à la création de l'écrivain ; site : `useSessionGuard` (faux dès qu'un compte est annoncé par `sessionChannel`). Test shared : changement de compte pendant le premier envoi.
+- **Réponse perdue** : après un échec la valeur du serveur est inconnue ; un choix plus récent que l'envoi échoué est envoyé même s'il égale l'ancienne valeur confirmée. Tests shared : ce scénario, puis l'échec sans choix plus récent.
+- **Cloche du site** : posée avec `key={event.id}` (état et écrivain jetés au changement d'événement, un GET échoué ne garde rien de l'événement précédent). Appli : un écran est poussé par événement (probablement non concernée), `key` ajoutée quand même (une ligne).
+- **Feuille de la cloche (appli)** : elle se ferme tout de suite ; seule la relecture de la cloche attend la fin des écritures ; une écriture qui échoue ensuite rouvre la feuille avec le message (`noPlace` ou `ficheSaveFailed`), la cloche disparaissant à sa fermeture quand la place est perdue. Recette appli.
+- **« C'est noté »** : `onSettled` remet l'échec non vu à faux (un ancien échec ne neutralise plus l'appui suivant).
+- **Index et tri** : la requête de `lastNotify` trie `created_at desc nulls last` comme l'index (`notifications_event_updated_idx`) : `EXPLAIN` (base du lot) : Index Scan sur l'index, tri incrémental (clé présentée `created_at`). Migration d'index régénérée au numéro **0082** (`0082_event-updated-notify-idx`, même SQL) après la fusion de `vague-r8` (qui porte `0081_express-invite-client-id`).
+- **Moment annoncé et fin de l'événement** : `notifyTiming` reçoit aussi `endsAt` (fin du brouillon, à défaut l'enregistrée) et réutilise `essentialQuietOverride` : événement terminé la veille, modifié à 23 h : « à 8 h », même verdict que l'API (test shared).
+
+### Tour 10 (R8k1, 12/11/2026)
+- **Aucun privilège de gestion d une page dans les gardes sans session** (`readers.ts`, lecture en lot) : `managesPost` vaut `persona = fan` et auteur ; un co-organisateur retiré de la structure, ou un responsable sans second facteur, ne reçoit plus pseudo ni extrait des commentaires de comptes privés (notification, Activité, pastille). Conséquence assumée : un responsable actuel de la page n a plus l extrait d un commentaire privé dans ses notifications ; il le lit en ouvrant la publication (second facteur compris).
+- **Paramètres SQL** : `anyOf` (`= any($1::type[])`, un seul paramètre tableau) dans la lecture en lot et la recherche de remplacement ; plus de limite à 65 535 valeurs.
+- **Suggestions de discussion** : une réponse ne compte que si son commentaire de premier niveau se lit aussi.
+- **Identifiant servi** : `data.commentId` d une ligne dont le commentaire cité ne se lit plus est remplacé par un commentaire lisible de la ligne (Journal et Activité).
+- **Coût** : la recherche de remplacement de la garde de livraison vérifie la lisibilité en un lot (`readableBatch`, déplacé dans `readers.ts`), l état des pages lu une fois. Test : une page suspendue ne notifie personne.
+- Note : le crash du PC (03:26) avait corrompu la base locale de développement ; elle a été recréée (données de test seulement).
 
 ### Tour 5 (R8c2, relecture Codex des tours 2 à 4, 12/11/2026)
 - **Retrait d'une carte des copies** : `dropFromCopies` (désormais dans `copyPhotos.ts`) capture le compte avant toute lecture et le passe à chaque `readCopy` et `saveCopy` ; rien n'est écrit sous un autre compte (test A → B entre la lecture et l'écriture).

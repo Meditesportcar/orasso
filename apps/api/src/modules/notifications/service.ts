@@ -30,7 +30,7 @@ import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
 import { type Executor, withTx } from "../../lib/tx";
 import { hasPlace } from "../events/place";
-import { citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
+import { type CitedView, citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
 
 export type NotificationRow = typeof notifications.$inferSelect;
 
@@ -117,14 +117,25 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
  * domaine d'une page (ou de la pastille) et rend un verdict par ligne. `shown: false` : la ligne n'est pas montrée ;
  * `actors` : les pseudos des personnes d'une ligne regroupée que le destinataire peut encore lire (les autres ne sont pas nommées).
  */
-export type JournalVerdict = { shown: boolean; actors?: string[]; commentReadable?: boolean };
+export type JournalVerdict = {
+  shown: boolean;
+  actors?: string[];
+  /** Avatar de chaque personne lisible (par pseudo), pour nommer celles qui étaient au-delà des trois premières. */
+  avatars?: Record<string, string | null>;
+  commentReadable?: boolean;
+  /** Un commentaire lisible de la ligne, servi à la place de celui qui ne se lit plus. */
+  readableCommentId?: string;
+};
 export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
 const journalGuards = new Map<string, JournalGuard>();
 export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
   for (const t of types) journalGuards.set(t, guard);
 }
 /** Verdicts des gardes de lecture pour ces lignes (une seule passe par garde, quel que soit le nombre de lignes). */
-async function journalVerdicts(userId: string, rows: readonly NotificationRow[]): Promise<Map<string, JournalVerdict>> {
+export async function journalVerdicts(
+  userId: string,
+  rows: readonly NotificationRow[],
+): Promise<Map<string, JournalVerdict>> {
   const byGuard = new Map<JournalGuard, NotificationRow[]>();
   for (const n of rows) {
     const guard = journalGuards.get(n.type);
@@ -133,6 +144,79 @@ async function journalVerdicts(userId: string, rows: readonly NotificationRow[])
   const verdicts = new Map<string, JournalVerdict>();
   for (const [guard, mine] of byGuard) for (const [id, v] of await guard(userId, mine)) verdicts.set(id, v);
   return verdicts;
+}
+
+/** Les gardes de lecture existent pour ce type ? (lignes à vérifier pour la pastille et l'Activité) */
+export const journalGuardedTypes = (): NotificationType[] => [...journalGuards.keys()] as NotificationType[];
+
+/**
+ * Applique le verdict d'une garde de lecture à une ligne déjà recomposée (`view`, personnes en règle) : les personnes que le
+ * destinataire ne peut plus lire ne sont ni nommées ni comptées, le titre suit, et un extrait de commentaire devenu illisible
+ * est remplacé par le libellé générique du type. `null` : la ligne n'est pas montrée.
+ */
+export function applyJournalVerdict(
+  n: NotificationRow,
+  view: CitedView | null | undefined,
+  verdict: JournalVerdict | undefined,
+): {
+  title: string;
+  body: string;
+  actors: CitedView["actors"] | undefined;
+  count: number | undefined;
+  people?: string[];
+  /** `undefined` : inchangé ; `null` : à retirer ; sinon : l'identifiant lisible qui remplace `data.commentId`. */
+  commentId?: string | null;
+} | null {
+  if (verdict && !verdict.shown) return null;
+  if (view === null) return null;
+  const allowed = verdict?.actors ? new Set(verdict.actors) : null;
+  // Toutes les personnes en règle (pas seulement les trois affichées) sont filtrées par lisibilité, puis les trois premières
+  // lisibles sont nommées : une personne cachée ne reprend ni le titre, ni le corps, ni le compte.
+  const people = view ? (allowed ? view.people.filter((p) => allowed.has(p)) : view.people) : undefined;
+  const narrowed = Boolean(view && people && people.length < view.people.length);
+  if (view && people && people.length === 0) return null;
+  const actors =
+    view && people && narrowed
+      ? people
+          .slice(0, ACTIVITY_MAX_ACTORS)
+          .map(
+            (p) => view.actors.find((a) => a.pseudo === p) ?? { pseudo: p, avatarUrl: verdict?.avatars?.[p] ?? null },
+          )
+      : view?.actors;
+  const template = (n.data as { _text?: { title?: unknown } })._text?.title;
+  const first = actors?.[0];
+  return {
+    title:
+      narrowed && first && typeof template === "string"
+        ? fillTemplate(template, first.pseudo)
+        : (view?.title ?? n.title),
+    // Le commentaire cité par la ligne ne se lit plus : son extrait ne part pas, le libellé générique du type le remplace.
+    body:
+      verdict?.commentReadable === false && n.type in r8NotificationTable
+        ? fillTemplate(
+            r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
+            first?.pseudo ?? view?.actors[0]?.pseudo ?? "",
+          )
+        : (view?.body ?? n.body),
+    actors,
+    count: view
+      ? narrowed && people
+        ? Math.max(1, view.count - (view.people.length - people.length))
+        : view.count
+      : undefined,
+    people,
+    commentId: verdict?.commentReadable === false ? (verdict.readableCommentId ?? null) : undefined,
+  };
+}
+
+/** `data` servie : l'identifiant du commentaire qui ne se lit plus n'en sort pas (remplacé par un lisible, ou retiré). */
+export function scrubCommentId(
+  data: Record<string, unknown>,
+  commentId: string | null | undefined,
+): Record<string, unknown> {
+  if (commentId === undefined) return data;
+  const { commentId: _gone, ...rest } = data;
+  return commentId ? { ...rest, commentId } : rest;
 }
 
 /**
@@ -439,36 +523,18 @@ export const notificationsService = {
       db,
     );
     const page = toPage(rows, limit, (n) => {
-      const verdict = verdicts.get(n.id);
-      if (verdict && !verdict.shown) return null;
+      const shown = applyJournalVerdict(n, views.get(n.id), verdicts.get(n.id));
+      if (!shown) return null;
       const view = views.get(n.id);
-      // Ligne regroupée dont le texte ne se recompose pas sans la personne partie : masquée (la page peut être plus courte).
-      if (view === null) return null;
-      // Les personnes que le destinataire ne peut plus lire (compte passé privé…) ne sont ni nommées ni montrées.
-      const allowed = verdict?.actors ? new Set(verdict.actors) : null;
-      const actors = view && allowed ? view.actors.filter((a) => allowed.has(a.pseudo)) : view?.actors;
-      const narrowed = Boolean(view && actors && actors.length < view.actors.length);
-      const template = (n.data as { _text?: { title?: unknown } })._text?.title;
-      const first = actors?.[0];
       return {
         id: n.id,
         type: n.type,
         family: n.family,
-        title:
-          narrowed && first && typeof template === "string"
-            ? fillTemplate(template, first.pseudo)
-            : (view?.title ?? n.title),
-        // Le commentaire cité par la ligne ne se lit plus : son extrait ne part pas, le libellé générique du type le remplace.
-        body:
-          verdict?.commentReadable === false && n.type in r8NotificationTable
-            ? fillTemplate(
-                r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
-                first?.pseudo ?? view?.actors[0]?.pseudo ?? "",
-              )
-            : (view?.body ?? n.body),
+        title: shown.title,
+        body: shown.body,
         data: view
-          ? { ...stripInternal(n.data), actors, count: narrowed ? Math.max(1, allowed?.size ?? 1) : view.count }
-          : stripInternal(n.data),
+          ? { ...scrubCommentId(stripInternal(n.data), shown.commentId), actors: shown.actors, count: shown.count }
+          : scrubCommentId(stripInternal(n.data), shown.commentId),
         eventId: n.eventId,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,

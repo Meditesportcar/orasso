@@ -529,7 +529,12 @@ export default function EventPage() {
       heroFloat={
         <>
           <Countdown event={e} />
-          <NotifyBell eventId={e.id} signedIn={status === "in"} stamp={mine.map((a) => a.status).join(",")} />
+          <NotifyBell
+            key={e.id}
+            eventId={e.id}
+            signedIn={status === "in"}
+            stamp={mine.map((a) => a.status).join(",")}
+          />
         </>
       }
       liftHero
