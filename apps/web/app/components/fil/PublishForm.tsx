@@ -24,6 +24,7 @@ import {
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
+  draftFromBody,
   type EventsLoad,
   emptyEventsLoad,
   eventsOf,
@@ -166,10 +167,15 @@ export function PublishForm({
   const setUncertain = (body: (ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null) => {
     setUncertainState(body);
     if (body) saveUncertain(tabStore(), userId, body);
-    else clearUncertain(tabStore());
+    else clearUncertain(tabStore(), userId);
   };
   const [checking, setChecking] = useState(false);
   const [found, setFound] = useState(false);
+  // Une seule opération à la fois : l'envoi et la vérification ne se chevauchent jamais (un « Réessayer » pendant la vérification
+  // créerait une publication que le 404 en retard ferait oublier).
+  const running = useRef<"send" | "check" | null>(null);
+  // Les photos d'un envoi incertain repris après un rechargement : parties, mais plus dans l'appareil.
+  const [keptPhotos, setKeptPhotos] = useState(0);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
   const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
@@ -195,6 +201,12 @@ export function PublishForm({
     if (!saved) return;
     setUncertainState(saved as never);
     setClientId(saved.clientId as `${string}-${string}-${string}-${string}-${string}`);
+    // Le brouillon affichable est celui du corps gardé : casquette, événement, légende… (les photos ne se restaurent pas).
+    const draft = draftFromBody(saved, authors);
+    setChoice(draft.choice);
+    setCaption(draft.caption);
+    if (draft.aspect) setAspect(draft.aspect);
+    setKeptPhotos(draft.photoCount);
     setError(T.noNetwork);
   }, [userId]);
   const frozen = busy || uncertain !== null;
@@ -399,27 +411,47 @@ export function PublishForm({
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
   async function abandonUncertain() {
-    if (!uncertain || checking) return;
+    if (!uncertain || running.current) return;
+    running.current = "check";
     setChecking(true);
     setError(null);
-    const res = await apiFetch<FeedPostView>(`/me/feed-posts/by-client/${uncertain.clientId}`);
-    setChecking(false);
-    if (res.ok) {
-      rememberPublished(userId, res.data);
-      setUncertain(null);
-      setFound(true);
-      return setDone(true);
+    try {
+      // Le compte avant la requête et avant d'exploiter sa réponse : un autre compte (autre onglet) répondrait 404 à notre place.
+      const before = await accountCheck();
+      if (before !== "same") return setError(stopMessage(before));
+      const res = await apiFetch<FeedPostView>(`/me/feed-posts/by-client/${uncertain.clientId}`);
+      const after = await accountCheck();
+      if (after !== "same") return setError(stopMessage(after));
+      if (res.ok) {
+        rememberPublished(userId, res.data);
+        setUncertain(null);
+        setFound(true);
+        return setDone(true);
+      }
+      if (res.status === 404) {
+        setUncertain(null);
+        setClientId(crypto.randomUUID());
+        keys.current = {};
+        return;
+      }
+      setError(T.uncertainUnchecked);
+    } finally {
+      running.current = null;
+      setChecking(false);
     }
-    if (res.status === 404) {
-      setUncertain(null);
-      setClientId(crypto.randomUUID());
-      keys.current = {};
-      return;
-    }
-    setError(T.uncertainUnchecked);
   }
 
   async function publish() {
+    if (running.current || checking) return;
+    running.current = "send";
+    try {
+      await publishRun();
+    } finally {
+      running.current = null;
+    }
+  }
+
+  async function publishRun() {
     if (busy || (!uncertain && issue)) return;
     setBusy(true);
     setError(null);
@@ -472,9 +504,22 @@ export function PublishForm({
       return setError(stopMessage(second));
     }
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
+    if (res.ok) {
+      // Succès : l'écran de confirmation prend la place du formulaire tout de suite (jamais un formulaire modifiable avec
+      // l'identifiant déjà publié, même si le contrôle du compte qui suit tarde).
+      setUncertain(null);
+      setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
+      setDone(true);
+      setBusy(false);
+      setProgress(null);
+      void accountCheck().then((c) => {
+        if (c === "same") rememberPublished(userId, res.data as FeedPostView);
+      });
+      return;
+    }
     setBusy(false);
     setProgress(null);
-    if (!res.ok && (res.status === 0 || res.status >= 500)) {
+    if (res.status === 0 || res.status >= 500) {
       // Pas de réponse : la publication est peut-être partie. Le formulaire se fige sur ce corps et ce `clientId`.
       setUncertain(body);
       return setError(T.noNetwork);
@@ -486,12 +531,6 @@ export function PublishForm({
     }
     // Une réponse du serveur (succès ou refus) règle l'envoi : l'incertitude se lève ici, après qu'on a la réponse.
     setUncertain(null);
-    if (res.ok) {
-      // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») : seulement si le compte est le même.
-      if ((await accountCheck()) === "same") rememberPublished(userId, res.data as FeedPostView);
-      setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
-      return setDone(true);
-    }
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.error.code === "persona_forbidden" || res.error.code === "two_factor_required") {
       setSecurity(true);
@@ -942,6 +981,11 @@ export function PublishForm({
           {loaded.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore}
         </p>
       ) : null}
+      {keptPhotos > 0 && uncertain && items.length === 0 ? (
+        <p className="o-t-caption" data-testid="fil-publish-kept-photos">
+          {T.uncertainPhotos(keptPhotos)}
+        </p>
+      ) : null}
       {uncertain && !busy ? (
         <Button
           type="button"
@@ -963,7 +1007,7 @@ export function PublishForm({
         type="submit"
         icon="upload"
         fullWidth
-        disabled={busy || (!uncertain && Boolean(issue))}
+        disabled={busy || checking || (!uncertain && Boolean(issue))}
         data-testid="fil-publish-send"
       >
         {uncertain ? T.uncertainRetry : L.publish}

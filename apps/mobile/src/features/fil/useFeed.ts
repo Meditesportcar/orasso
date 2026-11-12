@@ -38,6 +38,7 @@ import { ApiRequestError, errorMessage, NETWORK_MESSAGE } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
+import { resetWantedPhotos, setWantedPhotos } from "./copyPhotos";
 import { forgetMyPublished, myPublishedCards, takeFeedDirty } from "./feedSignal";
 
 const FILTER_KEY = "fil-filter";
@@ -52,6 +53,18 @@ function useAppActive(): boolean {
     return () => sub.remove();
   }, []);
   return active;
+}
+
+async function dropFromCopies(id: string): Promise<void> {
+  for (const f of feedFilters) {
+    const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(feedCopyKey(f));
+    const items = saved?.value.items;
+    if (saved && Array.isArray(items) && items.some((c) => c.id === id)) {
+      const left = items.filter((c) => c.id !== id);
+      setWantedPhotos(f, left);
+      await saveCopy(feedCopyKey(f), { ...saved.value, items: left }, new Date(saved.savedAt));
+    }
+  }
 }
 
 export function useFeed() {
@@ -102,6 +115,18 @@ export function useFeed() {
     forgetMyPublished();
     setMine([]);
     setReady(false);
+    // Les photos de la copie : ce que chaque copie garde est relu une fois par compte, puis les photos périmées ou orphelines partent.
+    resetWantedPhotos();
+    void (async () => {
+      for (const f of feedFilters) {
+        const saved = await readCopy<unknown>(feedCopyKey(f));
+        setWantedPhotos(
+          f,
+          (saved ? parseFeedCopy(saved.value, f) : null) ?? [],
+          f === feedFilters[feedFilters.length - 1],
+        );
+      }
+    })();
     let cancelled = false;
     void cacheGetJson<FeedFilter>(FILTER_KEY).then((saved) => {
       if (cancelled) return;
@@ -155,7 +180,9 @@ export function useFeed() {
         setErrorSource(null);
         setRound((n) => n + 1);
         // La première page reçue est gardée pour le prochain passage sans réseau (jamais mes cartes épinglées).
-        void saveCopy(feedCopyKey(f), { filter: f, items: feedCopyCards(applied.state.items) });
+        const copyCards = feedCopyCards(applied.state.items);
+        setWantedPhotos(f, copyCards);
+        void saveCopy(feedCopyKey(f), { filter: f, items: copyCards });
       } catch (e) {
         if (!ticket.current()) return;
         // Pas de réponse (hors ligne, API arrêtée) : la copie, même ancienne, plutôt qu'une erreur plein écran.
@@ -277,6 +304,18 @@ export function useFeed() {
     };
   }, [ref, online, focused, appActive, copy]);
 
+  // Le réseau disparaît pendant qu'on regarde le Fil (mode avion, sans quitter l'onglet ni actualiser) : la liste affichée passe à
+  // sa copie filtrée (40 cartes, sans rendez-vous au spot ni sponsorisé, sans rail ni pagination) ; le retour du réseau est
+  // traité par `FilScreen` (relecture en haut de liste, sinon la pastille).
+  useEffect(() => {
+    if (online) return;
+    const l = listRef.current;
+    if (!l || l.filter !== filterRef.current) return;
+    const items = feedCopyCards(l.items);
+    if (!items.length) return;
+    setCopy((c) => c ?? { filter: l.filter, items, savedAt: new Date(lastOk.current || Date.now()).toISOString() });
+  }, [online]);
+
   const showingCopy = Boolean(copy && copy.filter === filter);
   const shown: FeedCard[] | null = showingCopy
     ? (copy?.items ?? null)
@@ -320,6 +359,8 @@ export function useFeed() {
       setList((s) => (s ? { ...s, items: withoutPlacement(s.items, placementId) } : s)),
     drop: (id: string) => {
       forgetMyPublished(id);
+      // Une publication supprimée sort aussi des copies gardées sur l'appareil (elle ne revient pas hors ligne).
+      void dropFromCopies(id);
       setMine((m) => m.filter((c) => c.id !== id));
       setList((s) => (s ? { ...s, items: s.items.filter((c) => c.id !== id) } : s));
       setCopy((c) => (c ? { ...c, items: c.items.filter((x) => x.id !== id) } : c));

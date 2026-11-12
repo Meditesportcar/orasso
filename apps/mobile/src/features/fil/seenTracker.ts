@@ -18,14 +18,11 @@ import { AppState, type View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
-import { cacheScope } from "@/lib/kv";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 
 const QUEUE_KEY = "fil.seen-queue";
-/** Un toucher sur une carte suivi d'un départ de l'écran dans ce délai = la carte a été ouverte. */
-const OPEN_WINDOW_MS = 4000;
-/** La mesure de ce qui est à l'écran : deux fois par seconde (la présence se compte à la seconde). */
 const MEASURE_EVERY_MS = 500;
 
 type Store = { scope: string; queue: ReturnType<typeof createSeenQueue>; restored: boolean };
@@ -45,6 +42,8 @@ function current(): Store | null {
     queue: createSeenQueue({
       now: () => Date.now(),
       send: async (batch) => {
+        // Le compte a changé pendant l'attente (A part, B arrive) : rien ne part avec le jeton de B.
+        if (cacheScope() !== scope) return "retry";
         try {
           await api.feedSeen(batch);
           return "ok";
@@ -58,12 +57,25 @@ function current(): Store | null {
   return store;
 }
 
+/** La garde d'une file : le compte d'origine, capturé à sa création ; faux dès qu'un autre compte est lié. */
+const guardOf = (s: Store) => ({ scope: s.scope, current: () => cacheScope() === s.scope });
+
+// Déconnexion ou changement de compte : la file de l'ancien compte est invalidée (rien ne part, rien ne s'écrit sous un autre).
+onCacheScopeDropped(async () => {
+  store = null;
+  written = null;
+});
+
 /** La file gardée sur le téléphone est reprise une fois (redémarrage de l'appli en cours de lecture hors ligne). */
 async function restore(s: Store): Promise<void> {
   if (s.restored) return;
   s.restored = true;
-  const saved = await readCopy<SeenEntry[]>(QUEUE_KEY);
-  if (saved && cacheScope() === s.scope && Array.isArray(saved.value)) s.queue.restore(saved.value);
+  // Lue sous le compte de cette file, jamais sous celui qui est lié maintenant.
+  const saved = await readCopy<SeenEntry[]>(QUEUE_KEY, guardOf(s));
+  if (saved && cacheScope() === s.scope && Array.isArray(saved.value)) {
+    written = { scope: s.scope, key: JSON.stringify(saved.value) };
+    s.queue.restore(saved.value);
+  }
 }
 
 /** Retient une carte vue (`view`), ouverte (`open`) ou partagée (`share`). */
@@ -77,14 +89,22 @@ export async function flushSeen(): Promise<void> {
   const s = current();
   if (!s) return;
   await restore(s);
+  // Gardée avant l'attente réseau : un arrêt de l'appli pendant l'envoi ne perd rien (le lot en vol reste dans l'état gardé).
+  await persist(s, false);
   const done = await s.queue.flush();
   await persist(s, done);
 }
 
+/** Dernière file écrite sur le téléphone, par compte : on n'écrit que ce qui a changé. */
+let written: { scope: string; key: string } | null = null;
+
 async function persist(s: Store, done: boolean): Promise<void> {
   const left = s.queue.snapshot();
-  if (done && left.length === 0) await saveCopy(QUEUE_KEY, []);
-  else await saveCopy(QUEUE_KEY, left);
+  const key = JSON.stringify(done && left.length === 0 ? [] : left);
+  if (written?.scope === s.scope && written.key === key) return;
+  // Écrit sous le compte de cette file, jamais sous celui qui est lié maintenant.
+  await saveCopy(QUEUE_KEY, JSON.parse(key), new Date(), guardOf(s));
+  written = { scope: s.scope, key };
 }
 
 /** Les cartes qu'on suit : jamais ma propre publication, jamais une carte déjà vue, jamais une forme d'identifiant inconnue. */
@@ -96,7 +116,7 @@ type Layout = { y: number; h: number };
 /**
  * Suit les cartes de la liste : toutes les 500 ms (Fil affiché, application active), mesure la liste et les cartes à l'écran,
  * compte une seconde de présence, puis retient la carte. Envoie toutes les 10 s, à la sortie du Fil, au passage en arrière-plan
- * et au retour du réseau. Un toucher puis la sortie du Fil = la carte a été ouverte.
+ * et au retour du réseau. `open` et `share` ne viennent que des actions qui ouvrent la publication ou le partage (`noteSeen`).
  *
  * `list` : la vue qui contient les cartes ; `layouts` : la place de chaque carte dans cette vue (`onLayout`) ; `reset` : un
  * numéro qui change quand la liste est remplacée (autre onglet, actualisation) et repart la mesure de présence.
@@ -114,18 +134,12 @@ export function useSeenTracker(opts: {
   const dwell = useRef(createSeenDwell());
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
-  const touched = useRef<{ id: string; at: number } | null>(null);
 
   // Une autre liste : la présence repart de zéro.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement de liste relance la mesure.
   useEffect(() => {
     dwell.current = createSeenDwell();
   }, [reset]);
-
-  /** Appelé au début d'un toucher sur une carte (les touchers remontent de la carte à son enveloppe). */
-  const touch = useCallback((id: string) => {
-    touched.current = { id, at: Date.now() };
-  }, []);
 
   useEffect(() => {
     if (!focused) return;
@@ -153,10 +167,6 @@ export function useSeenTracker(opts: {
       clearInterval(measuring);
       clearInterval(sending);
       state.remove();
-      // Quitter le Fil juste après un toucher sur une carte : elle a été ouverte (fiche, profil, publication…).
-      const last = touched.current;
-      touched.current = null;
-      if (last && Date.now() - last.at < OPEN_WINDOW_MS) noteSeen(last.id, "open");
       void flushSeen();
     };
   }, [focused, assist, list, layouts]);
@@ -167,6 +177,4 @@ export function useSeenTracker(opts: {
     if (online && !wasOnline.current) void flushSeen();
     wasOnline.current = online;
   }, [online]);
-
-  return { touch };
 }

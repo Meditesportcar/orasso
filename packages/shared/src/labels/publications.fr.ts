@@ -35,6 +35,9 @@ export const publicationsLabels = {
   /** La petite ligne d'une carte posée dans une liste de profil (à la place de la raison du Fil), avant « il y a 3 h ». */
   cardReasonMine: "Sur ton profil",
   cardReasonOther: "Sur son profil",
+  /** Lot R8g : la même petite ligne quand l'auteur est une page (structure, fiche pro). */
+  cardReasonMinePage: "Sur ta page",
+  cardReasonOtherPage: "Sur sa page",
   /** Date et lieu sous une vignette (le lieu est facultatif). */
   tileLabel: (date: string, place: string | null) => (place ? `${date}, ${place}` : date),
   // La publication seule (`/publication/<id>`, `/app/publication/:id`).
@@ -47,5 +50,5 @@ export const publicationsLabels = {
   menuCommentsOff: "Couper les commentaires",
   menuCommentsOn: "Rétablir les commentaires",
   /** La copie gardée de mon onglet, sans réseau : la phrase de l'Accueil hors ligne (lot R8c2) vient de `lib/offlineCopy`. */
-  offlineList: "Dernières publications gardées sur cet appareil.",
+  offlineList: "Hors ligne : voici ce que ton téléphone a gardé.",
 } as const;

@@ -141,10 +141,29 @@ export function publicationCard(post: FeedPostView): FeedCard<"feed_post"> {
   return {
     id: `feed_post:${post.id}`,
     kind: "feed_post",
-    reason: { code: "following_author", label: post.mine ? L.cardReasonMine : L.cardReasonOther },
+    reason: { code: "following_author", label: cardReasonOf(post) },
     at: post.createdAt,
     payload: { post },
     // « Déjà vu » (R8c1) ne concerne que le parcours du Fil : sur un profil ou une publication seule, jamais de séparation.
     seen: false,
   };
+}
+
+/** « Sur son profil » pour une personne, « Sur sa page » pour une page (structure, fiche pro…) : lot R8g. */
+function cardReasonOf(post: FeedPostView): string {
+  const page = post.author.kind !== "user";
+  if (post.mine) return page ? L.cardReasonMinePage : L.cardReasonMine;
+  return page ? L.cardReasonOtherPage : L.cardReasonOther;
+}
+
+/**
+ * La suite d'une liste (`page` = la page suivante) : si l'accès a disparu entre deux pages (`restricted`), la restriction vaut pour
+ * toute la liste : rien des pages déjà lues ne reste, ni curseur ; sinon la page s'ajoute sans doublon.
+ */
+export function applyNextPage<T extends { id: string }>(
+  list: { items: readonly T[]; nextCursor: string | null; restricted: boolean },
+  page: { items: readonly T[]; nextCursor: string | null; restricted: boolean },
+): { items: T[]; nextCursor: string | null; restricted: boolean } {
+  if (page.restricted) return { items: [], nextCursor: null, restricted: true };
+  return { items: appendUnique(list.items, page.items), nextCursor: page.nextCursor, restricted: list.restricted };
 }

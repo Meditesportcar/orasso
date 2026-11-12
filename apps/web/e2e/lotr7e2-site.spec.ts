@@ -40,7 +40,8 @@ test("le Fil : trois filtres, une raison par carte, menu « ⋯ », flamme", asy
   await expect(page).toHaveURL(/filtre=following/);
 
   // Menu : pourquoi, moins de ce genre puis annuler, signaler.
-  const post = page.getByTestId("feed-card-feed_post").first();
+  // R8c2 : « Abonnements » contient mes propres publications (R8c1) : le menu « Moins de ce genre » est celui d'une carte d'un autre.
+  const post = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
   await post.getByTestId("feed-card-more").click();
   await expect(page.getByTestId("feed-menu-why")).toBeVisible();
   await expect(page.getByTestId("feed-menu-less")).toBeVisible();

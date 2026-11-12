@@ -221,6 +221,33 @@ describe("createSeenQueue : la file des cartes vues", () => {
     expect(sent[0]?.[0]?.at).toBe("2026-11-12T09:00:00.000Z");
   });
 
+  it("un lot en vol reste dans l'état gardé jusqu'à l'acquittement : deux envois concurrents, puis redémarrage", async () => {
+    let release: (() => void) | null = null;
+    const clock = { t: Date.parse("2026-11-11T10:00:00.000Z") };
+    const queue = createSeenQueue({
+      now: () => clock.t,
+      send: () => new Promise<SeenSendResult>((r) => (release = () => r("ok"))),
+    });
+    queue.add(id(1), "view");
+    const first = queue.flush();
+    expect(await queue.flush()).toBe(false); // le second envoi ne part pas : un lot est en vol
+    // Ce qu'un second `flushSeen` sauvegarderait contient le lot en vol (un arrêt de l'appli ici ne perd rien).
+    const saved = queue.snapshot();
+    expect(saved.map((e) => e.id)).toEqual([id(1)]);
+    // Redémarrage : une nouvelle file reprend l'état gardé et le renvoie.
+    const sent: string[] = [];
+    const restarted = createSeenQueue({
+      now: () => clock.t,
+      send: async (b) => (sent.push(...b.map((e) => e.id)), "ok"),
+    });
+    restarted.restore(saved);
+    await restarted.flush();
+    expect(sent).toEqual([id(1)]);
+    (release as (() => void) | null)?.();
+    await first;
+    expect(queue.snapshot()).toEqual([]);
+  });
+
   it("restore : les entrées gardées reprennent leur place, sans les périmées ni les inconnues", async () => {
     const { queue, sent, clock } = setup();
     queue.restore([

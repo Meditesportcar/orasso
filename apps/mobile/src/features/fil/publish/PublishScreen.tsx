@@ -153,6 +153,9 @@ function PublishForm() {
   // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
   const [uncertain, setUncertain] = useState<FeedPostBody | null>(null);
   const [checking, setChecking] = useState(false);
+  // Ce formulaire existe encore ; une seule opération (envoi ou vérification) à la fois.
+  const mounted = useRef(true);
+  const running = useRef(false);
   const [found, setFound] = useState(false);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
   const [security, setSecurity] = useState(false);
@@ -348,13 +351,15 @@ function PublishForm() {
 
   // Départ de l'écran (publié, abandonné) : les opérations en cours sont invalidées (leurs JPEG tardifs sont effacés à
   // leur arrivée) et les JPEG non floutés du cache de l'appli sont effacés.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      // Le formulaire n'existe plus : une réponse qui arrive après n'écrit rien chez le formulaire suivant (même compte).
+      mounted.current = false;
       generation.current++;
       discardTempPhotos();
-    },
-    [],
-  );
+    };
+  }, []);
 
   /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro, la détection est relancée. */
   async function recropAt(key: string, focus: { x: number; y: number }) {
@@ -399,7 +404,16 @@ function PublishForm() {
     }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   async function publish() {
-    if (busy || working || (!uncertain && issue)) return;
+    if (running.current || busy || checking || working || (!uncertain && issue)) return;
+    running.current = true;
+    try {
+      await publishRun();
+    } finally {
+      running.current = false;
+    }
+  }
+
+  async function publishRun() {
     setBusy(true);
     setError(null);
     setSecurity(false);
@@ -444,7 +458,8 @@ function PublishForm() {
       setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
       markFeedDirty(post);
-      discardTempPhotos();
+      // Les JPEG temporaires sont ceux de ce formulaire : s'il n'existe plus, ce sont peut-être ceux du suivant.
+      if (mounted.current) discardTempPhotos();
       setInvitedName(post.coAuthorInvite ? post.coAuthorInvite.name : null);
       setDone(true);
     } catch (e) {
@@ -505,7 +520,8 @@ function PublishForm() {
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
   async function abandonUncertain() {
-    if (!uncertain || checking) return;
+    if (!uncertain || checking || busy || running.current) return;
+    running.current = true;
     const guard = accountGuard();
     setChecking(true);
     setError(null);
@@ -513,7 +529,7 @@ function PublishForm() {
       const post = await api.feedPostByClient(uncertain.clientId);
       if (!guard.current()) return;
       markFeedDirty(post);
-      discardTempPhotos();
+      if (mounted.current) discardTempPhotos();
       setUncertain(null);
       setFound(true);
       setDone(true);
@@ -525,6 +541,7 @@ function PublishForm() {
         keys.current = {};
       } else setError(T.uncertainUnchecked);
     } finally {
+      running.current = false;
       setChecking(false);
     }
   }
@@ -625,7 +642,7 @@ function PublishForm() {
             big
             wide
             icon="upload"
-            disabled={busy || (!uncertain && Boolean(issue))}
+            disabled={busy || checking || (!uncertain && Boolean(issue))}
             onPress={() => void publish()}
             testID="fil-publish-send"
           >

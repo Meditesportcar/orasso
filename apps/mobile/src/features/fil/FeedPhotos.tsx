@@ -15,6 +15,21 @@ import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { useScrollAssist } from "@/ui/ScrollAssist";
+import { FilPhotoImage } from "./FilPhotoImage";
+
+/** La première photo passe par `FilPhotoImage` (gardée pour le hors ligne) ; les autres comme toute photo privée. */
+function PhotoSlide({
+  first,
+  ...props
+}: {
+  first: boolean;
+  url: string;
+  style: object;
+  resizeMode: "cover";
+  accessibilityLabel: string;
+}) {
+  return first ? <FilPhotoImage {...props} /> : <CrewPhotoImage {...props} />;
+}
 
 /**
  * Lot R7e2, tour 2 : la carte sait si elle est près de l'écran (à moins d'un écran de la fenêtre). Loin, ses photos sont
@@ -79,7 +94,8 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
           {post.photos.map((p, i) => (
             <View key={p.url} style={{ width, height }}>
               {loaded.includes(i) ? (
-                <CrewPhotoImage
+                <PhotoSlide
+                  first={i === 0}
                   url={p.url}
                   style={{ width, height }}
                   resizeMode="cover"

@@ -10,6 +10,8 @@ import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { Avatar } from "@/ui/Avatar";
 import { CoAuthorSignature, collaborationLine, InviteStatusLine, TwoAvatars } from "../CoAuthorHead";
 import { FeedPhotos } from "../FeedPhotos";
+import { useFilOffline } from "../offlineContext";
+import { noteSeen } from "../seenTracker";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CardShell } from "./CardShell";
 import { CommercialBadge } from "./CommercialBadge";
@@ -25,6 +27,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const post: FeedPostView = card.payload.post;
   // Collaboration (R8o) : acceptée, la carte est signée des deux (« Kenji_66 et Wrap 66 »), sous la ligne « Collaboration ».
   const co = post.coAuthor;
+  const offline = useFilOffline();
   return (
     <CardShell
       card={card}
@@ -45,7 +48,12 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       testID="feed-card-feed_post"
       actions={
         <>
-          <PostActions post={post} />
+          <PostActions
+            post={post}
+            offline={offline}
+            onShared={() => noteSeen(card.id, "share")}
+            onOpened={() => noteSeen(card.id, "open")}
+          />
           {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
         </>
       }

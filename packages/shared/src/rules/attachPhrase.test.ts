@@ -30,14 +30,23 @@ describe("attachPhrase : l'accord du verbe avec le titre", () => {
     expect(attachPhrase("attendee", "before", "Montée de Prats")).toBe("sera à la Montée de Prats");
     expect(attachPhrase("attendee", "after", "MONTÉE historique")).toBe("était à la MONTÉE historique");
     for (const word of FEMININE_TITLE_WORDS) {
-      expect(attachPhrase("on_site", "before", `${word} du port`)).toBe(`présent à la ${word} du port`);
+      const elided = /^[aeiou]/.test(word.normalize("NFD").toLowerCase());
+      expect(attachPhrase("on_site", "before", `${word} du port`)).toBe(
+        elided ? `présent à l'${word} du port` : `présent à la ${word} du port`,
+      );
     }
+    expect(attachPhrase("organizer", "before", "Exposition du port")).toBe("pour l'Exposition du port");
+    expect(attachPhrase("attendee", "before", "Expo du port")).toBe("sera à l'Expo du port");
   });
 
-  it("voyelle ou « h » au début : élision, sans espace", () => {
+  it("voyelle : élision, sans espace ; « h » muet seulement pour des mots français connus ; « y » reste consonne", () => {
     expect(attachPhrase("organizer", "before", "Anciennes du port")).toBe("pour l'Anciennes du port");
     expect(attachPhrase("on_site", "before", "Open de Perpignan")).toBe("présent à l'Open de Perpignan");
     expect(attachPhrase("attendee", "after", "Hivernale de Font-Romeu")).toBe("était à l'Hivernale de Font-Romeu");
+    expect(attachPhrase("on_site", "before", "Historique de Céret")).toBe("présent à l'Historique de Céret");
+    expect(attachPhrase("on_site", "before", "Hot Rod Day")).toBe("présent au Hot Rod Day");
+    expect(attachPhrase("organizer", "before", "Harley Days")).toBe("pour le Harley Days");
+    expect(attachPhrase("on_site", "before", "Youngtimers")).toBe("présent au Youngtimers");
   });
 
   it("un titre qui commence par un article : l'article passe dans la préposition", () => {

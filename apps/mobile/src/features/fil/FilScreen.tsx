@@ -36,6 +36,7 @@ import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
 import { HotRail } from "./HotRail";
 import { HowFeedSheet } from "./HowFeedSheet";
+import { FilOfflineContext } from "./offlineContext";
 import { PublishChoice } from "./PublishChoice";
 import { noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
@@ -143,10 +144,10 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
     wasOnline.current = online;
   }, [online, failed, offlineCopy, reload, askPill, assist]);
 
-  // Les cartes vues : suivies à l'écran, envoyées par lots ; un toucher puis la sortie du Fil = la carte a été ouverte.
+  // Les cartes vues : suivies à l'écran, envoyées par lots .
   const listBox = useRef<View>(null);
   const layouts = useRef(new Map<string, { y: number; h: number }>());
-  const { touch } = useSeenTracker({
+  useSeenTracker({
     list: listBox,
     layouts,
     cards: feed.items ?? [],
@@ -206,7 +207,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const showHot = feed.hot.length > 0 && feed.filter !== "for_you";
   const publishedId = feed.published;
   return (
-    <>
+    <FilOfflineContext.Provider value={feed.offline}>
       <View ref={anchor} collapsable={false} style={styles.anchor} />
       <StoriesBar />
       {/* Lot R8f1 (variante A1 de la maquette R8.2) : une seule rangée, le sélecteur prend la place restante et le bouton
@@ -337,7 +338,6 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 onLayout={(e) =>
                   layouts.current.set(card.id, { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })
                 }
-                onTouchStart={() => touch(card.id)}
                 style={styles.item}
               >
                 {i === frontier ? (
@@ -432,7 +432,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         <HowFeedSheet visible={how} onClose={() => setHow(false)} />
         <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
-    </>
+    </FilOfflineContext.Provider>
   );
 }
 

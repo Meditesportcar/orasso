@@ -1,7 +1,7 @@
 // La liste des publications d'un auteur sur le site (`GET /authors/:key/feed-posts`, lue dans le navigateur avec le cookie de
 // session), page par page (curseur opaque). Ne sait rien du profil : une clé d'auteur suffit. Seule la dernière lecture compte ;
 // une panne n'est jamais une liste vide ; une liste restreinte (compte privé non suivi) n'a ni élément ni curseur.
-import { type AuthorPostsFilter, type AuthorPostsPage, appendUnique, type FeedPostView } from "@orasso/shared";
+import { type AuthorPostsFilter, type AuthorPostsPage, applyNextPage, type FeedPostView } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
@@ -84,13 +84,9 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     if (mine !== seq.current) return;
     if (!res.ok) return setState((s) => ({ ...s, loadingMore: false, error: res.error.message }));
     cursorRef.current = res.data.nextCursor;
-    setState((s) => ({
-      ...s,
-      items: appendUnique(s.items, res.data.items),
-      nextCursor: res.data.nextCursor,
-      loadingMore: false,
-      error: null,
-    }));
+    // L'accès a disparu entre deux pages : la restriction vaut pour toute la liste (`applyNextPage`).
+    cursorRef.current = res.data.restricted ? null : res.data.nextCursor;
+    setState((s) => ({ ...s, ...applyNextPage(s, res.data), loadingMore: false, error: null }));
   }, [authorKey, filter]);
 
   // Une publication supprimée (menu d'une carte, page seule) : elle sort de la liste sans relecture.

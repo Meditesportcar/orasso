@@ -63,6 +63,7 @@ export * from "./presence";
 export * from "./pro";
 export * from "./proposedVehicle";
 export * from "./publicationsList";
+export * from "./publicPage";
 export * from "./pushRecipient";
 export * from "./quietHours";
 export * from "./recurrence";

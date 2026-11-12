@@ -28,6 +28,8 @@ function queueFor(userId: string): Store["queue"] {
     queue: createSeenQueue({
       now: () => Date.now(),
       send: async (batch) => {
+        // Un autre compte est arrivé dans l'onglet pendant l'attente : rien ne part avec sa session.
+        if (store?.userId !== userId) return "retry";
         const res = await apiFetch("/me/fil/seen", { method: "POST", json: { cards: batch }, keepalive: true });
         if (res.ok) return "ok";
         return res.status === 400 ? "drop" : "retry";

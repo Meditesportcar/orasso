@@ -504,6 +504,36 @@ describe("terrain : alertes et main courante", () => {
 });
 
 describe("inscription express", () => {
+  it("idempotence (R8p, tour 5) : réponse perdue après création, même clientId → une seule invitation et un seul e-mail", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e01";
+    const first = await call(julie, "POST", `/events/${eventId}/express-invites`, {
+      email: "Rejeu@Exemple.fr",
+      clientId,
+    });
+    expect(first.status).toBe(201);
+    // Deux rejeux, dont un simultané : la même invitation, le même lien, aucun e-mail de plus.
+    const again = await Promise.all(
+      [1, 2].map(() =>
+        call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Rejeu@Exemple.fr", clientId }),
+      ),
+    );
+    expect(again.map((r) => r.status)).toEqual([201, 201]);
+    expect(again.map((r) => r.json.id)).toEqual([first.json.id, first.json.id]);
+    expect(again.map((r) => r.json.url)).toEqual([first.json.url, first.json.url]);
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "rejeu@exemple.fr"))).toHaveLength(1);
+    const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
+    expect(mails.filter((m) => m.to === "rejeu@exemple.fr")).toHaveLength(1);
+    // Sans clientId (APK en ligne) : le comportement ne change pas, chaque envoi crée son invitation.
+    await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Libre@Exemple.fr" });
+    await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Libre@Exemple.fr" });
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "libre@exemple.fr"))).toHaveLength(2);
+    // Un autre auteur avec le même identifiant n'obtient jamais l'invitation du premier.
+    const other = await call(theo, "POST", `/events/${eventId}/express-invites`, {
+      email: "Autre@Exemple.fr",
+      clientId,
+    });
+    expect(other.status === 201 ? other.json.id : null).not.toBe(first.json.id);
+  });
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
     const send = vi.spyOn(mail, "send");

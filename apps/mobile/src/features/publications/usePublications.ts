@@ -1,12 +1,16 @@
 // La liste des publications d'un auteur (`GET /authors/:key/feed-posts`), page par page (curseur opaque, 20 par page). Ne sait
 // rien du profil : une clé d'auteur suffit (les pages de structure, de pro et la fiche d'un événement la reprendront).
 // Une panne n'est jamais une liste vide ; une liste restreinte (compte privé non suivi) n'a ni élément ni curseur.
-import { type AuthorPostsFilter, appendUnique, type FeedPostView } from "@orasso/shared";
+import { type AuthorPostsFilter, applyNextPage, type FeedPostView } from "@orasso/shared";
+import { useNetworkState } from "expo-network";
+import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
+import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
+import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
 import { onPostChanged, onPostRemoved } from "./publicationsSignal";
 
@@ -23,6 +27,8 @@ export type PublicationsState = {
   error: string | null;
   /** La première lecture a abouti au moins une fois. */
   loaded: boolean;
+  /** La liste vient de la copie gardée sur l'appareil (sans réseau), pas de l'API. */
+  stale: boolean;
 };
 
 const EMPTY: PublicationsState = {
@@ -33,9 +39,18 @@ const EMPTY: PublicationsState = {
   loadingMore: false,
   error: null,
   loaded: false,
+  stale: false,
 };
 
-export function usePublications(authorKey: string, filter?: AuthorPostsFilter, enabled = true) {
+/** La copie hors ligne de ma première page (rangée par compte par `offlineCopy`). */
+export const MY_PUBLICATIONS_COPY = "publications.mine";
+type Copied = { items: FeedPostView[]; restricted: boolean };
+
+/**
+ * `offline` : **mon** profil seulement (jamais celui d'un autre) : la première page est gardée dans la copie du compte ; sans
+ * réseau elle s'affiche, même ancienne ; au retour du réseau elle se recharge seule.
+ */
+export function usePublications(authorKey: string, filter?: AuthorPostsFilter, enabled = true, offline = false) {
   const [state, setState] = useState<PublicationsState>(EMPTY);
   const gate = useRef(createRequestGate(cacheScope)).current;
   const cursorRef = useRef<string | null>(null);
@@ -55,12 +70,48 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
         loadingMore: false,
         error: null,
         loaded: true,
+        stale: false,
       });
+      if (offline && !filter)
+        void saveCopy(MY_PUBLICATIONS_COPY, { items: page.items, restricted: page.restricted } satisfies Copied, now());
     } catch (e) {
       if (!ticket.current()) return;
+      const copy = offline && !filter ? await readCopy<Copied>(MY_PUBLICATIONS_COPY) : null;
+      if (!ticket.current()) return;
+      if (copy) {
+        cursorRef.current = null;
+        setState({
+          ...EMPTY,
+          items: copy.value.items,
+          restricted: copy.value.restricted,
+          loading: false,
+          loaded: true,
+          stale: true,
+        });
+        return;
+      }
       setState((s) => ({ ...s, loading: false, loadingMore: false, error: errorMessage(e) }));
     }
-  }, [authorKey, filter, gate]);
+  }, [authorKey, filter, gate, offline]);
+
+  // Retour du réseau : la copie affichée se recharge toute seule.
+  const network = useNetworkState();
+  const online = network.isConnected !== false && network.isInternetReachable !== false;
+  const stale = state.stale;
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    // Seulement au passage hors ligne → en ligne : une copie affichée parce que l'API a échoué en ligne ne se relit pas en boucle.
+    if (online && !wasOnline.current && stale) void reload();
+    wasOnline.current = online;
+  }, [online, stale, reload]);
+
+  // Retour sur l'écran (après « Publier ») : ma liste se relit, la nouvelle publication y est. Seulement chez moi.
+  const focused = useIsFocused();
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (focused && !wasFocused.current && offline && enabled) void reload();
+    wasFocused.current = focused;
+  }, [focused, offline, enabled, reload]);
 
   // Une autre clé ou un autre filtre : la liste repart de zéro (jamais les publications de l'auteur précédent).
   useEffect(() => {
@@ -86,13 +137,9 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
       const page = await api.authorPosts(authorKey, cursor, filter);
       if (!ticket.current()) return;
       cursorRef.current = page.nextCursor;
-      setState((s) => ({
-        ...s,
-        items: appendUnique(s.items, page.items),
-        nextCursor: page.nextCursor,
-        loadingMore: false,
-        error: null,
-      }));
+      // L'accès a disparu entre deux pages : la restriction vaut pour toute la liste (`applyNextPage`).
+      cursorRef.current = page.restricted ? null : page.nextCursor;
+      setState((s) => ({ ...s, ...applyNextPage(s, page), loadingMore: false, error: null }));
     } catch (e) {
       if (!ticket.current()) return;
       setState((s) => ({ ...s, loadingMore: false, error: errorMessage(e) }));

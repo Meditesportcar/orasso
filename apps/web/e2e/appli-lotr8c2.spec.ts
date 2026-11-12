@@ -344,6 +344,15 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "for_you");
+  // Hors ligne, la première photo des cartes de la copie s'affiche : elle est gardée dès qu'elle est reçue en ligne.
+  const firstPhoto = page
+    .getByTestId("feed-card-feed_post")
+    .first()
+    .getByTestId("feed-post-photos")
+    .locator("img")
+    .first();
+  await expect(firstPhoto).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
   await tab(page, "nearby");
   await tab(page, "following");
   const onlineFirst = await page.getByTestId("feed-card-feed_post").first().textContent();
@@ -382,6 +391,10 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
   await expect(page.getByTestId("feed-card-sponsored")).toHaveCount(0);
   await expect(page.getByTestId("fil-waiting")).toHaveCount(0);
   await expect(page.getByTestId("load-error")).toHaveCount(0);
+  // La photo gardée remplace « Photo indisponible ».
+  const keptCard = page.getByTestId("feed-card-feed_post").first();
+  await expect(keptCard.getByTestId("feed-post-photos").locator("img").first()).toBeVisible({ timeout: 30_000 });
+  await expect(keptCard.getByTestId("photo-failed")).toHaveCount(0);
   await shot(page, "hors-ligne-pour-toi-390");
   await tab(page, "following");
   await expect(page.getByTestId("fil-offline")).toBeVisible();
@@ -435,5 +448,56 @@ test("hors ligne puis retour du réseau en bas de la liste : la pastille « Nouv
   await expect(page.getByTestId("fil-fresh")).toHaveCount(0);
   await expect(page.getByTestId("fil-list")).toBeVisible();
   expect(first.length).toBeGreaterThan(0);
+  await ctx.close();
+});
+
+test("mode avion sans quitter l'onglet : la copie filtrée, « Pas de réseau » sur la flamme et le commentaire, puis le retour du réseau", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  await goFil(page, "for_you");
+  await expect(page.getByTestId("fil-offline")).toHaveCount(0);
+  await ctx.setOffline(true); // ni actualisation ni changement d'onglet
+  await expect(page.getByTestId("fil-offline")).toContainText("Hors ligne : voici ce que ton téléphone a gardé.", {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("fil-hot")).toHaveCount(0);
+  await expect(page.getByTestId("fil-more")).toHaveCount(0);
+  await expect(page.getByTestId("feed-card-spot_meetup")).toHaveCount(0);
+  await expect(page.getByTestId("feed-card-sponsored")).toHaveCount(0);
+  // Flamme et commentaire d'une carte de la copie : « Pas de réseau », le compteur ne bouge pas.
+  const card = page.getByTestId("feed-card-feed_post").first();
+  const before = await card.getByTestId("feed-post-fire-count").textContent();
+  await card.getByTestId("feed-post-fire").click();
+  await expect(card.getByTestId("feed-post-no-network")).toHaveText("Pas de réseau");
+  expect(await card.getByTestId("feed-post-fire-count").textContent()).toBe(before);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(card.getByTestId("feed-post-no-network")).toBeVisible();
+  await ctx.setOffline(false);
+  // On a défilé pour toucher la carte : le retour du réseau propose la pastille, qui actualise.
+  await page.waitForTimeout(3000);
+  if (await page.getByTestId("fil-fresh").count()) await page.getByTestId("fil-fresh").click();
+  await expect(page.getByTestId("fil-offline")).toHaveCount(0, { timeout: 30_000 });
+  await ctx.close();
+});
+
+test("partager une carte la retient comme interaction (`share`)", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  const sent: { cards: { id: string; action: string }[] }[] = [];
+  page.on("request", (req) => {
+    if (req.method() === "POST" && req.url().includes("/api/me/fil/seen")) sent.push(req.postDataJSON());
+  });
+  await goFil(page, "following");
+  const card = page.getByTestId("feed-card-feed_post").first();
+  await card.scrollIntoViewIfNeeded();
+  await card.getByTestId("feed-post-share").click();
+  await expect
+    .poll(() => sent.flatMap((b) => b.cards).filter((c) => c.action === "share").length, {
+      timeout: 40_000,
+      intervals: [1_000],
+    })
+    .toBeGreaterThan(0);
   await ctx.close();
 });

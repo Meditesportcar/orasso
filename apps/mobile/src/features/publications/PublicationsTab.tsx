@@ -6,6 +6,7 @@
 // panneau qu'il ait publié ou non). Une liste restreinte ne dit rien de son contenu : ni nombre, ni photo.
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type AuthorPostsFilter,
   publicationsLabels as L,
   PUBLICATIONS_VIEW_KEY,
   type PublicationsViewMode,
@@ -13,13 +14,14 @@ import {
   viewMode,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { cacheGetJson, cacheSetJson } from "@/lib/kv";
 import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
 import { Waiting } from "@/ui/Waiting";
 import { PublicationsGrid } from "./PublicationsGrid";
 import { PublicationsOneByOne } from "./PublicationsOneByOne";
@@ -49,14 +51,7 @@ function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => v
   return [mode, choose];
 }
 
-export function PublicationsTab({
-  authorKey,
-  pseudo,
-  mine,
-  total,
-  restricted: restrictedHint = false,
-  follow,
-}: {
+type TabProps = {
   /** La clé d'auteur (`u:<compte>` pour une personne). */
   authorKey: string;
   /** Le pseudo (ou le nom de la page) : il entre dans les phrases des états vides et du compte privé. */
@@ -69,10 +64,40 @@ export function PublicationsTab({
   restricted?: boolean;
   /** Compte privé : « Demander à suivre » (`asked` : la demande est déjà partie). Absent : pas de bouton. */
   follow?: { asked: boolean; onAsk: () => Promise<void> | void };
-}) {
+  /** Lot R8g : le filtre « Tout · Événements · Hors événement » d'une page de structure (absent : toutes les publications). */
+  filter?: AuthorPostsFilter;
+  /** Lot R8g : une phrase d'état vide propre à une page (le titre reste « Pas encore de publication »). */
+  emptyText?: string;
+};
+
+/**
+ * Lot R8g : `header` (les puces du filtre d'une page) reste affiché au-dessus de tous les états, y compris le chargement, l'erreur
+ * et le vide d'un filtre : on peut toujours changer de filtre. Sans `header`, rien ne change.
+ */
+export function PublicationsTab({ header, ...props }: TabProps & { header?: ReactNode }) {
+  return header ? (
+    <View style={styles.wrap}>
+      {header}
+      <PublicationsBody {...props} />
+    </View>
+  ) : (
+    <PublicationsBody {...props} />
+  );
+}
+
+function PublicationsBody({
+  authorKey,
+  pseudo,
+  mine,
+  total,
+  restricted: restrictedHint = false,
+  follow,
+  filter,
+  emptyText,
+}: TabProps) {
   const { t } = useTheme();
   const router = useRouter();
-  const list = usePublications(authorKey, undefined, !restrictedHint);
+  const list = usePublications(authorKey, filter, !restrictedHint, mine);
   const [mode, setMode] = useViewMode();
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(false);
@@ -137,7 +162,7 @@ export function PublicationsTab({
           {isMine ? L.emptyMineTitle : L.emptyOtherTitle}
         </Text>
         <Muted variant="caption" style={styles.panelText}>
-          {isMine ? L.emptyMineText : L.emptyOtherText(pseudo)}
+          {isMine ? L.emptyMineText : (emptyText ?? L.emptyOtherText(pseudo))}
         </Muted>
         {isMine ? (
           <Button
@@ -156,6 +181,7 @@ export function PublicationsTab({
 
   return (
     <View style={styles.wrap} testID="publications-tab">
+      {list.stale ? <Notice testID="publications-offline">{L.offlineList}</Notice> : null}
       <View style={styles.head}>
         <Text variant="bodyStrong" color={t.color.ink} style={styles.count} testID="publications-count">
           {count === null ? "" : L.count(count)}
