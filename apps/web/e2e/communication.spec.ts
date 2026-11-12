@@ -59,14 +59,22 @@ test("communication : annonce publique, consignes, message groupé, discussions 
   const page = await ctxD.newPage();
   const base = "/orga/meditesportcar/communication";
 
-  // 1. Annonce avec « prévenir les inscrits ».
+  // 1. Annonce avec « prévenir les inscrits ». Lot R8d (T3) : plus de « Nouvelle annonce » dans l'espace Communication (une
+  // information publique est une publication, une information privée un message groupé) ; la route des annonces reste en
+  // service pour l'ancien APK : l'annonce est écrite par elle, comme le fait l'ancien APK, et reste lisible partout.
   await page.goto(`${base}?e=${event.id}`);
   await expect(page.getByRole("heading", { name: "Communication" })).toBeVisible();
+  await expect(page.getByTestId("announcement-panel")).toHaveCount(0);
+  await expect(page.getByTestId("orga-publish-for-event")).toBeVisible();
   const announcement = `Musique coupée à 22 h ${s}`;
-  await page.getByLabel("Texte de l'annonce").fill(announcement);
-  await page.getByText("Prévenir les inscrits (notification)").click();
-  await page.getByTestId("publish-announcement").click();
-  await expect(page.getByTestId("comm-ok")).toContainText("Annonce publiée");
+  const posted = await apiCall(damien, "POST", `/events/${event.id}/announcements`, {
+    body: announcement,
+    audience: "public",
+    pinned: false,
+    notify: true,
+  });
+  expect(posted.status).toBe(201);
+  await page.goto(`${base}?e=${event.id}`);
   await expect(page.getByTestId("orga-feed")).toContainText(announcement);
   // La notification `event_announcement` est vérifiée par les tests de l'API (heure fixée) : ici, le soir, les heures
   // calmes la retiennent jusqu'à 08:00 et le Journal ne la montre pas encore.

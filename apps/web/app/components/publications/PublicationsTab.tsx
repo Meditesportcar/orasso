@@ -163,7 +163,11 @@ function PublicationsBody({
         ) : null}
         <ViewToggle value={mode} onChange={setMode} />
       </div>
-      {mode === "one" ? <PublicationsOneByOne posts={list.items} /> : <PublicationsGrid posts={list.items} />}
+      {mode === "one" ? (
+        <PublicationsOneByOne posts={list.items} />
+      ) : (
+        <PublicationsGrid posts={list.items} authorKey={authorKey} />
+      )}
       {list.error ? (
         <div className="pub-state" role="alert" data-testid="load-error">
           <p className="o-t-body">{L.error}</p>

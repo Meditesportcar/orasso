@@ -137,6 +137,18 @@ export const errorCodes = [
   "important_requires_event",
   "important_quota",
   "photo_required",
+  // Lot R8o : collaboration (co-auteur).
+  "coauthor_self",
+  "coauthor_important",
+  "coauthor_unavailable",
+  "coauthor_cannot_see",
+  "coauthor_quota",
+  "coauthor_provider",
+  "coauthor_closed",
+
+  // Lot R8p (tours 8) : un envoi sous un autre compte que celui du formulaire ; l'e-mail d'une invitation est encore en route.
+  "account_changed",
+  "mail_pending",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

@@ -14,6 +14,8 @@ export default [
     route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
     // Lot R8b2 : la page d'une publication seule (le lien d'une notification et la vignette d'un profil y mènent).
     route("app/publication/:id", "routes/app-publication.tsx"),
+    // Lot R8d : « Mentions · N » d'un événement (écran à part, session requise).
+    route("app/e/:slug/mentions", "routes/event-mentions.tsx"),
     // Lot R7f3 : publier une story (photo en 9:16).
     route("app/story/publier", "routes/app-story-publier.tsx"),
     // Lot R7f4 : partager un contenu en story (carte sur fond 9:16).

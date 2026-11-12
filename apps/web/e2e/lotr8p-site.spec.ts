@@ -487,3 +487,39 @@ test("site : A → B → A : l'envoi incertain de A est gardé ; B n'en voit rie
   await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
   await expect(page.getByTestId("fil-publish-caption")).toHaveValue("Un mot de A");
 });
+
+// --- Tour 9 ------------------------------------------------------------------------------------------------------------
+
+test("site : une reprise (ancien corps sans compte attendu) envoie quand même le compte attendu ; un 409 account_changed garde l'incertitude", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await lostThenUncertain(page, "Un mot de reprise", false);
+  const me = await page.evaluate(async () => (await (await fetch("/api/me")).json()) as { user: { id: string } });
+  // Un ancien corps incertain, sans compte attendu.
+  await page.evaluate((id) => {
+    const key = `orasso:fil:publish-uncertain:${id}`;
+    const body = JSON.parse(window.sessionStorage.getItem(key) ?? "{}");
+    body.expectedUserId = undefined;
+    window.sessionStorage.setItem(key, JSON.stringify(body));
+  }, me.user.id);
+  await page.reload();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  let sent: Record<string, unknown> | null = null;
+  await page.route("**/api/me/feed-posts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    sent = route.request().postDataJSON();
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "account_changed", message: "Ta session a changé" } }),
+    });
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByText("session a changé")).toBeVisible();
+  expect(sent).toMatchObject({ expectedUserId: me.user.id });
+  // Le 409 ne prouve pas qu'aucune tentative n'a abouti : l'envoi reste incertain et figé.
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+});

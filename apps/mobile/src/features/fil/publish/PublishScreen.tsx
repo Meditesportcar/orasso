@@ -9,10 +9,13 @@ import {
   acceptEvents,
   attachableQuery,
   attachLeadOf,
+  coauthorLabels as CO,
+  type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
+  coAuthorInputOf,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -29,7 +32,6 @@ import {
   feedPostBodyR8,
   importantAvailable,
   importantImmediate,
-  initialPublishChoice,
   feedScreenLabels as L,
   noCommercialDraft,
   type PublishChoice,
@@ -38,6 +40,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  publishStartChoice,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -70,6 +73,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { SquareCropper } from "@/ui/SquareCropper";
 import { markFeedDirty } from "../feedSignal";
+import { CoAuthorLine } from "./CoAuthorLine";
 import {
   addFrame,
   blurInstead,
@@ -115,12 +119,15 @@ async function uploadPhoto(photo: PickedPhoto, i: number): Promise<string> {
 }
 
 /** Le formulaire est isolé par compte : un autre compte repart d'un brouillon vide (aucune liste ni présence de l'ancien). */
-export function PublishScreen() {
+export function PublishScreen({ start }: { start?: PublishStart } = {}) {
   const { me } = useSession();
-  return <PublishForm key={me?.user.id ?? "none"} />;
+  return <PublishForm key={me?.user.id ?? "none"} start={start} />;
 }
 
-function PublishForm() {
+/** Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis (`?structure=&evenement=`). */
+export type PublishStart = { structure?: string; evenement?: string };
+
+function PublishForm({ start }: { start?: PublishStart }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -133,11 +140,11 @@ function PublishForm() {
   const [caption, setCaption] = useState("");
   // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
   const { me } = useSession();
-  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
   const authors = useMemo(
     () => publishAuthors(me?.personas ?? [], me?.profile.pseudo ?? "", me?.profile.avatarUrl ?? null),
     [me?.personas, me?.profile.pseudo, me?.profile.avatarUrl],
   );
+  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const account = me?.user.id ?? "";
@@ -158,6 +165,8 @@ function PublishForm() {
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
+  // « Publier avec… » (lot R8o) : un seul co-auteur invité ; absent de la publication quand « Info importante » est cochée.
+  const [coAuthor, setCoAuthor] = useState<CoAuthorSearchItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +177,7 @@ function PublishForm() {
   // jusqu'à la fin, une seule opération à la fois.
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
+  const [invitedName, setInvitedName] = useState<string | null>(null);
   const [clientId, setClientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
   const keys = useRef<Record<string, string>>({});
@@ -427,23 +437,26 @@ function PublishForm() {
         uploaded.push(key);
       }
       setSent(photos.length);
-      const body: FeedPostBody =
-        uncertain ??
-        feedPostBodyR8({
+      const body: FeedPostBody = uncertain ?? {
+        ...feedPostBodyR8({
           photos: photos.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
           caption,
           aspect,
           clientId,
+          expectedUserId: account,
           author,
           eventId: event ? event.id : null,
           vehicleId: choice.vehicleId,
           placeLabel: choice.placeLabel,
           important,
           ...(fan ? commercialField(commercialLine) : {}),
-        });
+        }),
+        // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
+        ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
+      };
       if (!guard.current()) return;
       sending = body;
-      const post = await api.createFeedPost(body);
+      const post = await api.createFeedPost({ ...body, expectedUserId: account });
       // La réponse d'un autre compte (déconnexion, reconnexion pendant l'envoi) n'écrit rien chez celui d'aujourd'hui.
       if (!guard.current()) return;
       setUncertain(null);
@@ -451,13 +464,15 @@ function PublishForm() {
       markFeedDirty(post);
       // Les JPEG temporaires sont ceux de ce formulaire : s'il n'existe plus, ce sont peut-être ceux du suivant.
       if (mounted.current) discardTempPhotos();
+      setInvitedName(post.coAuthorInvite ? post.coAuthorInvite.name : null);
       setDone(true);
     } catch (e) {
       if (!guard.current()) return;
       // Un refus définitif prouve que rien n'a été créé : on sort de l'état incertain (429 et 401 ne prouvent rien : le contrôle
       // de rejeu de l'API vient après ; le corps incertain est gardé).
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.status !== 429 && e.status !== 401) {
-        setUncertain(null);
+        // 409 `account_changed` : l'incertitude reste (une première tentative sous le bon compte a pu aboutir).
+        if (e.code !== "account_changed") setUncertain(null);
       }
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.status === 401) setError(errorMessage(e));
@@ -569,6 +584,11 @@ function PublishForm() {
           <Text variant="body" color={c.inkMuted}>
             {found ? T.uncertainFound : L.publishedText}
           </Text>
+          {invitedName ? (
+            <Text variant="body" color={c.inkMuted} testID="fil-publish-invited">
+              {CO.sent(invitedName)}
+            </Text>
+          ) : null}
         </View>
         <SmButton kind="p" big wide icon="feed" onPress={close} testID="fil-publish-back">
           {L.backToFeed}
@@ -906,6 +926,7 @@ function PublishForm() {
         />
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
+      {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
       <Says says={publishSays(author, event, important.on)} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {loaded.forbidden && eventBlock ? (

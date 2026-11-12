@@ -13,11 +13,14 @@ import {
   attachDateLabel,
   attachLeadOf,
   attachStateLabel,
+  coauthorLabels as CO,
+  type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
   clearUncertain,
+  coAuthorInputOf,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -40,7 +43,6 @@ import {
   importantReasonLabels,
   importantReasons,
   importantWhoText,
-  initialPublishChoice,
   feedScreenLabels as L,
   loadUncertain,
   type NotifyPreview,
@@ -53,6 +55,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  publishStartChoice,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -68,6 +71,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/fil.css";
 import "../../styles/fil-publish.css";
 import { CommercialLine, useCommercialLine } from "../stories/CommercialLine";
+import { CoAuthorLine } from "./CoAuthorLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
@@ -130,6 +134,7 @@ export function PublishForm({
   personas,
   vehicles,
   optionsFailed,
+  start,
 }: {
   userId: string;
   pseudo: string;
@@ -137,6 +142,8 @@ export function PublishForm({
   personas: Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl">[];
   vehicles: { id: string; label: string }[];
   optionsFailed: boolean;
+  /** Lot R8d : « Publier pour cet événement » (`?structure=&evenement=`) pose la structure et l'événement de départ. */
+  start?: { structure?: string | null; evenement?: string | null };
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
@@ -146,8 +153,8 @@ export function PublishForm({
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
-  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
   const authors = useMemo(() => publishAuthors(personas, pseudo, avatarUrl), [personas, pseudo, avatarUrl]);
+  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
@@ -177,6 +184,9 @@ export function PublishForm({
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
+  // « Publier avec… » (lot R8o) : un seul co-auteur invité ; absent de la publication quand « Info importante » est cochée.
+  const [coAuthor, setCoAuthor] = useState<CoAuthorSearchItem | null>(null);
+  const [invitedName, setInvitedName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -474,27 +484,34 @@ export function PublishForm({
       uploaded.push(key);
     }
     setProgress(L.publishing);
-    const body =
-      (uncertain as ReturnType<typeof feedPostBodyR8> | null) ??
-      feedPostBodyR8({
+    const body = (uncertain as ReturnType<typeof feedPostBodyR8> | null) ?? {
+      ...feedPostBodyR8({
         photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
         caption,
         aspect,
         clientId,
+        expectedUserId: userId,
         author,
         eventId: event ? event.id : null,
         vehicleId: choice.vehicleId,
         placeLabel: choice.placeLabel,
         important,
         ...(fan ? commercialField(commercialLine) : {}),
-      });
+      }),
+      // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
+      ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
+    };
     const second = await accountCheck();
     if (second !== "same") {
       setBusy(false);
       setProgress(null);
       return setError(stopMessage(second));
     }
-    const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
+    const res = await apiFetch("/me/feed-posts", {
+      method: "POST",
+      // Le compte attendu part avec **chaque** envoi, reprises comprises (un ancien corps incertain n'en porte peut-être pas).
+      json: { ...body, expectedUserId: userId },
+    });
     if (res.ok) {
       // Succès : l'écran de confirmation prend la place du formulaire tout de suite (jamais un formulaire modifiable avec
       // l'identifiant déjà publié, même si le contrôle du compte qui suit tarde).
@@ -502,6 +519,7 @@ export function PublishForm({
       // compte vient de passer avant l'envoi ; un autre compte, dans le même onglet, n'en voit jamais rien).
       rememberPublished(userId, res.data as FeedPostView);
       setUncertain(null);
+      setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
       setDone(true);
       setBusy(false);
       setProgress(null);
@@ -519,6 +537,9 @@ export function PublishForm({
     if (!res.ok && (res.status === 429 || res.status === 401)) {
       return setError(res.status === 429 ? L.tooManyRequests : res.error.message);
     }
+    // 409 `account_changed` : la session n'est plus celle du formulaire. Rien ne prouve que la première tentative (sous le bon
+    // compte) n'a pas abouti : l'incertitude est gardée, l'envoi reste au compte d'origine, repris quand il revient.
+    if (!res.ok && res.error.code === "account_changed") return setError(T.accountChanged);
     // Une réponse du serveur (succès ou refus) règle l'envoi : l'incertitude se lève ici, après qu'on a la réponse.
     setUncertain(null);
     if (res.status === 429) return setError(L.tooManyRequests);
@@ -557,6 +578,11 @@ export function PublishForm({
       <div className="fil" data-testid="fil-publish-done">
         <FicheBar title={L.published} back="/app/fil" />
         <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        {invitedName ? (
+          <p className="o-t-body" data-testid="fil-publish-invited">
+            {CO.sent(invitedName)}
+          </p>
+        ) : null}
         <a className="fil-publish" href="/app/fil" data-testid="fil-publish-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
@@ -940,6 +966,7 @@ export function PublishForm({
         />
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
+      {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
       <SaysBlock says={publishSays(author, event, important.on)} />
 
       {error ? (

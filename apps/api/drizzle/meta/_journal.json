@@ -589,6 +589,20 @@
       "when": 1794491782801,
       "tag": "0083_persona-follows",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1794494993763,
+      "tag": "0084_announcements-to-posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1794498433383,
+      "tag": "0085_feed-coauthors",
+      "breakpoints": true
     }
   ]
 }

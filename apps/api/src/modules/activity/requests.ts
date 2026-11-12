@@ -2,7 +2,14 @@
 // propres règles de regard (les services d'origine) ; les actions restent sur leurs routes (`/me/follow-requests/:userId/
 // accept`, `/contact-requests/:id/accept`, `/me/crew-invitations/:crewId/accept`…). Rien d'autre que la liste blanche
 // ci-dessous ne sort : pas de plaque, pas d'e-mail, pas d'identifiant de plus que celui qu'utilise l'action.
-import type { InboxRequestCounts, RequestFrom, RequestItem, RequestsPage } from "@orasso/shared";
+import {
+  type CoAuthorRequestPayload,
+  captionPreview,
+  type InboxRequestCounts,
+  type RequestFrom,
+  type RequestItem,
+  type RequestsPage,
+} from "@orasso/shared";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -15,6 +22,7 @@ import type { Executor } from "../../lib/tx";
 import { crewRegistrationService } from "../crews/registration";
 import { crewsService } from "../crews/service";
 import { eventInvitesService } from "../event-invites/service";
+import { pendingCoauthorCount, pendingCoauthorRequests } from "../feed/coauthors";
 import { invitationsService } from "../invitations/service";
 import { contactsService } from "../messaging/contacts";
 import { inboxService, registerInboxExtras } from "../messaging/inbox";
@@ -287,6 +295,31 @@ async function partnershipItems(v: Viewer): Promise<Keyed[]> {
   );
 }
 
+/**
+ * Invitations à publier avec quelqu'un (lot R8o) : pour moi et pour les pages que je gère. `id` = la publication (actions
+ * `/me/feed-coauthor-requests/:postId/accept|decline`). Liste blanche : la clé de la page, son nom, la légende (120
+ * caractères) et la vignette ; jamais l'identifiant du compte de qui a publié pour une page.
+ */
+async function coauthorItems(v: Viewer): Promise<Keyed[]> {
+  const rows = await pendingCoauthorRequests(v.user.id, db, now());
+  return rows.map((r) => {
+    const a = r.view.author;
+    const from: RequestFrom =
+      a.kind === "user"
+        ? { type: "person", pseudo: a.name, avatarUrl: a.avatarUrl }
+        : { type: "structure", name: a.name, logoUrl: a.avatarUrl };
+    const payload: CoAuthorRequestPayload = {
+      postId: r.postId,
+      author: { key: a.key, kind: a.kind, name: a.name, avatarUrl: a.avatarUrl },
+      forKey: r.forKey,
+      forName: r.forView && r.forView.kind !== "user" ? r.forView.name : null,
+      caption: captionPreview(r.view.caption),
+      photoUrl: r.view.photos[0]?.url ?? null,
+    };
+    return keyed({ kind: "coauthor", id: r.postId, from, at: r.invitedAt.toISOString(), payload });
+  });
+}
+
 /** Demandes de message reçues (« Demandes de message ») : action `/contact-requests/:id/accept`. */
 async function contactItems(v: Viewer): Promise<Keyed[]> {
   const { items } = await contactsService.list(v, "in");
@@ -370,6 +403,7 @@ export const requestsService = {
       plateTransferItems(v),
       contactItems(v),
       partnershipItems(v),
+      coauthorItems(v),
     ]);
     const rest = [...follows, ...others.flatMap(window)].sort((a, b) => compare(positionOf(a), positionOf(b)));
     const items = rest.slice(0, REQUESTS_PAGE_SIZE);
@@ -386,14 +420,19 @@ export const requestsService = {
 // Pastille « Demandes · 3 » de la Boîte : les compteurs déjà déclarés par chaque domaine, plus les deux sortes qui n'en
 // avaient pas (transferts de plaque, invitations entre passionnés). L'activité non vue vient du service de la cloche.
 registerInboxExtras(async (userId, requests: InboxRequestCounts, ex) => {
-  const [plate, peers, partners] = await Promise.all([
+  // Les invitations à publier (genre `coauthor`) ne sont pas dans `pendingRequests` : l'ancienne appli n'a pas leur carte (« Demandes · 1 »
+  // sur une liste vide). Elles ont leur champ, `pendingCoauthors`, que les nouveaux clients ajoutent à la ligne.
+  const [plate, peers, partners, pendingCoauthors] = await Promise.all([
     pendingPlateTransfers(userId, ex),
     eventInvitesService.receivedAll(userId, ex, { all: true }).then((x) => x.length),
     partnershipsService.pendingCount(userId, ex),
+    pendingCoauthorCount(userId, ex),
   ]);
   const sum = Object.values(requests).reduce((a, b) => a + b, 0);
   return {
     unseenActivity: await activityService.unseenCount(userId, ex),
     pendingRequests: sum + plate + peers + partners,
+    // Pour les nouveaux clients (`inboxRowCounts` l'ajoute à la ligne « Demandes ») ; l'ancienne appli l'ignore.
+    pendingCoauthors,
   };
 });

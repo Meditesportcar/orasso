@@ -2,7 +2,13 @@
 // retirer, « Signaler » pour une publication d'un autre. Les droits viennent de l'API (`manage.canDelete` sur la page seule ;
 // dans une liste, ma propre publication) ; chaque écriture revérifie les siens côté serveur.
 import { Button, Icon } from "@orasso/design-system/web";
-import { feedScreenLabels as F, type FeedPostView, publicationsLabels as L } from "@orasso/shared";
+import {
+  eventJournalLabels as EL,
+  feedScreenLabels as F,
+  type FeedPostView,
+  publicationsLabels as L,
+  coauthorLabels as T,
+} from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
@@ -11,12 +17,17 @@ import { apiFetch } from "../../lib/api.client";
 import { postLive } from "../fil/commentsLive";
 import { forgetPublished } from "../fil/mine";
 import { ReportDialog } from "../ReportDialog";
-import { notifyPostRemoved } from "./signal";
+import { notifyPostChanged, notifyPostRemoved } from "./signal";
+
+/** Le temps de lire « Tu n'es plus co-auteur… » avant que la fenêtre se ferme. */
+const DONE_MS = 1800;
 
 export function PostMenu({
   post,
   canDelete,
   canCommentsOff = false,
+  pin,
+  hide,
   onClose,
   onRemoved,
 }: {
@@ -25,18 +36,51 @@ export function PostMenu({
   canDelete: boolean;
   /** `manage.canCommentsOff` : « Couper les commentaires » / « Rétablir les commentaires ». */
   canCommentsOff?: boolean;
+  /** Lot R8d (journal d'un événement) : « Épingler en tête » / « Retirer l'épingle » pour un responsable de la fiche. */
+  pin?: { pinned: boolean; onToggle: () => Promise<string | null> };
+  /** Lot R8d (mentions d'un événement) : « Masquer de la fiche » / « Remettre sur la fiche ». */
+  hide?: { hidden: boolean; onToggle: () => Promise<string | null> };
   onClose: () => void;
   /** Supprimée : la liste la retire (le signal) ; la page seule revient en arrière. */
   onRemoved?: (post: FeedPostView) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // Collaboration (R8o) : la confirmation reste dans la fenêtre un instant, puis elle se ferme.
+  const [done, setDone] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (post && !dialog.open) dialog.showModal();
     if (!post && dialog.open) dialog.close();
   }, [post]);
+
+  /** « Me retirer », « Annuler l'invitation » ou « Retirer le co-auteur » : la route dit le reste (l'API revérifie les droits). */
+  async function leave(target: FeedPostView, message: string) {
+    setError(null);
+    if (
+      target.coAuthoredByMe &&
+      !window.confirm(`${T.withdrawConfirmTitle}\n${T.withdrawConfirmText(target.author.name)}`)
+    ) {
+      return;
+    }
+    const res = await apiFetch(`/feed-posts/${target.id}/coauthor`, { method: "DELETE" });
+    if (!res.ok) return setError(res.error.message);
+    // Les listes se relisent tout de suite ; le minuteur ne sert qu'à la confirmation visible.
+    notifyPostChanged(target.id);
+    setDone(message);
+    timer.current = setTimeout(() => {
+      setDone(null);
+      onClose();
+    }, DONE_MS);
+  }
 
   async function toggleComments(target: FeedPostView) {
     setError(null);
@@ -47,6 +91,20 @@ export function PostMenu({
     });
     if (!res.ok) return setError(res.error.message);
     postLive.set(target, { ...postLive.apply(target), commentsOff: res.data.commentsOff });
+    onClose();
+  }
+
+  async function toggleHide() {
+    setError(null);
+    const failed = await hide?.onToggle();
+    if (failed) return setError(failed);
+    onClose();
+  }
+
+  async function togglePin() {
+    setError(null);
+    const failed = await pin?.onToggle();
+    if (failed) return setError(failed);
     onClose();
   }
 
@@ -81,6 +139,81 @@ export function PostMenu({
               {error}
             </p>
           ) : null}
+          {done ? (
+            <p className="o-t-caption" role="status" data-testid="publication-menu-done">
+              {done}
+            </p>
+          ) : null}
+          {post.coAuthorInvite && post.coAuthorInvite.status !== "accepted" ? (
+            <p className="o-t-caption" data-testid="publication-menu-invite">
+              {T.inviteStatus(post.coAuthorInvite.name, post.coAuthorInvite.status)}
+            </p>
+          ) : null}
+          {post.coAuthoredByMe && !done ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void leave(post, T.withdrawn(post.author.name))}
+              data-testid="publication-menu-withdraw"
+            >
+              <Icon name="close" size={20} />
+              <span>
+                <strong>{T.withdraw}</strong>
+              </span>
+            </button>
+          ) : null}
+          {post.coAuthorInvite && !done && post.coAuthorInvite.status === "pending" ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void leave(post, T.cancelled)}
+              data-testid="publication-menu-cancel-invite"
+            >
+              <Icon name="close" size={20} />
+              <span>
+                <strong>{T.cancelInvite}</strong>
+              </span>
+            </button>
+          ) : null}
+          {post.coAuthorInvite && !done && post.coAuthorInvite.status === "accepted" ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void leave(post, T.removed)}
+              data-testid="publication-menu-remove-coauthor"
+            >
+              <Icon name="close" size={20} />
+              <span>
+                <strong>{T.removeCoAuthor}</strong>
+              </span>
+            </button>
+          ) : null}
+          {pin ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void togglePin()}
+              data-testid="publication-menu-pin"
+            >
+              <Icon name="star" size={20} />
+              <span>
+                <strong>{pin.pinned ? EL.unpin : EL.pin}</strong>
+              </span>
+            </button>
+          ) : null}
+          {hide ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void toggleHide()}
+              data-testid="mention-menu-hide"
+            >
+              <Icon name={hide.hidden ? "undo" : "eye"} size={20} />
+              <span>
+                <strong>{hide.hidden ? EL.unhide : EL.hide}</strong>
+              </span>
+            </button>
+          ) : null}
           {canDelete ? (
             <button
               type="button"
@@ -107,7 +240,7 @@ export function PostMenu({
               </span>
             </button>
           ) : null}
-          {post.mine ? null : (
+          {post.mine || hide ? null : (
             <div className="fil-menu__report" data-testid="publication-menu-report">
               <ReportDialog targetType="feed_post" targetId={post.id} label={F.report} look="link" />
             </div>
