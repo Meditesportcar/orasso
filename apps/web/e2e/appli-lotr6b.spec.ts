@@ -139,6 +139,10 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(followButton(mine.page)).toHaveText(/Abonné/i);
     // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
     await mine.page.getByTestId("profil-tab-publications").click();
+    // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+    await expect(mine.page.getByTestId("publications-tab").or(mine.page.getByTestId("publications-empty"))).toBeVisible(
+      { timeout: 30_000 },
+    );
     await expect(mine.page.getByTestId("publications-private")).toHaveCount(0);
 
     // 4. « Suivre en retour » : la personne privée suit Moi (public : tout de suite) ; Moi voit « Te suit ».

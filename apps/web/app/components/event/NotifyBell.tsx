@@ -57,6 +57,8 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la lecture, il n'est pas lu.
   useEffect(() => {
     let alive = true;
+    // Aucun envoi de l'ancien compte dans la fenêtre avant la relecture : l'écrivain d'avant n'existe plus.
+    writer.current = null;
     void apiFetch<EventNotificationPrefsView>(`/me/events/${encodeURIComponent(eventId)}/notification-prefs`).then(
       (res) => {
         if (!alive || !res.ok) return;

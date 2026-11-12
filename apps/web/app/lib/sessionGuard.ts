@@ -46,3 +46,6 @@ export function guardFor(
 ): { userId: string | null; guard: SessionGuard } {
   return previous && previous.userId === userId ? previous : { userId, guard: createSessionGuard(userId, listen) };
 }
+
+/** Une annonce de session rend-elle la page périmée ? Oui si elle nomme un autre compte que celui de la page. */
+export const pageSessionStale = (pageUser: string | null, announced: string | null): boolean => announced !== pageUser;

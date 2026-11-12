@@ -283,11 +283,17 @@ test("site : envoi incertain repris après rechargement, événement absent de l
   await expect(kept).toHaveAttribute("aria-pressed", "true");
   await expect(kept).toBeDisabled();
   await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("Expo Rivesaltes");
-  // « Réessayer » renvoie le corps gardé, avec son événement.
-  const sent = page.waitForRequest((r) => r.url().includes("/api/me/feed-posts") && r.method() === "POST");
+  // « Réessayer » renvoie le corps gardé, avec son événement. L'envoi est coupé de nouveau : aucune publication ne naît, la recette
+  // se rejoue sur la même base.
+  let resent: { eventId?: string | null } | null = null;
+  await page.route("**/api/me/feed-posts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    resent = JSON.parse(route.request().postData() ?? "{}");
+    return route.abort("failed");
+  });
   await page.getByTestId("fil-publish-send").click();
-  expect(JSON.parse((await sent).postData() ?? "{}").eventId).toBeTruthy();
-  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => resent?.eventId ?? null).toBeTruthy();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
 });
 
 test("site : « Modifier » vérifie d'abord : publiée, « Ta publication est en ligne »", async ({ page }) => {

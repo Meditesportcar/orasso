@@ -88,6 +88,11 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(page.getByTestId("follow-button")).toHaveText(/Abonné/i);
       // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
       await page.getByTestId("profil-tab-publications").click();
+      await expect(page).toHaveURL(/onglet=publications/);
+      // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+      await expect(page.getByTestId("publications-tab").or(page.getByTestId("publications-empty"))).toBeVisible({
+        timeout: 30_000,
+      });
       await expect(page.getByTestId("publications-private")).toHaveCount(0);
 
       // 4. « Suivre en retour » et « Te suit ».

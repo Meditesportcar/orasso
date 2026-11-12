@@ -74,10 +74,13 @@ import { CommercialLine, useCommercialLine } from "../stories/CommercialLine";
 import { CoAuthorLine } from "./CoAuthorLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
+import { pageSessionStale } from "../../lib/sessionGuard";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
 import { mustDropChosenEvent, shownEvent } from "./eventDrop";
+import { loadHeldEvent, saveHeldEvent } from "./heldEvent";
 import { rememberPublished } from "./mine";
 import { convertAll, holdLock } from "./prepare";
 
@@ -169,6 +172,10 @@ export function PublishForm({
   );
   // L'événement tel qu'il était affiché à l'envoi (titre, date, rôle, phase…), gardé avec le corps incertain : si la liste relue ne
   // l'a plus, l'écran le montre quand même, coché et figé, car « Réessayer » renvoie ce corps avec son `eventId` (P14a).
+  // Un autre onglet connecte un autre compte : cet écran (casquette, événement, rôle de A) est périmé. Il se masque, avec son envoi en
+  // attente, au lieu de rester affiché ; l'API refuse déjà l'envoi (409 `account_changed`).
+  const [sessionStale, setSessionStale] = useState(false);
+  useEffect(() => listenSession((announced) => setSessionStale(pageSessionStale(userId, announced))), [userId]);
   const [heldEvent, setHeldEvent] = useState<AttachableEventItem | null>(null);
   /** Garde (ou efface) le corps incertain dans l'onglet, rangé par compte : il survit à un rechargement (reconnexion). */
   const setUncertain = (
@@ -219,7 +226,9 @@ export function PublishForm({
     const saved = loadUncertain(tabStore(), userId);
     if (!saved) return;
     setUncertainState(saved as never);
-    setHeldEvent(loadHeldEvent(tabStore(), userId, (saved as { eventId?: string | null }).eventId ?? null));
+    setHeldEvent(
+      loadHeldEvent<AttachableEventItem>(tabStore(), userId, (saved as { eventId?: string | null }).eventId ?? null),
+    );
     setClientId(saved.clientId as `${string}-${string}-${string}-${string}-${string}`);
     // Le brouillon affichable est celui du corps gardé : casquette, événement, légende… (les photos ne se restaurent pas).
     const draft = draftFromBody(saved, authors);
@@ -599,6 +608,20 @@ export function PublishForm({
   const patch = (key: string, fn: (i: Item) => Item) =>
     setItems((list) => list.map((i) => (i.key === key ? fn(i) : i)));
   const badge = (i: Item) => (i.rects.length ? L.plateOk : i.noPlate ? L.plateNone : L.plateTodo);
+
+  if (sessionStale) {
+    return (
+      <div className="fil" data-testid="fil-publish-stale">
+        <FicheBar title={L.publishTitle} back="/app/fil" />
+        <p className="o-t-body" role="alert">
+          {T.accountChanged}
+        </p>
+        <Button icon="undo" onClick={() => window.location.reload()} data-testid="fil-publish-stale-reload">
+          {RELOAD_LABEL}
+        </Button>
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -1059,27 +1082,8 @@ export function PublishForm({
 
 /** La case « Info importante », ses cinq motifs et le plafond (même règles et mêmes mots que l'appli). */
 /** Le stockage de l'onglet (absent côté serveur, refusé en navigation privée). */
-const heldEventKey = (account: string) => `fil.publish.held-event:${account}`;
-
-function saveHeldEvent(store: Storage | null, account: string, event: AttachableEventItem | null): void {
-  try {
-    if (event) store?.setItem(heldEventKey(account), JSON.stringify(event));
-    else store?.removeItem(heldEventKey(account));
-  } catch {
-    // Stockage refusé : l'événement gardé ne survit pas à un rechargement.
-  }
-}
-
-/** L'événement gardé avec l'envoi incertain de ce compte, s'il correspond au corps gardé. */
-function loadHeldEvent(store: Storage | null, account: string, eventId: string | null): AttachableEventItem | null {
-  try {
-    const raw = store?.getItem(heldEventKey(account));
-    const parsed = raw ? (JSON.parse(raw) as AttachableEventItem | null) : null;
-    return parsed && eventId && parsed.id === eventId ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+/** Le bouton de l'écran périmé (libellé local : ajouter aux libellés partagés quand le paquet sera touché). */
+const RELOAD_LABEL = "Recharger la page";
 
 function tabStore(): Storage | null {
   try {

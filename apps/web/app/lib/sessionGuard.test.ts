@@ -1,7 +1,7 @@
 import { createSerialWriter } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { createSessionGuard, guardFor, type Listen } from "./sessionGuard";
+import { createSessionGuard, guardFor, type Listen, pageSessionStale } from "./sessionGuard";
 
 function bus() {
   const listeners = new Set<(id: string | null) => void>();
@@ -99,5 +99,13 @@ describe("garde d'une page dont le compte change (tour 3)", () => {
     expect(b1.guard.alive()).toBe(false); // une annonce de A n'accorde rien à une page de B
     b.say("B");
     expect(b1.guard.alive()).toBe(true);
+  });
+});
+
+describe("page périmée par une annonce de session (tour 4)", () => {
+  it("un autre compte ou la déconnexion périment la page ; le compte de la page non (hydratation, retour de A)", () => {
+    expect(pageSessionStale("A", "A")).toBe(false);
+    expect(pageSessionStale("A", "B")).toBe(true);
+    expect(pageSessionStale("A", null)).toBe(true);
   });
 });

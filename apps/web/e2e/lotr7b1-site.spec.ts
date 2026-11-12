@@ -35,7 +35,7 @@ test("Mon compte : Publications par défaut (R8b2), onglets Garage et Sorties, a
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/app/moi");
     // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
-    await page.getByTestId("profil-tab-publications").click();
+    await expect(page.getByTestId("profil-tab-publications")).toHaveAttribute("aria-selected", "true");
     await page.getByTestId("profil-tab-garage").click();
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("link", { name: "Ajouter un véhicule" }).first()).toBeVisible();
@@ -90,6 +90,11 @@ test("profil d'un autre : onglets Garage et Sorties ; compte privé : nombres se
   await expect(p2.getByTestId("profil-tab-garage")).toBeVisible();
   // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
   await p2.getByTestId("profil-tab-publications").click();
+  await expect(p2).toHaveURL(/onglet=publications/);
+  // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+  await expect(p2.getByTestId("publications-tab").or(p2.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(p2.getByTestId("publications-private")).toHaveCount(0);
   // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
   await p2.getByTestId("profil-tab-garage").click();

@@ -274,6 +274,11 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await page.goto(`/u/${dPseudo}`);
   // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
   await page.getByTestId("profil-tab-publications").click();
+  await expect(page).toHaveURL(/onglet=publications/);
+  // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+  await expect(page.getByTestId("publications-tab").or(page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByTestId("publications-private")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   await audit(page);

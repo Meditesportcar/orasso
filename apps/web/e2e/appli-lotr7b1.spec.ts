@@ -155,6 +155,10 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await expect(b.page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
   // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
   await b.page.getByTestId("profil-tab-publications").click();
+  // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+  await expect(b.page.getByTestId("publications-tab").or(b.page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(b.page.getByTestId("publications-private")).toHaveCount(0);
   // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
   await b.page.getByTestId("profil-tab-garage").click();
