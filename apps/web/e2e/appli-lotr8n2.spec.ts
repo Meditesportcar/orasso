@@ -306,8 +306,8 @@ test("appli : la feuille de la cloche se ferme tout de suite, une écriture qui 
   await signIn(page, a.email);
   await goto(page, `/e/${event.slug}`);
   await expect(page.getByTestId("notify-bell")).toBeVisible({ timeout: 30_000 });
-  const prefsUrl = //api/me/events/[^/]+/notification-prefs$/;
-    await page.getByTestId("notify-bell").click();
+  const prefsUrl = /\/api\/me\/events\/[^/]+\/notification-prefs$/;
+  await page.getByTestId("notify-bell").click();
   const sw = page.getByTestId("notify-news-switch");
   await expect(sw).toBeVisible();
   // L'envoi est lent puis échoue ; on ferme aussitôt.
