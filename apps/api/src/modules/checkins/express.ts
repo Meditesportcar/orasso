@@ -58,14 +58,32 @@ async function usableInvite(token: string) {
   return { invite, event };
 }
 
+/** L'invitation déjà créée par cet auteur avec cet identifiant (même réponse que la première fois), ou `undefined`. */
+async function replayed(userId: string, clientId: string) {
+  const [row] = await db
+    .select()
+    .from(expressInvites)
+    .where(and(eq(expressInvites.createdBy, userId), eq(expressInvites.clientId, clientId)));
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    email: row.email,
+    expiresAt: row.expiresAt.toISOString(),
+    url: `${env.PUBLIC_URL}/express/${row.token}`,
+  };
+}
+
 export const expressService = {
   /** `POST /events/:id/express-invites` (staff ou organisateur, de la veille à J+1). */
-  async invite(v: Viewer, eventId: string, email: string) {
+  async invite(v: Viewer, eventId: string, email: string, clientId: string | null = null) {
     const event = await eventsRepo.byId(eventId);
     await staffService.requireEventStaff(v, event);
     if (event.status !== "published" || !isStaffModeOpen(event, now())) {
       throw new AppError(423, "locked", "Inscription express : de la veille à la fin de l'événement");
     }
+    // Rejeu d'un envoi dont la réponse s'est perdue (R8p, tour 5) : la première invitation, aucun second e-mail.
+    const replay = clientId ? await replayed(v.user.id, clientId) : undefined;
+    if (replay) return replay;
     // Limite d'envoi : un compte staff ne peut pas servir à arroser des adresses (anti-abus du formulaire).
     const [sent] = await db
       .select({ n: count() })
@@ -83,9 +101,23 @@ export const expressService = {
     const expiresAt = new Date(now().getTime() + VALIDITY_MS);
     const [row] = await db
       .insert(expressInvites)
-      .values({ eventId, email: email.toLowerCase(), token, createdBy: v.user.id, expiresAt, createdAt: now() })
+      .values({
+        eventId,
+        email: email.toLowerCase(),
+        token,
+        createdBy: v.user.id,
+        expiresAt,
+        createdAt: now(),
+        clientId,
+      })
+      .onConflictDoNothing()
       .returning();
-    if (!row) throw new Error("Invitation non enregistrée");
+    if (!row) {
+      // Une autre requête avec le même identifiant vient d'insérer : c'est elle qui envoie l'e-mail.
+      const again = clientId ? await replayed(v.user.id, clientId) : undefined;
+      if (again) return again;
+      throw new Error("Invitation non enregistrée");
+    }
     const url = `${env.PUBLIC_URL}/express/${token}`;
     await mail.send(
       "express_invite",

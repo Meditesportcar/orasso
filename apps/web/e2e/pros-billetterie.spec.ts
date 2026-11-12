@@ -128,7 +128,7 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   await fan.getByTestId("call").click();
   await fan.getByTestId("route").click();
   await fan.getByRole("button", { name: "Suivre" }).click();
-  await expect(fan.getByRole("button", { name: "Tu suis ce pro" })).toBeVisible();
+  await expect(fan.getByRole("button", { name: "Suivi", exact: true })).toBeVisible();
 
   // --- 6. Publication du pro, visible de l'abonné seulement ---------------------------------------------------------
   await pro.goto(`/pro/${slug}/publications`);

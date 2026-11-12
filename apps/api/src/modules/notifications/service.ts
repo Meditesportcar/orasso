@@ -3,7 +3,10 @@
 import {
   ACTIVITY_MAX_ACTORS,
   deliverAfter,
+  deliversNotification,
   emailAlwaysTypes,
+  essentialNeedsPlace,
+  essentialQuietOverride,
   journalOnlyNotificationTypes,
   journalWindowStart,
   type NotificationType,
@@ -12,12 +15,13 @@ import {
   pushRecipientId,
   type QuietOverride,
   r7QuietOverride,
+  r8NotificationTable,
   shouldDeliver,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { type NotificationData, notifications, profiles, user } from "../../db/schema";
+import { events, type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -25,7 +29,8 @@ import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
 import { type Executor, withTx } from "../../lib/tx";
-import { citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
+import { hasPlace } from "../events/place";
+import { type CitedView, citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
 
 export type NotificationRow = typeof notifications.$inferSelect;
 
@@ -36,6 +41,8 @@ export type NotifyInput = {
   eventId?: string | null;
   /** Début de l'événement concerné : le jour J lève les heures calmes. */
   eventStartsAt?: Date | null;
+  /** Fin de l'événement concerné (sinon lue par `eventId`) : l'exception « moins de 12 h » ne vaut pas pour un événement fini. */
+  eventEndsAt?: Date | null;
   /** Lien dans l'e-mail (chemin du site, ex. `/e/nocturne-de-canet-2026`). */
   link?: { label: string; path: string };
   /** E-mail rédigé par l'appelant (sécurité du compte) à la place du gabarit titre + texte. */
@@ -104,6 +111,136 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
   for (const t of types) deliveryGuards.set(t, guard);
 }
 
+/**
+ * Garde de lecture du Journal : un domaine retire d'une liste (et de la pastille) les lignes que leur destinataire ne peut
+ * plus lire (ex. commentaire d'une publication qu'il ne voit plus), **en lot** : une garde reçoit toutes les lignes de son
+ * domaine d'une page (ou de la pastille) et rend un verdict par ligne. `shown: false` : la ligne n'est pas montrée ;
+ * `actors` : les pseudos des personnes d'une ligne regroupée que le destinataire peut encore lire (les autres ne sont pas nommées).
+ */
+export type JournalVerdict = {
+  shown: boolean;
+  actors?: string[];
+  /** Avatar de chaque personne lisible (par pseudo), pour nommer celles qui étaient au-delà des trois premières. */
+  avatars?: Record<string, string | null>;
+  commentReadable?: boolean;
+  /** Un commentaire lisible de la ligne, servi à la place de celui qui ne se lit plus. */
+  readableCommentId?: string;
+};
+export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
+const journalGuards = new Map<string, JournalGuard>();
+export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
+  for (const t of types) journalGuards.set(t, guard);
+}
+/** Verdicts des gardes de lecture pour ces lignes (une seule passe par garde, quel que soit le nombre de lignes). */
+export async function journalVerdicts(
+  userId: string,
+  rows: readonly NotificationRow[],
+): Promise<Map<string, JournalVerdict>> {
+  const byGuard = new Map<JournalGuard, NotificationRow[]>();
+  for (const n of rows) {
+    const guard = journalGuards.get(n.type);
+    if (guard) byGuard.set(guard, [...(byGuard.get(guard) ?? []), n]);
+  }
+  const verdicts = new Map<string, JournalVerdict>();
+  for (const [guard, mine] of byGuard) for (const [id, v] of await guard(userId, mine)) verdicts.set(id, v);
+  return verdicts;
+}
+
+/** Les gardes de lecture existent pour ce type ? (lignes à vérifier pour la pastille et l'Activité) */
+export const journalGuardedTypes = (): NotificationType[] => [...journalGuards.keys()] as NotificationType[];
+
+/**
+ * Applique le verdict d'une garde de lecture à une ligne déjà recomposée (`view`, personnes en règle) : les personnes que le
+ * destinataire ne peut plus lire ne sont ni nommées ni comptées, le titre suit, et un extrait de commentaire devenu illisible
+ * est remplacé par le libellé générique du type. `null` : la ligne n'est pas montrée.
+ */
+export function applyJournalVerdict(
+  n: NotificationRow,
+  view: CitedView | null | undefined,
+  verdict: JournalVerdict | undefined,
+): {
+  title: string;
+  body: string;
+  actors: CitedView["actors"] | undefined;
+  count: number | undefined;
+  people?: string[];
+  /** `undefined` : inchangé ; `null` : à retirer ; sinon : l'identifiant lisible qui remplace `data.commentId`. */
+  commentId?: string | null;
+} | null {
+  if (verdict && !verdict.shown) return null;
+  if (view === null) return null;
+  const allowed = verdict?.actors ? new Set(verdict.actors) : null;
+  // Toutes les personnes en règle (pas seulement les trois affichées) sont filtrées par lisibilité, puis les trois premières
+  // lisibles sont nommées : une personne cachée ne reprend ni le titre, ni le corps, ni le compte.
+  const people = view ? (allowed ? view.people.filter((p) => allowed.has(p)) : view.people) : undefined;
+  const narrowed = Boolean(view && people && people.length < view.people.length);
+  if (view && people && people.length === 0) return null;
+  const actors =
+    view && people && narrowed
+      ? people
+          .slice(0, ACTIVITY_MAX_ACTORS)
+          .map(
+            (p) => view.actors.find((a) => a.pseudo === p) ?? { pseudo: p, avatarUrl: verdict?.avatars?.[p] ?? null },
+          )
+      : view?.actors;
+  const template = (n.data as { _text?: { title?: unknown } })._text?.title;
+  const first = actors?.[0];
+  return {
+    title:
+      narrowed && first && typeof template === "string"
+        ? fillTemplate(template, first.pseudo)
+        : (view?.title ?? n.title),
+    // Le commentaire cité par la ligne ne se lit plus : son extrait ne part pas, le libellé générique du type le remplace.
+    body:
+      verdict?.commentReadable === false && n.type in r8NotificationTable
+        ? fillTemplate(
+            r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
+            first?.pseudo ?? view?.actors[0]?.pseudo ?? "",
+          )
+        : (view?.body ?? n.body),
+    actors,
+    count: view
+      ? narrowed && people
+        ? Math.max(1, view.count - (view.people.length - people.length))
+        : view.count
+      : undefined,
+    people,
+    commentId: verdict?.commentReadable === false ? (verdict.readableCommentId ?? null) : undefined,
+  };
+}
+
+/** `data` servie : l'identifiant du commentaire qui ne se lit plus n'en sort pas (remplacé par un lisible, ou retiré). */
+export function scrubCommentId(
+  data: Record<string, unknown>,
+  commentId: string | null | undefined,
+): Record<string, unknown> {
+  if (commentId === undefined) return data;
+  const { commentId: _gone, ...rest } = data;
+  return commentId ? { ...rest, commentId } : rest;
+}
+
+/**
+ * Exception des heures calmes : celle de l'appelant, sinon celle du type (R7), sinon celle de l'Essentiel urgent (R8n1),
+ * qui ne vaut que pour un événement à venir ou en cours (`endsAt`, lue par `eventId` si l'appelant ne la donne pas).
+ */
+async function quietOverride(
+  ex: Executor,
+  type: NotificationType,
+  input: { urgent?: QuietOverride; eventId?: string | null; eventEndsAt?: Date | null },
+  at: Date,
+): Promise<QuietOverride | undefined> {
+  if (input.urgent) return input.urgent;
+  const r7 = r7QuietOverride(type);
+  if (r7) return r7;
+  if (!essentialQuietOverride(type)) return undefined;
+  let endsAt = input.eventEndsAt ?? null;
+  if (!endsAt && input.eventId) {
+    const [row] = await ex.select({ endsAt: events.endsAt }).from(events).where(eq(events.id, input.eventId));
+    endsAt = row?.endsAt ?? null;
+  }
+  return essentialQuietOverride(type, { endsAt, now: at });
+}
+
 export const notificationsService = {
   /**
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
@@ -118,7 +255,7 @@ export const notificationsService = {
     const due =
       immediate || input.silent || !env.NOTIFY_QUIET_HOURS
         ? at
-        : deliverAfter(at, input.eventStartsAt ?? null, undefined, input.urgent ?? r7QuietOverride(type));
+        : deliverAfter(at, input.eventStartsAt ?? null, undefined, await quietOverride(ex, type, input, at));
     const grouped = input.groupKey && !input.silent ? input.groupKey : null;
     // Le verrou du regroupement ne vaut que dans une transaction : appelée sur la base, `notify` ouvre la sienne.
     if (grouped && ex === db) {
@@ -253,11 +390,50 @@ export const notificationsService = {
       deliverAfter:
         immediate || !env.NOTIFY_QUIET_HOURS
           ? at
-          : deliverAfter(at, input.eventStartsAt ?? null, undefined, input.urgent ?? r7QuietOverride(type)),
+          : deliverAfter(at, input.eventStartsAt ?? null, undefined, await quietOverride(ex, type, input, at)),
     };
     const unique = [...new Set(userIds)];
     for (let i = 0; i < unique.length; i += 1000) {
       await ex.insert(notifications).values(unique.slice(i, i + 1000).map((userId) => ({ ...base, userId })));
+    }
+  },
+
+  /**
+   * Lot R8n1 : une notification personnalisée par personne (le résumé quotidien), en une requête par tranche de 1 000.
+   * Sans regroupement. JAMAIS REPORTÉ aux heures calmes (exigible tout de suite) : l'appelant abandonne lui-même ce qui tombe
+   * la nuit (garde de livraison). Pour une notification qui doit attendre 8 h, utiliser `notify` / `notifyMany`.
+   */
+  async notifyEachNow(
+    ex: Executor,
+    type: NotificationType,
+    items: readonly {
+      userId: string;
+      title: string;
+      body: string;
+      link?: { label: string; path: string };
+      data?: Record<string, unknown>;
+    }[],
+  ): Promise<void> {
+    if (!items.length) return;
+    const at = now();
+    // Jamais reportées à 8 h : exigibles tout de suite ; le domaine abandonne à la livraison ce qui tombe dans les heures
+    // calmes (garde de livraison du résumé), le suivant remplace.
+    const deliverAt = at;
+    for (let i = 0; i < items.length; i += 1000) {
+      await ex.insert(notifications).values(
+        items.slice(i, i + 1000).map((item) => ({
+          userId: item.userId,
+          type,
+          family: notificationTypes[type],
+          title: item.title,
+          body: item.body,
+          data: { ...item.data, ...(item.link ? { link: item.link.path, linkLabel: item.link.label } : {}) },
+          inJournal: true,
+          eventId: null,
+          groupKey: null,
+          deliverAfter: deliverAt,
+        })),
+      );
     }
   },
 
@@ -340,22 +516,25 @@ export const notificationsService = {
       )
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(limit + 1);
+    const verdicts = await journalVerdicts(userId, rows.slice(0, limit));
     // Personnes d'une ligne regroupée relues à l'instant : pseudos, avatars, total et textes sans les comptes partis.
     const views = await citedViews(
       rows.filter((n) => Array.isArray((n.data as { _actorIds?: unknown })._actorIds)),
       db,
     );
     const page = toPage(rows, limit, (n) => {
+      const shown = applyJournalVerdict(n, views.get(n.id), verdicts.get(n.id));
+      if (!shown) return null;
       const view = views.get(n.id);
-      // Ligne regroupée dont le texte ne se recompose pas sans la personne partie : masquée (la page peut être plus courte).
-      if (view === null) return null;
       return {
         id: n.id,
         type: n.type,
         family: n.family,
-        title: view?.title ?? n.title,
-        body: view?.body ?? n.body,
-        data: view ? { ...stripInternal(n.data), actors: view.actors, count: view.count } : stripInternal(n.data),
+        title: shown.title,
+        body: shown.body,
+        data: view
+          ? { ...scrubCommentId(stripInternal(n.data), shown.commentId), actors: shown.actors, count: shown.count }
+          : scrubCommentId(stripInternal(n.data), shown.commentId),
         eventId: n.eventId,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,
@@ -378,7 +557,27 @@ export const notificationsService = {
           citedPeopleRemain(now(), true),
         ),
       );
-    return row?.n ?? 0;
+    // Lignes que leur destinataire ne peut plus lire (gardes de lecture) : pas comptées. Les mêmes exclusions que le total
+    // (`citedPeopleRemain`) : une ligne déjà exclue n'est pas retirée deux fois. Une seule passe en lot.
+    const guarded = journalGuards.size
+      ? await ex
+          .select()
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.userId, userId),
+              eq(notifications.inJournal, true),
+              isNotNull(notifications.deliveredAt),
+              isNull(notifications.readAt),
+              citedPeopleRemain(now(), true),
+              inArray(notifications.type, [...journalGuards.keys()] as NotificationType[]),
+            ),
+          )
+      : [];
+    const hidden = guarded.length
+      ? [...(await journalVerdicts(userId, guarded)).values()].filter((v) => !v.shown).length
+      : 0;
+    return Math.max(0, (row?.n ?? 0) - hidden);
   },
 
   async markRead(userId: string, ids: string[] | "all") {
@@ -397,16 +596,37 @@ export const notificationsService = {
   },
 };
 
+/**
+ * Lot R8n1 : la personne reçoit-elle cette notification (préférences) ? La règle ordinaire (`shouldDeliver`) d'abord ; seulement
+ * si elle refuse un type de l'Essentiel rattaché à un événement, on lit la place de la personne (aucune requête de plus dans
+ * le cas courant). Les décisions sur la candidature n'ont pas besoin de place.
+ */
+async function wantsNotification(n: NotificationRow, profile: typeof profiles.$inferSelect | undefined) {
+  const prefs = profile?.notificationPrefs;
+  const mutedTypes = profile?.mutedTypes;
+  const base = { prefs, mutedTypes, type: n.type, hasEventId: Boolean(n.eventId) };
+  if (shouldDeliver(prefs, mutedTypes, n.type)) return true;
+  const needsPlace = essentialNeedsPlace(n.type, Boolean(n.eventId));
+  const placed = needsPlace && n.eventId ? await hasPlace(db, n.eventId, n.userId) : false;
+  return deliversNotification({ ...base, hasPlace: placed });
+}
+
 async function deliverOne(n: NotificationRow) {
   const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   const banned = Boolean(profile?.bannedAt);
+  // La préférence n'est lue qu'une fois (et seulement si le reste du verdict la demande).
+  let wanted: Promise<boolean> | null = null;
+  const wants = () => {
+    wanted ??= wantsNotification(n, profile);
+    return wanted;
+  };
   // Lot M6, tour 2 : le Journal garde toujours la notification, mais le bandeau en direct ne l'annonce que si elle est
   // livrée (`delivered`) : pas pour un type ou une famille coupés, un compte supprimé ou banni, une actualité du Journal.
   const delivered =
     !journalOnlyNotificationTypes.includes(n.type) &&
     !profile?.deletedAt &&
     !(banned && n.family !== "account") &&
-    shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type);
+    (await wants());
   realtime.publish(`user:${n.userId}`, "notification", {
     id: n.id,
     type: n.type,
@@ -422,7 +642,7 @@ async function deliverOne(n: NotificationRow) {
   // Compte banni (lot 32, relecture) : seulement la famille « Sécurité du compte », par e-mail (appareils révoqués).
   if (banned && n.family !== "account") return;
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
-  if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
+  if (!(await wants())) return;
 
   // Lot M6, tour 4 : seulement les appareils dont la session d'inscription vit encore (`push.tokensOf`).
   const tokens = banned ? [] : await push.tokensOf(n.userId);

@@ -372,7 +372,7 @@ test("lien d'invitation : le compte créé suit l'équipe organisatrice", async 
   await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte et suivre" }).click();
   await page.waitForURL("**/o/meditesportcar");
-  await expect(page.getByRole("button", { name: "Tu suis cette structure" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Suivi", exact: true })).toBeVisible();
   // Une invitation inconnue n'existe pas.
   const unknown = await page.goto("/invitation/jeton-inconnu");
   expect(unknown?.status()).toBe(404);

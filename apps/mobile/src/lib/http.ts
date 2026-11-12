@@ -91,9 +91,8 @@ export async function requestWithHeaders<T>(
       ...(cookies ? { credentials: "include" as const } : {}),
     });
   } catch {
-    throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
-  } finally {
     clearTimeout(timer);
+    throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
   }
   // Horloge simulée (lot 34a) : l'API annonce son décalage en développement ; sans l'en-tête, il retombe à 0.
   // Une réponse d'erreur du serveur frontal (5xx, sans en-tête) ne dit rien de l'horloge.
@@ -102,7 +101,16 @@ export async function requestWithHeaders<T>(
     // Relecture du lot 48 : décalage avec l'heure du serveur (code tournant), mesuré sur chaque réponse.
     applyDateHeader(response.headers.get("date"), sentAt, Date.now());
   }
-  const text = await response.text();
+  // Une coupure après les en-têtes fait échouer la lecture du corps : c'est une erreur réseau (la réponse est perdue), jamais
+  // une `TypeError` brute. Le délai court jusqu'à la fin de la lecture.
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
+  } finally {
+    clearTimeout(timer);
+  }
   let json: unknown = null;
   try {
     json = text ? JSON.parse(text) : null;

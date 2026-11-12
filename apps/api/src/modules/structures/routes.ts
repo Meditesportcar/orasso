@@ -17,6 +17,7 @@ import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
+import { authorCountsFor } from "../feed/lists";
 import { storiesSummaryFor } from "../stories/bar";
 import { storiesShare } from "../stories/share";
 import { structuresService } from "./service";
@@ -25,16 +26,19 @@ import { verificationService } from "./verification";
 const ip = (c: { req: { header(name: string): string | undefined } }) =>
   c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 
+// Correctif cache et session (11/11) : monté avant `loadSession` (app.ts). Liste des structures sans lecteur (le service ne reçoit pas de session), donc cache public permis et aucun
+// `Set-Cookie` possible dans une réponse que le cache public pourrait garder.
+export const structuresPublicRoutes = new Hono<AppEnv>().get("/structures", async (c) => {
+  const q = query(c, structureListQuery);
+  return c.json(await structuresService.list(q.limit, q.cursor, q.q), 200, {
+    "cache-control": "public, max-age=60",
+  });
+});
+
 export const structuresRoutes = new Hono<AppEnv>()
   .post("/structures", async (c) => {
     const v = await requireUser(c);
     return c.json(await structuresService.create(v, await body(c, structureCreateSchema)), 201);
-  })
-  .get("/structures", async (c) => {
-    const q = query(c, structureListQuery);
-    return c.json(await structuresService.list(q.limit, q.cursor, q.q), 200, {
-      "cache-control": "public, max-age=60",
-    });
   })
   .get("/invitations/:token", async (c) => c.json(await structuresService.byInviteToken(c.req.param("token"))))
   .post("/invitations/:token/accept", async (c) =>
@@ -72,7 +76,12 @@ export const structuresRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     const view = await structuresService.getPublic(c.req.param("slug"), viewer);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
-    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "structure", view.id) });
+    return c.json({
+      ...view,
+      stories: await storiesSummaryFor(viewer, "structure", view.id),
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (sans session : les publications de l'organisateur seulement).
+      ...(await authorCountsFor("structure", view.id, viewer)),
+    });
   })
   // Lot R7h : les stories qui identifient la structure ou un de ses événements (organisation et staff, lecture).
   .get("/structures/:id/story-mentions", async (c) => {

@@ -2,18 +2,17 @@
 // « Le vote » ouvre le Prix du public de l'événement.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Image, StyleSheet, View } from "react-native";
-
 import { mediaSource } from "@/lib/media";
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { reasonLine, TrophyHead } from "./parts";
 import type { CardProps } from "./types";
 
 export function VoteResultCard({ card, onMenu, faded }: CardProps<"vote_result">) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const { event, podium } = card.payload;
   const first = podium[0];
   return (

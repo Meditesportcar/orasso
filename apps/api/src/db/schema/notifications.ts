@@ -55,6 +55,8 @@ export const notifications = pgTable(
     index("notifications_actor_ids_idx")
       .using("gin", sql`(${t.data} -> '_actorIds')`)
       .where(sql`${t.groupKey} is not null`),
+    // Lot R8n2, tour 4 : le dernier changement annoncé d'un événement (`lastNotify` de la réponse de l'organisateur).
+    index("notifications_event_updated_idx").on(t.eventId, t.createdAt.desc()).where(sql`${t.type} = 'event_updated'`),
     index("notifications_undelivered_idx").on(t.deliverAfter).where(sql`${t.deliveredAt} is null`),
   ],
 );

@@ -10,6 +10,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
+import { loadPageInfo, pageKeyOf } from "./authors";
 
 /** Un signalement est-il encore en attente de décision sur cette publication ? */
 export async function hasOpenReport(ex: Executor, postId: string): Promise<boolean> {
@@ -82,12 +83,23 @@ export async function postWithAuthor(id: string, ex: Executor = db) {
   return row;
 }
 
-export function factsOf(row: NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>, at: Date): FeedPostFacts {
+/**
+ * Ce que la règle de visibilité lit d'une publication. Publication d'une page (R8a1) : elle se voit de tout membre
+ * connecté tant que la page est en règle (`pageInGoodStanding`, lu par l'appelant) et que la personne qui l'a publiée n'est
+ * pas bannie, quelle que soit la confidentialité de son compte ; un compte supprimé la laisse à la page.
+ */
+export function factsOf(
+  row: NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>,
+  at: Date,
+  pageInGoodStanding = false,
+): FeedPostFacts {
+  const isPage = row.post.persona !== "fan";
   return {
     authorId: row.post.authorId,
     authorVisibility: row.author.visibility,
-    authorUnavailable: unavailable(row.author, at),
+    authorUnavailable: isPage ? Boolean(row.author.bannedAt) : unavailable(row.author, at),
     deleted: row.post.deletedAt !== null,
+    ...(isPage ? { page: { inGoodStanding: pageInGoodStanding } } : {}),
   };
 }
 
@@ -100,6 +112,9 @@ export async function requireVisiblePost(v: Viewer, id: string, ex: Executor = d
   const at = now();
   if (!row) throw notFound("Publication introuvable");
   const rel = await relationOf(v.user.id, row.post.authorId, ex);
-  if (!canSeeFeedPost({ userId: v.user.id }, factsOf(row, at), rel)) throw notFound("Publication introuvable");
+  const key = pageKeyOf(row.post);
+  const standing = key ? ((await loadPageInfo(ex, [row.post])).get(key)?.inGoodStanding ?? false) : false;
+  if (!canSeeFeedPost({ userId: v.user.id }, factsOf(row, at, standing), rel))
+    throw notFound("Publication introuvable");
   return row;
 }

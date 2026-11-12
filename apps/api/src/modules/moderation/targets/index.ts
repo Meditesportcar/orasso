@@ -4,6 +4,7 @@ import { storyTarget } from "../../stories/moderation";
 import { crewTarget, proTarget, providerTarget } from "./community";
 import { crewCommentTarget, crewPostTarget } from "./crewFeed";
 import { announcementTarget, eventTarget, reviewTarget } from "./event";
+import { feedCommentTarget } from "./feedComment";
 import { feedPostTarget } from "./feedPost";
 import { messageTarget } from "./message";
 import { profileTarget } from "./profile";
@@ -25,6 +26,7 @@ const registry: Record<ReportTarget, TargetRules> = {
   crew_comment: crewCommentTarget,
   feed_post: feedPostTarget,
   story: storyTarget,
+  feed_comment: feedCommentTarget,
 };
 
 export const targetOf = (type: ReportTarget): TargetRules => registry[type];

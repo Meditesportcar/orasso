@@ -12,9 +12,11 @@ import { crewPageApi } from "./crewPage";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
+import { eventNotificationsApi } from "./eventNotifications";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { feedApi } from "./feed";
+import { feedCommentsApi } from "./feedComments";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -26,11 +28,13 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { pagesApi } from "./pages";
 import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
+import { publicationsApi } from "./publications";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { shareApi } from "./share";
@@ -97,13 +101,17 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...eventNotificationsApi,
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...feedCommentsApi,
   ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,
   ...storiesVideoApi,
+  ...publicationsApi,
+  ...pagesApi,
 };

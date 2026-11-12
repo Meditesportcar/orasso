@@ -1,4 +1,4 @@
-// Le Fil (lot R7e1) : compte supprimé. Ses publications partent (avec leurs photos et leurs flammes), ses flammes sur les
+// Le Fil (lot R7e1) : compte supprimé. Ses publications personnelles partent (avec leurs photos et leurs flammes), ses flammes sur les
 // publications des autres aussi (leur compteur baisse). Appelé par `accountService.anonymize`, dans sa transaction ;
 // rend les clés des photos à effacer après la validation.
 // Exception (tour 3, même règle que le retrait par l'auteur) : une publication qui a un signalement en attente est
@@ -27,7 +27,9 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
   const posts = await tx
     .select({ id: feedPosts.id })
     .from(feedPosts)
-    .where(eq(feedPosts.authorId, userId))
+    // Vague R8 : seules ses publications personnelles partent ; celles d'une page restent à la page (`author_id` garde la
+    // ligne `user`, que l'anonymisation conserve).
+    .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.persona, "fan")))
     .orderBy(feedPosts.id)
     .for("update");
   const ids = posts.map((p) => p.id);

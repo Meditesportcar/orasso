@@ -101,6 +101,9 @@ export const rateRules = {
   referenceSearchPublic: { max: 120, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   /** Lot R4b : le plateau d'un événement (route publique, pages de 30). */
   lineup: { max: 120, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
+  // Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, revalidées à chaque affichage (304 compris) :
+  // une limite à part, dimensionnée pour des galeries, pour ne pas épuiser celle des listes.
+  feedPublicPhoto: { max: 600, windowMs: 60_000, message: "Trop de photos demandées : réessaie dans une minute." },
   lineupPublic: { max: 60, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
   /** QR ami : lectures par minute, et codes refusés (le code à 8 chiffres ne se devine pas par essais). */
   friendQr: { max: 30, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
@@ -193,7 +196,12 @@ export const rateRules = {
   feedPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
+  // Lot R8c1 : cartes vues du Fil, 50 par envoi. Un défilement rapide envoie un lot toutes les quelques secondes (jusqu'à ~1 200
+  // par heure en rafale) : 600 par heure laisse de la marge, et le plafond de 5 000 lignes par compte borne la table.
+  feedSeen: { max: 600, windowMs: 3_600_000, message: "Trop d'envois de cartes vues : réessaie plus tard." },
   feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  // Lot R8k1 : commentaires d'une publication du Fil (60 par heure et par compte).
+  feedComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

@@ -2,6 +2,8 @@ import { AvatarRing, Button, CheckboxField, Chip, Icon, type IconName, TextField
 import {
   type AccountSettings,
   accountAppLabels,
+  authorKeyOf,
+  explicitProfileTab,
   feedScreenLabels,
   gradeLabels,
   type MyPartnerships,
@@ -10,6 +12,7 @@ import {
   networkLabels as N,
   type NetworkCounts,
   type NotificationFamily,
+  newsDigestType,
   notificationFamilies,
   notificationFamilyLabels,
   notificationTypeLabels,
@@ -18,17 +21,20 @@ import {
   partnershipLabels as PTN,
   personaKindLabels,
   preferencesLabels,
+  profileOpenTab,
   profilePhotoLabels,
-  profileTabFromParam,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
   profileVisibilityRules,
   settingsHubLabels as S,
+  type UserProfileView,
   type VehicleFull,
+  type WithPublications,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
+import { EventNotificationsFieldset } from "../components/event/NotifySignup";
 import { GarageTab } from "../components/profile/GarageTab";
 import { type GarageActionData, garageAction, loadGarage } from "../components/profile/garage.server";
 import { PanelDown } from "../components/profile/PanelDown";
@@ -38,6 +44,7 @@ import { ProfileTabs } from "../components/profile/ProfileTabs";
 import { isPanelFailure, panelRetryHref } from "../components/profile/panel";
 import { loadSorties } from "../components/profile/passport.server";
 import { SortiesTab } from "../components/profile/SortiesTab";
+import { PublicationsTab } from "../components/publications/PublicationsTab";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
@@ -64,9 +71,11 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const url = new URL(request.url);
-  // Lot R7b1 : l'onglet interne ; seule sa lecture est faite (le Garage par défaut, partout).
-  const onglet = profileTabFromParam(url.searchParams.get("onglet"));
-  const [settings, network, garage, sorties, partnerships, vehicleList] = await Promise.all([
+  // Lot R7b1 : l'onglet interne ; seule sa lecture est faite. Lot R8b2 : « Publications » s'ouvre par défaut, le mien compris.
+  const onglet =
+    explicitProfileTab(url.searchParams.get("onglet")) ??
+    profileOpenTab({ mine: true, hasGarage: true, publications: undefined });
+  const [settings, network, garage, sorties, partnerships, vehicleList, selfProfile] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     // Lot R4c : abonnés, abonnements, sorties (R6b).
     api<NetworkCounts>(request, "/me/network"),
@@ -75,7 +84,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Lot R7m1 : mes partenaires (la ligne « Partenaires », « Mettre fin »).
     api<MyPartnerships>(request, "/me/partnerships"),
     // Lot R8b1 : le nombre de « Garage · N » vient du Garage quand il est ouvert ; sur « Sorties », une lecture légère.
-    onglet === "sorties" ? api<VehicleFull[]>(request, "/me/vehicles") : Promise.resolve(null),
+    onglet !== "garage" ? api<VehicleFull[]>(request, "/me/vehicles") : Promise.resolve(null),
+    // Lot R8b2 : mon nombre de publications (la ligne « N publications » de l'onglet) : mon profil public le porte.
+    onglet === "publications"
+      ? api<WithPublications<UserProfileView>>(request, `/users/${encodeURIComponent(me.profile.pseudo)}`)
+      : Promise.resolve(null),
   ]);
   const garageCount =
     garage && !isPanelFailure(garage)
@@ -92,6 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     partnershipsDown: !partnerships.ok,
     onglet,
     garageCount,
+    publicationsCount: selfProfile?.ok ? (selfProfile.data.publications?.count ?? null) : null,
     // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
     retryHref: panelRetryHref(url.searchParams),
     garage,
@@ -109,7 +123,9 @@ export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
 };
 
 const MUTABLE = mutableTypesByFamily();
-const FAMILIES = notificationFamilies.filter((f) => MUTABLE[f]?.length) as NotificationFamily[];
+// Lot R8n2 : « Nouveautés de mes sorties » a sa propre ligne (réglage `eventNews`), pas une case de plus dans la famille.
+const typesOf = (f: NotificationFamily) => (MUTABLE[f] ?? []).filter((t) => !(f === "event" && t === newsDigestType));
+const FAMILIES = notificationFamilies.filter((f) => f === "event" || MUTABLE[f]?.length) as NotificationFamily[];
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
@@ -130,11 +146,11 @@ export async function action({ request }: Route.ActionArgs) {
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
     ) as Record<"application" | "event" | "social" | "grade", boolean>;
-    const mutedTypes = FAMILIES.flatMap((f) => MUTABLE[f] ?? []).filter((t) => form.get(`type_${t}`) !== "on");
+    const mutedTypes = FAMILIES.flatMap(typesOf).filter((t) => form.get(`type_${t}`) !== "on");
     const res = await api(request, "/me/settings", {
       method: "PATCH",
       json: {
-        notificationPrefs: prefs,
+        notificationPrefs: { ...prefs, eventNews: form.get("eventNews") === "on" },
         mutedTypes,
         visibility: String(form.get("visibility") ?? "public"),
       },
@@ -364,6 +380,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             />
           )
         ) : null}
+        {loaderData.onglet === "publications" ? (
+          <PublicationsTab
+            authorKey={authorKeyOf("user", loaderData.me.user.id)}
+            pseudo={loaderData.me.profile.pseudo}
+            mine
+            total={loaderData.publicationsCount}
+          />
+        ) : null}
         {loaderData.onglet === "sorties" && loaderData.sorties ? (
           isPanelFailure(loaderData.sorties) ? (
             <PanelDown message={PT.outingsDown} href={loaderData.retryHref} />
@@ -475,26 +499,38 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             Les relances du staff et les alertes de sécurité du compte arrivent toujours. Tout reste visible dans ton
             Journal.
           </p>
-          {FAMILIES.map((family) => (
-            <fieldset key={family} className="s-fieldset s-stack s-stack--tight">
-              <legend className="s-label o-t-label">{notificationFamilyLabels[family]}</legend>
-              <CheckboxField
-                name={`fam_${family}`}
-                label={`Recevoir les notifications « ${notificationFamilyLabels[family]} »`}
-                defaultChecked={settings.notificationPrefs[family] !== false}
+          {FAMILIES.map((family) =>
+            family === "event" ? (
+              <EventNotificationsFieldset
+                key={family}
+                familyOn={settings.notificationPrefs.event !== false}
+                eventNews={
+                  settings.notificationPrefs.eventNews !== false && !settings.mutedTypes.includes(newsDigestType)
+                }
+                types={typesOf("event")}
+                mutedTypes={settings.mutedTypes}
               />
-              <div className="s-checklist">
-                {(MUTABLE[family] ?? []).map((type) => (
-                  <CheckboxField
-                    key={type}
-                    name={`type_${type}`}
-                    label={notificationTypeLabels[type]}
-                    defaultChecked={!settings.mutedTypes.includes(type)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-          ))}
+            ) : (
+              <fieldset key={family} className="s-fieldset s-stack s-stack--tight">
+                <legend className="s-label o-t-label">{notificationFamilyLabels[family]}</legend>
+                <CheckboxField
+                  name={`fam_${family}`}
+                  label={`Recevoir les notifications « ${notificationFamilyLabels[family]} »`}
+                  defaultChecked={settings.notificationPrefs[family] !== false}
+                />
+                <div className="s-checklist">
+                  {typesOf(family).map((type) => (
+                    <CheckboxField
+                      key={type}
+                      name={`type_${type}`}
+                      label={notificationTypeLabels[type]}
+                      defaultChecked={!settings.mutedTypes.includes(type)}
+                    />
+                  ))}
+                </div>
+              </fieldset>
+            ),
+          )}
         </section>
 
         {/* Lot M5 (parité de la maquette 7.2) : « Confidentialité » = compte public ou privé, export des données. */}

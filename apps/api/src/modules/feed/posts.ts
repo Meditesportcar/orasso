@@ -1,9 +1,17 @@
 // Le Fil (lot R7e1) : lecture des publications (liste blanche des champs de `FeedPostView`), retrait. Toute lecture
 // repasse par `canSeeFeedPost` : une publication qu'on ne peut pas voir est omise, quel que soit l'appelant.
-import { canSeeFeedPost, type FeedPerson, type FeedPostView } from "@orasso/shared";
+import {
+  authorKeyOf,
+  canSeeFeedPost,
+  type FeedAuthorView,
+  type FeedCommentPreview,
+  type FeedPerson,
+  type FeedPostView,
+} from "@orasso/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
+import { managedPageKeys } from "../../lib/authorship";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
 import { commercialViews } from "../partnerships/commercial";
@@ -11,6 +19,8 @@ import type { Profile } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 import { factsOf } from "./access";
+import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
+import { loadPageInfo, pageKeyOf } from "./authors";
 import { eventSummariesByIds } from "./summary";
 
 export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">): FeedPerson => ({
@@ -20,6 +30,36 @@ export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "of
   // Donnée administrée (seed, puis l'administration), jamais déduite du pseudo.
   official: p.official,
 });
+
+/** La personne comme auteur d'une publication (vague R8) : sa clé `u:`, son pseudo comme nom. */
+export const personAuthorView = (
+  userId: string,
+  p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">,
+): FeedAuthorView => ({
+  key: authorKeyOf("user", userId),
+  kind: "user",
+  name: p.pseudo,
+  avatarUrl: storage.url(p.avatarKey),
+  verified: false,
+  pseudo: p.pseudo,
+  grade: p.grade,
+  official: p.official,
+});
+
+/**
+ * Les deux derniers commentaires de chaque publication (R8k1 s'y branche sans toucher ce fichier). Le chargeur reçoit
+ * toutes les publications visibles d'un coup (jamais une requête par publication) et le regard de la personne.
+ */
+export type LastCommentsLoader = (
+  ex: Executor,
+  postIds: string[],
+  viewerId: string,
+  at: Date,
+) => Promise<Map<string, FeedCommentPreview[]>>;
+let lastCommentsLoader: LastCommentsLoader = async () => new Map();
+export function registerLastComments(loader: LastCommentsLoader): void {
+  lastCommentsLoader = loader;
+}
 
 /** Dossier des photos du Fil : clés privées, servies seulement par `GET /feed-posts/:id/photos/:nom` (jamais `/api/files`). */
 export const FEED_PHOTO_FOLDER = "private/feed/";
@@ -49,26 +89,36 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     .innerJoin(profiles, eq(profiles.userId, feedPosts.authorId))
     .where(and(inArray(feedPosts.id, ids), isNull(feedPosts.deletedAt)));
   if (!rows.length) return [];
-  const authorIds = [...new Set(rows.map((r) => r.post.authorId))];
+  // Publications de pages : la page (nom, logo) et son état, en une requête par sorte de page.
+  const pages = await loadPageInfo(
+    ex,
+    rows.map((r) => r.post),
+  );
+  const fanAuthorIds = [...new Set(rows.filter((r) => r.post.persona === "fan").map((r) => r.post.authorId))];
   const followed = new Set(
-    (
-      await ex
-        .select({ id: userFollows.followedId })
-        .from(userFollows)
-        .where(
-          and(
-            eq(userFollows.followerId, viewerId),
-            inArray(userFollows.followedId, authorIds),
-            eq(userFollows.status, "accepted"),
-          ),
-        )
-    ).map((r) => r.id),
+    fanAuthorIds.length
+      ? (
+          await ex
+            .select({ id: userFollows.followedId })
+            .from(userFollows)
+            .where(
+              and(
+                eq(userFollows.followerId, viewerId),
+                inArray(userFollows.followedId, fanAuthorIds),
+                eq(userFollows.status, "accepted"),
+              ),
+            )
+        ).map((r) => r.id)
+      : [],
   );
-  const visible = rows.filter((r) =>
-    canSeeFeedPost({ userId: viewerId }, factsOf(r, at), {
-      followAccepted: r.post.authorId === viewerId || followed.has(r.post.authorId),
-    }),
-  );
+  const visible = rows.filter((r) => {
+    const key = pageKeyOf(r.post);
+    return canSeeFeedPost(
+      { userId: viewerId },
+      factsOf(r, at, key ? (pages.get(key)?.inGoodStanding ?? false) : false),
+      { followAccepted: r.post.authorId === viewerId || followed.has(r.post.authorId) },
+    );
+  });
   if (!visible.length) return [];
   const postIds = visible.map((r) => r.post.id);
   const photos = await ex
@@ -93,33 +143,73 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     ex,
     visible.flatMap((r) => (r.post.eventId ? [r.post.eventId] : [])),
   );
+  // Rattachement (rôle, phase, présence validée), par lots.
+  const attaches = await loadAttachViews(
+    ex,
+    visible.map((r) => ({
+      id: r.post.id,
+      authorId: r.post.authorId,
+      persona: r.post.persona,
+      eventId: r.post.eventId,
+      eventRole: r.post.eventRole,
+    })),
+    at,
+  );
+  // « Mes » publications de page : les pages que je gère (affichage seulement, sans second facteur).
+  const managed = visible.some((r) => r.post.persona !== "fan")
+    ? await managedPageKeys(viewerId, ex)
+    : new Set<string>();
 
   const commercialBy = await commercialViews(
     ex,
     visible.map((r) => r.post.commercialPartnerId),
   );
+  const lastComments = await lastCommentsLoader(ex, postIds, viewerId, at);
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {
     const r = byId.get(id);
     if (!r) return [];
+    const key = pageKeyOf(r.post);
+    const page = key ? pages.get(key) : undefined;
+    const attached = attaches.get(r.post.id);
+    const own = photos
+      .filter((p) => p.postId === r.post.id)
+      .map((p) => ({ url: feedPhotoUrl(r.post.id, p.storageKey), width: p.width, height: p.height }));
+    // Sans photo propre : l'affiche de l'événement (une référence, jamais une copie). Sans affiche non plus, ou sans
+    // événement, la publication n'est pas servie.
+    const poster = !own.length && attached ? eventVisualUrl(attached.event) : null;
+    if (!own.length && !poster) return [];
     const vehicle = r.post.vehicleId ? vehicleById.get(r.post.vehicleId) : undefined;
     const event = r.post.eventId ? events.get(r.post.eventId) : undefined;
     return [
       {
         id: r.post.id,
-        author: personOf(r.author),
+        author: page ? page.view : personAuthorView(r.post.authorId, r.author),
         caption: r.post.caption,
         aspect: r.post.aspect,
-        photos: photos
-          .filter((p) => p.postId === r.post.id)
-          .map((p) => ({ url: feedPhotoUrl(r.post.id, p.storageKey), width: p.width, height: p.height })),
+        photos: own.length ? own : [{ url: poster as string, ...EVENT_VISUAL_SIZE }],
         vehicle: vehicle ? { id: vehicle.id, label: vehicleLabel(vehicle) } : null,
-        event: event ? { slug: event.slug, title: event.title } : null,
+        event: event
+          ? { slug: event.slug, title: event.title }
+          : attached
+            ? { slug: attached.event.slug, title: attached.event.title }
+            : null,
         reactionsCount: r.post.reactionsCount,
         reactedByMe: mine.has(r.post.id),
         createdAt: r.post.createdAt.toISOString(),
-        mine: r.post.authorId === viewerId,
+        mine: key ? managed.has(key) : r.post.authorId === viewerId,
         commercialPartner: r.post.commercialPartnerId ? (commercialBy.get(r.post.commercialPartnerId) ?? null) : null,
+        coAuthor: null,
+        attach: attached ? attached.attach : null,
+        placeLabel: attached ? attached.event.city : r.post.placeLabel,
+        visual: own.length ? "photos" : "event_poster",
+        important: r.post.importantReason
+          ? { reason: r.post.importantReason, sentAt: r.post.importantSentAt?.toISOString() ?? null }
+          : null,
+        pinned: r.post.pinnedAt !== null,
+        commentsCount: r.post.commentsCount,
+        commentsOff: r.post.commentsOff,
+        lastComments: lastComments.get(r.post.id) ?? [],
       },
     ];
   });

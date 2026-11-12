@@ -55,3 +55,4 @@ Thumbs.db
 apps/web/public/_ds-previews/
 apps/web/test-results/
 apps/web/playwright-report/
+.run-*

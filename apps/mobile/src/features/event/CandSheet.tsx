@@ -44,6 +44,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { arrivalBody } from "@/features/arrival/ArrivalSeen";
 import { AfterInviteCard } from "@/features/event/invite/AfterInviteCard";
+import { NotifySignup } from "@/features/event/NotifySignup";
 import { CheckBox, CrewDot, Seg, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
@@ -319,6 +320,8 @@ export function CandSheet({
                 ? "L'événement est sans sélection : ta place est réservée. Ton QR t'attend dans Sorties."
                 : "L'équipe organisatrice te répond au fil des candidatures. Tu retrouves ta candidature dans Sorties."}
           </Text>
+          {/* Lot R8n2 (R8.11) : « Ce que tu recevras pour cet événement » ; « C'est noté » en est le bouton principal. */}
+          {done.crew === null ? <NotifySignup eventId={e.id} onDone={closeAll} /> : null}
           <NotificationAsk reason="Active les notifications pour recevoir la réponse tout de suite, même appli fermée." />
           {/* Lot R6c (R6.5) : « Invite du monde à venir », trois visages et « Inviter » ; fermée, elle ne revient pas. */}
           {onInvite ? (
@@ -331,7 +334,7 @@ export function CandSheet({
             />
           ) : null}
           <SmButton
-            kind="p"
+            kind={done.crew === null ? "s" : "p"}
             big
             wide
             icon="ticket"

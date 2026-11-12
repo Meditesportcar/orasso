@@ -296,12 +296,15 @@ describe("schémas", () => {
     const ok = feedPostCreateSchema.parse({ photos: [{ uploadKey: key, noPlateConfirmed: true }] });
     expect(ok.aspect).toBe("portrait_4_5");
     expect(ok.caption).toBeNull();
-    expect(feedPostCreateSchema.safeParse({ photos: [] }).success).toBe(false);
+    // Vague R8 (T1) : « au moins une photo, sinon rattachée à un événement qui a une affiche » est une règle de l'API
+    // (400 `photo_required`, elle connaît l'événement) ; le schéma laisse passer la liste vide.
+    expect(feedPostCreateSchema.safeParse({ photos: [] }).success).toBe(true);
     const six = Array.from({ length: FEED_POST_PHOTOS_MAX + 1 }, (_, i) => ({
       uploadKey: `private/feed-posts/0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0a0${i}.webp`,
     }));
     expect(feedPostCreateSchema.safeParse({ photos: six }).success).toBe(false);
-    expect(feedPostCreateSchema.safeParse({ photos: [{ uploadKey: key }], caption: "x".repeat(501) }).success).toBe(
+    // 500 pour un passionné (refusé par l'API), 2 000 pour une casquette : le schéma borne à 2 000.
+    expect(feedPostCreateSchema.safeParse({ photos: [{ uploadKey: key }], caption: "x".repeat(2001) }).success).toBe(
       false,
     );
     expect(feedPostCreateSchema.safeParse({ photos: [{ uploadKey: key }, { uploadKey: key }] }).success).toBe(false);
