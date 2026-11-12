@@ -179,7 +179,8 @@ describe("compte supprimé : plus aucun nom dans les notifications", () => {
     expect(await notifs(kenji.id, "coauthor_withdrawn")).toHaveLength(1);
     await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, damien.id));
     await withTx((tx) => anonymizeFeedForDeletedAccount(tx, damien.id));
-    for (const type of ["coauthor_accepted", "coauthor_withdrawn"]) expect(await notifs(kenji.id, type)).toHaveLength(0);
+    for (const type of ["coauthor_accepted", "coauthor_withdrawn"])
+      expect(await notifs(kenji.id, type)).toHaveLength(0);
     const feed = JSON.stringify((await call(kenji, "GET", "/me/activity")).json);
     expect(feed).not.toContain("Damien_66");
     expect(JSON.stringify((await call(kenji, "GET", "/me/notifications")).json)).not.toContain("Damien_66");
@@ -194,7 +195,9 @@ describe("Fil et pastille", () => {
     await follow(fan, damien);
     const post = (await publishWith(kenji, { kind: "user", id: damien.id })).json as FeedPostView;
     await call(damien, "POST", `/me/feed-coauthor-requests/${post.id}/accept`);
-    await db.execute(sql`update feed_posts set created_at = ${new Date(now().getTime() - 3_600_000)} where id = ${post.id}`);
+    await db.execute(
+      sql`update feed_posts set created_at = ${new Date(now().getTime() - 3_600_000)} where id = ${post.id}`,
+    );
     const ids = async () => (await fil(fan, "?filter=following")).items.map((c: FeedCard) => c.id);
     expect(await ids()).toContain(`feed_post:${post.id}`);
     await db

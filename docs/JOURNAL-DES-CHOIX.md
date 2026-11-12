@@ -5803,3 +5803,6 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 ### Tour 7 (lot R8d, 12/11/2026)
 - **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (référence mise à jour à chaque donnée) : A ? B ? A dans une page restée montée n'ignore plus la dernière annonce. Pas de test A ? B ? A (il faut deux comptes dans une même fenêtre annoncés par le canal) ; recette du site non rejouée ce tour.
 - **Épingle de la façade** : l'écriture est comptée à la détection de la reprise dans la transaction, une fois par requête (drapeau gardé entre les tentatives) ; le test précharge 59 écritures et lève le 40P01 après le corps.
+
+### Tour 10 (R8c1, 12/11/2026)
+- **Curseur en version 4** : le champ \sc\ ayant quitté le format binaire, \VERSION\ passe à 4 ; les versions 2 et 3 sont reconnues par \isPreviousCursor\ (première page et \eset: true\, jamais un 400, même tronquées). Une version inconnue (5…) ou un curseur de la version 4 mal formé reste un 400. Tests : version 3 fabriquée avec son \sc\, version 4 relue à l'identique.

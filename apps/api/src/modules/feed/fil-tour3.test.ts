@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, createStructure, resetDb, seedReference, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import { feedPostReactions, feedSeen, feedSeenFloor, profiles, structures } from "../../db/schema";
-import { decodeCursor } from "./cursor";
+import { decodeCursor, encodeCursor } from "./cursor";
 import { dbPost, fil, flames, follow, HOUR, ids, person, postIds, seen, view, walk } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -395,5 +395,31 @@ describe("tour 3", () => {
       expect(page.items.length).toBe(new Set(ids(page.items)).size);
       cursor = page.next;
     }
+  }, 120_000);
+
+  it("tour 10 : un curseur de version 3 (avec son empreinte `sc`) est reconnu comme ancien : première page et reset, jamais 400 ; la version 4 se relit à l'identique", async () => {
+    const author = await person("Auteur_V3");
+    const me = await person("Lecteur_V3");
+    for (let i = 0; i < 30; i++) await dbPost(author, at(5 + i));
+    const first = await fil(me);
+    const raw = Buffer.from(first.next as string, "base64url");
+    expect(raw[0]).toBe(4);
+    const decoded = decodeCursor(first.next as string);
+    expect(decoded?.phase).toBe(1);
+    expect(encodeCursor(decoded as NonNullable<typeof decoded>)).toBe(first.next);
+    // Format 3 fabriqué : version 3 et six octets `sc` entre les clés des sources et la borne de rognage.
+    const nx = raw[1 + 1 + 1 + 6 + 6 + 2 + 4] as number;
+    const keysEnd = 1 + 1 + 1 + 6 + 6 + 2 + 4 + 1 + nx * 23;
+    const v3 = Buffer.concat([raw.subarray(0, keysEnd), Buffer.alloc(6, 7), raw.subarray(keysEnd)]);
+    v3[0] = 3;
+    const res = await fil(me, `?cursor=${v3.toString("base64url")}`);
+    expect(res.status).toBe(200);
+    expect(res.json.reset).toBe(true);
+    expect(res.items.length).toBe(20);
+    // Une version 3 tronquée est aussi un ancien format (jamais 400) ; une version 5 inconnue reste invalide.
+    expect((await fil(me, `?cursor=${v3.subarray(0, 12).toString("base64url")}`)).json.reset).toBe(true);
+    const v5 = Buffer.from(raw);
+    v5[0] = 5;
+    expect((await fil(me, `?cursor=${v5.toString("base64url")}`)).status).toBe(400);
   }, 120_000);
 });

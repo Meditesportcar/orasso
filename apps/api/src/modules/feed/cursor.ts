@@ -11,7 +11,7 @@
 // - la zone (R8c1) : `A` les cartes pas encore vues, `B` les cartes vues sans interaction (rangées après, par date). La zone B
 //   n'a que la phase 2 (parcours par date).
 //
-// Version 3 (R8c1) : un curseur de la version 2 (APK en ligne en plein parcours) n'est jamais une erreur : `isPreviousCursor`,
+// Version 4 (R8c1) : un curseur de la version 2 (APK en ligne en plein parcours) n'est jamais une erreur : `isPreviousCursor`,
 // et le Fil repart de la première page avec `reset: true`.
 //
 // Une clé de carte est `genre:uuid` ; elle tient sur 17 octets (1 de genre, 16 d'uuid). Plus grand curseur produit :
@@ -21,8 +21,9 @@ import { FEED_POOL, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 import { validation } from "../../lib/errors";
 import type { Key } from "./sources/types";
 
-const VERSION = 3;
-const PREVIOUS_VERSION = 2;
+const VERSION = 4;
+/** Versions antérieures reconnues (APK et site en ligne en plein parcours) : première page et `reset`, jamais un 400. La 3 avait une empreinte des flammes (6 octets) retirée en 4. */
+const PREVIOUS_VERSIONS: readonly number[] = [2, 3];
 /** 9999-12-31T23:59:59.999Z : la plus grande date qu'un curseur peut porter. */
 const MAX_DATE_MS = 253_402_300_799_999;
 export const MAX_SOURCES = 16;
@@ -246,7 +247,8 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
  */
 export function isPreviousCursor(raw: string | undefined): boolean {
   if (!raw || !/^[A-Za-z0-9_-]+$/.test(raw)) return false;
-  return Buffer.from(raw, "base64url")[0] === PREVIOUS_VERSION;
+  const version = Buffer.from(raw, "base64url")[0];
+  return version !== undefined && PREVIOUS_VERSIONS.includes(version);
 }
 
 /** Identifiant de la carte-clé d'un curseur (frontière en phase 1, dernière clé servie en phase 2) : pour les tests. */
