@@ -29,6 +29,9 @@ import {
   feedPosts,
   profiles,
 } from "../../../db/schema";
+import type { Actor } from "../../../lib/actor";
+import { isPageActor } from "../../../lib/actor";
+import { canManagePost } from "../../../lib/authorship";
 import { now } from "../../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../../lib/errors";
 import { decodeCursor, encodeCursor } from "../../../lib/pagination";
@@ -37,6 +40,7 @@ import type { Viewer } from "../../../lib/session";
 import { type Tx, withTx } from "../../../lib/tx";
 import { moderationService } from "../../moderation/service";
 import { postWithAuthor, profileOkSql, requireVisiblePost, UUID_RE } from "../access";
+import { loadPageInfo, pageKeyOf } from "../authors";
 import { notifyCommentLike, notifyNewComment } from "./notify";
 import { softDeleteComment } from "./remove";
 import { mentionSuggestions } from "./suggest";
@@ -152,9 +156,22 @@ export const feedCommentsService = {
     v: Viewer,
     postId: string,
     input: { text: string; parentId?: string | null; clientId: string },
+    /** Lot R9a (T7) : la page au nom de laquelle on commente (`writeActor` : second facteur d'une structure compris). */
+    actor?: Actor | null,
   ): Promise<FeedCommentCreated> {
     rateLimit("feedComment", v.user.id);
     const userId = v.user.id;
+    const page = actor && isPageActor(actor) ? actor : null;
+    // Les colonnes de la page : la contrainte de la table exige la persona et son identifiant, rien d'autre.
+    const pageColumns = page
+      ? {
+          persona: (page.kind === "structure" ? "organizer" : page.kind) as "organizer" | "pro" | "provider" | "media",
+          structureId: page.kind === "structure" ? page.id : null,
+          proId: page.kind === "pro" ? page.id : null,
+          providerId: page.kind === "provider" ? page.id : null,
+          mediaId: page.kind === "media" ? page.id : null,
+        }
+      : null;
     let createdId: string;
     try {
       createdId = await withTx(async (tx, after) => {
@@ -209,7 +226,11 @@ export const feedCommentsService = {
           .values({
             postId: post.post.id,
             authorId: userId,
-            persona: "fan",
+            persona: pageColumns?.persona ?? "fan",
+            structureId: pageColumns?.structureId ?? null,
+            proId: pageColumns?.proId ?? null,
+            providerId: pageColumns?.providerId ?? null,
+            mediaId: pageColumns?.mediaId ?? null,
             parentId,
             replyToId: target?.id ?? null,
             text: input.text,
@@ -239,6 +260,9 @@ export const feedCommentsService = {
             .onConflictDoNothing();
         }
 
+        const pageInfo = pageColumns
+          ? (await loadPageInfo(tx, [{ ...pageColumns, authorId: userId }])).get(page?.key ?? "")
+          : null;
         await notifyNewComment({
           tx,
           after,
@@ -247,8 +271,12 @@ export const feedCommentsService = {
             userId,
             pseudo: v.profile.pseudo,
             avatarKey: v.profile.avatarKey,
-            visibility: v.profile.visibility,
+            // Une page est publique : la confidentialité du compte de qui écrit ne joue pas (lot R9a).
+            visibility: page ? "public" : v.profile.visibility,
           },
+          page:
+            page && pageInfo ? { key: page.key, name: pageInfo.view.name, avatarUrl: pageInfo.view.avatarUrl } : null,
+          postPageKey: pageKeyOf(post.post),
           postId: post.post.id,
           postAuthorId: post.post.authorId,
           commentId: row.id,
@@ -285,14 +313,27 @@ export const feedCommentsService = {
     const parentId = await withTx(async (tx) => {
       // Son propre commentaire se supprime même quand on ne voit plus la publication (rien d'autre n'est lu).
       const own = await commentRow(commentId, tx);
-      if (own && own.c.authorId === v.user.id) {
+      // Son propre commentaire de passionné se supprime même sans voir la publication. Celui d'une page passe par les droits
+      // sur la page (lot R9a) : qui n'en a plus ne peut plus le retirer.
+      if (own && own.c.authorId === v.user.id && own.c.persona === "fan") {
         if (!(await softDeleteComment(tx, own.c.id, v.user.id, now()))) {
           throw notFound(feedCommentLabels.commentNotFound);
         }
         return own.c.parentId;
       }
       const found = await requireVisibleComment(v, commentId, tx);
-      if (found.c.authorId !== v.user.id) {
+      if (found.c.persona !== "fan") {
+        // La page : `requireAuthorship` (second facteur d'une structure : son erreur remonte telle quelle) ; à défaut,
+        // qui gère la publication. Sans droit, rien n'est révélé.
+        const owns = await canManagePost(v, found.c, tx);
+        const may =
+          owns ||
+          (await managesPostStrict(v, found.post.post, tx).catch((error: unknown) => {
+            if (error instanceof AppError && error.code === "persona_forbidden") return false;
+            throw error;
+          }));
+        if (!may) throw notFound(feedCommentLabels.commentNotFound);
+      } else if (found.c.authorId !== v.user.id) {
         // Une page exige le second facteur : son erreur remonte telle quelle ; sans droit, rien n'est révélé.
         const may = await managesPostStrict(v, found.post.post, tx).catch((error: unknown) => {
           if (error instanceof AppError && error.code === "persona_forbidden") return false;
@@ -408,9 +449,9 @@ export const feedCommentsService = {
   },
 
   /** `GET /feed-posts/:id/mention-suggestions?q=` */
-  async suggestions(v: Viewer, postId: string, q: string): Promise<MentionSuggestion[]> {
+  async suggestions(v: Viewer, postId: string, q: string, actor?: Actor | null): Promise<MentionSuggestion[]> {
     rateLimit("feedRead", v.user.id);
-    return mentionSuggestions(v, postId, q);
+    return mentionSuggestions(v, postId, q, actor && isPageActor(actor) ? actor : null);
   },
 };
 

@@ -7,11 +7,14 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import { applications, events, feedPostComments, profiles, userFollows } from "../../../db/schema";
+import type { Actor } from "../../../lib/actor";
 import { now } from "../../../lib/deps";
 import { escapeLike } from "../../../lib/pagination";
 import type { Viewer } from "../../../lib/session";
 import { storage } from "../../../lib/storage";
+import { followSets } from "../../social/pageFollows";
 import { authorVisibleSql, profileOkSql, requireVisiblePost } from "../access";
+import { PAGE_VIEWER_ID } from "../sources/types";
 import { postFactsOf } from "./pagefacts";
 import { commentVisibleSql, managesPost } from "./view";
 
@@ -20,13 +23,25 @@ const PER_SOURCE = 40;
 
 type Candidate = { userId: string; pseudo: string; avatarKey: string | null };
 
-export async function mentionSuggestions(v: Viewer, postId: string, q: string): Promise<MentionSuggestion[]> {
+export async function mentionSuggestions(
+  v: Viewer,
+  postId: string,
+  q: string,
+  /** Lot R9a : en casquette, la conversation et les comptes publics que la page suit, rien du réseau de la personne. */
+  page: Actor | null = null,
+): Promise<MentionSuggestion[]> {
   const row = await requireVisiblePost(v, postId);
   const at = now();
-  const viewerId = v.user.id;
-  const manages = await managesPost(v, row.post);
+  const viewerId = page ? PAGE_VIEWER_ID : v.user.id;
+  const manages = page ? false : await managesPost(v, row.post);
   const nameFilter = q ? sql`lower(${profiles.pseudo}) like ${`${escapeLike(q.toLowerCase())}%`}` : sql`true`;
-  const live = and(profileOkSql("profiles", at), sql`${profiles.userId} <> ${viewerId}`, nameFilter);
+  const live = and(
+    profileOkSql("profiles", at),
+    sql`${profiles.userId} <> ${v.user.id}`,
+    nameFilter,
+    // Une page ne cite que des comptes publics.
+    page ? sql`${profiles.visibility} = 'public'` : undefined,
+  );
   const pick = { userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey };
 
   const rootVisible = manages ? profileOkSql("rp", at) : authorVisibleSql("rp", sql`rc.author_id`, viewerId, at);
@@ -39,6 +54,8 @@ export async function mentionSuggestions(v: Viewer, postId: string, q: string): 
       and(
         eq(feedPostComments.postId, row.post.id),
         isNull(feedPostComments.deletedAt),
+        // Jamais le compte derrière un commentaire de page (lot R9a).
+        eq(feedPostComments.persona, "fan"),
         commentVisibleSql(viewerId, manages, at),
         // Une réponse ne compte que si son commentaire de premier niveau se lit aussi (ni supprimé, ni d'un compte privé non suivi).
         sql`(${feedPostComments.parentId} is null or exists (select 1 from feed_post_comments rc join profiles rp on rp.user_id = rc.author_id
@@ -50,24 +67,40 @@ export async function mentionSuggestions(v: Viewer, postId: string, q: string): 
     .orderBy(desc(sql`max(${feedPostComments.createdAt})`))
     .limit(PER_SOURCE);
 
-  const following: Candidate[] = await db
-    .select(pick)
-    .from(userFollows)
-    .innerJoin(profiles, eq(profiles.userId, userFollows.followedId))
-    .where(and(eq(userFollows.followerId, viewerId), eq(userFollows.status, "accepted"), live))
-    .orderBy(sql`lower(${profiles.pseudo})`)
-    .limit(PER_SOURCE);
+  let following: Candidate[];
+  if (page) {
+    const followed = [...(await followSets(page, at)).users];
+    following = followed.length
+      ? await db
+          .select(pick)
+          .from(profiles)
+          .where(and(inArray(profiles.userId, followed), live))
+          .orderBy(sql`lower(${profiles.pseudo})`)
+          .limit(PER_SOURCE)
+      : [];
+  } else {
+    following = await db
+      .select(pick)
+      .from(userFollows)
+      .innerJoin(profiles, eq(profiles.userId, userFollows.followedId))
+      .where(and(eq(userFollows.followerId, viewerId), eq(userFollows.status, "accepted"), live))
+      .orderBy(sql`lower(${profiles.pseudo})`)
+      .limit(PER_SOURCE);
+  }
 
-  const followers: Candidate[] = await db
-    .select(pick)
-    .from(userFollows)
-    .innerJoin(profiles, eq(profiles.userId, userFollows.followerId))
-    .where(and(eq(userFollows.followedId, viewerId), eq(userFollows.status, "accepted"), live))
-    .orderBy(sql`lower(${profiles.pseudo})`)
-    .limit(PER_SOURCE);
+  // Ceux qui me suivent : un lien de la personne, jamais proposé à une page.
+  const followers: Candidate[] = page
+    ? []
+    : await db
+        .select(pick)
+        .from(userFollows)
+        .innerJoin(profiles, eq(profiles.userId, userFollows.followerId))
+        .where(and(eq(userFollows.followedId, viewerId), eq(userFollows.status, "accepted"), live))
+        .orderBy(sql`lower(${profiles.pseudo})`)
+        .limit(PER_SOURCE);
 
   let onEvent: Candidate[] = [];
-  if (q && row.post.eventId) {
+  if (q && row.post.eventId && !page) {
     const [event] = await db.select({ endsAt: events.endsAt }).from(events).where(eq(events.id, row.post.eventId));
     // Après la fin de l'événement on ne dit plus qui était retenu (les absents ne se déduisent jamais).
     if (event && event.endsAt > at) {

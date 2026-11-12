@@ -10,7 +10,9 @@ import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { feedPostComments, feedPosts, profiles } from "../../../db/schema";
 import type { Executor } from "../../../lib/tx";
 import { authorVisibleSql, profileOkSql } from "../access";
+import { loadPageInfo, pageKeyOf } from "../authors";
 import { personAuthorView, registerLastComments } from "../posts";
+import { commentPageOkSql } from "./view";
 
 export async function loadLastComments(
   ex: Executor,
@@ -27,15 +29,28 @@ export async function loadLastComments(
       .from(feedPosts)
       .where(and(inArray(feedPosts.id, postIds), eq(feedPosts.persona, "fan"), eq(feedPosts.authorId, viewerId)))
   ).map((r) => r.id);
+  // Un commentaire de page est servi à qui voit la publication, la page en règle et la personne non bannie, quelle que
+  // soit la confidentialité de son compte (lot R9a) ; celui d'une personne, comme avant.
   const visible = or(
-    mine.length ? and(inArray(c.postId, mine), profileOkSql("profiles", at)) : undefined,
-    authorVisibleSql("profiles", sql`${c.authorId}`, viewerId, at),
+    and(sql`${c.persona} <> 'fan'`, sql`profiles.banned_at is null`, commentPageOkSql),
+    and(
+      eq(c.persona, "fan"),
+      or(
+        mine.length ? and(inArray(c.postId, mine), profileOkSql("profiles", at)) : undefined,
+        authorVisibleSql("profiles", sql`${c.authorId}`, viewerId, at),
+      ),
+    ),
   );
   const ranked = ex
     .select({
       id: c.id,
       postId: c.postId,
       authorId: c.authorId,
+      persona: c.persona,
+      structureId: c.structureId,
+      proId: c.proId,
+      providerId: c.providerId,
+      mediaId: c.mediaId,
       text: c.text,
       createdAt: c.createdAt,
       pseudo: profiles.pseudo,
@@ -55,11 +70,15 @@ export async function loadLastComments(
     .from(ranked)
     .where(lte(ranked.rank, FEED_COMMENT_PREVIEW_COUNT))
     .orderBy(asc(ranked.createdAt), asc(ranked.id));
+  const pageRows = rows.filter((r) => r.persona !== "fan");
+  const pages = pageRows.length ? await loadPageInfo(ex, pageRows) : new Map();
   for (const r of rows) {
     const list = out.get(r.postId) ?? [];
+    // Un commentaire de page se montre sous la page, jamais sous le compte de qui l'a écrit.
+    const pageView = r.persona !== "fan" ? pages.get(pageKeyOf(r) ?? "")?.view : undefined;
     list.push({
       id: r.id,
-      author: personAuthorView(r.authorId, r),
+      author: pageView ?? personAuthorView(r.authorId, r),
       text: r.text,
       createdAt: r.createdAt.toISOString(),
     });

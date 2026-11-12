@@ -59,7 +59,16 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
         ),
       })
       .from(c)
-      .where(and(inScope, isNull(c.deletedAt), anyOf(c.authorId, actorUnion, "text"), ne(c.authorId, userId)))
+      .where(
+        and(
+          inScope,
+          isNull(c.deletedAt),
+          // Jamais un commentaire de page : il ne remplace pas celui d'une personne dans une ligne regroupée (lot R9a).
+          eq(c.persona, "fan"),
+          anyOf(c.authorId, actorUnion, "text"),
+          ne(c.authorId, userId),
+        ),
+      )
       .as("ranked");
   for (const [scopeCol, inScope] of [
     [c.postId, posts.length ? anyOf(c.postId, posts, "uuid") : undefined],
