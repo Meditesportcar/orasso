@@ -2,10 +2,14 @@
 // « Abonnements », dans l'adresse : `?filtre=`), cartes par genre avec raison et « ⋯ ». Lu dans le navigateur (`/api/fil`,
 // cookie de session) : seule la dernière lecture compte, `reset` remplace la liste, le curseur est renvoyé tel quel, une
 // erreur n'est jamais une liste vide. Mêmes règles et mêmes mots que l'appli (`@orasso/shared`).
+// Lot R8c2 (maquette R8.3) : la phrase de l'onglet et « Comment le Fil choisit », le rail « Ça plaît en ce moment », le bandeau de
+// ma publication (en tête à l'envoi seulement), « Tu es à jour » puis « Déjà vu », la pastille « Nouvelles publications » et les
+// cartes vues envoyées à l'API. Pas de mode hors ligne sur le site.
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   applyFeedPage,
   CONTACT_EMAIL,
+  caughtUpIndex,
   emptyFeedList,
   type FeedCard,
   type FeedErrorSource,
@@ -14,24 +18,31 @@ import {
   type FeedPage,
   feedCardKindLabels,
   feedFilters,
+  feedPhrases,
   feedRetryAction,
   feedScreenFilters,
   feedWhyText,
   isFeedSponsoredTargeted,
+  justPublished,
   feedScreenLabels as L,
-  pinnedPublished,
   storyPublishLabels as S,
   sponsoredNotBeforeFourth,
   withMyPublished,
   withoutPlacement,
 } from "@orasso/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
 import { apiFetch } from "../../lib/api.client";
 import { ReportDialog } from "../ReportDialog";
 import { cardFor } from "./Cards";
+import { HotRail } from "./HotRail";
+import { HowFeedDialog } from "./HowFeedDialog";
 import { forgetPublished, readPublished } from "./mine";
+import { isTrackable, noteSeenAction, useSeenObserver } from "./seenTracker";
+
+/** « Nouvelles publications » : une lecture par minute, onglet affiché. */
+const FRESH_EVERY_MS = 60_000;
 
 const asFilter = (v: string | null): FeedFilter =>
   (feedFilters as readonly string[]).includes(v ?? "") ? (v as FeedFilter) : "for_you";
@@ -51,10 +62,19 @@ export function Fil({ userId }: { userId: string }) {
   const [faded, setFaded] = useState<Record<string, FeedCard>>({});
   const [lessNote, setLessNote] = useState<{ card: FeedCard; error: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Lot R8c2 : « Comment le Fil choisit », le bandeau de ma publication, la pastille, le suivi des cartes vues.
+  const [how, setHow] = useState(false);
+  const [bannerClosed, setBannerClosed] = useState<string | null>(null);
+  const [fresh, setFresh] = useState(0);
+  const [round, setRound] = useState(0);
+  const listBox = useRef<HTMLDivElement>(null);
+  const mineRead = useRef(false);
   const seq = useRef(0);
   const listRef = useRef(list);
   listRef.current = list;
   const topRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
   const menuRef = useRef<HTMLDialogElement>(null);
   const whyRef = useRef<HTMLDialogElement>(null);
 
@@ -72,13 +92,22 @@ export function Fil({ userId }: { userId: string }) {
       setList(applied.state);
       setError(null);
       setErrorSource(null);
+      setFresh(0);
+      setRound((n) => n + 1);
     }
   }, []);
 
   // Le filtre vient de l'adresse au premier affichage (après l'hydratation : jamais de décalage serveur/navigateur).
   useEffect(() => {
     setFilter(asFilter(new URLSearchParams(window.location.search).get("filtre")));
-    setMineCards(readPublished(userId));
+    // Ma publication juste envoyée est en tête **cette fois seulement** : l'onglet l'oublie aussitôt lue, un rechargement ou
+    // un départ du Fil la remet à sa place (R8c2). `mineRead` : le mode strict de développement rejoue l'effet.
+    if (!mineRead.current) {
+      mineRead.current = true;
+      const found = justPublished(readPublished(userId), Date.now());
+      for (const c of found) forgetPublished(c.id);
+      setMineCards(found);
+    }
     setReady(true);
   }, [userId]);
   useEffect(() => {
@@ -144,8 +173,33 @@ export function Fil({ userId }: { userId: string }) {
     setList(applied.state);
     setError(null);
     setErrorSource(null);
+    if (res.data.reset) {
+      setFresh(0);
+      setRound((n) => n + 1);
+    }
     if (applied.scrollTop) topRef.current?.scrollIntoView();
   }
+
+  /** La pastille « Nouvelles publications » : ma publication reprend sa place, la première page est relue, on remonte. */
+  async function refresh() {
+    setMineCards([]);
+    topRef.current?.scrollIntoView();
+    await load(filterRef.current);
+  }
+
+  // Les nouveautés : une lecture par minute, seulement onglet affiché et liste lue.
+  const ref = list?.ref;
+  useEffect(() => {
+    if (!ref) return;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      const res = await apiFetch<{ count: number }>(
+        `/fil/fresh?filter=${filterRef.current}&since=${encodeURIComponent(ref)}`,
+      );
+      if (res.ok && listRef.current?.ref === ref) setFresh(res.data.count);
+    }, FRESH_EVERY_MS);
+    return () => window.clearInterval(timer);
+  }, [ref]);
 
   useEffect(() => {
     if (menu) menuRef.current?.showModal();
@@ -192,7 +246,13 @@ export function Fil({ userId }: { userId: string }) {
 
   const shown = list && list.filter === filter ? list.items : null;
   // La carte « Sponsorisé » ne remonte jamais avant la 4e place, même si une des trois premières cartes sort (tour 2).
-  const items = shown ? sponsoredNotBeforeFourth(withMyPublished(shown, pinnedPublished(mineCards))) : null;
+  const pinned = justPublished(mineCards, Date.now());
+  const items = shown ? sponsoredNotBeforeFourth(withMyPublished(shown, pinned)) : null;
+  // « Tu es à jour » : avant la première carte déjà vue. Le bandeau : ma publication juste envoyée est en tête.
+  const frontier = items ? caughtUpIndex(items) : -1;
+  const hot = list && list.filter === filter ? (list.hot ?? []) : [];
+  const publishedId = pinned[0]?.id ?? null;
+  useSeenObserver({ userId, root: listBox, cards: items ?? [], reset: `${filter}:${round}` });
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = () => (feedRetryAction(errorSource) === "loadMore" ? more() : load(filter));
   const empty = L.empty[filter];
@@ -207,6 +267,11 @@ export function Fil({ userId }: { userId: string }) {
       {/* Lot R7f3 : « Publier » demande où (en story, dans le Fil) ; sans JavaScript aussi (`details`). */}
       {/* Lot R8f1 (variante A1, maquette R8.2) : une seule rangée, les trois filtres et, à droite, le bouton icône « Publier » ;
           la liste des choix s'ouvre sous la rangée, alignée à droite, par-dessus le Fil (rien ne descend). */}
+      {fresh > 0 ? (
+        <button type="button" className="fil-fresh" onClick={() => void refresh()} data-testid="fil-fresh">
+          <Icon name="up" size={16} /> {L.freshPill}
+        </button>
+      ) : null}
       <div className="fil-top">
         <div className="fil-filters" role="tablist" aria-label="Filtres du Fil" data-testid="fil-filters">
           {feedScreenFilters.map((o) => (
@@ -245,6 +310,50 @@ export function Fil({ userId }: { userId: string }) {
           </div>
         </details>
       </div>
+      <div className="fil-phrase">
+        <p className="o-t-caption" data-testid="fil-phrase">
+          {feedPhrases[filter]}
+        </p>
+        <button
+          type="button"
+          className="fil-info"
+          aria-label={L.howOpen}
+          onClick={() => setHow(true)}
+          data-testid="fil-how-open"
+        >
+          <Icon name="info" size={20} />
+        </button>
+      </div>
+      {publishedId && bannerClosed !== publishedId ? (
+        <div className="fil-banner" data-testid="fil-banner">
+          <Icon name="check" size={20} />
+          <div className="fil-banner__body">
+            <p className="o-t-caption">
+              <strong>{L.bannerTitle}</strong>
+              {L.bannerText}
+            </p>
+            <a className="fil-link" href="/app/moi?onglet=publications" data-testid="fil-banner-profile">
+              <Icon name="profile" size={16} /> {L.bannerProfile}
+            </a>
+          </div>
+          <button
+            type="button"
+            className="fil-banner__close"
+            aria-label={L.bannerClose}
+            onClick={() => setBannerClosed(publishedId)}
+            data-testid="fil-banner-close"
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+      ) : null}
+      {hot.length > 0 && filter !== "for_you" ? (
+        <HotRail
+          cards={hot}
+          scope={filter === "nearby" ? "nearby" : "following"}
+          onOpen={(card) => noteSeenAction(userId, card.id, "open")}
+        />
+      ) : null}
       {notice ? (
         <p className="o-t-caption" role="alert" data-testid="fil-notice">
           {notice}
@@ -290,30 +399,58 @@ export function Fil({ userId }: { userId: string }) {
         </div>
       ) : null}
       {items?.length ? (
-        <div className="fil-list" data-testid="fil-list">
-          {items.map((card) => {
+        <div className="fil-list" data-testid="fil-list" ref={listBox}>
+          {items.map((card, i) => {
             const Card = cardFor(card.kind);
             return (
-              <Card
-                key={card.id}
-                card={card}
-                onMenu={setMenu}
-                faded={Boolean(faded[card.id])}
-                userId={userId}
-                onRemoved={(c) =>
-                  setList((s) =>
-                    s
-                      ? {
-                          ...s,
-                          items:
-                            c.kind === "sponsored"
-                              ? withoutPlacement(s.items, c.payload.id)
-                              : s.items.filter((x) => x.id !== c.id),
-                        }
-                      : s,
-                  )
-                }
-              />
+              <Fragment key={card.id}>
+                {i === frontier ? (
+                  <>
+                    <div className="fil-uptodate" data-testid="fil-uptodate">
+                      <Icon name="check" size={26} />
+                      <div>
+                        <strong>{L.upToDate}</strong>
+                        <small>{L.upToDateText}</small>
+                      </div>
+                    </div>
+                    <h2 className="fil-seen-heading" data-testid="fil-seen-heading">
+                      {L.seenHeading}
+                    </h2>
+                  </>
+                ) : null}
+                {/* Un clic sur un lien de la carte = elle a été ouverte ; sur le bouton « partager » = partagée (R8c2). */}
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: l'enveloppe ne fait qu'observer les clics de la carte. */}
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: les liens et boutons de la carte portent déjà le clavier. */}
+                <div
+                  className={frontier >= 0 && i >= frontier ? "fil-item is-seen" : "fil-item"}
+                  data-seen-id={isTrackable(card) ? card.id : undefined}
+                  onClickCapture={(e) => {
+                    const target = e.target as Element;
+                    if (target.closest('[data-testid="feed-post-share"]')) noteSeenAction(userId, card.id, "share");
+                    else if (target.closest("a[href]")) noteSeenAction(userId, card.id, "open");
+                  }}
+                >
+                  <Card
+                    card={card}
+                    onMenu={setMenu}
+                    faded={Boolean(faded[card.id])}
+                    userId={userId}
+                    onRemoved={(c) =>
+                      setList((s) =>
+                        s
+                          ? {
+                              ...s,
+                              items:
+                                c.kind === "sponsored"
+                                  ? withoutPlacement(s.items, c.payload.id)
+                                  : s.items.filter((x) => x.id !== c.id),
+                            }
+                          : s,
+                      )
+                    }
+                  />
+                </div>
+              </Fragment>
             );
           })}
         </div>
@@ -430,6 +567,8 @@ export function Fil({ userId }: { userId: string }) {
           </div>
         ) : null}
       </dialog>
+
+      <HowFeedDialog open={how} onClose={() => setHow(false)} />
 
       <dialog ref={whyRef} className="mod-dialog" aria-label={L.whyTitle} onClose={() => setWhy(null)}>
         {why ? (

@@ -602,3 +602,293 @@
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }
+
+/* ---- Lot R8c2 (maquette R8.3 `f-clair`, R8.7 `f-cartes`) : phrase, « Comment le Fil choisit », rail, bandeau, « Tu es à jour », pastille, ligne rattachée. ---- */
+
+/* La phrase sous le sélecteur et le « i » (40 px). */
+.fil-phrase {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.fil-phrase p {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+.fil-info {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  cursor: pointer;
+}
+.fil-info:focus-visible,
+.fil-fresh:focus-visible,
+.fil-banner__close:focus-visible,
+.fil-hot__rail:focus-visible,
+.fil-hot__tile:focus-visible,
+.fil-attach__line:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* La pastille « Nouvelles publications » : collée en haut de la page, centrée, bouton secondaire. */
+.fil-fresh {
+  position: sticky;
+  top: 6px;
+  z-index: 14;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+
+/* Le bandeau de ma publication à l'envoi : contour moutarde, un bouton secondaire, « Fermer ». */
+.fil-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.fil-banner > svg {
+  color: var(--accent-text);
+  margin-top: 2px;
+}
+.fil-banner__body {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.fil-banner__body p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.fil-banner__close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+/* « Tu es à jour », puis « Déjà vu » : les cartes vues sont atténuées (62 %). */
+.fil-item {
+  min-width: 0;
+}
+.fil-item.is-seen {
+  opacity: 0.62;
+}
+.fil-uptodate {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.fil-uptodate > svg {
+  color: var(--accent-text);
+}
+.fil-uptodate strong {
+  font-size: 15px;
+}
+.fil-uptodate small {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+.fil-seen-heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* Le rail « Ça plaît en ce moment » : vignettes de 112 px (4:5), défilement horizontal à la souris, au doigt et au clavier. */
+.fil-hot {
+  display: grid;
+  gap: var(--space-2);
+}
+.fil-hot__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-2);
+}
+.fil-hot__head svg {
+  color: var(--accent-text);
+}
+.fil-hot__title {
+  margin: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.fil-hot__scope {
+  margin-left: auto;
+}
+.fil-hot__rail {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 2px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.fil-hot__rail li {
+  flex: none;
+  scroll-snap-align: start;
+}
+.fil-hot__tile {
+  position: relative;
+  display: block;
+  width: 112px;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+.fil-hot__tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-hot__who {
+  position: absolute;
+  inset: 0 0 auto 0;
+  padding: 5px 6px;
+  background: color-mix(in srgb, var(--night) 70%, transparent);
+  color: var(--night-ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+.fil-hot__flames {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+/* La ligne rattachée d'une carte : « pour le Rassemblement du Lydia · lun. 9 nov. » et le tampon « Présent ». */
+.fil-attach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+}
+.fil-attach__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 44px;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.fil-attach__stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* « Comment le Fil choisit » : une carte par onglet, puis « Ta publication ». */
+.fil-rule {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.fil-rule__tag {
+  justify-self: start;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fil-rule--mine .fil-rule__tag {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+.fil-rule__phrase {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.fil-rule ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+.fil-rule li::marker {
+  color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fil-item {
+    transition: opacity 120ms ease;
+  }
+}

@@ -21,6 +21,7 @@ import { cacheGetJson, cacheSetJson } from "@/lib/kv";
 import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
 import { Waiting } from "@/ui/Waiting";
 import { PublicationsGrid } from "./PublicationsGrid";
 import { PublicationsOneByOne } from "./PublicationsOneByOne";
@@ -96,7 +97,7 @@ function PublicationsBody({
 }: TabProps) {
   const { t } = useTheme();
   const router = useRouter();
-  const list = usePublications(authorKey, filter, !restrictedHint);
+  const list = usePublications(authorKey, filter, !restrictedHint, mine);
   const [mode, setMode] = useViewMode();
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(false);
@@ -180,6 +181,7 @@ function PublicationsBody({
 
   return (
     <View style={styles.wrap} testID="publications-tab">
+      {list.stale ? <Notice testID="publications-offline">{L.offlineList}</Notice> : null}
       <View style={styles.head}>
         <Text variant="bodyStrong" color={t.color.ink} style={styles.count} testID="publications-count">
           {count === null ? "" : L.count(count)}
