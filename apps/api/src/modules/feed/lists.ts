@@ -283,12 +283,8 @@ export async function listAuthorPosts(
   } else if (!(await pageInGoodStanding(db, key))) {
     throw notFound(feedListErrors.authorNotFound);
   }
-<<<<<<< HEAD
-  const rows = await authorPostIds(db, key, q.filter, cursor, at, v.user.id);
-=======
   if (await proPostsHidden(db, key, v.user.id, at)) return { items: [], nextCursor: null, restricted: false };
-  const rows = await authorPostIds(db, key, q.filter, cursor, at);
->>>>>>> vague-r8
+  const rows = await authorPostIds(db, key, q.filter, cursor, at, v.user.id);
   const { page, nextCursor } = pageOf(rows);
   const items: FeedPostView[] = await loadPostViews(
     db,
