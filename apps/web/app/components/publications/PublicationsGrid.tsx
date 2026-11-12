@@ -1,9 +1,24 @@
 // La grille de deux (trois colonnes au-delà de 900 px) : photo en 4:5, dessous la date puis le lieu ; **aucune pastille**. Toucher
 // une vignette ouvre la publication seule. Les images ne se chargent que près de l'écran (`loading="lazy"` du navigateur).
 import { Icon } from "@orasso/design-system/web";
-import { type FeedPostView, publicationsLabels as L, publicationPath, tileMeta } from "@orasso/shared";
+import {
+  eventJournalLabels,
+  type FeedPostView,
+  publicationsLabels as L,
+  publicationPath,
+  tileMeta,
+} from "@orasso/shared";
 
-export function PublicationsGrid({ posts }: { posts: readonly FeedPostView[] }) {
+import { JournalBadges, type JournalOptions } from "../event-journal/JournalBadges";
+
+export function PublicationsGrid({
+  posts,
+  journal,
+}: {
+  posts: readonly FeedPostView[];
+  /** Lot R8d (journal d'un événement) : étiquettes, menu « … » de l'organisateur, vignettes sans lien (sans session). */
+  journal?: JournalOptions;
+}) {
   const now = new Date();
   return (
     <div className="pub-grid" data-testid="publications-grid">
@@ -12,16 +27,55 @@ export function PublicationsGrid({ posts }: { posts: readonly FeedPostView[] }) 
         const photo = post.photos[0];
         return (
           <div key={post.id} className="pub-tile" data-testid="publication-tile">
-            <a
-              className="pub-tile__photo"
-              href={publicationPath(post.id, { web: true })}
-              aria-label={`${L.openPost}, ${L.tileLabel(meta.date, meta.place)}`}
-              data-testid="publication-tile-open"
-            >
-              {photo ? (
-                <img src={photo.url} alt="" width={photo.width} height={photo.height} loading="lazy" decoding="async" />
-              ) : null}
-            </a>
+            {journal?.readOnly ? (
+              <div
+                className="pub-tile__photo"
+                data-testid="publication-tile-open"
+                role="img"
+                aria-label={L.tileLabel(meta.date, meta.place)}
+              >
+                {photo ? (
+                  <img
+                    src={photo.url}
+                    alt=""
+                    width={photo.width}
+                    height={photo.height}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <a
+                className="pub-tile__photo"
+                href={publicationPath(post.id, { web: true })}
+                aria-label={`${L.openPost}, ${L.tileLabel(meta.date, meta.place)}`}
+                data-testid="publication-tile-open"
+              >
+                {photo ? (
+                  <img
+                    src={photo.url}
+                    alt=""
+                    width={photo.width}
+                    height={photo.height}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : null}
+              </a>
+            )}
+            {journal ? <JournalBadges post={post} floating /> : null}
+            {journal?.onMenu ? (
+              <button
+                type="button"
+                className="evj-dots"
+                aria-label={eventJournalLabels.menuOpen}
+                onClick={() => journal.onMenu?.(post)}
+                data-testid="journal-tile-menu"
+              >
+                <Icon name="more" size={18} />
+              </button>
+            ) : null}
             <div className="pub-tile__caption">
               <b data-testid="publication-tile-date">{meta.date}</b>
               {meta.place ? (

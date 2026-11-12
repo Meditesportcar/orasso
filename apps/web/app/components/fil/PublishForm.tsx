@@ -40,7 +40,6 @@ import {
   importantReasonLabels,
   importantReasons,
   importantWhoText,
-  initialPublishChoice,
   feedScreenLabels as L,
   loadUncertain,
   type NotifyPreview,
@@ -53,6 +52,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  publishStartChoice,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -130,6 +130,7 @@ export function PublishForm({
   personas,
   vehicles,
   optionsFailed,
+  start,
 }: {
   userId: string;
   pseudo: string;
@@ -137,6 +138,8 @@ export function PublishForm({
   personas: Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl">[];
   vehicles: { id: string; label: string }[];
   optionsFailed: boolean;
+  /** Lot R8d : « Publier pour cet événement » (`?structure=&evenement=`) pose la structure et l'événement de départ. */
+  start?: { structure?: string | null; evenement?: string | null };
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
@@ -146,8 +149,8 @@ export function PublishForm({
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
-  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
   const authors = useMemo(() => publishAuthors(personas, pseudo, avatarUrl), [personas, pseudo, avatarUrl]);
+  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);

@@ -6,21 +6,33 @@ import { useState } from "react";
 
 import "../../styles/fil.css";
 import "../../styles/publications.css";
+import { JournalBadges, type JournalOptions } from "../event-journal/JournalBadges";
 import { cardFor } from "../fil/Cards";
 import { FoldCaptions } from "./FoldedCaption";
 import { PostMenu } from "./PostMenu";
 
-export function PublicationsOneByOne({ posts }: { posts: readonly FeedPostView[] }) {
+/**
+ * `journal` (lot R8d, fiche d'un événement) : les étiquettes au-dessus de chaque carte, et le menu « … » est celui de la fiche
+ * (`onMenu`, qui porte « Épingler en tête » pour l'organisateur) ; sans `journal`, la brique ne change pas.
+ */
+export function PublicationsOneByOne({ posts, journal }: { posts: readonly FeedPostView[]; journal?: JournalOptions }) {
   const [menu, setMenu] = useState<FeedPostView | null>(null);
   const Card = cardFor("feed_post");
   return (
     <FoldCaptions>
       <div className="pub-one" data-testid="publications-one-by-one">
         {posts.map((post) => (
-          <Card key={post.id} card={publicationCard(post)} faded={false} onMenu={() => setMenu(post)} />
+          <div key={post.id} className={journal ? "evj-item" : undefined}>
+            {journal ? <JournalBadges post={post} /> : null}
+            <Card
+              card={publicationCard(post)}
+              faded={false}
+              onMenu={() => (journal?.onMenu ? journal.onMenu(post) : setMenu(post))}
+            />
+          </div>
         ))}
       </div>
-      <PostMenu post={menu} canDelete={Boolean(menu?.mine)} onClose={() => setMenu(null)} />
+      {journal?.onMenu ? null : <PostMenu post={menu} canDelete={Boolean(menu?.mine)} onClose={() => setMenu(null)} />}
     </FoldCaptions>
   );
 }

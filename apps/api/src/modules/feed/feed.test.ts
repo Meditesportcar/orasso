@@ -211,7 +211,8 @@ describe("sources du Fil", () => {
       winner: true,
       createdAt: hoursAgo(24),
     });
-    // annonce publique d'une structure suivie
+    // annonce publique d'une structure suivie : depuis la vague R8 (lot R8d) le Fil ne la sert plus en carte `announcement`
+    // (elle devient une publication du journal de l'événement, reprise par scripts/announcements-to-posts.ts)
     await db.insert(eventAnnouncements).values({
       eventId: upcoming.id,
       kind: "announcement",
@@ -234,15 +235,7 @@ describe("sources du Fil", () => {
     const res = await fil(viewer);
     expect(res.status).toBe(200);
     expect(kinds(res.items)).toEqual(
-      new Set<FeedCardKind>([
-        "event_recommended",
-        "vehicle_public",
-        "lineup",
-        "vote_result",
-        "announcement",
-        "pro",
-        "feed_post",
-      ]),
+      new Set<FeedCardKind>(["event_recommended", "vehicle_public", "lineup", "vote_result", "pro", "feed_post"]),
     );
     expect(new Set(ids(res.items)).size).toBe(res.items.length);
     expect(postIdsOf(res.items)).toContain(postId);
@@ -253,7 +246,7 @@ describe("sources du Fil", () => {
     expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(kenji.id);
     expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(viewer.id);
     expect(text).not.toContain("Réservée aux participants");
-    expect(text).toContain("Ouverture des portes à 18 h");
+    expect(text).not.toContain("Ouverture des portes à 18 h");
     // chaque carte a une raison lisible
     for (const c of res.items) {
       expect(c.reason.label.length).toBeGreaterThan(0);
@@ -261,7 +254,7 @@ describe("sources du Fil", () => {
     }
   });
 
-  it("l'annonce d'une structure non suivie n'entre pas dans le Fil", async () => {
+  it("l'annonce d'une structure non suivie n'entre pas dans le Fil (et une annonce suivie non plus : plus de carte `announcement`)", async () => {
     const viewer = await person("Viewer_Annonce");
     const orga = await person("Orga_Annonce");
     const structure = await createStructure(orga.id);

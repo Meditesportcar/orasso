@@ -31,6 +31,7 @@ export function GroupMessageSheet({
   structureId,
   events,
   visible,
+  initialEventId,
   onClose,
   onSent,
 }: {
@@ -38,11 +39,13 @@ export function GroupMessageSheet({
   /** Événements proposés (publiés, pas finis depuis plus de 7 jours : l'API refuse au-delà). */
   events: readonly EventCard[];
   visible: boolean;
+  /** Lot R8d : « Écrire aux inscrits » depuis la page d'un événement : l'événement est déjà choisi. */
+  initialEventId?: string;
   onClose: () => void;
   onSent: (recipients: number) => void;
 }) {
   const { t } = useTheme();
-  const [eventId, setEventId] = useState<string>(NO_EVENT);
+  const [eventId, setEventId] = useState<string>(initialEventId ?? NO_EVENT);
   const [segment, setSegment] = useState<MessageSegment | "">("");
   const [templateId, setTemplateId] = useState<string>(NO_TEMPLATE);
   const [subject, setSubject] = useState("");

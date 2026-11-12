@@ -120,6 +120,8 @@ export const CACHE_KEY_PREFIXES = [
   "explore-events.",
   // Lot R7j : la page d'un souvenir, une par événement (propre au compte).
   "memory.",
+  // Lot R8d : le journal d'un événement gardé pour le jour J (une clé par événement, propre au compte).
+  "journal.",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {

@@ -10,7 +10,15 @@ import {
 } from "@orasso/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
-import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
+import {
+  eventAnnouncements,
+  feedPostPhotos,
+  feedPostReactions,
+  feedPosts,
+  profiles,
+  userFollows,
+  vehicles,
+} from "../../db/schema";
 import { managedPageKeys } from "../../lib/authorship";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
@@ -232,15 +240,32 @@ export async function softDeletePost(
     .update(feedPosts)
     .set({ deletedAt: at, deletedBy })
     .where(and(eq(feedPosts.id, postId), isNull(feedPosts.deletedAt)))
-    .returning({ id: feedPosts.id });
+    .returning({ id: feedPosts.id, legacy: feedPosts.legacyAnnouncementId });
   if (!done) return [];
   await tx.delete(feedPostReactions).where(eq(feedPostReactions.postId, postId));
-  if (opts.keepPhotos) return [];
+  // Lot R8d : une publication qui a repris une annonce emporte l'annonce d'origine (la façade des annonces la servait encore,
+  // texte et image, y compris sans session). L'image publique de l'annonce part avec les autres fichiers, après la validation.
+  const keys: string[] = [];
+  if (done.legacy) {
+    const [old] = await tx
+      .select({ imageKey: eventAnnouncements.imageKey })
+      .from(eventAnnouncements)
+      .where(and(eq(eventAnnouncements.id, done.legacy), isNull(eventAnnouncements.deletedAt)))
+      .for("update");
+    if (old) {
+      await tx
+        .update(eventAnnouncements)
+        .set({ deletedAt: at, imageKey: null, imageWidth: null, imageHeight: null })
+        .where(eq(eventAnnouncements.id, done.legacy));
+      if (old.imageKey) keys.push(old.imageKey);
+    }
+  }
+  if (opts.keepPhotos) return keys;
   const photos = await tx
     .delete(feedPostPhotos)
     .where(eq(feedPostPhotos.postId, postId))
     .returning({ key: feedPostPhotos.storageKey });
-  return photos.map((p) => p.key);
+  return [...keys, ...photos.map((p) => p.key)];
 }
 
 /** Véhicule actif de l'auteur (le véhicule d'une publication est toujours le sien). */

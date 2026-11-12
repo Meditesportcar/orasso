@@ -7,20 +7,39 @@ import { StyleSheet, View } from "react-native";
 
 import { FeedPostCard } from "@/features/fil/cards/FeedPostCard";
 import { FoldCaptions } from "./FoldedCaption";
+import { JournalBadges, type JournalOptions } from "./JournalBadges";
 import { PostMenu } from "./PostMenu";
 
-export function PublicationsOneByOne({ posts }: { posts: readonly FeedPostView[] }) {
+/**
+ * `journal` (lot R8d, fiche d'un événement) : les étiquettes au-dessus de chaque carte, et le menu « … » est celui de la fiche
+ * (`onMenu`, qui porte « Épingler en tête » pour l'organisateur) ; sans `journal`, la brique ne change pas.
+ */
+export function PublicationsOneByOne({ posts, journal }: { posts: readonly FeedPostView[]; journal?: JournalOptions }) {
   const [menu, setMenu] = useState<FeedPostView | null>(null);
   return (
     <FoldCaptions>
       <View style={styles.list} testID="publications-one-by-one">
         {posts.map((post) => (
-          <FeedPostCard key={post.id} card={publicationCard(post)} faded={false} onMenu={() => setMenu(post)} />
+          <View key={post.id} style={journal ? styles.item : undefined}>
+            {journal ? <JournalBadges post={post} /> : null}
+            <FeedPostCard
+              card={publicationCard(post)}
+              faded={false}
+              onMenu={() => (journal?.onMenu ? journal.onMenu(post) : setMenu(post))}
+            />
+          </View>
         ))}
       </View>
-      <PostMenu post={menu} canDelete={Boolean(menu?.mine)} onClose={() => setMenu(null)} onRemoved={() => undefined} />
+      {journal?.onMenu ? null : (
+        <PostMenu
+          post={menu}
+          canDelete={Boolean(menu?.mine)}
+          onClose={() => setMenu(null)}
+          onRemoved={() => undefined}
+        />
+      )}
     </FoldCaptions>
   );
 }
 
-const styles = StyleSheet.create({ list: { gap: 12 } });
+const styles = StyleSheet.create({ list: { gap: 12 }, item: { gap: 6 } });

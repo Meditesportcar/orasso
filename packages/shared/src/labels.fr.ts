@@ -19,6 +19,7 @@ export * from "./labels/crewPage.fr";
 export * from "./labels/crews.fr";
 export * from "./labels/devClock.fr";
 export * from "./labels/event-editor.fr";
+export * from "./labels/eventJournal.fr";
 export * from "./labels/eventNotifications.fr";
 export * from "./labels/events.fr";
 export * from "./labels/explorer.fr";
