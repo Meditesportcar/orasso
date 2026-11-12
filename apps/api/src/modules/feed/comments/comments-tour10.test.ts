@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { addMember, call, createStructure, resetDb, useClock } from "../../../../test/helpers";
+import { addMember, call, createStructure, quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { notifications, profiles, structureMembers, structures } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
@@ -16,9 +16,11 @@ afterAll(async () => {
   await pool.end();
 });
 
+let clock: ReturnType<typeof useClock>;
 beforeEach(async () => {
   await resetDb();
-  useClock(new Date(Date.now() + 10 * 60_000));
+  clock = useClock(new Date(Date.now() + 10 * 60_000));
+  quietHours(false);
 });
 
 const lines = (userId: string, type: string) =>
@@ -56,18 +58,25 @@ describe("publication de page : aucun privilège de gestion dans les gardes de n
   });
 
   it("un responsable actuel de la page a le même verdict qu'un lecteur sans gestion (il lit en ouvrant la publication)", async () => {
-    const { owner, priv, id } = await world();
+    // Le responsable actuel est ici celui qui a publié (le destinataire des notifications) : `coOrga`, second facteur prouvé.
+    const { coOrga, priv, id } = await world();
     await comment(priv, id, "Un commentaire d'un compte privé");
-    expect(await lines(owner.id, "feed_comment")).toHaveLength(0);
+    expect(await lines(coOrga.id, "feed_comment")).toHaveLength(0);
     // Ouvrir la publication (second facteur prouvé) le montre bien au responsable.
-    const list = await call(owner, "GET", `/feed-posts/${id}/comments`);
+    const list = await call(coOrga, "GET", `/feed-posts/${id}/comments`);
     expect(JSON.stringify(list.json)).toContain("Un commentaire d'un compte privé");
   });
 
-  it("une page suspendue ou supprimée : aucune notification de commentaire ne part", async () => {
+  it("une page suspendue après le commentaire : la notification différée ne part pas", async () => {
     const { coOrga, structure, open, id } = await world();
+    clock.set(new Date("2026-06-15T21:00:00Z")); // 23 h à Paris : heures calmes, la notification attend le matin
+    quietHours(true);
+    await comment(open, id, "Avant la suspension de la page");
+    const [pending] = await lines(coOrga.id, "feed_comment");
+    expect(pending?.deliveredAt).toBeNull();
     await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, structure.id));
-    await comment(open, id, "Sous une page suspendue");
+    clock.set(new Date("2026-06-16T08:30:00Z"));
+    await notificationsService.deliverDue();
     expect(await lines(coOrga.id, "feed_comment")).toHaveLength(0);
   });
 });

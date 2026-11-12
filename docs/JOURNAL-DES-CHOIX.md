@@ -5628,6 +5628,10 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Coût** : la recherche de remplacement de la garde de livraison vérifie la lisibilité en un lot (`readableBatch`, déplacé dans `readers.ts`), l état des pages lu une fois. Test : une page suspendue ne notifie personne.
 - Note : le crash du PC (03:26) avait corrompu la base locale de développement ; elle a été recréée (données de test seulement).
 
+### Tour 11 (R8k1, 12/11/2026) : tests seulement
+- `comments-tour10.test.ts` : le responsable actuel vérifié est celui qui a publié (le destinataire) ; la page est suspendue **après** le commentaire (heures calmes, livraison le matin).
+- `comments-batch.test.ts` : l horloge simulée avance entre les commentaires du test (deux commentaires de la même milliseconde se départageaient au hasard, d où l échec en suite) ; les fichiers qui livrent des notifications posent `quietHours(false)` pour ne pas dépendre de l heure réelle.
+
 ### Tour 5 (R8c2, relecture Codex des tours 2 à 4, 12/11/2026)
 - **Retrait d'une carte des copies** : `dropFromCopies` (désormais dans `copyPhotos.ts`) capture le compte avant toute lecture et le passe à chaque `readCopy` et `saveCopy` ; rien n'est écrit sous un autre compte (test A → B entre la lecture et l'écriture).
 - **Photo refusée dans le repli** : `CrewPhotoImage` reçoit `onFailed` ; un 401, 403, 404 ou 410 reçu par le repli efface aussi la photo gardée (`forgetIfRefused`, testé : 500 sans effet, puis 404 efface).
