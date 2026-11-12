@@ -5180,6 +5180,13 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **Site, la publication confirmée est transmise au Fil avant toute navigation** : `rememberPublished` est écrit tout de suite à la réponse du POST (l'entrée porte l'identifiant du compte ; le contrôle du compte qui précède l'envoi suffit, un autre compte du même onglet n'en voit jamais rien) ; plus de contrôle détaché. Test : `/me` qui ne revient jamais, l'entrée du Fil est déjà dans l'onglet.
 - **Ancienne clé du `sessionStorage`** (`orasso:fil:publish-uncertain`) : migrée sous la clé de son compte au premier chargement de ce compte (un autre compte la laisse à son propriétaire), effacée aussi par `purgeUncertain` ; un contenu illisible est écarté. Test de la transition.
 
+### Tour 7 (R8p, 12/11/2026) : relecture Opus du tour 6
+- **Aucune connexion gardée pendant la livraison** : `mail.send` se découpe en `mail.enqueue` (écrit la ligne de `email_outbox`, budget compté sous verrou, dans la transaction de l'appelant s'il en donne une) et `mail.deliver` (livre hors transaction et note le résultat) ; `send` les enchaîne, son comportement ne change pas. `ensureMail` écrit la ligne **dans sa transaction, sous le verrou de l'invitation**, valide, puis livre : le verrou est relâché avant le transport, la ligne est déjà visible des autres. Test : douze invitations simultanées (plus que la réserve de 10 connexions) à livraison retenue ne bloquent pas une autre route, puis partent toutes.
+- **Relance** : la dernière trace de l'invitation décide. « envoyé » ou « écarté par le budget » : rien ; « en attente » depuis moins de 10 minutes : on patiente ; « échec » ou « en attente » depuis plus de 10 minutes (processus arrêté en route) : l'e-mail repart au rejeu. Test des quatre cas.
+- Les deux tests d'invitation express qui espionnaient `mail.send` espionnent maintenant `mail.enqueue` et `mail.deliver` (le contenu du message est le 3e argument de `deliver`).
+- **À noter (non corrigé)** : sur le site, un changement de session dans un autre onglet entre le contrôle du compte et le POST reste possible sur une fenêtre de quelques millisecondes ; l'API répondrait alors au nom du compte d'aujourd'hui.
+- Base de recette : le PC s'est éteint en pleine récupération ; la base du worktree a été recréée (`.data/pg` supprimé, migrations rejouées), sans conséquence (données de démonstration).
+
 ## Lot R8k1 : API des commentaires d'une publication du Fil (migration 0078 `feed-comments`, D40, 11/11/2026)
 
 

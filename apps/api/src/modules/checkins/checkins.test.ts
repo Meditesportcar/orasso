@@ -512,7 +512,7 @@ describe("inscription express", () => {
       (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
         (m) => m.to === "panne@exemple.fr",
       );
-    const send = vi.spyOn(mail, "send").mockRejectedValueOnce(new Error("panne avant la boîte d'envoi"));
+    const send = vi.spyOn(mail, "enqueue").mockRejectedValueOnce(new Error("panne avant la boîte d'envoi"));
     const lost = await call(julie, "POST", path, body);
     expect(lost.status).toBe(500);
     send.mockRestore();
@@ -527,6 +527,73 @@ describe("inscription express", () => {
     // Un rejeu de plus ne renvoie rien.
     await call(julie, "POST", path, body);
     expect(await mailsTo()).toHaveLength(1);
+  });
+  it("tour 7 : plusieurs invitations dont la livraison est lente ne bloquent aucune autre route (aucune connexion gardée pendant le transport)", async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const real = mail.deliver.bind(mail);
+    const deliver = vi.spyOn(mail, "deliver").mockImplementation(async (row, to, content) => {
+      await gate;
+      return real(row, to, content);
+    });
+    const path = `/events/${eventId}/express-invites`;
+    // Plus de requêtes que la réserve du pool (10) : si chacune gardait une connexion pendant la livraison, tout s'arrêterait.
+    const pending = [...Array(12).keys()].map((n) => call(julie, "POST", path, { email: `lent${n}@exemple.fr` }));
+    await new Promise((r) => setTimeout(r, 1_500));
+    const other = await Promise.race([
+      call(julie, "GET", "/me").then((r) => r.status),
+      new Promise<string>((r) => setTimeout(() => r("bloquée"), 8_000)),
+    ]);
+    expect(other).toBe(200);
+    open();
+    const done = await Promise.all(pending);
+    deliver.mockRestore();
+    expect(done.map((r) => r.status)).toEqual(Array(12).fill(201));
+    const sent = (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+      (m) => m.to.startsWith("lent"),
+    );
+    expect(sent).toHaveLength(12);
+    expect(sent.every((m) => m.status === "sent")).toBe(true);
+  }, 60_000);
+
+  it("tour 7 : un e-mail en échec est renvoyé au rejeu ; une attente de plus de 10 minutes aussi ; une attente récente ou un envoi réussi, jamais", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e03";
+    const body = { email: "Relance@Exemple.fr", clientId };
+    const path = `/events/${eventId}/express-invites`;
+    const rows = async () =>
+      (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+        (m) => m.to === "relance@exemple.fr",
+      );
+    const first = await call(julie, "POST", path, body);
+    expect(first.status).toBe(201);
+    expect(await rows()).toHaveLength(1);
+    // Envoyé : un rejeu ne renvoie rien.
+    await call(julie, "POST", path, body);
+    expect(await rows()).toHaveLength(1);
+    // Échec signalé : le rejeu renvoie.
+    await db
+      .update(emailOutbox)
+      .set({ status: "failed" })
+      .where(eq(emailOutbox.id, (await rows())[0]!.id));
+    await call(julie, "POST", path, body);
+    const afterFailed = await rows();
+    expect(afterFailed).toHaveLength(2);
+    expect(afterFailed.filter((m) => m.status === "sent")).toHaveLength(1);
+    // En attente depuis peu : le rejeu patiente.
+    await db.update(emailOutbox).set({ status: "queued", createdAt: new Date(clock.now.getTime() - 60_000) });
+    await call(julie, "POST", path, body);
+    expect(await rows()).toHaveLength(2);
+    // En attente depuis plus de 10 minutes (processus arrêté en route) : considéré non envoyé, il repart.
+    await db
+      .update(emailOutbox)
+      .set({ status: "queued", createdAt: new Date(clock.now.getTime() - 11 * 60_000) })
+      .where(eq(emailOutbox.template, "express_invite"));
+    await call(julie, "POST", path, body);
+    const afterStale = await rows();
+    expect(afterStale).toHaveLength(3);
+    expect(afterStale.filter((m) => m.status === "sent")).toHaveLength(1);
   });
   it("idempotence (R8p, tour 5) : réponse perdue après création, même clientId → une seule invitation et un seul e-mail", async () => {
     const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e01";
@@ -560,13 +627,13 @@ describe("inscription express", () => {
   });
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
-    const send = vi.spyOn(mail, "send");
+    const send = vi.spyOn(mail, "deliver");
     const invite = await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Nouveau@Exemple.fr" });
     expect(invite.status).toBe(201);
     const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
     expect(mails.map((m) => m.to)).toEqual(["nouveau@exemple.fr"]);
     // La personne n'a pas de compte : le pied ne dit pas le contraire (relecture du lot 56).
-    const sentMail = send.mock.calls.find(([template]) => template === "express_invite")?.[2];
+    const sentMail = send.mock.calls[0]?.[2];
     send.mockRestore();
     expect(sentMail?.html).toContain("Tu reçois cet e-mail parce qu'on t'a invité sur Orasso.");
     expect(sentMail?.html).not.toContain("parce que tu as un compte");

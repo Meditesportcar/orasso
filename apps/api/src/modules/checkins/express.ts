@@ -12,7 +12,7 @@ import {
   normalizePlate,
   vehicleCreateSchema,
 } from "@orasso/shared";
-import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 
 import { auth } from "../../auth";
 import { db } from "../../db/client";
@@ -76,45 +76,54 @@ async function replayed(userId: string, clientId: string, event: Awaited<ReturnT
   };
 }
 
+/** Une ligne « en attente » plus vieille que cela est restée en route (arrêt du processus) : l'e-mail est considéré non envoyé. */
+const STALE_QUEUED_MS = 10 * 60_000;
+
 /**
- * Envoie l'e-mail de l'invitation **s'il n'a laissé aucune trace** dans la boîte d'envoi (en attente, envoyé ou écarté par le
- * budget) : sous un verrou propre à l'invitation, donc la création, un rejeu simultané et un rejeu tardif ne l'envoient jamais
- * deux fois. Un envoi qui a échoué (transport) est retenté au rejeu.
+ * Envoie l'e-mail de l'invitation **sauf s'il est parti ou en route** : la dernière trace de la boîte d'envoi est « envoyé »,
+ * « écarté par le budget » ou « en attente » depuis moins de 10 minutes. Pas de trace, un échec (`failed`) ou une attente
+ * trop ancienne : il repart. Sous un verrou propre à l'invitation, la ligne d'envoi est écrite **dans la transaction** (donc
+ * visible des autres dès le verrou relâché) ; la livraison se fait **après**, hors transaction : aucune connexion de la base
+ * n'attend le transport (la réserve du pool est de 10).
  */
 async function ensureMail(
   row: { id: string; eventId: string; email: string; token: string },
   event: { title: string; startsAt: Date },
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  const content = renderMail(
+    `Inscription express · ${event.title}`,
+    [
+      `Tu es à l'entrée de « ${event.title} » (${formatDateTime(event.startsAt)}).`,
+      "Crée ton compte Orasso et ton véhicule en une minute : ton QR d'accès s'affiche aussitôt.",
+      "Lien valable 24 h.",
+    ],
+    { label: "M'inscrire", url: `${env.PUBLIC_URL}/express/${row.token}` },
+    { footer: "invitation" },
+  );
+  const queued = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`express-mail:${row.id}`}))`);
-    const [done] = await tx
-      .select({ id: emailOutbox.id })
+    const [last] = await tx
+      .select({ status: emailOutbox.status, createdAt: emailOutbox.createdAt })
       .from(emailOutbox)
-      .where(
-        and(
-          eq(emailOutbox.template, "express_invite"),
-          sql`${emailOutbox.payload}->>'inviteId' = ${row.id}`,
-          inArray(emailOutbox.status, ["queued", "sent", "skipped_quota"]),
-        ),
-      )
+      .where(and(eq(emailOutbox.template, "express_invite"), sql`${emailOutbox.payload}->>'inviteId' = ${row.id}`))
+      .orderBy(desc(emailOutbox.createdAt))
       .limit(1);
-    if (done) return;
-    await mail.send(
+    const onItsWay =
+      last &&
+      (last.status === "sent" ||
+        last.status === "skipped_quota" ||
+        (last.status === "queued" && now().getTime() - last.createdAt.getTime() < STALE_QUEUED_MS));
+    if (onItsWay) return undefined;
+    return mail.enqueue(
       "express_invite",
       row.email,
-      renderMail(
-        `Inscription express · ${event.title}`,
-        [
-          `Tu es à l'entrée de « ${event.title} » (${formatDateTime(event.startsAt)}).`,
-          "Crée ton compte Orasso et ton véhicule en une minute : ton QR d'accès s'affiche aussitôt.",
-          "Lien valable 24 h.",
-        ],
-        { label: "M'inscrire", url: `${env.PUBLIC_URL}/express/${row.token}` },
-        { footer: "invitation" },
-      ),
+      content,
       { eventId: row.eventId, inviteId: row.id },
+      env.MAIL_TRANSPORT,
+      tx,
     );
   });
+  if (queued) await mail.deliver(queued, row.email, content);
 }
 
 export const expressService = {
