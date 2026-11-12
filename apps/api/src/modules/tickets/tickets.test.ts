@@ -207,7 +207,11 @@ describe("contrôle à l'entrée", () => {
     expect(ok.json).toMatchObject({ result: "ok", pseudo: "Kenji_66", ticketName: "Entrée" });
     expect((await check(orga, e.id, t.payload)).json).toMatchObject({ result: "already", pseudo: "Kenji_66" });
     expect((await check(staff, e.id, foreign.payload)).json).toEqual({ result: "refused", reason: "other_event" });
-    const forged = `${t.payload.slice(0, -3)}AAA`;
+    // Falsification déterministe : un caractère au milieu de la signature (jamais les bits de bourrage de la fin).
+    const mid = Math.floor(t.payload.length / 2);
+    const swapped = t.payload[mid] === "B" ? "C" : "B";
+    const forged = `${t.payload.slice(0, mid)}${swapped}${t.payload.slice(mid + 1)}`;
+    expect(forged).not.toBe(t.payload);
     expect((await check(staff, e.id, forged)).json).toEqual({ result: "refused", reason: "forged" });
     expect((await check(staff, e.id, "bonjour")).json).toEqual({ result: "refused", reason: "malformed" });
 
