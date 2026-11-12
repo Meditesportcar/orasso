@@ -5516,3 +5516,7 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (Â« 
 - **`share`** : `PostActions` reÃ§oit `onShared` (facultatif) ; le Fil note `share` Ã  l'ouverture du partage (la feuille n'a pas de retour de rÃ©ussite : c'est l'intention de partager, pas son aboutissement). `open` : `isRealTap` (moins de 10 px) testÃ©.
 - **Â« Pas de rÃ©seau Â»** : `PostActions` reÃ§oit `offline` (facultatif, portÃ© par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent Â« Pas de rÃ©seau Â» avant toute mutation (recette).
 - **`attachPhrase`** : l'Ã©lision l'emporte aussi pour un nom fÃ©minin (Â« pour l'Exposition Â», Â« Ã  l'Expo Â»).
+
+### Tour 8 (R8c1, relecture Codex du tour 6, 12/11/2026)
+- **Empreinte des flammes indépendante de la zone** : elle est calculée sur les publications des deux zones de la fenêtre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compté, donc plus de \eset\ (coût : une lecture de plus de la source des publications par page de la phase 1).
+- **Pas de doublon dans une page** : les cartes déjà servies par la page sont écartées de la zone A par date et de la zone B (la page est complétée par les suivantes) ; \ppendCards\ dédoublonne aussi à l'intérieur de la page reçue (filet, site et appli). Un doublon entre deux pages reste possible après un rognage et est retiré par l'écran.
