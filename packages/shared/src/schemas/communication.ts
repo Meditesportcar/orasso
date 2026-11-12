@@ -83,6 +83,11 @@ export type AnnouncementView = {
   structureName: string;
   /** Organisation seulement : qui l'a écrite (nul pour une entrée automatique ou un compte supprimé). */
   authorPseudo?: string | null;
+  /**
+   * Vague R8 (lot R8d) : l'annonce a été reprise en publication du journal de l'événement (c'est son identifiant). Absent
+   * sinon. Les écrans de la vague sautent ces entrées ; l'ancien APK ignore le champ.
+   */
+  migratedPostId?: string;
 };
 
 export type AnnouncementPage = { items: AnnouncementView[] };

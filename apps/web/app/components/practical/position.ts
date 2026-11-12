@@ -45,14 +45,15 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
 const follow = createFollowTracker();
 
 if (typeof window !== "undefined") {
-  // Comme « Ma météo » : une annonce « aucun compte » invalide les demandes en cours ; un autre compte efface la position.
+  // Comme « Ma météo » (R8m) : toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface
+  // la position, invalide les demandes en cours (modèle de demande en vol conservé) et remet le suivi de la météo à zéro.
   let seen: string | null = currentSession();
   listenSession((userId) => {
-    if (userId === null) store.invalidate();
-    else if (seen !== null && userId !== seen) store.forget();
-    if (userId === null || (seen !== null && userId !== seen)) follow.reset();
-    seen = userId ?? seen;
-    store.purgeForeign();
+    if (userId !== seen) {
+      store.forget();
+      follow.reset();
+    }
+    seen = userId;
   });
 }
 

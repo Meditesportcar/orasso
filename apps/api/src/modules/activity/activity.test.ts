@@ -622,6 +622,8 @@ describe("pastilles de la Boîte (inbox/summary et /me)", () => {
       requests: expect.objectContaining({ follow: 0, contact: 0, crew: 0 }),
       unseenActivity: 0,
       pendingRequests: 0,
+      // Lot R8o : les invitations à publier ont leur champ (l ancienne appli l ignore).
+      pendingCoauthors: 0,
     });
     const me = (await call(damien, "GET", "/me")).json;
     expect(me.counts).toMatchObject({

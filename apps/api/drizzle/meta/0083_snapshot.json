@@ -1,5 +1,5 @@
 {
-  "id": "7f39ec3d-565d-4da9-820b-bc38edcbcaee",
+  "id": "f52ef9c1-ce40-4754-8d87-40671cc0a3b2",
   "prevId": "fe8b94d0-edcb-42a7-917a-32e72dce5418",
   "version": "7",
   "dialect": "postgresql",
@@ -11248,6 +11248,93 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.page_follows": {
+      "name": "page_follows",
+      "schema": "",
+      "columns": {
+        "follower_kind": {
+          "name": "follower_kind",
+          "type": "page_follow_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "follower_id": {
+          "name": "follower_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_kind": {
+          "name": "target_kind",
+          "type": "page_follow_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "page_follows_target_idx": {
+          "name": "page_follows_target_idx",
+          "columns": [
+            {
+              "expression": "target_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "page_follows_pkey": {
+          "name": "page_follows_pkey",
+          "columns": [
+            "follower_kind",
+            "follower_id",
+            "target_kind",
+            "target_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "page_follows_not_self_check": {
+          "name": "page_follows_not_self_check",
+          "value": "not (\"page_follows\".\"follower_kind\" = \"page_follows\".\"target_kind\" and \"page_follows\".\"follower_id\" = \"page_follows\".\"target_id\")"
+        },
+        "page_follows_user_target_check": {
+          "name": "page_follows_user_target_check",
+          "value": "\"page_follows\".\"follower_kind\" <> 'user' or \"page_follows\".\"target_kind\" in ('provider', 'media')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.partnerships": {
       "name": "partnerships",
       "schema": "",
@@ -17156,6 +17243,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_id": {
+          "name": "media_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "audience": {
           "name": "audience",
           "type": "story_audience",
@@ -17424,6 +17523,50 @@
           "method": "btree",
           "with": {}
         },
+        "stories_provider_idx": {
+          "name": "stories_provider_idx",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"stories\".\"provider_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stories_media_idx": {
+          "name": "stories_media_idx",
+          "columns": [
+            {
+              "expression": "media_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"stories\".\"media_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "stories_crew_idx": {
           "name": "stories_crew_idx",
           "columns": [
@@ -17517,6 +17660,32 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "stories_provider_id_provider_profiles_id_fk": {
+          "name": "stories_provider_id_provider_profiles_id_fk",
+          "tableFrom": "stories",
+          "tableTo": "provider_profiles",
+          "columnsFrom": [
+            "provider_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stories_media_id_media_profiles_id_fk": {
+          "name": "stories_media_id_media_profiles_id_fk",
+          "tableFrom": "stories",
+          "tableTo": "media_profiles",
+          "columnsFrom": [
+            "media_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "stories_crew_id_crews_id_fk": {
@@ -17637,7 +17806,7 @@
         },
         "author_kind": {
           "name": "author_kind",
-          "type": "story_tag_target",
+          "type": "story_author_kind",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
@@ -21303,130 +21472,12 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.profile_weather_places": {
-      "name": "profile_weather_places",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slot": {
-          "name": "slot",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lat": {
-          "name": "lat",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lng": {
-          "name": "lng",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "profile_weather_places_user_id_user_id_fk": {
-          "name": "profile_weather_places_user_id_user_id_fk",
-          "tableFrom": "profile_weather_places",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "profile_weather_places_pkey": {
-          "name": "profile_weather_places_pkey",
-          "columns": [
-            "user_id",
-            "slot"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "profile_weather_places_slot_check": {
-          "name": "profile_weather_places_slot_check",
-          "value": "\"profile_weather_places\".\"slot\" in (0, 1)"
-        },
-        "profile_weather_places_label_check": {
-          "name": "profile_weather_places_label_check",
-          "value": "char_length(\"profile_weather_places\".\"label\") between 1 and 80"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.weather_departments": {
       "name": "weather_departments",
       "schema": "",
       "columns": {
         "department": {
           "name": "department",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fetched_at": {
-          "name": "fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "forecast": {
-          "name": "forecast",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.weather_places_cache": {
-      "name": "weather_places_cache",
-      "schema": "",
-      "columns": {
-        "cell": {
-          "name": "cell",
           "type": "text",
           "primaryKey": true,
           "notNull": true
@@ -21989,6 +22040,17 @@
         "account"
       ]
     },
+    "public.page_follow_kind": {
+      "name": "page_follow_kind",
+      "schema": "public",
+      "values": [
+        "user",
+        "structure",
+        "pro",
+        "provider",
+        "media"
+      ]
+    },
     "public.partnership_status": {
       "name": "partnership_status",
       "schema": "public",
@@ -22202,6 +22264,17 @@
         "followers",
         "crew",
         "public"
+      ]
+    },
+    "public.story_author_kind": {
+      "name": "story_author_kind",
+      "schema": "public",
+      "values": [
+        "user",
+        "structure",
+        "pro",
+        "provider",
+        "media"
       ]
     },
     "public.story_link": {

@@ -78,6 +78,7 @@ const shot = async (page: Page, name: string) => {
 for (const width of [390, 1280]) {
   test(`${width} px : par défaut (T10), détail, Changer de lieu, Second lieu, Retirer ce lieu`, async ({ browser }) => {
     // `PUT /me/weather/places` est limité à 10 par minute et par compte : la fenêtre de la série précédente doit être passée.
+    test.setTimeout(240_000);
     if (width === 1280) await new Promise((r) => setTimeout(r, 62_000));
     await apiCall(cookie, "PUT", "/me/weather/places", { places: [] });
     const { ctx, page } = await openHome(browser, { width, theme: width === 390 ? "beton" : "sable" });
@@ -118,6 +119,7 @@ for (const width of [390, 1280]) {
 
     // Second lieu : Perpignan.
     await page.getByTestId("meteo-second").click();
+    await page.waitForURL(/lieu=second/);
     await page.getByTestId("place-search").fill("Perp");
     await page.getByTestId("place-search-submit").click();
     await page.getByTestId("place-result-0").click();
@@ -200,6 +202,7 @@ test("position accordée : arrondie à 0,1°, jamais dans une adresse ni dans le
 
 test("sans département ni lieu : « Choisis ta ville »", async ({ browser }) => {
   const cookie26 = await login("pilote26@orasso.local");
+  await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
   await apiCall(cookie26, "PUT", "/me/home/widgets", {
     order: [],
     hidden: ["live", "agenda", "favorite_garage", "pending"],
@@ -266,6 +269,7 @@ test("tour 2 : sans département, position puis « Second lieu » : la ville s'a
   await page.getByTestId("my-weather-use-position").click();
   await expect(page.getByText("Canet-en-Roussillon · ma position")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("meteo-second").click();
+  await page.waitForURL(/lieu=second/);
   await page.getByTestId("place-search").fill("Lyon");
   await page.getByTestId("place-search-submit").click();
   await page.getByTestId("place-result-0").click();
@@ -314,6 +318,7 @@ test("tour 3 : position + Lyon, puis remplacer la position par Toulouse : Lyon r
   await page.getByTestId("my-weather-use-position").click();
   await expect(page.getByText("Canet-en-Roussillon · ma position")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("meteo-second").click();
+  await page.waitForURL(/lieu=second/);
   await page.getByTestId("place-search").fill("Lyon");
   await page.getByTestId("place-search-submit").click();
   await page.getByTestId("place-result-0").click();

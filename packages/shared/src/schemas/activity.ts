@@ -54,6 +54,7 @@ export const requestKinds = [
   "plate_transfer",
   "contact",
   "partnership",
+  "coauthor",
 ] as const;
 export type RequestKind = (typeof requestKinds)[number];
 

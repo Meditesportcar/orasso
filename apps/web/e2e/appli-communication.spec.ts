@@ -31,10 +31,11 @@ test("appli : fil de l'événement et discussion du staff", async ({ browser }) 
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 30_000 });
 
-  // Page événement : le fil montre l'annonce épinglée du seed.
+  // Page événement : l'annonce épinglée du seed est devenue la publication épinglée du journal (lot R8d : reprise des annonces).
   await page.goto("/e/nocturne-de-canet-2026");
-  await expect(page.getByTestId("event-feed")).toContainText("Musique coupée à 22 h", { timeout: 30_000 });
-  await page.getByTestId("event-feed").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("event-journal")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("journal-pinned")).toHaveCount(1);
+  await page.getByTestId("event-journal").scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${DIR}/01-fil-evenement-sable.png` });
 
   // Mode staff : « Discussion » à côté de l'Alerte → conversation du staff de l'événement.

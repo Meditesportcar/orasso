@@ -1,4 +1,5 @@
 import {
+  ACTOR_HEADER,
   CLOCK_OFFSET_HEADER,
   feedLabels,
   isReservedPseudo,
@@ -49,6 +50,7 @@ import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
+import { coauthorRoutes } from "./modules/feed/routes-coauthors";
 import { feedFilRoutes } from "./modules/feed/routes-fil";
 import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
@@ -74,6 +76,7 @@ import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
+import { pageFollowsRoutes } from "./modules/social/routes-page-follows";
 import { spotMeetupsRoutes } from "./modules/spot-meetups/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { storiesRoutes } from "./modules/stories/routes";
@@ -112,7 +115,7 @@ if (corsOrigins.length) {
     "*",
     cors({
       origin: corsOrigins,
-      allowHeaders: ["authorization", "content-type", "x-device-id"],
+      allowHeaders: ["authorization", "content-type", "x-device-id", ACTOR_HEADER],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       // `date` : le navigateur (recette web de l'appli) mesure le décalage avec l'heure du serveur (lot 48, code tournant).
       exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER, "date"],
@@ -279,6 +282,7 @@ app.route("/", crewsRoutes);
 // Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
 app.route("/", crewFeedRoutes);
 app.route("/", storiesRoutes);
+app.route("/", pageFollowsRoutes);
 // Lot R7f4 : partager un contenu (feuille, carte, fichiers qui sortent d'Orasso).
 app.route("/", shareRoutes);
 app.route("/", invitationsRoutes);
@@ -289,6 +293,8 @@ app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
 // Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
 app.route("/", feedListRoutes);
+// Vague R8 (lot R8o) : collaboration (co-auteur) ; avant `feedRoutes`.
+app.route("/", coauthorRoutes);
 app.route("/", feedRoutes);
 app.route("/", feedFilRoutes);
 app.route("/", feedCommentRoutes);

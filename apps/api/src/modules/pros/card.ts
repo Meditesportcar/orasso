@@ -5,17 +5,24 @@ import { count, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { proFollows, type proProfiles } from "../../db/schema";
 import { storage } from "../../lib/storage";
+import { pageFollowerCounts } from "../social/pageFollows";
 
 type ProRow = typeof proProfiles.$inferSelect;
 
+/** Abonnés d'une fiche pro : les personnes (`pro_follows`) **plus** les pages qui la suivent (`page_follows`, lot R9a). */
 export async function followersCounts(ids: string[]): Promise<Map<string, number>> {
   if (!ids.length) return new Map();
-  const rows = await db
-    .select({ proId: proFollows.proId, n: count() })
-    .from(proFollows)
-    .where(inArray(proFollows.proId, ids))
-    .groupBy(proFollows.proId);
-  return new Map(rows.map((r) => [r.proId, r.n]));
+  const [rows, pages] = await Promise.all([
+    db
+      .select({ proId: proFollows.proId, n: count() })
+      .from(proFollows)
+      .where(inArray(proFollows.proId, ids))
+      .groupBy(proFollows.proId),
+    pageFollowerCounts("pro", ids),
+  ]);
+  const out = new Map(rows.map((r) => [r.proId, r.n]));
+  for (const [id, n] of pages) out.set(id, (out.get(id) ?? 0) + n);
+  return out;
 }
 
 export function toCard(p: ProRow, followers: number): ProCard {

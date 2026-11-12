@@ -10,7 +10,7 @@ import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
 
 const store = createPositionStore({
-  // Le dernier compte annoncé par la mise en page, même si l'annonce a eu lieu avant le chargement de ce module.
+  // Le dernier compte annoncé par la mise en page ; `null` sans session (la position n'a alors aucune portée).
   scope: currentSession,
   now: () => Date.now(),
   weatherAt: async (position) => {
@@ -21,17 +21,18 @@ const store = createPositionStore({
 });
 
 if (typeof window !== "undefined") {
-  // Chaque transition de session invalide les demandes en cours, même sans position gardée (A → aucun → A pendant le GPS).
-  // Une annonce « aucun compte » invalide les demandes en cours (la position gardée reste liée à son compte) ; un autre compte
-  // efface la position.
+  // Toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface la position et
+  // invalide les demandes en cours : A → déconnexion → A pendant le GPS ne ramène rien. (Aucune annonce « aucun compte » ne
+  // survient en cours de navigation : seules les pages publiques, sans session, l'annoncent.)
   let seen: string | null = currentSession();
   listenSession((userId) => {
-    if (userId === null) store.invalidate();
-    else if (seen !== null && userId !== seen) store.forget();
-    seen = userId ?? seen;
-    store.purgeForeign();
+    if (userId !== seen) store.forget();
+    seen = userId;
   });
 }
+
+/** La position visible pour la session courante (tests, et lecture sans React). */
+export const peekWeatherPosition = () => store.view();
 
 const EMPTY = { at: null, busy: false, coarse: null } as const;
 let last = store.view();

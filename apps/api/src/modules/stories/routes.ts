@@ -11,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { noStore, readActor } from "../../lib/actor";
 import { notFound, validation } from "../../lib/errors";
 import { rangedFile } from "../../lib/ranged";
 import { type AppEnv, requireUser } from "../../lib/session";
@@ -43,7 +44,13 @@ export const storiesRoutes = new Hono<AppEnv>()
   .get("/me/stories/:id/viewers", async (c) =>
     c.json(await storiesService.viewers(await requireUser(c), uuidParam(c, "id"))),
   )
-  .get("/stories/bar", async (c) => c.json(await storiesBar.get(await requireUser(c))))
+  .get("/stories/bar", async (c) => {
+    const v = await requireUser(c);
+    // Vague R9 (lot R9a) : lue en tant que page (`X-Orasso-Actor`) ; la réponse dépend de l'acteur : jamais en cache.
+    const actor = await readActor(c, v);
+    noStore(c);
+    return c.json(await storiesBar.get(v, actor));
+  })
   .get("/stories/by-author/:key", async (c) =>
     c.json(await storiesAccess.byAuthor(await requireUser(c), c.req.param("key"))),
   )

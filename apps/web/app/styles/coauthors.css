@@ -1,0 +1,85 @@
+/* Collaboration (lot R8o, maquette R8.13 `p-collab`) : la signature à deux noms d'une carte, la demande de l'Activité, l'étiquette
+   « Avec … » d'une vignette de profil. Jetons seulement ; un nom ne se tronque jamais (il passe à la ligne). */
+.co-two {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.co-two > .s-avatar:last-child,
+.co-two > .fil-logo:last-child {
+  margin-left: calc(var(--space-2) * -1);
+  box-shadow: 0 0 0 calc(var(--space-1) / 2) var(--surface);
+}
+.co-sign a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.co-sign a:hover,
+.co-sign a:focus-visible {
+  text-decoration: underline;
+}
+.co-invite {
+  color: var(--ink-muted);
+  margin: 0;
+}
+.co-request {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.co-request__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.co-request__text {
+  display: grid;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+}
+.co-request__text b {
+  overflow-wrap: anywhere;
+}
+.co-request__thumb {
+  width: calc(var(--space-12) + var(--space-2));
+  aspect-ratio: 4 / 5;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--night);
+}
+.co-request__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.co-request__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.co-pin {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: fit-content;
+  max-width: calc(100% - var(--space-4));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--night) 85%, transparent);
+  color: var(--night-ink);
+  font-size: var(--type-caption-size);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+/* La vignette de la grille porte l'étiquette « Avec … » : elle devient le repère de position (aucun changement visuel sans étiquette). */
+.pub-tile__photo {
+  position: relative;
+}

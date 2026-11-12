@@ -16,6 +16,7 @@ import { and, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { db } from "../../../db/client";
 import { feedPosts, profiles } from "../../../db/schema";
 import { authorVisibleSql, profileOkSql } from "../access";
+import { coSignedOwners } from "../coauthors";
 import { loadPostViews } from "../posts";
 import {
   atBounds,
@@ -67,7 +68,20 @@ export function feedPostScopeSql(args: {
       or (${feedPosts.persona} = 'organizer'
         and exists (select 1 from structure_follows sf where sf.user_id = ${userId} and sf.structure_id = ${feedPosts.structureId}))
       or (${feedPosts.persona} = 'pro'
-        and exists (select 1 from pro_follows pf where pf.user_id = ${userId} and pf.pro_id = ${feedPosts.proId})))`);
+        and exists (select 1 from pro_follows pf where pf.user_id = ${userId} and pf.pro_id = ${feedPosts.proId}))
+      -- Collaboration (R8o) : une publication co-signée est aussi « suivie » quand je suis son co-auteur accepté.
+      or exists (select 1 from feed_post_coauthors fc where fc.post_id = ${feedPosts.id} and fc.status = 'accepted' and (
+        (fc.coauthor_kind = 'user' and (fc.coauthor_id = ${userId} or exists (select 1 from user_follows cf
+            join profiles cpr on cpr.user_id = cf.followed_id
+          where cf.follower_id = ${userId} and cf.followed_id = fc.coauthor_id and cf.status = 'accepted'
+            and ${profileOkSql("cpr", ref)})))
+        or (fc.coauthor_kind = 'structure' and exists (select 1 from structure_follows cs
+            join structures cst on cst.id = cs.structure_id
+          where cs.user_id = ${userId} and cs.structure_id::text = fc.coauthor_id
+            and cst.deleted_at is null and cst.verification <> 'suspended'))
+        or (fc.coauthor_kind = 'pro' and exists (select 1 from pro_follows cp
+            join pro_profiles cpp on cpp.id = cp.pro_id
+          where cp.user_id = ${userId} and cp.pro_id::text = fc.coauthor_id and cpp.deleted_at is null)))))`);
   }
   if (filter === "nearby") out.push(inDepartments(sql`nullif(${feedPosts.department}, '')`, args.nearby));
   return out;
@@ -113,10 +127,18 @@ export async function postCards(
     ).map((v) => [v.id, v]),
   );
   const counts = flames ?? (await flamesOf([...views.keys()], ref));
+  // Collaboration (R8o) : une seule carte par publication ; elle compte comme suivie si je suis l'auteur ou le co-auteur.
+  const coOwners = await coSignedOwners(
+    db,
+    rows.map((r) => r.post),
+    new Map([...views].flatMap(([id, v]) => (v.coAuthor ? [[id, v.coAuthor] as const] : []))),
+    userId,
+  );
   return rows.flatMap((r): LoadedCard<"feed_post">[] => {
     const view = views.get(r.post.id);
     if (!view) return [];
     const isPage = r.post.persona !== "fan";
+    const owner = coOwners.get(r.post.id);
     return [
       {
         id: `feed_post:${r.post.id}`,
@@ -124,15 +146,15 @@ export async function postCards(
         at: r.post.createdAt,
         department: r.post.department || null,
         // Une page n'a pas d'auteur dans le Fil : ni « Tu suis… » ni abonnés de la personne qui l'a publiée.
-        authorId: isPage ? null : r.post.authorId,
-        structureId: r.post.persona === "organizer" ? r.post.structureId : null,
-        proId: r.post.persona === "pro" ? r.post.proId : null,
+        authorId: owner ? owner.authorId : isPage ? null : r.post.authorId,
+        structureId: owner ? owner.structureId : r.post.persona === "organizer" ? r.post.structureId : null,
+        proId: owner ? owner.proId : r.post.persona === "pro" ? r.post.proId : null,
         categoryIds: [],
         eventId: r.post.eventId,
-        mine: r.post.authorId === userId,
+        mine: r.post.authorId === userId || owner?.mine === true,
         flames7d: counts.get(r.post.id) ?? 0,
-        authorPseudo: isPage ? view.author.name : r.author.pseudo,
-        official: isPage ? false : r.author.official,
+        authorPseudo: owner ? owner.name : isPage ? view.author.name : r.author.pseudo,
+        official: owner ? false : isPage ? false : r.author.official,
         payload: { post: view },
       },
     ];
