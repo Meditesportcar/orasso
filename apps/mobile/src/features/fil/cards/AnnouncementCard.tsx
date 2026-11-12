@@ -1,18 +1,17 @@
 // Carte « annonce » d'un organisateur suivi : son texte, sa photo éventuelle, « Voir la fiche ».
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Image, StyleSheet, View } from "react-native";
-
 import { mediaSource } from "@/lib/media";
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { OrgLogo, reasonLine } from "./parts";
 import type { CardProps } from "./types";
 
 export function AnnouncementCard({ card, onMenu, faded }: CardProps<"announcement">) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const { event, announcement } = card.payload;
   return (
     <CardShell

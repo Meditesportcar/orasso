@@ -2,18 +2,17 @@
 // la photo masquée de ma voiture (sinon l'affiche), « Voir » ouvre la page du souvenir.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { memoryLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-
 import { MemoryPhoto } from "@/features/memories/MemoryPhoto";
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { reasonLine } from "./parts";
 import type { CardProps } from "./types";
 
 export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const { memory } = card.payload;
   return (
     <CardShell
