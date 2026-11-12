@@ -1,5 +1,7 @@
+import { spotEnded } from "@orasso/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { applyDateHeader, resetServerSkewForTests, serverNowMs } from "../../lib/clock";
 import { appLinkOf } from "../../lib/links";
 
 describe("lien d un rendez-vous au spot (notification)", () => {
@@ -22,9 +24,8 @@ describe("fin locale à l'heure du serveur", () => {
   // Horloge figée (dette R7 § 9) : le test ne dépend plus de l'heure à laquelle il tourne.
   afterEach(() => vi.useRealTimers());
 
-  it("un téléphone en retard de 40 min : le rendez-vous est fini à l'heure du serveur, lieu masqué", async () => {
-    const { applyDateHeader, resetServerSkewForTests, serverNowMs } = await import("../../lib/clock");
-    const { spotEnded } = await import("@orasso/shared");
+  // Imports statiques (plus d'`import()` dans le test) : sous charge, l'import à froid dépassait le délai de 5 s du test.
+  it("un téléphone en retard de 40 min : le rendez-vous est fini à l'heure du serveur, lieu masqué", () => {
     resetServerSkewForTests();
     // Il est 12:00:05 pour le serveur ; le téléphone lit 11:20:05.
     const deviceNow = ends + 5_000 - 40 * 60_000;

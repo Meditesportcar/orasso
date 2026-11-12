@@ -6,6 +6,7 @@ import {
   commentCounter,
   commentIssue,
   commentsTitle,
+  createPostLiveStore,
   emptySheet,
   insertMention,
   lastCommentsLine,
@@ -766,5 +767,66 @@ describe("tour 8 : suppression d'une réponse, confirmation tardive, curseur", (
     // « z » est supprimé ailleurs ; la page suivante commence à « d » (après le curseur) : z est avant elle, la borne le couvre.
     s = sheetWithTopPage(s, [at("d", 4)], null, false, { recent: [], boundary: at("y", 2) });
     expect(s.items.map((c) => c.id)).toEqual(["a", "b", "d"]);
+  });
+});
+
+describe("petit lot API : borne gardée avec son curseur (P36)", () => {
+  const stamp = (i: number) => new Date(Date.UTC(2026, 10, 10, 10, 0, i)).toISOString();
+  const c = (i: number) => at(`c${String(i).padStart(2, "0")}`, 0, { createdAt: stamp(i) });
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => c(from + k));
+  const ids = (s: SheetState) => s.items.map((x) => x.id);
+
+  it("deux chargements partis du même curseur : la seconde page, périmée, est jetée sans effet", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    // Deux chargements partent du commentaire 20 : leurs marques portent le même curseur.
+    const m1 = sheetMark(s);
+    const m2 = sheetMark(s);
+    expect(m1.cursor).toBe("C20");
+    s = sheetWithTopPage(s, range(21, 60), "C60", false, m1);
+    expect(s.cursor).toBe("C60");
+    const stale = sheetWithTopPage(s, range(21, 40), "C40", false, m2);
+    // Le curseur ne recule pas, la liste et la borne restent celles de la page plus longue.
+    expect(stale).toBe(s);
+    expect(stale.cursor).toBe("C60");
+    expect(sheetMark(stale).boundary?.id).toBe("c60");
+    // Le chargement suivant part du bon curseur : une page vide en fin de liste est appliquée.
+    const m3 = sheetMark(stale);
+    expect(m3.cursor).toBe("C60");
+    const end = sheetWithTopPage(stale, [], null, false, m3);
+    expect(end.cursor).toBeNull();
+    expect(ids(end)).toEqual(ids(s));
+  });
+
+  it("des chargements l'un après l'autre (chacun avec sa marque) s'appliquent tous ; une marque sans curseur ne contrôle rien", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    s = sheetWithTopPage(s, range(21, 40), "C40", false, sheetMark(s));
+    s = sheetWithTopPage(s, range(41, 60), null, false, sheetMark(s));
+    expect(ids(s)).toEqual(range(1, 60).map((x) => x.id));
+    // Compatible : une marque faite à la main, sans curseur, s'applique comme avant.
+    const old = sheetWithTopPage(s, range(41, 50), "C50", false, { recent: [], boundary: c(40) });
+    expect(old.cursor).toBe("C50");
+  });
+
+  it("une page de la première lecture (sans curseur envoyé) s'applique même si le curseur de la feuille a changé", () => {
+    let s = sheetWithTopPage(emptySheet(), range(1, 20), "C20", true);
+    const reload = sheetMark(s);
+    s = sheetWithTopPage(s, range(21, 40), "C40", false, sheetMark(s));
+    const again = sheetWithTopPage(s, range(1, 20), "C20", true, reload);
+    expect(again.cursor).toBe("C20");
+  });
+
+  it("réponses : la page périmée d'un fil est jetée aussi", () => {
+    let s = sheetWithTopPage(emptySheet(), [c(1)], null, true);
+    s = sheetWithRepliesPage(s, "c01", range(10, 29), "R29", true);
+    const m1 = repliesMark(s, "c01");
+    const m2 = repliesMark(s, "c01");
+    expect(m1.cursor).toBe("R29");
+    s = sheetWithRepliesPage(s, "c01", range(30, 49), "R49", false, m1);
+    const stale = sheetWithRepliesPage(s, "c01", range(30, 39), "R39", false, m2);
+    expect(stale).toBe(s);
+    expect(stale.replies.c01?.cursor).toBe("R49");
+    const end = sheetWithRepliesPage(stale, "c01", [], null, false, repliesMark(stale, "c01"));
+    expect(end.replies.c01?.cursor).toBeNull();
+    expect(end.replies.c01?.items.length).toBe(40);
   });
 });

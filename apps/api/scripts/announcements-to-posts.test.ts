@@ -11,6 +11,7 @@ import {
   applications,
   eventAnnouncements,
   events,
+  feedPostComments,
   feedPostPhotos,
   feedPosts,
   notifications,
@@ -18,6 +19,7 @@ import {
   structureFollows,
   structureMembers,
 } from "../src/db/schema";
+import { deps, type MemoryJobQueue } from "../src/lib/deps";
 import { rateLimit, resetRateLimits } from "../src/lib/rateLimit";
 import { storage } from "../src/lib/storage";
 import { withTx } from "../src/lib/tx";
@@ -35,7 +37,12 @@ import {
   type TestUser,
   useClock,
 } from "../test/helpers";
-import { announcementsToPosts, nearestAspect, revertAnnouncementsToPosts } from "./announcements-to-posts";
+import {
+  announcementsToPosts,
+  describeReprise,
+  nearestAspect,
+  revertAnnouncementsToPosts,
+} from "./announcements-to-posts";
 
 afterAll(async () => {
   await pool.end();
@@ -717,7 +724,25 @@ describe("tour 3 : reprise et retrait sous contrainte", () => {
 });
 
 describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () => {
-  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /**
+   * Attend (sondage borné à 5 s) que la base montre la situation attendue, au lieu d'une pause fixe (petit lot API, P38) :
+   * `idle_tx` = la transaction qui retient la porte est ouverte et au repos ; `lock_wait` = une requête attend un verrou.
+   */
+  const waitDb = async (what: "idle_tx" | "lock_wait") => {
+    const cond =
+      what === "idle_tx"
+        ? sql`state = 'idle in transaction' and query ~* '(for update|insert into)'`
+        : sql`wait_event_type = 'Lock'`;
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      const seen = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and ${cond}`,
+      );
+      if (Number(seen.rows[0]?.n) > 0) return;
+      if (Date.now() > deadline) throw new Error(`La base n'a jamais montré « ${what} » en 5 s`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  };
 
   it("un retrait de l'annonce pendant que la reprise valide : la publication reprise est retirée aussi", async () => {
     const e = await mkEvent();
@@ -740,9 +765,9 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
       });
       await gate;
     });
-    await pause(300);
+    await waitDb("idle_tx");
     const removal = call(owner, "DELETE", `/events/${e.id}/announcements/${a.row.id}`);
-    await pause(600);
+    await waitDb("lock_wait");
     release();
     await script;
     expect((await removal).status).toBe(204);
@@ -769,9 +794,9 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
         sql`insert into reports (reporter_id, target_type, target_id, reason) values (${reporter.id}, 'feed_post', ${post.id}, 'other')`,
       );
     });
-    await pause(300);
+    await waitDb("idle_tx");
     const reverting = revertAnnouncementsToPosts();
-    await pause(600);
+    await waitDb("lock_wait");
     release();
     await holder;
     const stats = await reverting;
@@ -784,6 +809,149 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
     expect(kept?.caption).toBe("Signalée en cours de retour arrière");
     expect(await photosOf(post.id)).toHaveLength(1);
     expect(await storage.get(photoKey)).not.toBeNull();
+  });
+});
+
+describe("petit lot API : 409 de la façade et --revert avec un commentaire seul signalé (P35)", () => {
+  /** Attend (sondage borné à 5 s) qu'une transaction soit ouverte et au repos. */
+  const waitIdleTx = async () => {
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      const seen = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and state = 'idle in transaction' and query ~* '(for update|insert into)'`,
+      );
+      if (Number(seen.rows[0]?.n) > 0) return;
+      if (Date.now() > deadline) throw new Error("Aucune transaction au repos en 5 s");
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  };
+
+  it("le retrait de l'annonce pendant qu'un autre retrait tient la publication reprise plus de 2 s : 409 « en cours de retrait », rien d'écrit", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Retrait déjà en cours" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    // Un autre retrait tient la publication reprise (verrou de ligne) et ne la lâche pas.
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from feed_posts where id = ${post.id} for update`);
+      await gate;
+    });
+    await waitIdleTx();
+    const started = Date.now();
+    const removal = await call(owner, "DELETE", `/events/${e.id}/announcements/${a.row.id}`);
+    const waited = Date.now() - started;
+    release();
+    await holder;
+    expect(removal.status).toBe(409);
+    expect(removal.text).toContain("en cours de retrait");
+    // La façade a essayé 20 fois à 100 ms d'intervalle avant de rendre la main.
+    expect(waited).toBeGreaterThanOrEqual(1800);
+    // Rien n'est écrit : l'annonce est toujours là et servie, la publication reprise aussi.
+    const [still] = await db.select().from(eventAnnouncements).where(eq(eventAnnouncements.id, a.row.id));
+    expect(still?.deletedAt).toBeNull();
+    expect((await postOf(a.row.id))?.deletedAt).toBeNull();
+    expect(await bodies(null, e.slug)).toContain("Retrait déjà en cours");
+  });
+
+  it("--revert d'une reprise dont seul un commentaire est signalé : retrait doux, détachée, signalement gardé", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { image: { w: 1080, h: 1350 }, body: "Commentaire signalé" });
+    const b = await mkAnnouncement(e.id, { body: "Rien de signalé" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const photoKey = (await photosOf(post.id))[0]!.storageKey;
+    const writer = await signUp("Commente_R8d");
+    const reporter = await signUp("SignaleC_R8d");
+    const [c] = await db
+      .insert(feedPostComments)
+      .values({ postId: post.id, authorId: writer.id, text: "Un commentaire à signaler", clientId: randomUUID() })
+      .returning();
+    await db.execute(
+      sql`insert into reports (reporter_id, target_type, target_id, reason) values (${reporter.id}, 'feed_comment', ${c!.id}, 'other')`,
+    );
+    const stats = await revertAnnouncementsToPosts();
+    expect(stats).toMatchObject({ posts: 2, detached: 1, leftoverFiles: [] });
+    // Le signalement du commentaire est gardé.
+    const kept = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from reports where target_type = 'feed_comment' and target_id = ${c!.id}`,
+    );
+    expect(Number(kept.rows[0]?.n)).toBe(1);
+    // La publication visée : retirée en douceur (ligne et photos gardées pour la modération), détachée.
+    const [row] = await db.select().from(feedPosts).where(eq(feedPosts.id, post.id));
+    expect(row?.deletedAt).not.toBeNull();
+    expect(row?.legacyAnnouncementId).toBeNull();
+    expect(await photosOf(post.id)).toHaveLength(1);
+    expect(await storage.get(photoKey)).not.toBeNull();
+    expect(await db.select().from(feedPostComments).where(eq(feedPostComments.id, c!.id))).toHaveLength(1);
+    // L'autre reprise, sans signalement, est supprimée ; les annonces d'origine sont de nouveau servies.
+    expect(await postOf(b.row.id)).toBeUndefined();
+    const list = await bodies(null, e.slug);
+    expect(list).toContain("Commentaire signalé");
+    expect(list).toContain("Rien de signalé");
+  });
+});
+
+describe("petit lot API : fichiers que le stockage refuse d'effacer (P37)", () => {
+  it("la reprise : la clé du fichier copié est dans le rapport (aucune tâche perdue en mémoire), puis l'effacement à la main la retire", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, {
+      image: { w: 1080, h: 1350 },
+      body: "Supprimée en route, stockage en panne",
+    });
+    const realCopy = storage.copy.bind(storage);
+    const copied: string[] = [];
+    const copy = vi.spyOn(storage, "copy").mockImplementation(async (from: string, to: string) => {
+      await realCopy(from, to);
+      copied.push(to);
+      await db.update(eventAnnouncements).set({ deletedAt: new Date() }).where(eq(eventAnnouncements.id, a.row.id));
+    });
+    const remove = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const queue = deps.jobs as MemoryJobQueue;
+    const sentBefore = queue.jobs.length;
+    let stats: Awaited<ReturnType<typeof announcementsToPosts>>;
+    try {
+      stats = await announcementsToPosts();
+    } finally {
+      copy.mockRestore();
+      remove.mockRestore();
+      quiet.mockRestore();
+    }
+    expect(stats.deletedDuring).toBe(1);
+    expect(copied).toHaveLength(1);
+    expect(stats.leftoverFiles).toEqual(copied);
+    // Le rapport de fin le dit en clair, et aucune reprise n'est partie dans la file en mémoire du script.
+    expect(describeReprise(stats)).toContain(copied[0]!);
+    expect(queue.jobs.length).toBe(sentBefore);
+    // Le fichier est bien resté ; l'effacement à la main avec la clé du rapport le retire.
+    expect(await storage.get(copied[0]!)).not.toBeNull();
+    await storage.remove(stats.leftoverFiles[0]!);
+    expect(await storage.get(copied[0]!)).toBeNull();
+  });
+
+  it("--revert : les photos d'une reprise supprimée que le stockage refuse d'effacer sont dans le rapport", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { image: { w: 1080, h: 1350 }, body: "Reprise à retirer" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const photoKey = (await photosOf(post.id))[0]!.storageKey;
+    const remove = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    let stats: Awaited<ReturnType<typeof revertAnnouncementsToPosts>>;
+    try {
+      stats = await revertAnnouncementsToPosts();
+    } finally {
+      remove.mockRestore();
+      quiet.mockRestore();
+    }
+    expect(stats.leftoverFiles).toEqual([photoKey]);
+    expect(await storage.get(photoKey)).not.toBeNull();
+    await storage.remove(photoKey);
+    expect(await storage.get(photoKey)).toBeNull();
   });
 });
 

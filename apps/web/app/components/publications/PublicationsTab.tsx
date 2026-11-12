@@ -171,7 +171,7 @@ function PublicationsBody({
       {list.error ? (
         <div className="pub-state" role="alert" data-testid="load-error">
           <p className="o-t-body">{L.error}</p>
-          <Button variant="secondary" icon="undo" onClick={() => void (list.nextCursor ? list.more() : list.reload())}>
+          <Button variant="secondary" icon="undo" onClick={() => void list.retry()}>
             {L.retry}
           </Button>
         </div>

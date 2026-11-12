@@ -69,9 +69,7 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
   await expect(page.getByText("secret-de-bravo")).toHaveCount(0);
   // Lot R5b (maquette R5.6) : la ligne « Ses photos, … sont pour ses abonnés » ; R7b1, tour 2 : plus de liste de véhicules.
-  await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
-  );
+  await expect(page.getByTestId("publications-private")).toContainText("ne sont visibles que de ses abonnés acceptés.");
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
   await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);
   await expect(page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);

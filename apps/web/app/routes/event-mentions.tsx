@@ -20,6 +20,7 @@ import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { listenSession } from "../lib/sessionChannel";
+import { createSessionGeneration } from "../lib/sessionGeneration";
 import "../styles/event-journal.css";
 import type { Route } from "./+types/event-mentions";
 
@@ -78,9 +79,13 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   // Session changée dans une autre fenêtre : jusqu'au prochain chargeur, rien de ce qui a été lu avec les droits de l'ancien compte
   // (listes, masquées, menus, « Voir plus ») n'est affiché.
   const [stale, setStale] = useState(false);
+  // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
+  const loaderUser = useRef(loaderData.userId);
+  loaderUser.current = loaderData.userId;
+  const generation = useRef(createSessionGeneration(() => loaderUser.current));
   // biome-ignore lint/correctness/useExhaustiveDependencies: repart du chargeur à chaque nouvelle donnée
   useEffect(() => {
-    generation.current += 1;
+    generation.current.bump();
     setBusy(null);
     setStale(false);
     setMore({ on_site: [], fans: [] });
@@ -89,17 +94,14 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   // Changement de session dans une autre fenêtre (déconnexion de A, connexion de B) : la génération change, les pages lues par A sont
   // vidées, la page se relit. Une pagination en vol est jetée à son arrivée (jamais les mentions masquées de A chez B).
   const revalidator = useRevalidator();
-  // Le compte du chargeur **courant** (mis à jour à chaque nouvelle donnée) : A → B → A dans une page restée montée compare toujours
-  // à la dernière donnée, jamais à celle du premier rendu.
-  const currentUser = useRef(loaderData.userId);
-  currentUser.current = loaderData.userId;
+  // Le compte du chargeur **courant** (`loaderUser`, mis à jour à chaque nouvelle donnée) : A → B → A dans une page restée montée
+  // compare toujours à la dernière donnée, jamais à celle du premier rendu.
   // biome-ignore lint/correctness/useExhaustiveDependencies: l'abonnement ne dépend que du chargeur
   useEffect(
     () =>
       listenSession((announced) => {
         // Le même compte qui s'annonce (hydratation, autre onglet du même compte) ne change rien.
-        if (announced === currentUser.current) return;
-        generation.current += 1;
+        if (!generation.current.announce(announced)) return;
         setBusy(null);
         setStale(true);
         setMore({ on_site: [], fans: [] });
@@ -118,16 +120,14 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   }, [revalidator.state]);
   const onSite = [...loaderData.onSite, ...more.on_site];
   const fans = [...loaderData.fans, ...more.fans];
-  // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
-  const generation = useRef(0);
   async function readMore(section: EventMentionsSection) {
     const cursor = cursors[section];
     if (!cursor || busy) return;
-    const mine = generation.current;
+    const mine = generation.current.current();
     setBusy(section);
     const q = new URLSearchParams({ section, cursor, ...(withHidden ? { hidden: "1" } : {}) }).toString();
     const res = await apiFetch<MentionsPage>(`/events/${event.id}/mentions?${q}`);
-    if (mine !== generation.current) return;
+    if (!generation.current.isCurrent(mine)) return;
     setBusy(null);
     if (!res.ok) return;
     setMore((m) => ({ ...m, [section]: [...m[section], ...res.data.items] }));

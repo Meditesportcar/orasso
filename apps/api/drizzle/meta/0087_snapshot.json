@@ -1,5 +1,5 @@
 {
-  "id": "e370ac7b-b7fb-4b06-9e34-7101412c1752",
+  "id": "95c2ca27-58e1-48fe-b7a5-52f8253b8c75",
   "prevId": "b2f7d9f9-81c4-4041-b892-3be11e1eb0a3",
   "version": "7",
   "dialect": "postgresql",
@@ -6845,31 +6845,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "tag": {
-          "name": "tag",
-          "type": "feed_post_tag",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "offer_starts_on": {
-          "name": "offer_starts_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "offer_ends_on": {
-          "name": "offer_ends_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
         "aspect": {
           "name": "aspect",
           "type": "feed_aspect",
@@ -7047,28 +7022,6 @@
           ],
           "isUnique": true,
           "where": "\"feed_posts\".\"client_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_offer_idx": {
-          "name": "feed_posts_offer_idx",
-          "columns": [
-            {
-              "expression": "pro_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "offer_ends_on",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"feed_posts\".\"tag\" = 'offer' and \"feed_posts\".\"deleted_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -7342,14 +7295,6 @@
         "feed_posts_caption_check": {
           "name": "feed_posts_caption_check",
           "value": "\"feed_posts\".\"caption\" is null or char_length(\"feed_posts\".\"caption\") <= case when \"feed_posts\".\"persona\" = 'fan' then 500 else 2000 end"
-        },
-        "feed_posts_tag_check": {
-          "name": "feed_posts_tag_check",
-          "value": "(\"feed_posts\".\"tag\" is null and \"feed_posts\".\"title\" is null and \"feed_posts\".\"offer_starts_on\" is null and \"feed_posts\".\"offer_ends_on\" is null)\n        or (\"feed_posts\".\"tag\" = 'offer' and \"feed_posts\".\"persona\" = 'pro' and \"feed_posts\".\"title\" is not null and char_length(\"feed_posts\".\"title\") between 2 and 80 and \"feed_posts\".\"offer_ends_on\" is not null)"
-        },
-        "feed_posts_offer_days_check": {
-          "name": "feed_posts_offer_days_check",
-          "value": "\"feed_posts\".\"offer_starts_on\" is null or \"feed_posts\".\"offer_ends_on\" is null or \"feed_posts\".\"offer_starts_on\" <= \"feed_posts\".\"offer_ends_on\""
         },
         "feed_posts_reactions_check": {
           "name": "feed_posts_reactions_check",
@@ -11282,6 +11227,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "email_outbox_express_invite_idx": {
+          "name": "email_outbox_express_invite_idx",
+          "columns": [
+            {
+              "expression": "((\"payload\"->>'inviteId'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"email_outbox\".\"template\" = 'express_invite'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -22265,13 +22226,6 @@
         "provider",
         "media",
         "event"
-      ]
-    },
-    "public.feed_post_tag": {
-      "name": "feed_post_tag",
-      "schema": "public",
-      "values": [
-        "offer"
       ]
     },
     "public.important_reason": {

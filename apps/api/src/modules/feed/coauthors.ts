@@ -664,7 +664,7 @@ export async function pendingCoauthorCount(userId: string, ex: Executor): Promis
       pending.map((r) => sql`${r.postId}::uuid`),
       sql`, `,
     )})
-      and ${postOkSql(at)}
+      and ${postOkSql(at, userId)}
       and (p.persona <> 'fan' or a.visibility = 'public' or p.author_id = ${userId}
         or exists (select 1 from user_follows uf where uf.follower_id = ${userId} and uf.followed_id = p.author_id and uf.status = 'accepted'))`);
   return Number(res.rows[0]?.n ?? 0);

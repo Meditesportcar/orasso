@@ -85,17 +85,28 @@ export type SheetMark = {
   recent: string[];
   /** Le dernier commentaire de la liste **venu d'une page de l'API** (pas un ajout confirmé) : le curseur envoyé pointe juste après lui. */
   boundary?: FeedCommentView;
+  /**
+   * Le curseur envoyé avec cette lecture (celui de la feuille au départ). Une page de suite dont le curseur envoyé n'est plus celui de la
+   * feuille est jetée sans effet : deux chargements partis du même curseur ne font pas reculer le curseur ni ne laissent une borne trop loin
+   * (petit lot API, P36). Facultatif : absent = pas de contrôle.
+   */
+  cursor?: string | null;
 };
 const lastFromApi = (items: readonly FeedCommentView[], recent: readonly string[]) =>
   [...items].reverse().find((c) => !recent.includes(c.id));
 export const sheetMark = (s: SheetState): SheetMark => ({
   recent: [...s.recent],
   boundary: lastFromApi(s.items, s.recent),
+  cursor: s.cursor,
 });
 /** La marque d'une lecture de réponses d'un commentaire. */
 export const repliesMark = (s: SheetState, parentId: string): SheetMark => {
   const r = s.replies[parentId];
-  return { recent: [...(r?.recent ?? [])], boundary: r ? lastFromApi(r.items, r.recent) : undefined };
+  return {
+    recent: [...(r?.recent ?? [])],
+    boundary: r ? lastFromApi(r.items, r.recent) : undefined,
+    cursor: r?.cursor ?? null,
+  };
 };
 
 /**
@@ -149,8 +160,16 @@ export function sheetWithTopPage(
   first: boolean,
   since?: SheetMark,
 ): SheetState {
+  // Une page de suite partie d'un curseur qui n'est plus celui de la feuille (un autre chargement a abouti avant) : jetée.
+  if (!first && since?.cursor !== undefined && since.cursor !== state.cursor) return state;
   const merged = reconcilePage(items, state.items, state.recent, since, state.removed, nextCursor !== null, first);
-  return { ...state, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true };
+  return {
+    ...state,
+    items: merged.items,
+    recent: merged.recent,
+    cursor: nextCursor,
+    loaded: true,
+  };
 }
 
 /** Applique une page de réponses (mêmes règles). Ne change ni l'ouverture ni le compteur du parent. */
@@ -163,6 +182,7 @@ export function sheetWithRepliesPage(
   since?: SheetMark,
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
+  if (!first && since?.cursor !== undefined && since.cursor !== was.cursor) return state;
   const merged = reconcilePage(items, was.items, was.recent, since, state.removed, nextCursor !== null, first);
   return {
     ...state,
@@ -666,9 +686,10 @@ export function createPostLiveStore() {
      * La publication telle qu'on la montre : ce que l'écran a changé depuis, tant que la publication reçue de l'API est celle d'alors.
      */
     apply(server: FeedPostView): FeedPostView {
+      const key = baseKey(server);
       const entry = entries.get(server.id);
       if (!entry) return server;
-      if (entry.base !== baseKey(server)) {
+      if (entry.base !== key) {
         entries.delete(server.id);
         return server;
       }

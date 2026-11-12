@@ -102,18 +102,20 @@ test("la liste des choix se ferme au clic ailleurs, à Échap et au changement d
   await expect(story).toBeHidden();
 });
 
-test("les liens à texte de la classe .fil-publish gardent leur texte entier dans leur fond (état vide de Mes publications)", async ({
+// « Mes publications » redirige vers le profil (onglet « Publications », lot R8b2) : l'état vide du profil porte le bouton « Publier »
+// (un `.o-button`, plus un lien `.fil-publish`) ; sa mesure et son texte entier restent vérifiés (petit lot site, P12).
+test("le bouton « Publier » de l'état vide du profil garde son texte entier dans son fond (onglet Publications, sans publication)", async ({
   page,
 }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 900 });
   await setTheme(page, "beton");
-  await loginInBrowser(page, "paul.photo@orasso.local", undefined, "/app/fil/mes-publications");
-  const link = page.getByTestId("fil-mine-empty").locator("a.fil-publish");
+  await loginInBrowser(page, "paul.photo@orasso.local", undefined, "/app/moi?onglet=publications");
+  const link = page.getByTestId("publications-empty").getByTestId("publications-publish");
   await expect(link).toBeVisible();
   await expect(link).toHaveText("Publier");
   const b = await link.boundingBox();
-  expect(b?.height ?? 0).toBeGreaterThanOrEqual(50);
+  expect(b?.height ?? 0).toBeGreaterThanOrEqual(48);
   expect(b?.width ?? 0).toBeGreaterThan(60);
   expect(await link.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 });

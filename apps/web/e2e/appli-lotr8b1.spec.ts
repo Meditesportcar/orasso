@@ -334,7 +334,6 @@ test("un compte privé vu d'un inconnu : les nombres, le panneau « Compte priv�
   // Lot R8b2 : plus de note « Réservé à ses abonnés » : l'onglet « Publications » (le seul) montre le panneau « Compte privé ».
   await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
   await expect(page.getByTestId("profil-tabs").getByRole("tab")).toHaveText(["Publications"]);
-  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toBeVisible();
   await shot(page, "13-prive-inconnu");
   // Demander à suivre : la demande attend sa réponse.
