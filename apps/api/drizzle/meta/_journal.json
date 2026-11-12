@@ -544,8 +544,50 @@
     {
       "idx": 77,
       "version": "7",
-      "when": 1794356446207,
-      "tag": "0077_weather-places",
+      "when": 1794355612340,
+      "tag": "0077_publications",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794359227082,
+      "tag": "0078_event-notification-prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794377349509,
+      "tag": "0079_feed-comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1794384378110,
+      "tag": "0080_feed-seen",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1794393268367,
+      "tag": "0081_express-invite-client-id",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1794449938244,
+      "tag": "0082_event-updated-notify-idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1794488736715,
+      "tag": "0083_weather-places",
       "breakpoints": true
     }
   ]

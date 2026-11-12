@@ -8,6 +8,7 @@ import { api, authApi } from "./api";
 import { ApiRequestError, getSessionToken, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
 import { forgetArrivee } from "@/features/arrivee/persist";
+import { postLive } from "@/features/fil/comments/live";
 import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
@@ -203,6 +204,8 @@ async function clearSession() {
   ]);
   // Lot M3, tour 2 : les fiches lues d'avance et les aperçus ne survivent pas au compte.
   clearEventPreviews();
+  // Lot R8k2, tour 2 : ni les commentaires ajoutés ni la feuille ouverte ne passent au compte suivant.
+  postLive.clear();
   // Lot M6, tour 2 : les annonces en attente (bandeau) non plus.
   resetAnnouncements();
 }

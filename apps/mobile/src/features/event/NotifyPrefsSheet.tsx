@@ -1,0 +1,243 @@
+// Notifications d'un événement (lot R8n2, maquette R8.11) : les pièces communes (bloc « Essentiel », ligne « Nouveautés
+// de l'événement » à interrupteur) et la feuille de la cloche de la fiche. Les mots viennent de `eventNotifyLabels`.
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { createSerialWriter, eventNotifyLabels as L, type SerialWriter } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { api } from "@/lib/api";
+import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
+import { AppSheet } from "@/ui/AppSheet";
+import { Muted } from "@/ui/Muted";
+
+const { space1, space2, space3 } = tokens.spacing;
+const { radiusMd, radiusPill } = tokens.radius;
+
+/** Le bloc « Essentiel » : cadenas, état « toujours actif » et les six lignes. Lecteur d'écran : « Essentiel, toujours actif ». */
+export function EssentialBlock() {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View style={styles.ess} testID="notify-essential">
+      <View
+        accessible
+        accessibilityLabel={`${L.essentialAria}. ${L.essentialBlockHelp}`}
+        style={[styles.row, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+      >
+        <Icon name="lock" size={20} color={c.accentText} />
+        <View style={styles.text}>
+          <Text variant="bodyStrong" color={c.ink}>
+            {L.essentialBlockTitle}
+          </Text>
+          <Text variant="caption" color={c.inkMuted}>
+            {L.essentialBlockHelp}
+          </Text>
+        </View>
+        <Icon name="lock" size={14} color={c.inkMuted} />
+      </View>
+      {L.essentialItems.map((item) => (
+        <View key={item} style={styles.item}>
+          <Icon name="check" size={16} color={c.accentText} />
+          <Text variant="caption" color={c.ink} style={styles.itemText}>
+            {item}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Une ligne à interrupteur : cloche, titre, aide ; `disabled` grise la ligne (elle garde sa raison dans l'aide). */
+export function SwitchRow({
+  title,
+  help,
+  on,
+  disabled = false,
+  onChange,
+  testID,
+  icon = "bell",
+}: {
+  title: string;
+  help: string;
+  on: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+  testID: string;
+  icon?: "bell";
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={title}
+      accessibilityHint={help}
+      accessibilityState={{ checked: on, disabled }}
+      aria-checked={on}
+      disabled={disabled}
+      onPress={() => onChange(!on)}
+      testID={testID}
+      style={[
+        styles.row,
+        styles.target,
+        { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard },
+        disabled ? styles.off : null,
+      ]}
+    >
+      <Icon name={icon} size={20} color={c.accentText} />
+      <View style={styles.text}>
+        <Text variant="bodyStrong" color={c.ink}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted}>
+          {help}
+        </Text>
+      </View>
+      <View style={[styles.switch, { backgroundColor: on ? c.accent : c.plateLine }]}>
+        <View
+          style={[
+            styles.knob,
+            { backgroundColor: on ? c.accentInk : c.inkMuted, transform: [{ translateX: on ? 20 : 0 }] },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Organisateur (maquette R8.11, vue « org ») : la confirmation d'un changement qui prévient les inscrits. `count` nul :
+ * le nombre n'a pas pu être lu (« Les inscrits seront prévenus. »). Aucune case à cocher.
+ */
+export function RecipientsBanner({ count, timing }: { count: number | null; timing: string | null }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View
+      accessibilityRole="summary"
+      style={[styles.banner, { backgroundColor: c.surface, borderColor: c.accent }]}
+      testID="notify-recipients"
+    >
+      <Icon name="bell" size={20} color={c.accentText} />
+      <View style={styles.text}>
+        <Text variant="bodyStrong" color={c.ink} testID="notify-recipients-count">
+          {count === null ? L.recipientsFallback : L.recipientsBanner(count)}
+        </Text>
+        <Text variant="caption" color={c.inkMuted}>
+          {L.autoNotify}
+        </Text>
+        {timing ? (
+          <Text variant="caption" color={c.ink} testID="notify-recipients-timing">
+            {timing}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * La feuille de la cloche de la fiche : l'Essentiel, puis « Nouveautés de l'événement », enregistrée au changement.
+ * Place perdue entre-temps (403 `no_place`) : le message, et la cloche disparaît (`onLost`).
+ */
+export function NotifyPrefsSheet({
+  eventId,
+  visible,
+  initialNews,
+  startMessage = null,
+  onClose,
+  onLost,
+}: {
+  eventId: string;
+  visible: boolean;
+  initialNews: boolean;
+  /** Rend la promesse de fin des écritures (`false` : la dernière a échoué). */
+  onClose: (idle: Promise<boolean>) => void;
+  /** Message d'une écriture qui a échoué après la fermeture. */
+  startMessage?: string | null;
+  onLost: () => void;
+}) {
+  const { t } = useTheme();
+  const [news, setNews] = useState(initialNews);
+  const [message, setMessage] = useState<string | null>(null);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const lost = useRef(onLost);
+  lost.current = onLost;
+  // À chaque ouverture : un écrivain neuf à partir de la valeur lue (envois sérialisés, dernier choix gardé).
+  useEffect(() => {
+    if (!visible) return;
+    setNews(initialNews);
+    setMessage(startMessage);
+    // Le compte de l'ouverture : un autre compte ensuite n'hérite jamais d'un envoi différé.
+    const guard = accountGuard();
+    writer.current = createSerialWriter<boolean>({
+      initial: initialNews,
+      alive: guard.current,
+      write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
+      onSettled: setNews,
+      onError: (confirmed, e) => {
+        setNews(confirmed);
+        if (e instanceof ApiRequestError && e.status === 403 && e.code === "no_place") {
+          setMessage(L.noPlace);
+          lost.current();
+        } else setMessage(errorMessage(e) || L.ficheSaveFailed);
+      },
+    });
+  }, [visible, initialNews, eventId, startMessage]);
+
+  // À la fermeture : on attend la fin des écritures avant que la cloche relise le réglage.
+  const closeWhenIdle = () => {
+    // Un échec déjà affiché dans la feuille a été vu : il ne la rouvre pas ; un échec qui arrive après la fermeture, si.
+    const seen = message !== null;
+    onClose((writer.current?.whenIdle() ?? Promise.resolve(true)).then((ok) => ok || seen));
+  };
+
+  const change = (next: boolean) => {
+    setNews(next);
+    setMessage(null);
+    writer.current?.set(next);
+  };
+
+  return (
+    <AppSheet visible={visible} onClose={closeWhenIdle} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
+      <Text variant="posterM" color={t.color.ink}>
+        {L.bellLabel}
+      </Text>
+      <EssentialBlock />
+      <SwitchRow
+        title={L.eventNewsTitle}
+        help={L.eventNewsHelpOnFiche}
+        on={news}
+        onChange={change}
+        testID="notify-news-switch"
+      />
+      {message ? (
+        <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="notify-message">
+          {message}
+        </Text>
+      ) : (
+        <Muted variant="caption">{L.ficheNote}</Muted>
+      )}
+    </AppSheet>
+  );
+}
+
+const styles = StyleSheet.create({
+  ess: { gap: space2 },
+  banner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space3,
+    padding: space3,
+    borderRadius: radiusMd,
+    borderWidth: 1.5,
+  },
+  row: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: radiusMd },
+  target: { minHeight: 56 },
+  off: { opacity: 0.55 },
+  text: { flex: 1, gap: 2 },
+  item: { flexDirection: "row", alignItems: "center", gap: space2, paddingLeft: space1 + 4, minHeight: 24 },
+  itemText: { flex: 1 },
+  switch: { width: 48, height: 28, borderRadius: radiusPill, padding: 3 },
+  knob: { width: 22, height: 22, borderRadius: radiusPill },
+});

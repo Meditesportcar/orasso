@@ -71,6 +71,19 @@ export const FEED_AFFINITY = { followed: 1.5, crew: 1.3, interest: 1.2, none: 1 
 export const FEED_LESS_FACTOR = 0.3;
 /** Le souvenir du jour (carte personnelle, lot R7j) : il passe devant, même devant un abonnement (1,5) tout neuf. */
 export const FEED_MEMORY_BOOST = 3;
+/** Popularité (R8c1) : les flammes des 7 derniers jours comptent dans la note, jusqu'à ×1,5 à 20 flammes et plus. */
+export const FEED_POPULARITY_WINDOW_MS = 7 * 24 * 3_600_000;
+export const FEED_POPULARITY_FULL = 20;
+export const FEED_POPULARITY_MAX_BONUS = 0.5;
+/** Une carte qui parle d'une de mes sorties (à venir ou en cours) passe devant : note × 2 (sauf l'événement recommandé lui-même). */
+export const FEED_MY_OUTING_BOOST = 2;
+/** Rail « Ça plaît en ce moment » : au plus 10 publications, au moins 3 flammes sur 7 jours. */
+export const FEED_HOT_MAX = 10;
+export const FEED_HOT_MIN_FLAMES = 3;
+/** « Nouvelles publications » : le compte s'arrête à 20, et `since` ne remonte pas au-delà de 48 h. */
+export const FEED_FRESH_CAP = 20;
+export const FEED_FRESH_MAX_AGE_MS = 48 * 3_600_000;
+
 /** Deux cartes consécutives du même genre. */
 export const FEED_REPEAT_PENALTY = 0.6;
 /** Départements « voisins » : le centre du département est à cette distance (km) ou moins. */
@@ -142,6 +155,10 @@ export type FeedCandidate<K extends string = FeedCardKind> = {
   categoryIds: readonly string[];
   /** Coefficient propre au genre (R7j : le souvenir du jour passe devant) ; absent = 1. */
   boost?: number;
+  /** L'événement dont parle la carte, s'il y en a un (« ma sortie », R8c1). */
+  eventId?: string | null;
+  /** Flammes des 7 derniers jours, de comptes en règle (publication) ; absent = 0. */
+  flames7d?: number;
 };
 
 /** Ce que le classement sait de la personne qui regarde (calculé par l'API pour elle seule). */
@@ -153,6 +170,8 @@ export type FeedViewerContext = {
   crewmates: ReadonlySet<string>;
   interests: ReadonlySet<string>;
   lessKinds: ReadonlySet<string>;
+  /** Mes sorties à venir ou en cours : identifiant de l'événement → son début (R8c1). */
+  myOutings: ReadonlyMap<string, Date>;
 };
 
 export const emptyFeedViewerContext = (): FeedViewerContext => ({
@@ -163,6 +182,7 @@ export const emptyFeedViewerContext = (): FeedViewerContext => ({
   crewmates: new Set(),
   interests: new Set(),
   lessKinds: new Set(),
+  myOutings: new Map(),
 });
 
 /** Fraîcheur : 1 à la publication, 0,5 après 36 h. Une carte datée du futur compte comme neuve. */
@@ -187,6 +207,17 @@ export function affinityFactor(c: FeedCandidate, ctx: FeedViewerContext): number
   return FEED_AFFINITY.none;
 }
 
+/** Coefficient de popularité : 1 sans flamme, 1,5 à 20 flammes (sur 7 jours) ou plus, progressif entre les deux. */
+export function popularityFactor(flames: number): number {
+  const n = Number.isFinite(flames) ? Math.max(0, flames) : 0;
+  return 1 + FEED_POPULARITY_MAX_BONUS * Math.min(1, n / FEED_POPULARITY_FULL);
+}
+
+/** La carte parle-t-elle d'une de mes sorties ? Jamais la carte « événement recommandé » (elle n'est pas une publication). */
+export function isMyOutingCard(c: FeedCandidate, ctx: FeedViewerContext): boolean {
+  return c.kind !== "event_recommended" && Boolean(c.eventId) && ctx.myOutings.has(c.eventId as string);
+}
+
 /** Score d'une carte à l'instant `now` (l'API fige `now` sur la première page d'un parcours). */
 export function scoreCard(card: FeedCandidate, ctx: FeedViewerContext, now: Date): number {
   return (
@@ -194,7 +225,9 @@ export function scoreCard(card: FeedCandidate, ctx: FeedViewerContext, now: Date
     proximityFactor(card.department, ctx.departments) *
     affinityFactor(card, ctx) *
     (ctx.lessKinds.has(card.kind) ? FEED_LESS_FACTOR : 1) *
-    (card.boost ?? 1)
+    (card.boost ?? 1) *
+    popularityFactor(card.flames7d ?? 0) *
+    (isMyOutingCard(card, ctx) ? FEED_MY_OUTING_BOOST : 1)
   );
 }
 
@@ -213,6 +246,7 @@ export const feedReasonCodes = [
   "pro_near",
   "from_orasso",
   "your_memory",
+  "my_outing",
   "new_here",
   "sponsored",
 ] as const;
@@ -223,6 +257,7 @@ export function reasonCode(c: FeedCandidate, ctx: FeedViewerContext, official = 
   if (official) return "from_orasso";
   // Le souvenir est une carte personnelle : sa raison est toujours celle-là, quel que soit le département de l'événement.
   if (c.kind === "memory") return "your_memory";
+  if (isMyOutingCard(c, ctx)) return "my_outing";
   if (c.authorId !== null && ctx.followedUsers.has(c.authorId)) return "following_author";
   if (c.structureId !== null && ctx.followedStructures.has(c.structureId)) return "following_structure";
   if (c.proId !== null && ctx.followedPros.has(c.proId)) return "following_pro";

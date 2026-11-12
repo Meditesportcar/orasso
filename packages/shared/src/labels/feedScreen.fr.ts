@@ -39,6 +39,8 @@ export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = fa
       return "Orasso publie ces cartes pour bien démarrer, tant que ton Fil se remplit.";
     case "your_memory":
       return "Tu étais à cet événement il y a un ou plusieurs ans, jour pour jour. Ce souvenir n'est montré qu'à toi.";
+    case "my_outing":
+      return "Elle parle d'une sortie où tu as ta place : ce qui la concerne passe devant.";
     case "new_here":
       return "C'est nouveau sur Orasso, dans ton secteur.";
     case "sponsored":
@@ -182,4 +184,86 @@ export const feedScreenLabels = {
   mineEmptyText: "Une photo de ta voiture, un mot, et tes abonnés la voient.",
   mineNote: "Une publication supprimée disparaît du Fil et de cette liste, pour tout le monde.",
   mineSettingCaption: "Les photos que tu as publiées au Fil",
+  // Lot R8c2 (maquette R8.3 `f-clair`, R8.7 `f-cartes`) : ce que le Fil dit de lui-même, ma publication, « Tu es à jour ».
+  /** Bouton « i » à côté de la phrase : ouvre « Comment le Fil choisit ». */
+  howOpen: "Comment le Fil choisit",
+  howTitle: "Comment le Fil choisit",
+  howClose: "Compris",
+  /** Ma publication à l'envoi : le bandeau (titre en gras, puis la suite) et ses deux boutons. */
+  bannerTitle: "Publié sur ton profil.",
+  bannerText: " Tes abonnés la verront dans leur Fil.",
+  bannerProfile: "Voir sur mon profil",
+  bannerClose: "Fermer le bandeau",
+  /** « Tu es à jour » : avant la première carte déjà vue, puis l'intertitre « Déjà vu ». */
+  upToDate: "Tu es à jour",
+  upToDateText: "Tu as vu les nouveautés : elles ne reviennent pas en haut. Tire vers le bas pour actualiser.",
+  seenHeading: "Déjà vu",
+  /** Pastille quand du neuf arrive pendant la lecture. */
+  freshPill: "Nouvelles publications",
+  /** Rail « Ça plaît en ce moment », avec son périmètre. */
+  hotTitle: "Ça plaît en ce moment",
+  hotScope: { nearby: "près de chez toi · 7 jours", following: "chez ceux que tu suis · 7 jours" },
+  hotOpen: (who: string, flames: number) => `Ouvre la publication de ${who}, ${flames} flammes`,
+  /** Sans réseau (appli) : la copie gardée, sous la phrase de l'Accueil hors ligne. */
+  offline: "Hors ligne : voici ce que ton téléphone a gardé.",
+  noNetwork: "Pas de réseau",
+  /** Deuxième ligne d'une carte rattachée : toute la ligne ouvre la fiche de l'événement. */
+  attachOpen: (phrase: string) => `${phrase} : ouvrir la fiche de l'événement`,
+  attachStamp: "Présent",
+} as const;
+
+/** La phrase sous le sélecteur, une par onglet (maquette R8.3 `PHR`). */
+export const feedPhrases: Record<FeedFilter, string> = {
+  for_you: "Près de toi, chez ceux que tu suis, et pour tes sorties.",
+  nearby: "À 80 km ou moins de chez toi : ce qui plaît, puis le plus récent.",
+  following: "Ceux que tu suis : ce qui plaît, puis le plus récent.",
+};
+
+/** La feuille « Comment le Fil choisit » (maquette R8.3 `REG` et `reglesH`) : chaque onglet, puis « Ta publication ». */
+export const feedHowRules: readonly { filter: FeedFilter; name: string; phrase: string; bullets: readonly string[] }[] =
+  [
+    {
+      filter: "for_you",
+      name: "Pour toi",
+      phrase: feedPhrases.for_you,
+      bullets: [
+        "Devant tout : ce qui concerne une sortie où tu es retenu ou inscrit.",
+        "Ensuite : ceux que tu suis, ce qui est près de chez toi, tes types de voitures, la fraîcheur, et ce qui plaît (le nombre de flammes compte dans la note).",
+        "Une carte déjà vue sans rien faire (ni flamme, ni ouverture, ni partage) ne remonte pas : quand il n'y a plus rien de neuf, « Tu es à jour », puis « Déjà vu ».",
+        "Une carte « Sponsorisé » environ toutes les 6 cartes.",
+      ],
+    },
+    {
+      filter: "nearby",
+      name: "Autour de moi",
+      phrase: feedPhrases.nearby,
+      bullets: [
+        "En tête, le rail « Ça plaît en ce moment » : les publications les plus aimées des 7 derniers jours près de chez toi.",
+        "Puis la liste, du plus récent au plus ancien. Seulement des publications publiques.",
+        "Il faut ton département : sans lui, « Choisis ton coin ».",
+      ],
+    },
+    {
+      filter: "following",
+      name: "Abonnements",
+      phrase: feedPhrases.following,
+      bullets: [
+        "En tête, le rail « Ça plaît en ce moment » : les publications les plus aimées des 7 derniers jours chez ceux que tu suis.",
+        "Puis la liste, du plus récent au plus ancien. Tes propres publications y sont.",
+        "Jamais le contenu privé d'un crew.",
+      ],
+    },
+  ];
+
+export const feedHowMine = {
+  name: "Ta publication",
+  phrase: "Elle passe en tête tout de suite, pour que tu voies qu'elle est partie.",
+  bullets: ["Elle reprend sa place normale dès que tu quittes le Fil ou que tu actualises."],
+} as const;
+
+/** La note finale de la feuille : le passage en gras est dit à part (appli et site le posent en gras). */
+export const feedHowNote = {
+  before: "Le Fil classe selon ",
+  strong: "ce que tu suis, la distance, tes sorties, tes types de voitures, la fraîcheur et ce qui plaît",
+  after: ". Rien d'autre : pas de vente de données.",
 } as const;

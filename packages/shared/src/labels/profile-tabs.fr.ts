@@ -6,6 +6,8 @@ export const profileTabsLabels = {
   group: "Contenu du profil",
   garage: "Garage",
   outings: "Sorties",
+  /** Lot R8b2 (maquette R8.1) : le troisième onglet, ouvert par défaut. */
+  publications: "Publications",
   /** Le bouton secondaire de l'onglet Sorties : mes places (candidatures, billets) sont dans la page Sorties. */
   seePlaces: "Voir mes places",
   /** Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (le reste du compte reste là). */
@@ -52,18 +54,27 @@ export const profileTabsLabels = {
   param: "onglet",
 } as const;
 
-export type ProfileTab = "garage" | "sorties";
-export const profileTabs: readonly ProfileTab[] = ["garage", "sorties"];
+export type ProfileTab = "garage" | "sorties" | "publications";
+export const profileTabs: readonly ProfileTab[] = ["garage", "sorties", "publications"];
 
-/** L'onglet demandé par l'adresse (`?onglet=`) ; tout ce qui n'est pas « sorties » ouvre le Garage (défaut retenu partout). */
+/** L'onglet demandé par l'adresse (`?onglet=`) : « sorties » ou « publications » ; tout le reste ouvre le Garage. */
 export function profileTabFromParam(value: string | null | undefined): ProfileTab {
-  return value === "sorties" ? "sorties" : "garage";
+  return value === "sorties" || value === "publications" ? value : "garage";
+}
+
+/**
+ * Lot R8b2 : l'adresse a-t-elle demandé un onglet (`?onglet=`) ? Sans demande, c'est `profileOpenTab` (`rules/publicationsList`)
+ * qui choisit l'onglet d'ouverture.
+ */
+export function explicitProfileTab(value: string | null | undefined): ProfileTab | null {
+  return value === "garage" || value === "sorties" || value === "publications" ? value : null;
 }
 
 /**
  * Lot R8b1 (décision D40) : un profil sans véhicule n'a pas d'onglet « Garage » et s'ouvre sur « Sorties » ; un garage vide
- * d'un exposant garde l'onglet (« Garage · 0 »).
+ * d'un exposant garde l'onglet (« Garage · 0 »). « Publications » existe pour tous les profils.
  */
 export function visibleProfileTab(tab: ProfileTab, hasGarage: boolean): ProfileTab {
+  if (tab === "publications") return tab;
   return hasGarage ? tab : "sorties";
 }

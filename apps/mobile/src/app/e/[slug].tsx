@@ -55,6 +55,7 @@ import { LineupBlock } from "@/features/event/Lineup";
 import { LiveBlock } from "@/features/event/LiveBlock";
 import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
+import { NotifyBell } from "@/features/event/NotifyBell";
 import { OrgBar } from "@/features/event/OrgBar";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { PresenceSheet } from "@/features/event/PresenceSheet";
@@ -506,7 +507,17 @@ export default function EventPage() {
               ? () => setWriting(true)
               : () => router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}` } }),
       })}
-      heroFloat={<Countdown event={e} />}
+      heroFloat={
+        <>
+          <Countdown event={e} />
+          <NotifyBell
+            key={e.id}
+            eventId={e.id}
+            signedIn={status === "in"}
+            stamp={mine.map((a) => a.status).join(",")}
+          />
+        </>
+      }
       liftHero
       onClose={close}
       onRefresh={event.reload}

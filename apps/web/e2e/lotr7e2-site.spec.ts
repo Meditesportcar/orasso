@@ -40,14 +40,15 @@ test("le Fil : trois filtres, une raison par carte, menu « ⋯ », flamme", asy
   await expect(page).toHaveURL(/filtre=following/);
 
   // Menu : pourquoi, moins de ce genre puis annuler, signaler.
-  const post = page.getByTestId("feed-card-feed_post").first();
+  // R8c2 : « Abonnements » contient mes propres publications (R8c1) : le menu « Moins de ce genre » est celui d'une carte d'un autre.
+  const post = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
   await post.getByTestId("feed-card-more").click();
   await expect(page.getByTestId("feed-menu-why")).toBeVisible();
   await expect(page.getByTestId("feed-menu-less")).toBeVisible();
   await expect(page.getByTestId("feed-menu-report")).toBeVisible();
   await shot(page, "menu");
   await page.getByTestId("feed-menu-why").click();
-  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
+  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso|sortie/);
   await shot(page, "pourquoi");
   await page.getByTestId("feed-why-ok").click();
   await post.getByTestId("feed-card-more").click();
@@ -141,15 +142,22 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   const first = page.getByTestId("feed-card-feed_post").first();
   await expect(first).toContainText("Site : prêtes pour dimanche");
   await expect(first).toContainText("Ta publication");
+  // Lot R8b2 : « Mes publications » redirige vers l'onglet « Publications » de mon compte ; supprimer se fait par le menu de la
+  // publication ouverte seule.
   await page.goto("/app/fil/mes-publications");
-  const posts = page.getByTestId("fil-mine-post");
-  await expect(posts.first()).toBeVisible({ timeout: 30_000 });
-  await expect(posts.first()).toContainText("Site : prêtes pour dimanche");
+  await expect(page).toHaveURL(/\/app\/moi\?onglet=publications/);
+  const tiles = page.getByTestId("publication-tile");
+  await expect(tiles.first()).toBeVisible({ timeout: 30_000 });
   await shot(page, "mes-publications");
-  const total = await posts.count();
+  const total = await tiles.count();
+  await page.getByTestId("publication-tile-open").first().click();
+  await expect(page.getByTestId("feed-card-feed_post")).toContainText("Site : prêtes pour dimanche");
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("feed-card-more").click();
   page.once("dialog", (d) => void d.accept());
-  await page.getByTestId("fil-mine-remove").first().click();
-  await expect(posts).toHaveCount(total - 1);
+  await page.getByTestId("publication-menu-remove").click();
+  await expect(page).toHaveURL(/\/app\/moi\?onglet=publications/, { timeout: 30_000 });
+  await expect(tiles).toHaveCount(total - 1);
   // Tour 4 : la publication supprimée ne revient pas en tête du Fil.
   await page.goto("/app/fil?filtre=following");
   await loaded(page);

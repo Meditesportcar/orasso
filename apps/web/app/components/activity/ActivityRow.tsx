@@ -1,5 +1,5 @@
 import { Icon, type IconName } from "@orasso/design-system/web";
-import { type ActivityDay, type ActivityItem, activityWhen, groupedTitle } from "@orasso/shared";
+import { type ActivityDay, type ActivityItem, activityWhen, groupedTitle, publicationLinkOf } from "@orasso/shared";
 import type { MouseEvent } from "react";
 
 import { now } from "../../lib/clock";
@@ -49,6 +49,9 @@ export function openAfterRead(
 
 /** Le lien d'une ligne : un chemin du site seulement (jamais une adresse extérieure). */
 export function pathOfItem(item: Pick<ActivityItem, "data">): string | null {
+  // Lot R8b2 : une notification qui porte `postId` ouvre la publication seule (les commentaires s'ouvrent avec `commentId`).
+  const post = publicationLinkOf(item.data, { web: true });
+  if (post) return post;
   const raw = item.data.link ?? item.data.screen ?? null;
   return typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
 }

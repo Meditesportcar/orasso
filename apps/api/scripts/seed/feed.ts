@@ -11,14 +11,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type FeedAspect, feedLabels, OFFICIAL_PSEUDO } from "@orasso/shared";
 import { hashPassword } from "better-auth/crypto";
-import { eq, like, sql } from "drizzle-orm";
+import { and, eq, gt, like, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { repoRoot } from "../../src/env";
 import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
-import { createAccount, HOUR } from "./helpers";
+import { createAccount, DAY, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
 
 const SIZE: Record<FeedAspect, { width: number; height: number }> = {
@@ -195,6 +195,11 @@ export async function migrateLegacyFeedKeys(): Promise<number> {
 }
 
 export async function seedFeed() {
+  await seedOrassoFeed();
+  await seedPublications();
+}
+
+async function seedOrassoFeed() {
   await migrateLegacyFeedKeys();
   // Le compte officiel : jamais de connexion possible (mot de passe aléatoire, e-mail non distribuable).
   let orasso = await byPseudo(ORASSO);
@@ -266,4 +271,184 @@ export async function seedFeed() {
     made += 1;
   }
   console.log(`Fil : ${made} publications ajoutées (compte Orasso, Kenji_66, Marc_66 en privé).`);
+}
+
+// --- Publications au nom d'une page, pour un événement (vague R8, lot R8a1) -----------------------------------------------
+// Roues Libres 66 « pour le Rassemblement du Lydia » (une avec photo, une sans photo donc avec l'affiche, une « Info
+// importante » motif Horaires déjà envoyée : **aucune notification réelle**) ; La Brasa (prestataire retenu, candidature
+// créée si elle manque) « présent au » ; Kenji_66 « était au » un événement fini depuis moins de 30 jours où sa présence est
+// validée (la présence est posée si aucun événement récent n'en a déjà une). Rejouable : rien si la structure a déjà ses
+// publications rattachées.
+const LYDIA_SLUG = "rassemblement-du-lydia";
+
+async function storeFeedPhoto(postId: string, index: number, position = 0): Promise<boolean> {
+  const photo = await reviewedNoPlateCar(index);
+  if (!photo) return false;
+  const out = await sharp(photo.data)
+    .resize(1080, 1350, { fit: "cover", position: "attention" })
+    .webp({ quality: 80 })
+    .toBuffer({ resolveWithObject: true });
+  const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
+  await storage.put(key, out.data);
+  await db.insert(t.feedPostPhotos).values({
+    postId,
+    storageKey: key,
+    width: out.info.width,
+    height: out.info.height,
+    position,
+    plateBlurred: false,
+    // Photo du seed regardée : aucune plaque lisible (décision vraie, pas un contournement).
+    noPlateConfirmed: true,
+  });
+  return true;
+}
+
+export async function seedPublications() {
+  const lydia = await db.query.events.findFirst({ where: eq(t.events.slug, LYDIA_SLUG) });
+  const structure = await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") });
+  if (!lydia || !structure) {
+    console.log("Publications rattachées : Lydia ou Roues Libres 66 absents, rien ajouté.");
+    return;
+  }
+  const already = await db.query.feedPosts.findFirst({
+    where: and(eq(t.feedPosts.structureId, structure.id), eq(t.feedPosts.eventId, lydia.id)),
+  });
+  if (already) {
+    console.log("Publications rattachées déjà présentes.");
+    return;
+  }
+  const at = Date.now();
+  const sarah = await byPseudo("Sarah_66");
+  if (!sarah) throw new Error("Compte Sarah_66 absent");
+  const orga = (
+    id: string,
+    caption: string,
+    hoursAgo: number,
+    extra: Partial<typeof t.feedPosts.$inferInsert> = {},
+  ) => {
+    const createdAt = new Date(at - hoursAgo * HOUR);
+    return db.insert(t.feedPosts).values({
+      id,
+      authorId: sarah.userId,
+      persona: "organizer",
+      structureId: structure.id,
+      eventId: lydia.id,
+      eventRole: "organizer",
+      caption,
+      department: "66",
+      createdAt,
+      updatedAt: createdAt,
+      ...extra,
+    });
+  };
+
+  // Avec une photo.
+  const withPhoto = randomUUID();
+  await orga(withPhoto, "Le plateau JDM prend forme au pied du Lydia : passez nous voir.", 3);
+  if (!(await storeFeedPhoto(withPhoto, 3))) {
+    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, withPhoto));
+    console.log("Publications rattachées : photos du seed absentes, rien ajouté.");
+    return;
+  }
+  // Sans photo : l'affiche de l'événement fait le visuel (une référence, jamais une copie).
+  await orga(randomUUID(), "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.", 8);
+  // « Info importante » : déjà envoyée (motif Horaires). Seed : aucune notification réelle n'est écrite.
+  await orga(randomUUID(), "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.", 26, {
+    importantReason: "schedule",
+    importantSentAt: new Date(at - 26 * HOUR),
+  });
+
+  // La Brasa, prestataire retenu au Lydia.
+  const brasa = await db.query.providerProfiles.findFirst({ where: eq(t.providerProfiles.name, "La Brasa") });
+  if (brasa) {
+    const kept = await db.query.applications.findFirst({
+      where: and(
+        eq(t.applications.eventId, lydia.id),
+        eq(t.applications.userId, brasa.userId),
+        eq(t.applications.kind, "provider"),
+      ),
+    });
+    if (!kept) {
+      await db.insert(t.applications).values({
+        eventId: lydia.id,
+        userId: brasa.userId,
+        kind: "provider",
+        providerProfileId: brasa.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(at),
+        followStructure: false,
+        decidedAt: new Date(at),
+      });
+    }
+    const id = randomUUID();
+    const createdAt = new Date(at - 5 * HOUR);
+    await db.insert(t.feedPosts).values({
+      id,
+      authorId: brasa.userId,
+      persona: "provider",
+      providerId: brasa.id,
+      eventId: lydia.id,
+      eventRole: "on_site",
+      caption: "Les grillades sont prêtes : bocatas et brochettes, juste à côté de la rangée JDM.",
+      department: "66",
+      createdAt,
+      updatedAt: createdAt,
+    });
+    if (!(await storeFeedPhoto(id, 5))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+  }
+
+  // Kenji_66 « était au » un événement fini depuis moins de 30 jours, présence validée.
+  const kenji = await byPseudo("Kenji_66");
+  if (kenji) {
+    const recent = await db
+      .select()
+      .from(t.events)
+      .where(
+        and(
+          eq(t.events.status, "published"),
+          sql`${t.events.admission} <> 'invite_only'`,
+          lt(t.events.endsAt, new Date(at)),
+          gt(t.events.endsAt, new Date(at - 30 * DAY)),
+        ),
+      )
+      .orderBy(sql`${t.events.endsAt} desc`);
+    const proven = new Set(
+      (
+        await db
+          .select({ id: t.eventPresences.eventId })
+          .from(t.eventPresences)
+          .where(eq(t.eventPresences.userId, kenji.userId))
+      ).map((r) => r.id),
+    );
+    const finished = recent.find((e) => proven.has(e.id)) ?? recent[0];
+    if (finished) {
+      if (!proven.has(finished.id)) {
+        await db
+          .insert(t.eventPresences)
+          .values({
+            eventId: finished.id,
+            userId: kenji.userId,
+            validatedAt: new Date(finished.endsAt.getTime() - HOUR),
+          })
+          .onConflictDoNothing();
+      }
+      const id = randomUUID();
+      const createdAt = new Date(at - 9 * HOUR);
+      await db.insert(t.feedPosts).values({
+        id,
+        authorId: kenji.userId,
+        persona: "fan",
+        eventId: finished.id,
+        eventRole: "attendee",
+        caption: "Belle journée sur le plateau, merci aux organisateurs.",
+        department: "66",
+        createdAt,
+        updatedAt: createdAt,
+      });
+      if (!(await storeFeedPhoto(id, 7))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+    } else {
+      console.log("Publications rattachées : aucun événement fini depuis moins de 30 jours pour Kenji_66.");
+    }
+  }
+  console.log("Publications rattachées : Roues Libres 66 (3), La Brasa, Kenji_66 ajoutées.");
 }

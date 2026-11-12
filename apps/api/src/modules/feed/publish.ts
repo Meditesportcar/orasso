@@ -7,35 +7,52 @@
 //   publique `feed/<postId>/<hex>.webp`.
 import { randomBytes, randomUUID } from "node:crypto";
 import {
+  type AttachableEventItem,
   aspectMatches,
   FEED_ASPECT_RATIOS,
+  FEED_CAPTION_MAX,
+  type FeedEventRole,
   type FeedPostCreate,
   type FeedPostPatch,
   type FeedPostView,
   feedLabels,
   type PlateRect,
   partnershipLabels,
+  publicationErrors,
   type ReportReason,
+  type StoryPersona,
 } from "@orasso/shared";
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPostReactions, feedPosts, uploads, userFollows } from "../../db/schema";
+import { feedPostPhotos, feedPostReactions, feedPosts, proProfiles, uploads, userFollows } from "../../db/schema";
+import { canManagePost, requireAuthorship } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Executor, withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
 import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
+import { assertProMayPost, lockProPostQuota } from "../pros/service";
 import { composeLinkedPost, loadLinked } from "../stories/linked";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
 import { hasOpenReport, requireVisiblePost } from "./access";
+import {
+  type AttachEvent,
+  attachableEvents,
+  attachEventsByIds,
+  deducePostRole,
+  eventVisualKey,
+  notAttachable,
+} from "./attach";
+import { pageDepartment } from "./authors";
+import { reserveImportant, sendImportant } from "./important";
+import { materializeMentions } from "./mentions";
 import { FEED_PHOTO_NAME_RE, feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
-import { eventSummariesByIds } from "./summary";
 
 const PAGE = 20;
 
@@ -63,12 +80,28 @@ async function ownView(v: Viewer, id: string): Promise<FeedPostView> {
   return view;
 }
 
+/** La publication déjà enregistrée pour ce `clientId` (rejeu d'un envoi), ou `undefined`. */
+async function findReplay(ex: Executor, userId: string, clientId: string | null | undefined) {
+  if (!clientId) return undefined;
+  const [again] = await ex
+    .select({ id: feedPosts.id })
+    .from(feedPosts)
+    .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, clientId), isNull(feedPosts.deletedAt)));
+  return again?.id;
+}
+
+/** Le même envoi (même `clientId`) vient d'être validé par une autre requête : on rend sa publication. */
+class Replayed extends Error {
+  constructor(readonly id: string) {
+    super("replayed");
+  }
+}
+
 export const feedPostsService = {
   /** `POST /me/feed-posts` */
   async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
     const userId = v.user.id;
-
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {
       const [again] = await db
@@ -78,6 +111,23 @@ export const feedPostsService = {
           and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, input.clientId), isNull(feedPosts.deletedAt)),
         );
       if (again) return ownView(v, again.id);
+    }
+
+    // 0. Au nom de qui : une casquette exige ses droits (403 `persona_forbidden`), la structure le second facteur.
+    const persona = input.persona;
+    const authorship = await requireAuthorship(v, input);
+    // Fiche pro : publiée et abonnement en règle, comme pour une offre (`POST /pros/:id/posts`).
+    if (persona === "pro") {
+      const [pro] = await db.select().from(proProfiles).where(eq(proProfiles.id, authorship.id));
+      if (!pro) throw new AppError(403, "persona_forbidden", publicationErrors.persona_forbidden);
+      assertProMayPost(pro);
+    }
+    if (persona !== "fan" && (input.vehicleId || input.linked?.type === "vehicle" || input.commercialPartnerId)) {
+      throw validation(publicationErrors.fanOnly);
+    }
+    // Légende : 500 caractères pour un passionné, 2 000 pour une casquette (le schéma borne à 2 000).
+    if (persona === "fan" && (input.caption?.length ?? 0) > FEED_CAPTION_MAX) {
+      throw validation(publicationErrors.captionTooLong, { field: "caption" });
     }
 
     // 1. Une décision de plaque par photo, avant tout le reste (le message dit laquelle manque).
@@ -90,27 +140,62 @@ export const feedPostsService = {
       throw new AppError(400, "plate_decision_required", feedLabels.plateDecision, { photoIndex: missing });
     }
 
-    // 2. Véhicule (le sien, actif) et événement (public). Une carte partagée (R7f4) donne elle-même son véhicule ou son événement.
+    // 2. Véhicule (le sien, actif) et événement. Une carte partagée (R7f4) donne elle-même son véhicule ou son événement.
     const linkedContent = input.linked ? await loadLinked(v, input.linked.type, input.linked.id) : null;
     const vehicleId = linkedContent?.type === "vehicle" ? linkedContent.id : (input.vehicleId ?? null);
     const eventId = linkedContent?.type === "event" ? linkedContent.id : (input.eventId ?? null);
     if (vehicleId && !(await ownActiveVehicle(db, userId, vehicleId))) {
       throw validation("Véhicule introuvable dans ton garage");
     }
-    if (eventId && !(await eventSummariesByIds(db, [eventId])).has(eventId)) {
-      throw validation("Événement introuvable");
+    // Rattachement : le rôle est **déduit** des droits, jamais reçu. Casquette : événement non rattachable → 422 ;
+    // passionné : accepté sans rôle (l'APK en ligne envoie n'importe quel événement public ; ni verbe, ni mention).
+    const at = now();
+    let event: AttachEvent | undefined;
+    let eventRole: FeedEventRole | null = null;
+    if (eventId) {
+      event = (await attachEventsByIds(db, [eventId])).get(eventId);
+      if (persona === "fan") {
+        if (event?.status !== "published") throw validation("Événement introuvable");
+      } else if (!event) {
+        throw notAttachable(publicationErrors.event_not_attachable);
+      }
+      if (event) {
+        eventRole = await deducePostRole(
+          db,
+          { userId, persona, pageId: authorship.kind === "user" ? null : authorship.id, event },
+          at,
+        );
+      }
+      if (persona !== "fan" && !eventRole) throw notAttachable(publicationErrors.event_not_attachable);
+    }
+    // Visuel (T1, Damien 11/11) : une photo ou une carte ; sinon seulement une publication rattachée (rôle déduit), avec
+    // une légende, dont l'événement a une affiche : elle prend l'affiche (une référence, jamais une copie).
+    if (!input.photos.length && !linkedContent) {
+      const ok = event && eventRole && input.caption && eventVisualKey(event);
+      if (!ok) throw new AppError(400, "photo_required", publicationErrors.photo_required);
+    }
+    // « Info importante » : la casquette organisateur, pour un événement de sa structure.
+    if (input.important && !(persona === "organizer" && event && eventRole === "organizer")) {
+      throw new AppError(400, "important_requires_event", publicationErrors.important_requires_event);
     }
 
-    // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite.
+    // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite, pour une
+    // publication personnelle seulement.
     const commercialPartnerId =
-      (
-        await commercialPartnerFor(db, {
-          authorId: userId,
-          tagProIds: [],
-          caption: input.caption,
-          explicit: input.commercialPartnerId,
-        })
-      )?.proId ?? null;
+      persona !== "fan"
+        ? null
+        : ((
+            await commercialPartnerFor(db, {
+              authorId: userId,
+              tagProIds: [],
+              caption: input.caption,
+              explicit: input.commercialPartnerId,
+            })
+          )?.proId ?? null);
+    const department =
+      persona === "fan"
+        ? (v.profile.departments[0] ?? "")
+        : ((await pageDepartment(db, authorship)) ?? event?.department ?? "");
 
     // 3. Les fichiers envoyés : à moi, pour cet usage, pas encore rattachés, au bon format.
     const keys = input.photos.map((p) => p.uploadKey);
@@ -120,7 +205,12 @@ export const feedPostsService = {
       .where(and(eq(uploads.userId, userId), eq(uploads.purpose, "feed_post"), isNull(uploads.consumedAt)));
     const byKey = new Map(rows.map((r) => [r.key, r]));
     for (const key of keys) {
-      if (!byKey.has(key)) throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      if (!byKey.has(key)) {
+        // Le même envoi vient peut-être d'être validé par une autre requête qui a consommé ces photos.
+        const again = await findReplay(db, userId, input.clientId);
+        if (again) return ownView(v, again);
+        throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      }
     }
     for (const key of keys) {
       const u = byKey.get(key);
@@ -146,7 +236,11 @@ export const feedPostsService = {
     try {
       for (const [index, p] of input.photos.entries()) {
         const source = await storage.get(p.uploadKey);
-        if (!source) throw validation("Photo introuvable : envoie-la à nouveau.");
+        if (!source) {
+          const again = await findReplay(db, userId, input.clientId);
+          if (again) throw new Replayed(again);
+          throw validation("Photo introuvable : envoie-la à nouveau.");
+        }
         const d = decisions[index] as (typeof decisions)[number];
         const out = d.rects.length
           ? await blurPlateRegions(source, d.rects)
@@ -189,9 +283,27 @@ export const feedPostsService = {
       }
 
       // 5. Une transaction : rattacher les fichiers (une seule fois), écrire la publication et ses photos.
-      await withTx(async (tx) => {
+      await withTx(async (tx, after) => {
+        // « Info importante » : le plafond se compte sous verrou, dans cette transaction, avant d'écrire la publication.
+        // Sous chaque verrou, on cherche de nouveau le `clientId` : deux envois simultanés du même identifiant rendent la
+        // même publication au lieu d'un faux refus de plafond.
+        const replayed = async () => {
+          if (!input.clientId) return;
+          const [again] = await tx
+            .select({ id: feedPosts.id })
+            .from(feedPosts)
+            .where(
+              and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, input.clientId), isNull(feedPosts.deletedAt)),
+            );
+          if (again) throw new Replayed(again.id);
+        };
+        // Fiche pro : même limite mensuelle et même verrou que `POST /pros/:id/posts`.
+        const proAt = persona === "pro" ? await lockProPostQuota(tx, authorship.id, replayed) : null;
+        if (input.important && event) await reserveImportant(tx, event.id, at, replayed);
         for (const p of photos) {
           if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
+            const again = await findReplay(tx, userId, input.clientId);
+            if (again) throw new Replayed(again);
             throw validation("Photo déjà utilisée : envoie-la à nouveau.");
           }
         }
@@ -202,21 +314,47 @@ export const feedPostsService = {
           vehicleId,
           eventId,
           aspect: linkedContent ? "portrait_4_5" : input.aspect,
-          department: v.profile.departments[0] ?? "",
+          department,
           clientId: input.clientId ?? null,
           commercialPartnerId,
+          persona,
+          // Fiche pro : l'instant pris sous le verrou, celui-là même qui a servi à compter le mois (horloge de
+          // l'application, comme les offres) : le comptage et l'insertion ne peuvent pas tomber dans deux mois.
+          ...(proAt ? { createdAt: proAt } : {}),
+          structureId: authorship.kind === "structure" ? authorship.id : null,
+          proId: authorship.kind === "pro" ? authorship.id : null,
+          providerId: authorship.kind === "provider" ? authorship.id : null,
+          mediaId: authorship.kind === "media" ? authorship.id : null,
+          eventRole,
+          // Le lieu libre ne vaut que sans événement (sinon c'est la ville de l'événement).
+          placeLabel: eventId ? null : (input.placeLabel ?? null),
+          importantReason: input.important?.reason ?? null,
         });
-        await tx.insert(feedPostPhotos).values(
-          photos.map((p, position) => ({
+        if (photos.length) {
+          await tx.insert(feedPostPhotos).values(
+            photos.map((p, position) => ({
+              postId,
+              storageKey: p.key,
+              width: p.width,
+              height: p.height,
+              position,
+              plateBlurred: p.blurred,
+              noPlateConfirmed: p.confirmed,
+            })),
+          );
+        }
+        // Mentions (lot R8a2) : les cibles de la publication, dans sa transaction ; les personnes citées sont prévenues.
+        await materializeMentions(tx, postId, { notify: true });
+        if (input.important && event) {
+          await sendImportant(tx, after, {
             postId,
-            storageKey: p.key,
-            width: p.width,
-            height: p.height,
-            position,
-            plateBlurred: p.blurred,
-            noPlateConfirmed: p.confirmed,
-          })),
-        );
+            authorUserId: userId,
+            reason: input.important.reason,
+            caption: input.caption ?? null,
+            now: at,
+            event,
+          });
+        }
         if (commercialPartnerId) {
           await notifyPartnerMention(tx, {
             proId: commercialPartnerId,
@@ -247,6 +385,7 @@ export const feedPostsService = {
       });
     } catch (error) {
       for (const key of written) await removeOrRetry(key);
+      if (error instanceof Replayed) return ownView(v, error.id);
       // Deux envois simultanés du même `clientId` : le second rend la publication du premier.
       if (input.clientId && sqlState(error) === "23505") {
         const [again] = await db
@@ -275,12 +414,17 @@ export const feedPostsService = {
     const [post] = await db
       .select({
         authorId: feedPosts.authorId,
+        persona: feedPosts.persona,
+        structureId: feedPosts.structureId,
+        proId: feedPosts.proId,
+        providerId: feedPosts.providerId,
+        mediaId: feedPosts.mediaId,
         deletedAt: feedPosts.deletedAt,
         commercial: feedPosts.commercialPartnerId,
       })
       .from(feedPosts)
       .where(eq(feedPosts.id, id));
-    if (!post || post.deletedAt || post.authorId !== v.user.id) throw notFound("Publication introuvable");
+    if (!post || post.deletedAt || !(await canManagePost(v, post))) throw notFound("Publication introuvable");
     if (post.commercial) {
       throw new AppError(409, "commercial_locked", partnershipLabels.errors.commercial_locked);
     }
@@ -322,6 +466,34 @@ export const feedPostsService = {
     return { status: 200, etag, data };
   },
 
+  /** `GET /me/feed-posts/attachable-events` : les événements rattachables pour cette casquette (50 au plus). */
+  async attachable(
+    v: Viewer,
+    q: { persona: StoryPersona; structureId?: string; proId?: string },
+  ): Promise<{ items: AttachableEventItem[] }> {
+    rateLimit("feedRead", v.user.id);
+    const authorship = await requireAuthorship(v, q);
+    return {
+      items: await attachableEvents(
+        db,
+        v.user.id,
+        { persona: q.persona, pageId: authorship.kind === "user" ? null : authorship.id },
+        now(),
+      ),
+    };
+  },
+
+  /**
+   * `GET /me/feed-posts/by-client/:clientId` (R8p, tour 3) : la publication que **cet auteur** a envoyée avec cet identifiant,
+   * quelle que soit la casquette (même règle que le contrôle de rejeu de `create`), ou 404. Jamais celle d'un autre compte.
+   */
+  async byClient(v: Viewer, clientId: string): Promise<FeedPostView> {
+    rateLimit("feedRead", v.user.id);
+    const id = await findReplay(db, v.user.id, clientId);
+    if (!id) throw notFound("Publication introuvable");
+    return ownView(v, id);
+  },
+
   /** `GET /me/feed-posts?cursor=` : mes publications, les plus récentes d'abord. */
   async mine(v: Viewer, cursor: string | undefined): Promise<{ items: FeedPostView[]; nextCursor: string | null }> {
     rateLimit("feedRead", v.user.id);
@@ -335,6 +507,8 @@ export const feedPostsService = {
       .where(
         and(
           eq(feedPosts.authorId, v.user.id),
+          // Mes publications personnelles : celles d'une page sont sur la page, jamais mêlées aux miennes.
+          eq(feedPosts.persona, "fan"),
           isNull(feedPosts.deletedAt),
           after ? or(sql`${at} < ${after.at}`, and(sql`${at} = ${after.at}`, lt(feedPosts.id, after.id))) : undefined,
         ),
@@ -359,11 +533,21 @@ export const feedPostsService = {
     rateLimit("feedWrite", v.user.id);
     const keys = await withTx(async (tx) => {
       const [post] = await tx
-        .select({ id: feedPosts.id, deletedAt: feedPosts.deletedAt })
+        .select({
+          id: feedPosts.id,
+          authorId: feedPosts.authorId,
+          persona: feedPosts.persona,
+          structureId: feedPosts.structureId,
+          proId: feedPosts.proId,
+          providerId: feedPosts.providerId,
+          mediaId: feedPosts.mediaId,
+          deletedAt: feedPosts.deletedAt,
+        })
         .from(feedPosts)
-        .where(and(eq(feedPosts.id, id), eq(feedPosts.authorId, v.user.id)))
+        .where(eq(feedPosts.id, id))
         .for("update");
-      if (!post || post.deletedAt) throw notFound("Publication introuvable");
+      // Une publication de page se retire au nom de la page (mêmes droits que pour publier), jamais par le seul `author_id`.
+      if (!post || post.deletedAt || !(await canManagePost(v, post, tx))) throw notFound("Publication introuvable");
       // Un signalement attend sa décision : l'auteur retire sa publication (elle disparaît du Fil), mais les photos restent
       // pour la modération, qui les efface à sa décision.
       return softDeletePost(tx, id, v.user.id, now(), { keepPhotos: await hasOpenReport(tx, id) });

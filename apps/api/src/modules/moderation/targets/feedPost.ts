@@ -36,17 +36,19 @@ registerReportMedia("feed_post", async (report, name) => {
  * Efface les lignes de photos gardées d'une publication retirée ; rend les fichiers à effacer après la validation. Si
  * l'auteur a supprimé son compte entre-temps, la publication elle-même (légende comprise) n'a plus de raison d'être gardée.
  */
-async function purgeHeldPhotos(tx: Tx, postId: string): Promise<string[]> {
+export async function purgeHeldPhotos(tx: Tx, postId: string): Promise<string[]> {
   const gone = await tx
     .delete(feedPostPhotos)
     .where(eq(feedPostPhotos.postId, postId))
     .returning({ key: feedPostPhotos.storageKey });
   const [author] = await tx
-    .select({ deletedAt: profiles.deletedAt })
+    .select({ deletedAt: profiles.deletedAt, persona: feedPosts.persona })
     .from(feedPosts)
     .innerJoin(profiles, eq(profiles.userId, feedPosts.authorId))
     .where(eq(feedPosts.id, postId));
-  if (author?.deletedAt) await tx.delete(feedPosts).where(eq(feedPosts.id, postId));
+  // Seules les publications personnelles sont effacées : celles d'une page restent à la page (retirées, pas effacées) et
+  // comptent toujours dans le plafond de l'« Info importante ».
+  if (author?.deletedAt && author.persona === "fan") await tx.delete(feedPosts).where(eq(feedPosts.id, postId));
   return gone.map((p) => p.key);
 }
 

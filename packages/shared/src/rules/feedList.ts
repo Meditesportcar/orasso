@@ -2,6 +2,12 @@
 // `reset` de l'API), les genres de carte qu'on sait dessiner, et ce qui bloque « Publier au Fil ».
 import { feedScreenLabels as L } from "../labels/feedScreen.fr";
 import type { FeedCard, FeedPage, FeedPostView } from "../schemas/feed";
+import {
+  FEED_SEEN_AT_MAX_AGE_MS,
+  FEED_SEEN_BATCH_MAX,
+  FEED_SEEN_QUEUE_MAX,
+  type FeedSeenAction,
+} from "../schemas/feedSeen";
 import { MAX_PLATE_RECTS, type PlateRect } from "../schemas/vehicle";
 import {
   FEED_ASPECT_RATIOS,
@@ -21,9 +27,13 @@ export type FeedListState = {
   filter: FeedFilter;
   items: FeedCard[];
   nextCursor: string | null;
+  /** Le rail « Ça plaît en ce moment » de la première page (R8c1) ; il ne change pas pendant le parcours. */
+  hot?: FeedCard<"feed_post">[];
+  /** L'instant du parcours (`FeedPage.ref`) : base de la pastille « Nouvelles publications ». */
+  ref?: string;
 };
 
-export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null });
+export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null, hot: [] });
 
 /** La première place d'une carte « Sponsorisé » dans la liste affichée (0 = première) : la 4e, jamais avant (D38). */
 export const SPONSORED_MIN_INDEX = 3;
@@ -60,20 +70,233 @@ export function appendCards(current: readonly FeedCard[], next: readonly FeedCar
  */
 export function applyFeedPage(
   state: FeedListState,
-  page: Pick<FeedPage, "items" | "nextCursor" | "filter" | "reset">,
+  page: Pick<FeedPage, "items" | "nextCursor" | "filter" | "reset"> & Partial<Pick<FeedPage, "hot" | "ref">>,
   sentCursor: string | null,
 ): { state: FeedListState; scrollTop: boolean } | null {
   if (page.filter !== state.filter) return null;
   if (!sentCursor || page.reset) {
     return {
-      state: { filter: state.filter, items: [...page.items], nextCursor: page.nextCursor },
+      state: {
+        filter: state.filter,
+        items: [...page.items],
+        nextCursor: page.nextCursor,
+        hot: page.hot ? [...page.hot] : [],
+        ...(page.ref ? { ref: page.ref } : {}),
+      },
       scrollTop: Boolean(page.reset && sentCursor),
     };
   }
   return {
-    state: { filter: state.filter, items: appendCards(state.items, page.items), nextCursor: page.nextCursor },
+    state: {
+      ...state,
+      items: appendCards(state.items, page.items),
+      nextCursor: page.nextCursor,
+    },
     scrollTop: false,
   };
+}
+
+/**
+ * Place de « Tu es à jour » : l'index de la première carte vue sans interaction (`seen: true`), ou -1 s'il n'y en a pas.
+ * 0 : tout est vu, la ligne est en tête. Le serveur range les cartes vues après les autres : la frontière est unique.
+ */
+export function caughtUpIndex(items: readonly Pick<FeedCard, "seen">[]): number {
+  return items.findIndex((c) => c.seen === true);
+}
+
+/** Une carte vue (ou ouverte, partagée) à envoyer à `POST /me/fil/seen`. */
+export type SeenEntry = { id: string; action: FeedSeenAction; at?: string };
+
+/**
+ * La file des cartes vues, prête à partir : sans doublon (une carte : la plus forte action, l'heure la plus ancienne),
+ * sans « Sponsorisé » (jamais retenu), 200 au plus (les plus récentes), puis `send` = les 50 premières d'un envoi, `rest` = la suite.
+ */
+export function seenBatch(queue: readonly SeenEntry[]): { send: SeenEntry[]; rest: SeenEntry[] } {
+  const byId = new Map<string, SeenEntry>();
+  for (const e of queue) {
+    if (e.id.startsWith("sponsored:")) continue;
+    const old = byId.get(e.id);
+    if (!old) {
+      byId.set(e.id, { ...e });
+      continue;
+    }
+    if (e.action !== "view") old.action = e.action;
+    if (e.at && (!old.at || e.at < old.at)) old.at = e.at;
+  }
+  const all = [...byId.values()].slice(-FEED_SEEN_QUEUE_MAX);
+  return { send: all.slice(0, FEED_SEEN_BATCH_MAX), rest: all.slice(FEED_SEEN_BATCH_MAX) };
+}
+
+// --- Cartes vues : ce que l'écran suit, puis envoie (R8c2) -------------------------------------------------------------
+
+/** Une carte compte comme « vue » quand la moitié au moins en est visible, sans interruption, pendant une seconde. */
+export const SEEN_DWELL_MS = 1000;
+export const SEEN_VISIBLE_SHARE = 0.5;
+/** Envoi toutes les 10 secondes, à la sortie du Fil et au passage en arrière-plan. */
+export const SEEN_FLUSH_EVERY_MS = 10_000;
+/** Après un échec (429, réseau, serveur), pas de nouvel essai avant 60 s ; le délai double, 15 min au plus. */
+export const SEEN_RETRY_BASE_MS = 60_000;
+export const SEEN_RETRY_MAX_MS = 15 * 60_000;
+
+const SEEN_ID = /^[a-z_]+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * L'identifiant d'une carte que `POST /me/fil/seen` retient : `genre:uuid`, jamais `sponsored`. L'API refuse tout le lot si un
+ * seul identifiant est inconnu : on n'envoie que ceux-là (un genre à identifiant d'une autre forme n'est pas suivi).
+ */
+export const isSeenCardId = (id: string): boolean => SEEN_ID.test(id) && !id.startsWith("sponsored:");
+
+/**
+ * Une carte est-elle assez visible pour compter ? `top` et `height` : la carte ; `areaTop`, `areaBottom` : la zone utile de
+ * l'écran (sous la bande, au-dessus de la barre d'onglets). La moitié de la carte (ou la moitié de la zone pour une carte
+ * plus haute qu'elle) doit être dans la zone.
+ */
+export function isVisibleEnough(top: number, height: number, areaTop: number, areaBottom: number): boolean {
+  if (!(height > 0) || !(areaBottom > areaTop)) return false;
+  const shown = Math.min(top + height, areaBottom) - Math.max(top, areaTop);
+  return shown >= SEEN_VISIBLE_SHARE * Math.min(height, areaBottom - areaTop);
+}
+
+/**
+ * Le temps de présence des cartes : `observe(visibles, maintenant)` dit lesquelles viennent de rester visibles une seconde
+ * d'affilée. Une carte qui sort de la vue repart de zéro ; une carte déjà annoncée ne l'est plus (jusqu'à `reset`).
+ */
+export function createSeenDwell(dwellMs: number = SEEN_DWELL_MS) {
+  const since = new Map<string, number>();
+  const done = new Set<string>();
+  return {
+    observe(visible: Iterable<string>, now: number): string[] {
+      const current = new Set(visible);
+      for (const id of [...since.keys()]) if (!current.has(id)) since.delete(id);
+      const ready: string[] = [];
+      for (const id of current) {
+        if (done.has(id)) continue;
+        const start = since.get(id);
+        if (start === undefined) since.set(id, now);
+        else if (now - start >= dwellMs) {
+          since.delete(id);
+          done.add(id);
+          ready.push(id);
+        }
+      }
+      return ready;
+    },
+    /** Une nouvelle liste (autre onglet, actualisation) : tout repart. */
+    reset(): void {
+      since.clear();
+      done.clear();
+    },
+  };
+}
+
+/** Le résultat d'un envoi : `ok` (204), `drop` (refus définitif : 400, le lot est abandonné), `retry` (429, réseau, serveur). */
+export type SeenSendResult = "ok" | "drop" | "retry";
+
+/**
+ * La file des cartes vues. `add` dédoublonne (`seenBatch`) ; `flush` envoie par lots de 50, sans file jamais plus longue que
+ * 200, sans entrée plus vieille que 24 h ; un échec remet le lot en tête et repousse le prochain essai (pas de boucle serrée).
+ * `now` et `send` sont donnés : aucune horloge ni réseau ici.
+ */
+export function createSeenQueue(opts: { send: (batch: SeenEntry[]) => Promise<SeenSendResult>; now: () => number }) {
+  let entries: SeenEntry[] = [];
+  let retryAt = 0;
+  let failures = 0;
+  let inFlight = false;
+  /** Le lot parti sans réponse : il reste dans l'état gardé (`snapshot`) jusqu'à l'acquittement. */
+  let sending: SeenEntry[] = [];
+  const normalize = (list: readonly SeenEntry[]): SeenEntry[] => {
+    const { send, rest } = seenBatch(list);
+    return [...send, ...rest];
+  };
+  const fresh = (list: readonly SeenEntry[]): SeenEntry[] => {
+    const limit = opts.now() - FEED_SEEN_AT_MAX_AGE_MS;
+    return list.filter((e) => {
+      const at = e.at ? Date.parse(e.at) : Number.NaN;
+      return Number.isNaN(at) || at >= limit;
+    });
+  };
+  return {
+    add(id: string, action: FeedSeenAction): void {
+      if (!isSeenCardId(id)) return;
+      entries = normalize([...entries, { id, action, at: new Date(opts.now()).toISOString() }]);
+    },
+    /** Remet en file des entrées gardées (reprise après un redémarrage de l'appli). */
+    restore(saved: readonly SeenEntry[]): void {
+      entries = normalize(fresh([...saved.filter((e) => isSeenCardId(e.id)), ...entries]));
+    },
+    snapshot(): SeenEntry[] {
+      entries = fresh(entries);
+      return normalize(fresh([...sending, ...entries]));
+    },
+    size: (): number => entries.length,
+    /** Vrai : tout est parti (ou rien à envoyer). Faux : un envoi a échoué, ou on attend le prochain essai. */
+    async flush(): Promise<boolean> {
+      if (inFlight) return false;
+      if (opts.now() < retryAt) return false;
+      inFlight = true;
+      try {
+        entries = fresh(entries);
+        while (entries.length > 0) {
+          const { send, rest } = seenBatch(entries);
+          if (send.length === 0) {
+            entries = [];
+            break;
+          }
+          entries = rest;
+          sending = send;
+          let result: SeenSendResult;
+          try {
+            result = await opts.send(send);
+          } catch {
+            result = "retry";
+          }
+          sending = [];
+          if (result === "retry") {
+            entries = normalize([...send, ...entries]);
+            failures += 1;
+            retryAt = opts.now() + Math.min(SEEN_RETRY_MAX_MS, SEEN_RETRY_BASE_MS * 2 ** (failures - 1));
+            return false;
+          }
+          failures = 0;
+        }
+        return true;
+      } finally {
+        inFlight = false;
+      }
+    },
+  };
+}
+
+// --- Hors ligne : la copie du Fil (R8c2) --------------------------------------------------------------------------------
+
+/** Cartes gardées par onglet pour l'affichage sans réseau. */
+export const FEED_COPY_MAX = 40;
+
+/**
+ * Ce que le téléphone garde d'une première page : 40 cartes au plus, **sans** `spot_meetup` (un lieu : jamais gardé, règle
+ * R7i) ni `sponsored` (le comptage se fait en ligne, jamais d'une copie).
+ */
+export function feedCopyCards(items: readonly FeedCard[]): FeedCard[] {
+  return items.filter((c) => c.kind !== "spot_meetup" && c.kind !== "sponsored").slice(0, FEED_COPY_MAX);
+}
+
+/** La copie gardée d'un onglet : sa clé dans `offlineCopy`. */
+export const feedCopyKey = (filter: FeedFilter): string => `fil.${filter}`;
+
+/** Une copie relue du disque : seulement des cartes bien formées du bon onglet, filtrées de nouveau (elle peut venir d'une version plus ancienne). */
+export function parseFeedCopy(raw: unknown, filter: FeedFilter): FeedCard[] | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as { filter?: unknown; items?: unknown };
+  if (r.filter !== filter || !Array.isArray(r.items)) return null;
+  const items = r.items.filter(
+    (c): c is FeedCard =>
+      Boolean(c) &&
+      typeof (c as FeedCard).id === "string" &&
+      typeof (c as FeedCard).kind === "string" &&
+      typeof (c as FeedCard).at === "string" &&
+      Boolean((c as FeedCard).payload),
+  );
+  return feedCopyCards(items);
 }
 
 /** Genres que le Fil dessine (lot R7e2, puis `spot_meetup` du lot R7i, `sponsored` du lot R7k2 et `memory` du lot R7j) : plus aucun n'est réservé. */
@@ -266,25 +489,39 @@ export function publishedCard(post: FeedPostView): FeedCard<"feed_post"> {
     reason: { code: "following_author", label: L.publishedReason },
     at: post.createdAt,
     payload: { post: { ...post, mine: true } },
+    seen: false,
   };
 }
 
-/** Ma publication reste en tête du Fil 24 h après son envoi (`createdAt`), pas plus. */
-export const MY_PUBLISHED_PIN_MS = 24 * 60 * 60 * 1000;
+/**
+ * Ma publication n'est en tête que juste après l'envoi (R8c2 : plus de 24 h) : l'appli la garde le temps de la visite du Fil,
+ * le site dans l'onglet. Un reste plus ancien qu'une heure (envoi jamais suivi d'un retour au Fil) n'est plus « à l'envoi ».
+ */
+export const FEED_JUST_PUBLISHED_MS = 60 * 60 * 1000;
 
-/** Mes cartes encore épinglées en tête : celles de moins de 24 h (une date illisible ou future compte comme récente). */
-export function pinnedPublished(mine: readonly FeedCard[], now: number = Date.now()): FeedCard[] {
+/** Mes cartes d'envoi encore « juste publiées » (une date illisible ou future compte comme récente). */
+export function justPublished(mine: readonly FeedCard[], now: number): FeedCard[] {
   return mine.filter((c) => {
     const at = Date.parse(c.at);
-    return Number.isNaN(at) || now - at < MY_PUBLISHED_PIN_MS;
+    return Number.isNaN(at) || now - at < FEED_JUST_PUBLISHED_MS;
   });
 }
 
-/** La liste affichée : mes publications récentes en tête, puis la page de l'API, sans doublon (la carte de l'API l'emporte). */
+/**
+ * La liste affichée : mes publications juste envoyées **en tête** (R8c2), puis la page de l'API. Si l'API a rendu la même carte
+ * (même identifiant, ce que fait « Abonnements »), ses données sont gardées (compteurs, légende) mais la raison reste « Ta
+ * publication » (maquette R8.7 : l'API n'a pas de raison propre pour elle) ; la carte monte en tête, le bandeau « Publié sur
+ * ton profil » parle d'elle. Sans doublon.
+ */
 export function withMyPublished(items: readonly FeedCard[], mine: readonly FeedCard[]): FeedCard[] {
   if (!mine.length) return [...items];
-  const seen = new Set(items.map((c) => c.id));
-  return [...mine.filter((c) => !seen.has(c.id)), ...items];
+  const byId = new Map(items.map((c) => [c.id, c]));
+  const head = mine.map((c) => {
+    const api = byId.get(c.id);
+    return api ? ({ ...api, reason: c.reason } as FeedCard) : c;
+  });
+  const pinned = new Set(head.map((c) => c.id));
+  return [...head, ...items.filter((c) => !pinned.has(c.id))];
 }
 
 // --- Réessayer ----------------------------------------------------------------------------------------------------------

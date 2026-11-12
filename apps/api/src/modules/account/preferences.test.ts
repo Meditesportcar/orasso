@@ -115,7 +115,9 @@ describe("Tes préférences", () => {
     expect(row?.mutedTypes).not.toContain("event_nearby_interest");
     expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_nearby_interest")).toBe(true);
     expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "new_event_followed")).toBe(false);
-    expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_updated")).toBe(false);
+    // Lot R8n1 : les autres types réglables sont coupés ; l'Essentiel (ici « événement modifié ») n'est plus un type qu'on coupe.
+    expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_announcement")).toBe(false);
+    expect(row?.mutedTypes).not.toContain("event_updated");
 
     // Couper l'interrupteur ne touche pas la famille.
     const off = await call(u, "PATCH", "/me/preferences", { newEvents: false });
