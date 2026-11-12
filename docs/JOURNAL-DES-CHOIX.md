@@ -5768,15 +5768,15 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 - **Info importante d'hier** : dÃ©jÃ  corrigÃ©e par le coordinateur (3c7efc20) ; vÃ©rifiÃ© : `important` n'est posÃ© que pour une importante d'aujourd'hui, test Â« importante d'hier + annonce d'aujourd'hui Â» prÃ©sent et vert.
 
 ### Tour 5 (lot R8d, 12/11/2026)
-- **Site, mentions** : un changement de session signalé par le canal (listenSession) incrémente la génération, vide les pages lues, remet usy à nul et revalide le chargeur : une pagination en vol d'un autre compte est jetée.
-- **Appli, mentions** : load() remet loadingMore à nul au démarrage (le inally d'une pagination périmée ne le fait plus) : « Voir plus » ne reste plus bloqué.
-- **Épingle de la façade** : une reprise sur 40P01, comme setPinned de pin.ts.
-- **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une réponse retardée, et l'appli n'a pas de test d'écran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
+- **Site, mentions** : un changement de session signalÃ© par le canal (listenSession) incrÃ©mente la gÃ©nÃ©ration, vide les pages lues, remet usy Ã  nul et revalide le chargeur : une pagination en vol d'un autre compte est jetÃ©e.
+- **Appli, mentions** : load() remet loadingMore Ã  nul au dÃ©marrage (le inally d'une pagination pÃ©rimÃ©e ne le fait plus) : Â« Voir plus Â» ne reste plus bloquÃ©.
+- **Ã‰pingle de la faÃ§ade** : une reprise sur 40P01, comme setPinned de pin.ts.
+- **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une rÃ©ponse retardÃ©e, et l'appli n'a pas de test d'Ã©cran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
 
 ### Tour 6 (lot R8d, 12/11/2026)
-- **Site, mentions** : un état « session changée » remplace listes, filtre, menus et « Voir plus » par le chargement jusqu'à la fin de la revalidation (levé par le chargeur ou par la fin de la revalidation). Le même compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant à l'hydratation (vu en recette). Pas de test automatique (aucun modèle de test d'écran du site pour ce canal) ; recette du site 7/7.
-- **Appli, mentions** : « Voir plus » est refusé tant que load() n'a pas installé ses listes et ses curseurs (drapeau eading), le déblocage après une pagination jetée est gardé.
-- **Épingle de la façade** : la limite eedWrite est comptée une fois, avant le rejeu sur 40P01 ; test (58 écritures, 40P01 simulé, l'épingle passe).
+- **Site, mentions** : un Ã©tat Â« session changÃ©e Â» remplace listes, filtre, menus et Â« Voir plus Â» par le chargement jusqu'Ã  la fin de la revalidation (levÃ© par le chargeur ou par la fin de la revalidation). Le mÃªme compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant Ã  l'hydratation (vu en recette). Pas de test automatique (aucun modÃ¨le de test d'Ã©cran du site pour ce canal) ; recette du site 7/7.
+- **Appli, mentions** : Â« Voir plus Â» est refusÃ© tant que load() n'a pas installÃ© ses listes et ses curseurs (drapeau eading), le dÃ©blocage aprÃ¨s une pagination jetÃ©e est gardÃ©.
+- **Ã‰pingle de la faÃ§ade** : la limite eedWrite est comptÃ©e une fois, avant le rejeu sur 40P01 ; test (58 Ã©critures, 40P01 simulÃ©, l'Ã©pingle passe).
 
 ### Tour 3 (R9a partie 1, 12/11/2026) : corrections de la relecture Codex
 - **AprÃ¨s `git merge vague-r8`** : le journal et `labels.fr.ts` gardent les deux cÃ´tÃ©s ; la migration reste `0079_persona-follows` (entrÃ©e ajoutÃ©e en fin de `_journal.json`, aprÃ¨s les migrations de la vague) et le snapshot 0079 est celui de la vague : Ã  renumÃ©roter et rÃ©gÃ©nÃ©rer Ã  la fusion.
@@ -5798,5 +5798,5 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 - **Tests** : l'UUID en majuscules exige 201 et le bon partenaire ; scÃ©nario heures calmes (notification diffÃ©rÃ©e) puis anonymisation de l'auteur : ni ligne ni livraison ensuite. Le test de forme du rÃ©sumÃ© de la BoÃ®te (`activity.test.ts`) accepte `pendingCoauthors`.
 
 ### Tour 7 (lot R8d, 12/11/2026)
-- **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (référence mise à jour à chaque donnée) : A ? B ? A dans une page restée montée n'ignore plus la dernière annonce. Pas de test A ? B ? A (il faut deux comptes dans une même fenêtre annoncés par le canal) ; recette du site non rejouée ce tour.
-- **Épingle de la façade** : l'écriture est comptée à la détection de la reprise dans la transaction, une fois par requête (drapeau gardé entre les tentatives) ; le test précharge 59 écritures et lève le 40P01 après le corps.
+- **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (rÃ©fÃ©rence mise Ã  jour Ã  chaque donnÃ©e) : A ? B ? A dans une page restÃ©e montÃ©e n'ignore plus la derniÃ¨re annonce. Pas de test A ? B ? A (il faut deux comptes dans une mÃªme fenÃªtre annoncÃ©s par le canal) ; recette du site non rejouÃ©e ce tour.
+- **Ã‰pingle de la faÃ§ade** : l'Ã©criture est comptÃ©e Ã  la dÃ©tection de la reprise dans la transaction, une fois par requÃªte (drapeau gardÃ© entre les tentatives) ; le test prÃ©charge 59 Ã©critures et lÃ¨ve le 40P01 aprÃ¨s le corps.
