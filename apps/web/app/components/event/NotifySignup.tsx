@@ -25,10 +25,13 @@ import "../../styles/event-notify.css";
  */
 export function useSessionGuard(): () => boolean {
   const changed = useRef(false);
+  // La fenêtre annonce d'abord son propre compte (hydratation) : la première annonce fixe le compte, une autre le change.
+  const known = useRef<string | null | undefined>(undefined);
   useEffect(
     () =>
-      listenSession(() => {
-        changed.current = true;
+      listenSession((userId) => {
+        if (known.current === undefined) known.current = userId;
+        else if (known.current !== userId) changed.current = true;
       }),
     [],
   );

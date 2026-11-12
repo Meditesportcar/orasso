@@ -187,7 +187,9 @@ export function NotifyPrefsSheet({
 
   // À la fermeture : on attend la fin des écritures avant que la cloche relise le réglage.
   const closeWhenIdle = () => {
-    onClose(writer.current?.whenIdle() ?? Promise.resolve(true));
+    // Un échec déjà affiché dans la feuille a été vu : il ne la rouvre pas ; un échec qui arrive après la fermeture, si.
+    const seen = message !== null;
+    onClose((writer.current?.whenIdle() ?? Promise.resolve(true)).then((ok) => ok || seen));
   };
 
   const change = (next: boolean) => {
