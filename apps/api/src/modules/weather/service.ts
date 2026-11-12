@@ -128,6 +128,8 @@ const departmentFlights = new Map<string, Promise<typeof weatherDepartments.$inf
 /** Lot R8m : cases de 0,1° en cours de récupération (un seul appel par case à la fois) et dernier échec par case. */
 const cellFlights = new Map<string, Promise<typeof weatherPlacesCache.$inferSelect | null>>();
 const cellFailures = new Map<string, number>();
+/** Demandes de `cellForAt` en cours, par case : leur résultat (repli compris) est partagé entre tous les appelants. */
+const atFlights = new Map<string, Promise<typeof weatherPlacesCache.$inferSelect | null>>();
 /** Une case plus vieille que ça est rafraîchie par la tâche (elle passe toutes les 3 h : une marge évite de la rater d'une seconde). */
 const CELL_REFRESH_AFTER_MS = 2 * HOUR;
 /** Cases rafraîchies par passage au plus, et durée de garde d'une case que personne ne lit plus. */
@@ -149,6 +151,7 @@ const DEPARTMENT_RETRY_MS = 10 * 60_000;
 export function resetPlaceCellState() {
   cellFlights.clear();
   cellFailures.clear();
+  atFlights.clear();
   atFetches.length = 0;
 }
 
@@ -703,6 +706,15 @@ export const weatherService = {
    * stock, sinon rien, sans appel.
    */
   async cellForAt(cell: WeatherCell) {
+    // Les demandes simultanées sur la même case partagent UNE promesse, repli compris (refus du plafond : le même repli pour tous).
+    const shared = atFlights.get(cell.key);
+    if (shared) return shared;
+    const run = this.cellForAtOnce(cell).finally(() => atFlights.delete(cell.key));
+    atFlights.set(cell.key, run);
+    return run;
+  },
+
+  async cellForAtOnce(cell: WeatherCell) {
     const cached = await db.query.weatherPlacesCache.findFirst({ where: eq(weatherPlacesCache.cell, cell.key) });
     const t = now().getTime();
     const fresh = cached ? t - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS : false;

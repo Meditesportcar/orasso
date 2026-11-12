@@ -801,6 +801,21 @@ describe("tour 5 : le plafond tient avec des demandes simultanées", () => {
   });
 });
 
+describe("tour 6 : le repli est partagé entre demandes simultanées sur la même case", () => {
+  it("quota plein, trois demandes simultanées sur la même case : trois replis, aucun appel", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    await weatherService.cellForAt({ lat: 43.0, lng: 3.0, key: "43.0,3.0" });
+    const before = f.mock.calls.length;
+    resetPlaceCellState();
+    fillPositionBudget();
+    const same = { lat: 43.2, lng: 3.2, key: "43.2,3.2" };
+    const rows = await Promise.all([1, 2, 3].map(() => weatherService.cellForAt(same)));
+    expect(rows.map((r) => r?.cell)).toEqual(["43.0,3.0", "43.0,3.0", "43.0,3.0"]);
+    expect(f.mock.calls.length).toBe(before);
+  });
+});
+
 describe("export des données personnelles et état « en cours de chargement »", () => {
   it("l'export contient les villes choisies, jamais une position", async () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);

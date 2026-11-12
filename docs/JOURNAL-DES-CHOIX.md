@@ -5655,3 +5655,10 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Delta de « Mentions · N »** : il repart de zéro à chaque **réponse servie** (l'objet de la fiche relue), non à chaque changement de valeur (appli et site). Recettes : masquer, le serveur redit le même nombre, relecture : le nombre servi s'affiche.
 - **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur présents avant la fin de gratuité, absents pour un autre lecteur après, maintenus pour le propriétaire).
 - **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors décision, à noter : une publication d'un pro qui cite une structure ou un événement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` après la fin de gratuité.
+
+### Lot R8m : Tour 6 (relecture Codex du tour 5, 12/11/2026)
+
+- **Position du site et déconnexion** : retour à la portée nulle sans session (`scope: currentSession`) et effacement de la position sur toute annonce qui change le compte, « aucun compte » comprise. Le changement du tour 5 (portée sur le dernier compte non nul) est retiré : il gardait la position de A après sa déconnexion.
+- **L'annonce « aucun compte » transitoire n'existe pas** (recherche faite) : les annonces `null` observées viennent des pages publiques (connexion), sans session ; la mise en page de l'espace connecté n'annonce jamais `null` en cours de navigation. Le rechargement de la position vu aux tours 4 et 5 était une course dans la recette (le bouton « Second lieu » cliqué avant sa navigation) : les recettes attendent maintenant cette navigation.
+- **Test du branchement réel** : `apps/web/app/components/weather/position.test.ts` (annonce de session → magasin) : déconnexion, position effacée, aucune coordonnée ne repart ni en relecture forcée ; un autre compte ne la voit pas.
+- **Repli sous concurrence** : `cellForAt` partage une promesse par case, repli compris : quota plein, trois demandes simultanées sur la même case, trois replis.

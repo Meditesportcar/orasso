@@ -9,15 +9,9 @@ import { useSyncExternalStore } from "react";
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
 
-/**
- * Le dernier compte annoncé NON nul : la mise en page annonce brièvement « aucun compte » pendant une revalidation (après un
- * formulaire) ; ce n'est pas une déconnexion, la position gardée ne doit pas être oubliée pour autant.
- */
-let lastUser: string | null = currentSession();
-
 const store = createPositionStore({
-  // Le dernier compte annoncé par la mise en page, même si l'annonce a eu lieu avant le chargement de ce module.
-  scope: () => currentSession() ?? lastUser,
+  // Le dernier compte annoncé par la mise en page ; `null` sans session (la position n'a alors aucune portée).
+  scope: currentSession,
   now: () => Date.now(),
   weatherAt: async (position) => {
     const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: position });
@@ -27,20 +21,18 @@ const store = createPositionStore({
 });
 
 if (typeof window !== "undefined") {
-  // Chaque transition de session invalide les demandes en cours, même sans position gardée (A → aucun → A pendant le GPS).
-  // Une annonce « aucun compte » invalide les demandes en cours (la position gardée reste liée à son compte) ; un autre compte
-  // efface la position.
+  // Toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface la position et
+  // invalide les demandes en cours : A → déconnexion → A pendant le GPS ne ramène rien. (Aucune annonce « aucun compte » ne
+  // survient en cours de navigation : seules les pages publiques, sans session, l'annoncent.)
+  let seen: string | null = currentSession();
   listenSession((userId) => {
-    if (userId === null) {
-      // Les demandes en cours sont invalidées ; la position gardée reste (annonce transitoire possible).
-      store.invalidate();
-      return;
-    }
-    // Un autre compte : la position de l'ancien est effacée.
-    if (lastUser !== null && userId !== lastUser) store.forget();
-    lastUser = userId;
+    if (userId !== seen) store.forget();
+    seen = userId;
   });
 }
+
+/** La position visible pour la session courante (tests, et lecture sans React). */
+export const peekWeatherPosition = () => store.view();
 
 const EMPTY = { at: null, busy: false } as const;
 let last = store.view();
