@@ -76,5 +76,11 @@ export const emailOutbox = pgTable(
     error: text("error"),
     ...timestamps,
   },
-  (t) => [index("email_outbox_status_idx").on(t.status)],
+  (t) => [
+    index("email_outbox_status_idx").on(t.status),
+    // Dernière trace d'une invitation express (`ensureMail`) : la boîte d'envoi n'est plus lue en entier.
+    index("email_outbox_express_invite_idx")
+      .on(sql`((${t.payload}->>'inviteId'))`)
+      .where(sql`${t.template} = 'express_invite'`),
+  ],
 );
