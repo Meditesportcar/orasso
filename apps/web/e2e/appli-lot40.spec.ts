@@ -316,9 +316,10 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
   await expect(page.getByTestId("casquette-visitor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("casquette-quick-vehicle")).toBeVisible();
-  // Lot R8b1 : un visiteur sans véhicule n'a pas d'onglet Garage, le Profil s'ouvre sur Sorties ; l'ajout d'un premier
-  // véhicule passe par la ligne de « Mes casquettes » (vérifiée juste au-dessus).
+  // Lots R8b1 et R8b2 : un visiteur sans véhicule n'a pas d'onglet Garage, le Profil s'ouvre sur Publications (Sorties est un
+  // clic plus loin) ; l'ajout d'un premier véhicule passe par la ligne de « Mes casquettes » (vérifiée juste au-dessus).
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await page.getByTestId("profil-tab-sorties").click();
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await shot(page, "visiteur-profil-sable");
 
@@ -326,6 +327,8 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   // Retour sur un onglet : `GET /me` relu, la casquette de base devient l'exposant (la ligne « Mon garage » du Profil).
   await page.getByRole("tab", { name: "Explorer", exact: true }).click();
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage (apparu avec la voiture) est un clic plus loin.
+  await page.getByTestId("profil-tab-garage").click({ timeout: 30_000 });
   await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("tab", { name: "Crew", exact: true })).toBeVisible();
   await shot(page, "visiteur-devenu-exposant-sable");

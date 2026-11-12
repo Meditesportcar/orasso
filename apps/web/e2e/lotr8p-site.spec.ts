@@ -53,7 +53,7 @@ test("une seule casquette : pas de « Publier en tant que » ; un passionné pub
   await expect(missing(d)).toHaveText("Ajoute au moins une photo.");
   await addPhoto(d);
   await eventByTitle(d, "Nocturne de Canet").click();
-  await expect(d.getByTestId("fil-publish-says-phrase")).toContainText("sera au Nocturne de Canet");
+  await expect(d.getByTestId("fil-publish-says-phrase")).toContainText("sera à la Nocturne de Canet");
   await expect(d.getByTestId("fil-publish-stamp")).toHaveCount(0);
   await expect(d.getByTestId("fil-publish-place")).toHaveCount(0);
   await shot(d, "moi-evenement");
@@ -78,7 +78,7 @@ test("une structure publie sans photo : l'affiche est le visuel ; hors événeme
   await expect(page.getByTestId("fil-publish-poster")).toContainText(
     "Sans photo : l'affiche de l'événement sera le visuel.",
   );
-  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour le Expo Rivesaltes");
+  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour l'Expo Rivesaltes");
   await expect(missing(page)).toHaveCount(0);
   expect(await cutWords(page, "fil-publish-events")).toEqual([]);
   await shot(page, "structure-affiche-visuel");
@@ -252,6 +252,49 @@ async function lostThenUncertain(page: Page, caption: string, reachServer: boole
   await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
   await page.unroute("**/api/me/feed-posts");
 }
+
+test("site : envoi incertain repris après rechargement, événement absent de la liste relue : il reste affiché, coché et figé, « Réessayer » le renvoie", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await structure(page).click();
+  await eventByTitle(page, "Expo Rivesaltes").click();
+  await page.getByTestId("fil-publish-caption").fill(`Événement gardé ${Date.now()}`);
+  await page.route("**/api/me/feed-posts", (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  // La liste relue au rechargement ne contient plus l'événement (plus rattachable).
+  await page.route("**/api/me/feed-posts/attachable-events**", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    await route.fulfill({
+      response: res,
+      json: { items: json.items.filter((e: { title: string }) => e.title !== "Expo Rivesaltes") },
+    });
+  });
+  await page.reload();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  const kept = eventByTitle(page, "Expo Rivesaltes");
+  await expect(kept).toBeVisible();
+  await expect(kept).toHaveAttribute("aria-pressed", "true");
+  await expect(kept).toBeDisabled();
+  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("Expo Rivesaltes");
+  // « Réessayer » renvoie le corps gardé, avec son événement. L'envoi est coupé de nouveau : aucune publication ne naît, la recette
+  // se rejoue sur la même base.
+  let resent: { eventId?: string | null } | null = null;
+  await page.route("**/api/me/feed-posts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    resent = JSON.parse(route.request().postData() ?? "{}");
+    return route.abort("failed");
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect.poll(() => resent?.eventId ?? null).toBeTruthy();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+});
 
 test("site : « Modifier » vérifie d'abord : publiée, « Ta publication est en ligne »", async ({ page }) => {
   test.setTimeout(240_000);

@@ -3,9 +3,9 @@
 // facteur, et un visiteur sans session (401). Ce qu'on ne voit pas répond 404, sans rien révéler.
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { addMember, call, createStructure, resetDb, useClock } from "../../../../test/helpers";
+import { addMember, call, createStructure, quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedPostComments, feedPosts, profiles, userFollows } from "../../../db/schema";
 import {
@@ -19,6 +19,7 @@ import {
   type TestUser,
   texts,
 } from "./testkit";
+import * as view from "./view";
 
 afterAll(async () => {
   await pool.end();
@@ -29,6 +30,8 @@ const tick = () => clock.advance(1000);
 
 beforeEach(async () => {
   await resetDb();
+  // Les heures calmes (22 h à 8 h) différeraient les notifications lues ici : le test ne dépend pas de l'heure réelle (petit lot API, P25).
+  quietHours(false);
   clock = useClock(new Date(Date.now() + 10 * 60_000));
 });
 
@@ -370,6 +373,12 @@ describe("le compteur du parent n'est rendu que si le parent se lit encore", () 
     expect(again.json.id).toBe(first.json.id);
     expect(again.json.parent).toBeUndefined();
     expect((await listReplies(friend, parent.json.id)).status).toBe(404);
+    // Supprimer ma réponse (DELETE réel) : 204 sans corps, sans compteur du parent ; la réponse est bien supprimée (petit lot API, P32).
+    const del = await call(friend, "DELETE", `/feed-comments/${first.json.id}`);
+    expect(del.status).toBe(204);
+    expect(del.text).toBe("");
+    const [row] = await db.select().from(feedPostComments).where(eq(feedPostComments.id, first.json.id));
+    expect(row?.deletedAt).not.toBeNull();
   });
   it("supprimer une réponse rend 200 avec le compteur de son parent (lu après la suppression) ; un commentaire de premier niveau, 204", async () => {
     const lea = await person("Lea_11");
@@ -384,5 +393,61 @@ describe("le compteur du parent n'est rendu que si le parent se lit encore", () 
     expect(del.json.parent).toMatchObject({ id: parent.json.id, repliesCount: 1 });
     expect(del.json.parent.countedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
     expect((await call(lea, "DELETE", `/feed-comments/${parent.json.id}`)).status).toBe(204);
+  });
+
+  it("suppression d'une réponse par celui qui gère la publication : 200 avec le compteur du parent (petit lot API, P32)", async () => {
+    const owner = await person("Orga_66", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    const lea = await person("Lea_11");
+    const nina = await person("Nina_34");
+    const id = await dbPost(owner, { persona: "organizer", structureId: structure.id });
+    const parent = await comment(lea, id, "Parent");
+    const r1 = await comment(nina, id, "R1", { parentId: parent.json.id });
+    await comment(nina, id, "R2", { parentId: parent.json.id });
+    const del = await call(owner, "DELETE", `/feed-comments/${r1.json.id}`);
+    expect(del.status).toBe(200);
+    expect(del.json.parent).toMatchObject({ id: parent.json.id, repliesCount: 1 });
+    const [row] = await db.select().from(feedPostComments).where(eq(feedPostComments.id, r1.json.id));
+    expect(row?.deletedAt).not.toBeNull();
+  });
+
+  it("suppression d'une réponse dont le parent est déjà supprimé : 204, la réponse est supprimée (petit lot API, P32)", async () => {
+    const lea = await person("Lea_11");
+    const nina = await person("Nina_34");
+    const kenji = await person("Kenji_66");
+    const id = await dbPost(kenji);
+    const parent = await comment(lea, id, "Parent");
+    const r1 = await comment(nina, id, "R1", { parentId: parent.json.id });
+    // Le parent est retiré ailleurs au même instant (course : sa suppression n'a pas encore emporté cette réponse).
+    await db.update(feedPostComments).set({ deletedAt: new Date() }).where(eq(feedPostComments.id, parent.json.id));
+    const del = await call(nina, "DELETE", `/feed-comments/${r1.json.id}`);
+    expect(del.status).toBe(204);
+    expect(del.text).toBe("");
+    const [row] = await db.select().from(feedPostComments).where(eq(feedPostComments.id, r1.json.id));
+    expect(row?.deletedAt).not.toBeNull();
+  });
+
+  it("la lecture du compteur du parent en panne après la suppression : 204, la réponse est supprimée (petit lot API, P31)", async () => {
+    const lea = await person("Lea_11");
+    const nina = await person("Nina_34");
+    const kenji = await person("Kenji_66");
+    const id = await dbPost(kenji);
+    const parent = await comment(lea, id, "Parent");
+    const r1 = await comment(nina, id, "R1", { parentId: parent.json.id });
+    const spy = vi.spyOn(view, "repliesCountsOf").mockRejectedValueOnce(new Error("panne de lecture"));
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const del = await call(nina, "DELETE", `/feed-comments/${r1.json.id}`);
+      expect(spy).toHaveBeenCalled();
+      expect(del.status).toBe(204);
+      const [row] = await db.select().from(feedPostComments).where(eq(feedPostComments.id, r1.json.id));
+      expect(row?.deletedAt).not.toBeNull();
+      expect(quiet).toHaveBeenCalled();
+      // Une nouvelle tentative rend « Déjà retiré » : c'est ce que le 500 provoquait.
+      expect((await call(nina, "DELETE", `/feed-comments/${r1.json.id}`)).status).toBe(404);
+    } finally {
+      spy.mockRestore();
+      quiet.mockRestore();
+    }
   });
 });

@@ -7,14 +7,36 @@ import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { call, quietHours, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
+import {
+  call,
+  createStructure,
+  quietHours,
+  resetDb,
+  seedReference,
+  signUp,
+  type TestUser,
+  useClock,
+} from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { notifications, profiles } from "../../db/schema";
+import {
+  adminAuditLog,
+  emailOutbox,
+  feedPostCoauthors,
+  feedPostReactions,
+  feedPosts,
+  notifications,
+  profiles,
+  user,
+} from "../../db/schema";
+import { now } from "../../lib/deps";
+import { mail } from "../../lib/mail";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
 import { coauthorNotificationsWhere, pendingCoauthorCount, pendingCoauthorRequests } from "./coauthors";
+import * as commentsAnonymize from "./comments/anonymize";
+import { dbPost } from "./comments/testkit";
 import { follow, person } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -99,6 +121,33 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     expect(hidden.status).toBe(201);
   });
 
+  it("un auteur suspendu qui invite une page qu'il gère : la pastille compte la demande que la liste montre (petit lot API, P46)", async () => {
+    const kenji = await signUp("Kenji_Susp", { twoFactor: true });
+    await db
+      .update(profiles)
+      .set({ visibility: "public", departments: ["66"] })
+      .where(eq(profiles.userId, kenji.id));
+    const structure = await createStructure(kenji.id);
+    const sent = await publishWith(kenji, { kind: "structure", id: structure.id });
+    expect(sent.status).toBe(201);
+    const readBoth = async () => {
+      // Même horloge simulée pour les deux lectures.
+      // (le compteur lit `now()`, l'horloge simulée de `useClock`).
+      const list = await pendingCoauthorRequests(kenji.id, db, now());
+      return { list: list.length, count: await pendingCoauthorCount(kenji.id, db) };
+    };
+    expect(await readBoth()).toEqual({ list: 1, count: 1 });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(now().getTime() + 86_400_000) })
+      .where(eq(profiles.userId, kenji.id));
+    // L'auteur lit sa publication même suspendu : la liste la montre, le compteur aussi.
+    expect(await readBoth()).toEqual({ list: 1, count: 1 });
+    // Les contrôles de suppression restent : publication supprimée, plus de demande dans l'un comme dans l'autre.
+    await db.update(feedPosts).set({ deletedAt: now() }).where(eq(feedPosts.id, sent.json.id));
+    expect(await readBoth()).toEqual({ list: 0, count: 0 });
+  });
+
   it("le nombre de requêtes ne dépend pas du nombre d'invitations", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
@@ -119,6 +168,213 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     expect(many.n).toBe(7);
     expect(many.queries).toBe(one.queries);
     expect(many.queries).toBeLessThan(8);
+  });
+});
+
+describe("anonymisation : un seul verrouillage trié au début (petit lot API, P44, tours 2 et 3)", () => {
+  /**
+   * Chevauchement forcé : une transaction tient `lockedId` ; les deux anonymisations démarrent et attendent toutes les deux ce
+   * verrou (sondage de la base), puis tout est relâché : elles se disputent alors tous leurs verrous en même temps.
+   */
+  async function overlap(a: TestUser, b: TestUser, lockedIds: string[]) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select 1 from feed_posts where id in (${sql.join(
+          lockedIds.map((i) => sql`${i}::uuid`),
+          sql`, `,
+        )}) order by id for update`,
+      );
+      await gate;
+    });
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      first = accountService.anonymize(a.id, null, {});
+      second = accountService.anonymize(b.id, null, {});
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const seen = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`,
+        );
+        if (Number(seen.rows[0]?.n) >= 2) break;
+        if (Date.now() > deadline) throw new Error("Les deux anonymisations n'attendent pas le verrou");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    } finally {
+      release();
+      await holder;
+    }
+    return Promise.allSettled([first, second]);
+  }
+
+  it("co-signatures et flammes mutuelles : aucune 40P01, les deux aboutissent", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    const posts: { k: string[]; d: string[] } = { k: [], d: [] };
+    for (let i = 0; i < 3; i++) {
+      const pk = await publishWith(kenji, { kind: "user", id: damien.id });
+      const pd = await publishWith(damien, { kind: "user", id: kenji.id });
+      expect([pk.status, pd.status]).toEqual([201, 201]);
+      posts.k.push(pk.json.id);
+      posts.d.push(pd.json.id);
+    }
+    await db
+      .insert(feedPostReactions)
+      .values([
+        ...posts.d.map((postId) => ({ postId, userId: kenji.id })),
+        ...posts.k.map((postId) => ({ postId, userId: damien.id })),
+      ]);
+    const results = await overlap(kenji, damien, [...posts.k, ...posts.d]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+    const alive = await db.select({ id: feedPosts.id }).from(feedPosts).where(sql`${feedPosts.deletedAt} is null`);
+    expect(alive).toHaveLength(0);
+    expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
+  });
+
+  it("sans co-signature : chacun a commenté sa propre publication et mis une flamme au commentaire de l'autre, aucune 40P01", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    // Publications insérées directement : ni co-signature ni flamme sur la publication, seulement les commentaires et leurs flammes.
+    const pk = await dbPost(kenji);
+    const pd = await dbPost(damien);
+    const ck = await call(kenji, "POST", `/feed-posts/${pk}/comments`, {
+      text: "Mon commentaire",
+      clientId: randomUUID(),
+    });
+    const cd = await call(damien, "POST", `/feed-posts/${pd}/comments`, { text: "Le mien", clientId: randomUUID() });
+    expect([ck.status, cd.status]).toEqual([201, 201]);
+    expect((await call(kenji, "PUT", `/feed-comments/${cd.json.id}/reaction`)).status).toBe(200);
+    expect((await call(damien, "PUT", `/feed-comments/${ck.json.id}/reaction`)).status).toBe(200);
+    const results = await overlap(kenji, damien, [pk, pd]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+  });
+
+  it("deux comptes qui se citent dans leurs commentaires, supprimés au même instant : les deux aboutissent", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    const pk = await dbPost(kenji);
+    const pd = await dbPost(damien);
+    const ck = await call(kenji, "POST", `/feed-posts/${pk}/comments`, {
+      text: "Salut @Damien_66",
+      clientId: randomUUID(),
+    });
+    const cd = await call(damien, "POST", `/feed-posts/${pd}/comments`, {
+      text: "Salut @Kenji_66",
+      clientId: randomUUID(),
+    });
+    expect([ck.status, cd.status]).toEqual([201, 201]);
+    const results = await overlap(kenji, damien, [pk, pd]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+  });
+
+  it("un faux 40P01 au premier essai : la suppression aboutit au second, rien n'est écrit deux fois", async () => {
+    const kenji = await person("Kenji_66");
+    const pk = await dbPost(kenji);
+    expect(
+      (await call(kenji, "POST", `/feed-posts/${pk}/comments`, { text: "Un", clientId: randomUUID() })).status,
+    ).toBe(201);
+    const real = commentsAnonymize.anonymizeFeedCommentsForDeletedAccount;
+    const spy = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockImplementationOnce(async () => {
+        throw Object.assign(new Error("deadlock detected"), { code: "40P01" });
+      });
+    try {
+      await accountService.anonymize(kenji.id, null, {});
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(real).toBeTypeOf("function");
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+    expect(profile?.deletedAt).not.toBeNull();
+    const [after] = await db.select({ email: user.email }).from(user).where(eq(user.id, kenji.id));
+    expect(after?.email).toMatch(/^supprime\+[0-9a-f]{8}@orasso\.invalid$/);
+    // Une erreur autre qu'un interblocage ne se reprend pas.
+    const other = await person("Autre_66");
+    const boom = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockRejectedValue(new Error("panne"));
+    try {
+      await expect(accountService.anonymize(other.id, null, {})).rejects.toThrow("panne");
+      expect(boom).toHaveBeenCalledTimes(1);
+    } finally {
+      boom.mockRestore();
+    }
+  });
+});
+
+describe("reprise de l'anonymisation : limitée à la transaction (petit lot API, tour 5)", () => {
+  const deadlock = (code: string) => Object.assign(new Error("interblocage simulé"), { code });
+  const audits = async (userId: string) =>
+    (await db.select().from(adminAuditLog)).filter((a) => a.targetId === userId && a.action === "user.self_delete");
+
+  it.each(["40P01", "40001"])(
+    "%s au premier essai avec confirm : un seul audit, un seul envoi, trace anonymisée, rien d'un essai annulé",
+    async (code) => {
+      const kenji = await person("Kenji_66");
+      const [before] = await db.select({ email: user.email }).from(user).where(eq(user.id, kenji.id));
+      const send = vi.spyOn(mail, "send");
+      const spy = vi
+        .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+        .mockImplementationOnce(async () => {
+          throw deadlock(code);
+        });
+      try {
+        await accountService.anonymize(kenji.id, null, { confirm: true });
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(send.mock.calls.filter((c) => c[0] === "account_deleted")).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+        send.mockRestore();
+      }
+      expect(await audits(kenji.id)).toHaveLength(1);
+      const traces = await db.select().from(emailOutbox).where(eq(emailOutbox.template, "account_deleted"));
+      expect(traces.filter((t) => t.to === before?.email)).toHaveLength(0);
+      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+      expect(profile?.deletedAt).not.toBeNull();
+    },
+  );
+
+  it("trois interblocages de suite : l'erreur remonte, rien n'est écrit, aucun envoi", async () => {
+    const kenji = await person("Kenji_66");
+    const send = vi.spyOn(mail, "send");
+    const spy = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockRejectedValue(deadlock("40P01"));
+    try {
+      await expect(accountService.anonymize(kenji.id, null, { confirm: true })).rejects.toMatchObject({
+        code: "40P01",
+      });
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      send.mockRestore();
+    }
+    expect(await audits(kenji.id)).toHaveLength(0);
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+    expect(profile?.deletedAt).toBeNull();
+  });
+
+  it("un interblocage après la validation (envoi de confirmation) n'est pas repris : l'envoi n'est tenté qu'une fois", async () => {
+    const kenji = await person("Kenji_66");
+    const send = vi.spyOn(mail, "send").mockRejectedValue(deadlock("40P01"));
+    try {
+      await expect(accountService.anonymize(kenji.id, null, { confirm: true })).rejects.toMatchObject({
+        code: "40P01",
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      send.mockRestore();
+    }
+    // La suppression est validée une seule fois (pas de faux succès d'un second essai).
+    expect(await audits(kenji.id)).toHaveLength(1);
   });
 });
 

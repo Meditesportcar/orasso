@@ -52,12 +52,17 @@ async function shot(page: Page, name: string) {
 
 const selected = (page: Page) => page.getByTestId("profil-tabs").getByRole("tab", { selected: true });
 
-test("mon profil : le Garage s'ouvre par défaut, Sorties montre ma saison et le passeport", async ({ browser }) => {
+test("mon profil : Publications s'ouvre par défaut (R8b2), Garage, puis Sorties montre ma saison et le passeport", async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
   await go(page, "/profil");
   await expect(page.getByTestId("profil-head")).toBeVisible({ timeout: 30_000 });
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/);
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/);
   // Le bouton principal de l'onglet : « Ajouter un véhicule » ; les trois nombres, « Profil public », la roue dentée.
   await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
@@ -98,15 +103,17 @@ test("les anciennes adresses : /garage et /mon-passeport mènent au Profil, sur 
   await ctx.close();
 });
 
-test("visiteur : le Passeport vit dans Profil › Sorties, sans onglet Garage (lot R8b1 : le profil s'ouvre sur Sorties)", async ({
+test("visiteur : le Passeport vit dans Profil › Sorties, sans onglet Garage (lot R8b2 : le profil s'ouvre sur Publications)", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "paul.photo@orasso.local");
   await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName("Publications", { timeout: 30_000 });
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await page.getByTestId("profil-tab-sorties").click();
+  await expect(selected(page)).toHaveAccessibleName("Sorties");
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
@@ -127,8 +134,11 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   // Privé, inconnu : nombres, bouton, « Réservé à ses abonnés », ni onglets ni photo.
   await go(a.page, "/u/Marc_66");
   await expect(a.page.getByTestId("public-counts")).toBeVisible({ timeout: 30_000 });
-  await expect(a.page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
-  await expect(a.page.getByTestId("profil-tabs")).toHaveCount(0);
+  await expect(a.page.getByTestId("publications-private")).toContainText("Compte privé");
+  // Depuis R8b2, la rangée ne garde que « Publications » pour un compte privé vu d'un inconnu (ni Garage ni Sorties).
+  await expect(a.page.getByTestId("profil-tab-publications")).toBeVisible();
+  await expect(a.page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await expect(a.page.getByTestId("profil-tab-sorties")).toHaveCount(0);
   // Tour 2 (maquette R7.12) : plus de liste « Ses véhicules · marque et modèle » pour un inconnu.
   await expect(a.page.getByTestId("profile-vehicles-private")).toHaveCount(0);
   await expect(a.page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
@@ -143,7 +153,15 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await signIn(b.page, "julie@orasso.local");
   await go(b.page, "/u/Marc_66");
   await expect(b.page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
-  await expect(b.page.getByTestId("profile-private-note")).toHaveCount(0);
+  // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+  await b.page.getByTestId("profil-tab-publications").click();
+  // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+  await expect(b.page.getByTestId("publications-tab").or(b.page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(b.page.getByTestId("publications-private")).toHaveCount(0);
+  // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
+  await b.page.getByTestId("profil-tab-garage").click();
   await expect(b.page.getByTestId("profile-car")).toBeVisible();
   await shot(b.page, "04-prive-abonne");
   await b.ctx.close();
@@ -333,6 +351,9 @@ test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, 
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/, { timeout: 30_000 });
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await page.getByTestId("garage-add").click();
   await runVehicleWizard(page);
@@ -360,6 +381,9 @@ test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, l
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/, { timeout: 30_000 });
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   // Depuis la carte du Garage (la fiche s'empile sur la barre), pas à froid.
   await page.getByTestId("garage-card").first().click();

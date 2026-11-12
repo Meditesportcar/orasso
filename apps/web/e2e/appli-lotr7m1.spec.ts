@@ -128,6 +128,8 @@ for (const theme of ["beton", "sable"] as const) {
       const other = await openApp(browser, theme);
       await signIn(other.page, "kenji@orasso.local");
       await go(other.page, "/p/garage-du-port");
+      // Depuis R8g, la page s'ouvre sur « Publications » quand le pro en a : « Ses partenaires » est dans « Présentation ».
+      await other.page.getByTestId("page-tab-presentation").click({ timeout: 20_000 });
       await expect(other.page.getByTestId("pro-partners")).toContainText(pseudo, { timeout: 20_000 });
       await shot(other.page, "pp_fiche", theme);
       await other.ctx.close();

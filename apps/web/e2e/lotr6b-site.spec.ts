@@ -61,10 +61,12 @@ for (const theme of ["beton", "sable"] as const) {
       // 2. Compte privé : « Demander à suivre » → « Demandé », la ligne réservée aux abonnés.
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Demander à suivre/i);
-      await expect(page.getByTestId("profile-private-note")).toContainText("sont visibles de ses abonnés.");
+      await expect(page.getByTestId("publications-private")).toContainText(
+        "ne sont visibles que de ses abonnés acceptés.",
+      );
       await page.getByTestId("follow-button").click();
       await expect(page.getByTestId("follow-button")).toHaveText(/Demandé/i);
-      await expect(page.getByTestId("profile-private-note")).toContainText("Ta demande attend sa réponse.");
+      await expect(page.getByTestId("publications-private-ask")).toContainText("Demande envoyée à");
       await shot(page, `03-prive-demande-${tag}`);
 
       // 3. La personne privée refuse une demande (sans prévenir) et accepte l'autre.
@@ -84,7 +86,14 @@ for (const theme of ["beton", "sable"] as const) {
       ).toBe("none");
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Abonné/i);
-      await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
+      // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+      await page.getByTestId("profil-tab-publications").click();
+      await expect(page).toHaveURL(/onglet=publications/);
+      // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+      await expect(page.getByTestId("publications-tab").or(page.getByTestId("publications-empty"))).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("publications-private")).toHaveCount(0);
 
       // 4. « Suivre en retour » et « Te suit ».
       await apiCall(asker.cookie, "POST", `/users/${me.pseudo}/follow`);
@@ -119,7 +128,7 @@ for (const theme of ["beton", "sable"] as const) {
       await shot(other.page, `09-reseau-abonne-retire-${tag}`);
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Demander à suivre/i);
-      await expect(page.getByTestId("profile-private-note")).toBeVisible();
+      await expect(page.getByTestId("publications-private")).toBeVisible();
       await other.ctx.close();
       await mine.ctx.close();
     });

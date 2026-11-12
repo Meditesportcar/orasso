@@ -6,6 +6,7 @@ import { appendUnique, type FeedPostView, type PublicPostView, publicToFeedPost 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { createRetryTracker } from "../../lib/retryTracker";
 import { onPostRemoved } from "../publications/signal";
 
 export type JournalPage = { items: (FeedPostView | PublicPostView)[]; nextCursor: string | null };
@@ -22,6 +23,7 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
+  const retryOf = useRef(createRetryTracker());
 
   // Nouvelle donnée du chargeur (autre fiche, revalidation) : la liste, le curseur et les requêtes en vol repartent de là.
   useEffect(() => {
@@ -30,6 +32,7 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
     setNextCursor(initial.nextCursor);
     setLoadingMore(false);
     setError(null);
+    retryOf.current.succeeded();
   }, [initial]);
 
   const reload = useCallback(async () => {
@@ -37,7 +40,11 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
     setError(null);
     const res = await apiFetch<JournalPage>(pathOf(eventId, null));
     if (mine !== seq.current) return;
-    if (!res.ok) return setError(res.error.message);
+    if (!res.ok) {
+      retryOf.current.failed("reload");
+      return setError(res.error.message);
+    }
+    retryOf.current.succeeded();
     setItems(toFeedPosts(res.data.items));
     setNextCursor(res.data.nextCursor);
   }, [eventId]);
@@ -50,7 +57,11 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
     const res = await apiFetch<JournalPage>(pathOf(eventId, nextCursor));
     if (mine !== seq.current) return;
     setLoadingMore(false);
-    if (!res.ok) return setError(res.error.message);
+    if (!res.ok) {
+      retryOf.current.failed("more");
+      return setError(res.error.message);
+    }
+    retryOf.current.succeeded();
     setItems((s) => appendUnique(s, toFeedPosts(res.data.items)));
     setNextCursor(res.data.nextCursor);
   }, [eventId, nextCursor, loadingMore]);
@@ -61,5 +72,8 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
     [],
   );
 
-  return { items, nextCursor, loadingMore, error, reload, more };
+  /** « Réessayer » : relit après l'échec d'une relecture, relance la page suivante après l'échec d'une page (P26b). */
+  const retry = useCallback(() => (retryOf.current.target() === "reload" ? reload() : more()), [reload, more]);
+
+  return { items, nextCursor, loadingMore, error, reload, more, retry };
 }

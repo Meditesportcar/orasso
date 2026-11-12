@@ -28,3 +28,20 @@ export function onPostChanged(listener: (id: string) => void): () => void {
     changed.delete(listener);
   };
 }
+
+/**
+ * Après un changement de collaboration de `postId`, lance `run` une fois `delay` ms plus tard (un nouveau changement
+ * repousse l'échéance). Rend l'arrêt : il annule aussi l'échéance en cours (petit lot site, P41).
+ */
+export function afterPostChanged(postId: string | null, run: () => void, delay: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const off = onPostChanged((id) => {
+    if (id !== postId) return;
+    clearTimeout(timer);
+    timer = setTimeout(run, delay);
+  });
+  return () => {
+    off();
+    clearTimeout(timer);
+  };
+}

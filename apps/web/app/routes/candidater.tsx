@@ -35,7 +35,7 @@ export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  await requireMe(request);
+  const me = await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
   // Plusieurs jours (lot 26) : on peut candidater pour un autre jour ; l'API refuse le doublon du même jour.
   const active = (event.myApplications ?? []).filter((a) =>
@@ -107,6 +107,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     contextError,
     preselectedDay,
     takenDays: active.map((a) => a.eventDayId),
+    userId: me.user.id,
     state: registrationState(event, nowMs()),
   };
 }
@@ -114,7 +115,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Step = 1 | 2 | 3;
 
 export default function Candidater({ loaderData }: Route.ComponentProps) {
-  const { event, structure, vehicles, preselected, preselectedDay, takenDays, state, slot, contextError } = loaderData;
+  const { event, structure, vehicles, preselected, preselectedDay, takenDays, state, slot, contextError, userId } =
+    loaderData;
   const navigate = useNavigate();
   const backHref = `/e/${event.slug}`;
   const here = `/e/${event.slug}/candidater`;
@@ -170,7 +172,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     return (
       <div className="s-narrow s-stack" data-testid="cand-done">
         <AppBar kind="flow" title={done.retained ? "Tu es retenu" : "Candidature envoyée"} closeHref={afterUrl} bleed />
-        <NotifySignup eventId={event.id} onDone={() => navigate(afterUrl)} />
+        <NotifySignup eventId={event.id} userId={userId} onDone={() => navigate(afterUrl)} />
       </div>
     );
   }

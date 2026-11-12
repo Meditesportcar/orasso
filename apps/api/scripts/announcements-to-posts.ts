@@ -27,7 +27,6 @@ import { db, pool } from "../src/db/client";
 import { feedPostPhotos, feedPosts } from "../src/db/schema";
 import { storage } from "../src/lib/storage";
 import { feedPhotoKey } from "../src/modules/feed/posts";
-import { removeOrRetry } from "../src/modules/vehicles/photos-blur";
 
 export type RepriseStats = {
   dryRun: boolean;
@@ -55,6 +54,8 @@ export type RepriseStats = {
   failed: number;
   postsBefore: number;
   postsAfter: number;
+  /** Fichiers copiés que le stockage n'a pas pu effacer : à effacer à la main (le script n'a pas de file persistante, P37). */
+  leftoverFiles: string[];
 };
 
 export type RevertStats = {
@@ -64,6 +65,8 @@ export type RevertStats = {
   detached: number;
   postsBefore: number;
   postsAfter: number;
+  /** Fichiers que le stockage n'a pas pu effacer : à effacer à la main (P37). */
+  leftoverFiles: string[];
 };
 
 type Row = {
@@ -101,6 +104,20 @@ export function nearestAspect(width: number, height: number): FeedAspect {
     }
   }
   return best;
+}
+
+/**
+ * Efface un fichier copié devenu inutile. Le script tourne sans pg-boss (sa file de tâches est en mémoire : une reprise y serait
+ * perdue à la fin du processus) : si le stockage refuse, la clé est **gardée dans le rapport de fin** pour un effacement à la main
+ * (petit lot API, P37), jamais envoyée à une file qui disparaît.
+ */
+async function removeOrKeep(key: string, leftover: string[]): Promise<void> {
+  try {
+    await storage.remove(key);
+  } catch (error) {
+    console.error(`[orasso] fichier à effacer à la main : ${key}`, error);
+    leftover.push(key);
+  }
 }
 
 const countPosts = async (): Promise<number> => {
@@ -142,6 +159,7 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
     failed: 0,
     postsBefore: await countPosts(),
     postsAfter: 0,
+    leftoverFiles: [],
   };
   const rows = (
     await db.execute<Row>(sql`select a.id, a.event_id, a.author_id, a.body, a.image_key, a.image_width, a.image_height,
@@ -275,13 +293,13 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
         return pin;
       });
       if (pinnedHere === "gone") {
-        if (photoKey) await removeOrRetry(photoKey);
+        if (photoKey) await removeOrKeep(photoKey, stats.leftoverFiles);
         stats.deletedDuring += 1;
         continue;
       }
       if (pinnedHere === null) {
         // Reprise par un autre passage entre-temps : rien de plus, le fichier copié ne sert à rien.
-        if (photoKey) await removeOrRetry(photoKey);
+        if (photoKey) await removeOrKeep(photoKey, stats.leftoverFiles);
         stats.alreadyMigrated += 1;
         continue;
       }
@@ -289,7 +307,7 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
       else stats.withPoster += 1;
       if (pinnedHere) stats.pinned += 1;
     } catch (error) {
-      if (photoKey) await removeOrRetry(photoKey);
+      if (photoKey) await removeOrKeep(photoKey, stats.leftoverFiles);
       stats.failed += 1;
       console.error(`[orasso] annonce ${row.id} : reprise impossible, elle reste une annonce.`, error);
     }
@@ -328,6 +346,7 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
       detached: Number(reported.rows[0]?.n ?? 0),
       postsBefore,
       postsAfter: postsBefore - Number(live.rows[0]?.n ?? 0),
+      leftoverFiles: [],
     };
   }
   // **Une seule transaction** : les reprises verrouillées, puis rien ne reste à demi (ni notification effacée avec une publication
@@ -387,9 +406,22 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
       await tx.execute(sql`delete from feed_posts where id in (${list})`);
     }
   });
-  for (const key of keys) await removeOrRetry(key);
-  return { dryRun, posts: posts.length, files: keys.length, detached, postsBefore, postsAfter: await countPosts() };
+  const leftoverFiles: string[] = [];
+  for (const key of keys) await removeOrKeep(key, leftoverFiles);
+  return {
+    dryRun,
+    posts: posts.length,
+    files: keys.length,
+    detached,
+    postsBefore,
+    postsAfter: await countPosts(),
+    leftoverFiles,
+  };
 }
+
+/** Les fichiers que le stockage n'a pas pu effacer, à effacer à la main (le script n'a pas de file persistante, P37). */
+export const leftoverLines = (keys: readonly string[]): string[] =>
+  keys.length ? [`${keys.length} fichier(s) à effacer à la main du stockage :`, ...keys.map((k) => `  - ${k}`)] : [];
 
 /** Le compte rendu, en clair (pour Damien). */
 export function describeReprise(s: RepriseStats): string {
@@ -404,6 +436,7 @@ export function describeReprise(s: RepriseStats): string {
     `  - ${s.alreadyMigrated} déjà reprise(s)`,
     `  - dont ${s.pinned} épinglée(s) en tête de leur fiche ; ${s.imageMissing} image(s) disparue(s) du stockage ; ${s.failed} échec(s)`,
     `Publications : ${s.postsBefore} avant, ${s.postsAfter} ${s.dryRun ? "après (prévu)" : "après"}.`,
+    ...leftoverLines(s.leftoverFiles),
   ];
   return lines.join("\n");
 }
@@ -417,6 +450,7 @@ async function main() {
     console.log(
       `${dryRun ? "[À BLANC : rien n'est écrit] " : ""}Retrait : ${s.posts} publication(s) reprise(s) (dont ${s.detached} gardée(s) en retrait doux, détachée(s) : un signalement les vise), ${s.files} fichier(s) copié(s). Publications : ${s.postsBefore} avant, ${s.postsAfter} après${dryRun ? " (prévu)" : ""}.`,
     );
+    for (const line of leftoverLines(s.leftoverFiles)) console.log(line);
   } else {
     console.log(describeReprise(await announcementsToPosts({ dryRun })));
   }

@@ -372,6 +372,50 @@ export const accountService = {
     // Lot 33 : `actor` = anonymisation décidée par l'équipe (même service, trace `user.anonymize` avec le motif).
     opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
   ) {
+    // Petit lot API, tour 4 : deux comptes supprimés au même instant peuvent encore s'interbloquer par une voie que le verrouillage
+    // trié ne couvre pas (cascades, mentions croisées). La transaction (annulée par PostgreSQL) est reprise en entier, 3 essais au plus,
+    // avec une courte attente aléatoire ; au-delà, l'erreur remonte comme avant.
+    // La reprise n'entoure que la transaction (tour 5) : les effets d'après la validation (fichiers, confirmation par e-mail, trace
+    // d'`emailOutbox`) s'exécutent une seule fois, après la boucle, et leurs erreurs remontent comme avant.
+    let done: Awaited<ReturnType<typeof accountService.anonymizeTx>>;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        done = await this.anonymizeTx(userId, ip, opts);
+        break;
+      } catch (error) {
+        const e = error as { code?: string; cause?: { code?: string } };
+        const state = (e.cause ?? e).code;
+        if ((state !== "40P01" && state !== "40001") || attempt >= 3) throw error;
+        await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+      }
+    }
+    if (!done.ran) return { deleted: true };
+    const { photoKeys, oldEmail, oldPseudo, anonEmail, mailIds } = done;
+    for (const key of photoKeys) await removeOrRetry(key);
+    if (oldEmail && opts.confirm) {
+      // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
+      // anonymisée et la copie du transport journal supprimée.
+      const content = opts.actor
+        ? securityMails.accountAnonymizedByTeam(oldPseudo ?? "")
+        : securityMails.accountDeleted(oldPseudo ?? "");
+      await mail.send("account_deleted", oldEmail, content, { userId });
+      const sent = await db
+        .update(emailOutbox)
+        .set({ to: anonEmail })
+        .where(eq(emailOutbox.to, oldEmail))
+        .returning({ id: emailOutbox.id });
+      mailIds.push(...sent.map((m) => m.id));
+    }
+    await removeJournalMails(mailIds);
+    return { deleted: true };
+  },
+
+  /** La transaction d'anonymisation (un essai) ; `anonymize` la reprend sur interblocage. Rend ce qu'il faut faire après la validation. */
+  async anonymizeTx(
+    userId: string,
+    ip: string | null,
+    opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
+  ) {
     const tag = randomBytes(4).toString("hex");
     const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
@@ -383,11 +427,14 @@ export const accountService = {
       where: eq(profiles.userId, userId),
       columns: { deletedAt: true },
     });
-    if (!before || before.deletedAt) return { deleted: true };
+    if (!before || before.deletedAt) return { ran: false as const };
+    let ran = false;
     await withTx(async (tx, after) => {
+      ran = false;
       // Verrou : deux suppressions simultanées n'anonymisent qu'une fois.
       const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).for("update");
       if (!profile || profile.deletedAt) return;
+      ran = true;
       // Lot R8k1 : les publications concernées d'abord, avant toute mutation du Journal (même ordre qu'un commentaire).
       await lockPostsOfDeletedAccount(tx, userId);
       const [current] = await tx.select({ email: user.email }).from(user).where(eq(user.id, userId));
@@ -565,22 +612,7 @@ export const accountService = {
         ip,
       });
     });
-    for (const key of photoKeys) await removeOrRetry(key);
-    if (oldEmail && opts.confirm) {
-      // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
-      // anonymisée et la copie du transport journal supprimée.
-      const content = opts.actor
-        ? securityMails.accountAnonymizedByTeam(oldPseudo ?? "")
-        : securityMails.accountDeleted(oldPseudo ?? "");
-      await mail.send("account_deleted", oldEmail, content, { userId });
-      const sent = await db
-        .update(emailOutbox)
-        .set({ to: anonEmail })
-        .where(eq(emailOutbox.to, oldEmail))
-        .returning({ id: emailOutbox.id });
-      mailIds.push(...sent.map((m) => m.id));
-    }
-    await removeJournalMails(mailIds);
-    return { deleted: true };
+    // Sorti de la transaction sans rien faire (déjà supprimé entre-temps) : rien à faire ensuite.
+    return ran ? { ran: true as const, photoKeys, oldEmail, oldPseudo, anonEmail, mailIds } : { ran: false as const };
   },
 };

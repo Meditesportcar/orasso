@@ -1,0 +1,1 @@
+CREATE INDEX "email_outbox_express_invite_idx" ON "email_outbox" USING btree ((("payload"->>'inviteId'))) WHERE "email_outbox"."template" = 'express_invite';

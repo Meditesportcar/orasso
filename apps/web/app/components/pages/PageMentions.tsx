@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/pages.css";
 import { apiFetch } from "../../lib/api.client";
+import { createRetryTracker } from "../../lib/retryTracker";
 
 type State = { items: MentionItem[]; next: string | null; loading: boolean; loaded: boolean; error: boolean };
 
@@ -32,6 +33,7 @@ function useMentions(pageKey: string, manage: boolean) {
   const mode = useRef(false);
   const cursor = useRef<string | null>(null);
   const seq = useRef(0);
+  const retryOf = useRef(createRetryTracker());
 
   const read = useCallback(
     async (first: boolean) => {
@@ -48,7 +50,11 @@ function useMentions(pageKey: string, manage: boolean) {
         }
       }
       if (mine !== seq.current) return;
-      if (!res.ok) return setState((s) => ({ ...s, loading: false, error: true }));
+      if (!res.ok) {
+        retryOf.current.failed(first ? "reload" : "more");
+        return setState((s) => ({ ...s, loading: false, error: true }));
+      }
+      retryOf.current.succeeded();
       if (first) setSeeHidden(mode.current);
       cursor.current = res.data.nextCursor;
       setState((s) => ({
@@ -79,7 +85,11 @@ function useMentions(pageKey: string, manage: boolean) {
         : s.items.filter((i) => i.post.id !== postId),
     }));
 
-  return { ...state, reload: () => read(true), more: () => read(false), setHidden, seeHidden };
+  const reload = () => read(true);
+  const more = () => read(false);
+  // « Réessayer » : relit après l'échec d'une relecture, relance la page suivante après l'échec d'une page (P26b).
+  const retry = () => (retryOf.current.target() === "reload" ? reload() : more());
+  return { ...state, reload, more, retry, setHidden, seeHidden };
 }
 
 function Row({
@@ -255,7 +265,7 @@ export function PageMentions({
           variant="secondary"
           icon="down"
           disabled={list.loading}
-          onClick={() => void list.more()}
+          onClick={() => void (list.error ? list.retry() : list.more())}
           data-testid={list.error ? "mentions-retry" : "mentions-more"}
         >
           {list.error ? L.mentionsRetry : L.mentionsMore}
