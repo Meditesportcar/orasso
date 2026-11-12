@@ -729,7 +729,10 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
    * `idle_tx` = la transaction qui retient la porte est ouverte et au repos ; `lock_wait` = une requête attend un verrou.
    */
   const waitDb = async (what: "idle_tx" | "lock_wait") => {
-    const cond = what === "idle_tx" ? sql`state = 'idle in transaction'` : sql`wait_event_type = 'Lock'`;
+    const cond =
+      what === "idle_tx"
+        ? sql`state = 'idle in transaction' and query ~* '(for update|insert into)'`
+        : sql`wait_event_type = 'Lock'`;
     const deadline = Date.now() + 5000;
     for (;;) {
       const seen = await db.execute<{ n: number }>(
@@ -815,7 +818,7 @@ describe("petit lot API : 409 de la façade et --revert avec un commentaire seul
     const deadline = Date.now() + 5000;
     for (;;) {
       const seen = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and state = 'idle in transaction'`,
+        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and state = 'idle in transaction' and query ~* '(for update|insert into)'`,
       );
       if (Number(seen.rows[0]?.n) > 0) return;
       if (Date.now() > deadline) throw new Error("Aucune transaction au repos en 5 s");

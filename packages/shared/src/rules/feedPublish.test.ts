@@ -357,7 +357,7 @@ describe("« Ce que verront les autres »", () => {
     expect(soon).toMatchObject({ phrase: "sera à la Nocturne de Canet", stamp: false });
     expect(
       publishSays(byKey("provider:v1"), { title: "Nocturne", role: "on_site", phase: "before" }, false).phrase,
-    ).toBe("présent au Nocturne");
+    ).toBe("présent à la Nocturne");
     const none = publishSays(byKey("me"), null, false);
     expect(none).toMatchObject({ phrase: null, stamp: false });
   });

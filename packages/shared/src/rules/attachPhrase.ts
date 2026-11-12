@@ -3,7 +3,7 @@
 // l'accord à la main ; ici, une règle pure, sans réseau ni horloge. Elle ne connaît pas la langue : l'article d'un titre
 // est lu dans le titre, le genre se devine d'une liste de noms féminins courants. Limites (journal des choix, « À revoir
 // avec Damien ») : un titre féminin hors de la liste (« Réunion de printemps ») s'écrit au masculin ; un titre pluriel
-// sans article (« Rassemblements d'automne ») aussi ; un titre qui commence par « H » aspiré (« Hot Rod Day ») prend « l' ».
+// sans article (« Rassemblements d'automne ») aussi ; un « h » muet n'est reconnu que pour une courte liste de mots français (`MUTE_H_WORDS`) : « Hot Rod Day » reste « au Hot Rod Day ».
 import type { FeedAttachPhase, FeedEventRole } from "./feedAttach";
 
 /** Premiers mots d'un titre qui se disent au féminin (sans accent, en minuscules : la comparaison les ignore). */

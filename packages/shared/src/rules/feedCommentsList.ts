@@ -46,6 +46,23 @@ export type SheetState = {
    * parce qu'ils étaient déjà là. Les supprimer ensuite ne fait pas baisser le total de la carte (petit lot API, P29). Facultatif : absent = vide.
    */
   uncounted?: string[];
+  /**
+   * Commentaires venus d'une page de lecture depuis que la carte a été relue pour la dernière fois : seuls ceux-là peuvent n'avoir
+   * pas été comptés par la carte. Remis à zéro, avec `uncounted`, quand la carte est relue (le compteur relu inclut tout ; tour 2 du petit lot API).
+   */
+  pageSeen?: string[];
+};
+
+/** La carte vient d'être relue (son compteur inclut tout ce que le serveur avait) : plus rien n'est « non compté ». */
+export const sheetCardRead = (state: SheetState): SheetState =>
+  state.uncounted?.length || state.pageSeen?.length ? { ...state, uncounted: [], pageSeen: [] } : state;
+
+/** Les identifiants que la page apporte et que la liste n'avait pas encore. */
+const withPageSeen = (state: SheetState, local: readonly FeedCommentView[], page: readonly FeedCommentView[]) => {
+  const have = new Set(local.map((c) => c.id));
+  const seen = state.pageSeen ?? [];
+  const added = page.filter((c) => !have.has(c.id) && !seen.includes(c.id)).map((c) => c.id);
+  return added.length ? [...seen, ...added] : state.pageSeen;
 };
 
 export const emptySheet = (): SheetState => ({
@@ -168,7 +185,14 @@ export function sheetWithTopPage(
   // Une page de suite partie d'un curseur qui n'est plus celui de la feuille (un autre chargement a abouti avant) : jetée.
   if (!first && since?.cursor !== undefined && since.cursor !== state.cursor) return state;
   const merged = reconcilePage(items, state.items, state.recent, since, state.removed, nextCursor !== null, first);
-  return { ...state, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true };
+  return {
+    ...state,
+    items: merged.items,
+    recent: merged.recent,
+    cursor: nextCursor,
+    loaded: true,
+    pageSeen: withPageSeen(state, state.items, items),
+  };
 }
 
 /** Applique une page de réponses (mêmes règles). Ne change ni l'ouverture ni le compteur du parent. */
@@ -185,6 +209,11 @@ export function sheetWithRepliesPage(
   const merged = reconcilePage(items, was.items, was.recent, since, state.removed, nextCursor !== null, first);
   return {
     ...state,
+    pageSeen: withPageSeen(
+      state,
+      Object.values(state.replies).flatMap((r) => r.items),
+      items,
+    ),
     replies: {
       ...state.replies,
       [parentId]: { ...was, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true },
@@ -206,7 +235,9 @@ export type ParentCount = { id: string; repliesCount: number; countedAt: string 
 
 /** `uncounted` après une confirmation : l'identifiant s'y ajoute quand la carte ne l'a pas compté (déjà là par une lecture, jamais confirmé par l'envoi). */
 const withUncounted = (state: SheetState, id: string, uncounted: boolean): string[] | undefined =>
-  uncounted && !(state.uncounted ?? []).includes(id) ? [...(state.uncounted ?? []), id] : state.uncounted;
+  uncounted && (state.pageSeen ?? []).includes(id) && !(state.uncounted ?? []).includes(id)
+    ? [...(state.uncounted ?? []), id]
+    : state.uncounted;
 
 /**
  * Ajoute le commentaire que l'API vient de rendre. Premier niveau : à la suite de la liste. Réponse (`parentId`) : sous son commentaire ; le
@@ -629,6 +660,8 @@ export function createPostLiveStore() {
   const entries = new Map<string, LiveEntry>();
   const threads = new Map<string, Thread>();
   const gone = new Set<string>();
+  /** La dernière carte reçue de l'API pour chaque publication (sa clé) : un changement veut dire que la carte a été relue. */
+  const lastServer = new Map<string, string>();
   const subs = new Set<() => void>();
   let opening: CommentsOpening | null = null;
   let version = 0;
@@ -648,6 +681,7 @@ export function createPostLiveStore() {
   const pg = (postId: string) => postGen.get(postId) ?? 0;
   const reset = () => {
     entries.clear();
+    lastServer.clear();
     threads.clear();
     gone.clear();
     postGen.clear();
@@ -700,9 +734,18 @@ export function createPostLiveStore() {
      * La publication telle qu'on la montre : ce que l'écran a changé depuis, tant que la publication reçue de l'API est celle d'alors.
      */
     apply(server: FeedPostView): FeedPostView {
+      // La carte reçue de l'API n'est plus celle d'avant (relue) : son compteur inclut tout, plus rien n'est « non compté » dans la
+      // feuille (sans prévenir : lecture pendant le rendu).
+      const key = baseKey(server);
+      const known = lastServer.get(server.id);
+      lastServer.set(server.id, key);
+      if (known !== undefined && known !== key) {
+        const t = threads.get(server.id);
+        if (t) threads.set(server.id, { ...t, sheet: sheetCardRead(t.sheet) });
+      }
       const entry = entries.get(server.id);
       if (!entry) return server;
-      if (entry.base !== baseKey(server)) {
+      if (entry.base !== key) {
         entries.delete(server.id);
         return server;
       }

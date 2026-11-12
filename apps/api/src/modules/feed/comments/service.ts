@@ -14,7 +14,6 @@ import {
   type FeedCommentCreated,
   type FeedCommentPage,
   type FeedCommentReaction,
-  type FeedCommentView,
   feedCommentLabels,
   type MentionSuggestion,
   type ReportReason,

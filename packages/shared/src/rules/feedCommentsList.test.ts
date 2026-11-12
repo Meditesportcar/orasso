@@ -6,6 +6,7 @@ import {
   commentCounter,
   commentIssue,
   commentsTitle,
+  createPostLiveStore,
   emptySheet,
   insertMention,
   lastCommentsLine,
@@ -24,6 +25,7 @@ import {
   type SheetState,
   sheetAddComment,
   sheetApplyParentCount,
+  sheetCardRead,
   sheetMark,
   sheetRemoveComment,
   sheetReopen,
@@ -843,6 +845,34 @@ describe("petit lot API : compteur de la carte (P29)", () => {
     const p = postWithCommentRemoved(card, "c01", gone.removed, gone.state);
     expect(p.commentsCount).toBe(4);
     expect(p.lastComments).toEqual([]);
+  });
+});
+
+describe("petit lot API, tour 2 : la carte relue inclut tout", () => {
+  const c = (i: number) => at(`c${i}`, i);
+  it("réponse perdue, carte relue (elle compte le commentaire), réessai confirmé, puis suppression : la carte baisse de 1", () => {
+    // La feuille a lu le commentaire (une page), la carte est relue ensuite, puis le réessai se confirme.
+    let s = sheetWithTopPage(emptySheet(), [c(1), c(2)], null, true);
+    s = sheetCardRead(s);
+    const retry = sheetAddComment(s, c(2), null);
+    expect(retry.counted).toBe(0);
+    expect(retry.state.uncounted ?? []).toEqual([]);
+    const gone = sheetRemoveComment(retry.state, "c2");
+    expect(gone.removed).toBe(1);
+    expect(postWithCommentRemoved(post({ commentsCount: 2 }), "c2", gone.removed, gone.state).commentsCount).toBe(1);
+  });
+  it("le magasin remet à zéro la feuille quand la carte reçue de l'API change (relue)", () => {
+    const store = createPostLiveStore();
+    const card = (n: number) => post({ commentsCount: n });
+    store.apply(card(1));
+    store.updateSheet("p", (s) => sheetWithTopPage(s, [c(1), c(2)], null, true));
+    store.updateSheet("p", (s) => sheetAddComment(s, c(2), null).state);
+    expect(store.sheetOf("p").uncounted).toEqual(["c2"]);
+    // Même carte : rien ne bouge. Carte relue : plus rien de « non compté ».
+    store.apply(card(1));
+    expect(store.sheetOf("p").uncounted).toEqual(["c2"]);
+    store.apply(card(2));
+    expect(store.sheetOf("p").uncounted).toEqual([]);
   });
 });
 

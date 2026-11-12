@@ -19,7 +19,8 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { feedPostCoauthors, feedPosts, notifications, profiles } from "../../db/schema";
+import { feedPostCoauthors, feedPostReactions, feedPosts, notifications, profiles } from "../../db/schema";
+import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { withTx } from "../../lib/tx";
 import { accountService } from "../account/service";
@@ -121,19 +122,19 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     expect(sent.status).toBe(201);
     const readBoth = async () => {
       // Même horloge simulée pour les deux lectures.
-      const at = new Date();
-      const list = await pendingCoauthorRequests(kenji.id, db, at);
+      // (le compteur lit `now()`, l'horloge simulée de `useClock`).
+      const list = await pendingCoauthorRequests(kenji.id, db, now());
       return { list: list.length, count: await pendingCoauthorCount(kenji.id, db) };
     };
     expect(await readBoth()).toEqual({ list: 1, count: 1 });
     await db
       .update(profiles)
-      .set({ suspendedUntil: new Date(Date.now() + 86_400_000) })
+      .set({ suspendedUntil: new Date(now().getTime() + 86_400_000) })
       .where(eq(profiles.userId, kenji.id));
     // L'auteur lit sa publication même suspendu : la liste la montre, le compteur aussi.
     expect(await readBoth()).toEqual({ list: 1, count: 1 });
     // Les contrôles de suppression restent : publication supprimée, plus de demande dans l'un comme dans l'autre.
-    await db.update(feedPosts).set({ deletedAt: new Date() }).where(eq(feedPosts.id, sent.json.id));
+    await db.update(feedPosts).set({ deletedAt: now() }).where(eq(feedPosts.id, sent.json.id));
     expect(await readBoth()).toEqual({ list: 0, count: 0 });
   });
 
@@ -160,23 +161,55 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
   });
 });
 
-describe("anonymisation : verrou de l'union des publications (petit lot API, P44)", () => {
-  it("deux co-auteurs mutuels anonymisés en même temps : aucune erreur, les deux aboutissent", async () => {
+describe("anonymisation : un seul verrouillage trié au début (petit lot API, P44, tour 2)", () => {
+  it("deux anonymisations complètes qui se chevauchent, avec co-signatures et flammes mutuelles : aucune 40P01, les deux aboutissent", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
-    // Chacun a invité l'autre sur plusieurs publications : chacun auteur de publications que l'autre cosigne.
-    for (let i = 0; i < 4; i++) {
-      expect((await publishWith(kenji, { kind: "user", id: damien.id })).status).toBe(201);
-      expect((await publishWith(damien, { kind: "user", id: kenji.id })).status).toBe(201);
+    const posts: { k: string[]; d: string[] } = { k: [], d: [] };
+    for (let i = 0; i < 3; i++) {
+      const pk = await publishWith(kenji, { kind: "user", id: damien.id });
+      const pd = await publishWith(damien, { kind: "user", id: kenji.id });
+      expect([pk.status, pd.status]).toEqual([201, 201]);
+      posts.k.push(pk.json.id);
+      posts.d.push(pd.json.id);
     }
-    const results = await Promise.allSettled([
-      withTx((tx) => anonymizeFeedForDeletedAccount(tx, kenji.id)),
-      withTx((tx) => anonymizeFeedForDeletedAccount(tx, damien.id)),
-    ]);
+    // Flammes mutuelles : chacun a mis une flamme sur les publications de l'autre.
+    await db
+      .insert(feedPostReactions)
+      .values([
+        ...posts.d.map((postId) => ({ postId, userId: kenji.id })),
+        ...posts.k.map((postId) => ({ postId, userId: damien.id })),
+      ]);
+    // Chevauchement forcé : une transaction tient la plus petite publication ; les deux anonymisations démarrent et attendent
+    // toutes les deux ce verrou (sondage de la base), puis tout est relâché : elles se disputent alors tous leurs verrous en même temps.
+    const lowest = [...posts.k, ...posts.d].sort()[0]!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from feed_posts where id = ${lowest} for update`);
+      await gate;
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const first = accountService.anonymize(kenji.id, null, {});
+    const second = accountService.anonymize(damien.id, null, {});
+    const deadline = Date.now() + 8000;
+    for (;;) {
+      const seen = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`,
+      );
+      if (Number(seen.rows[0]?.n) >= 2) break;
+      if (Date.now() > deadline) throw new Error("Les deux anonymisations n'attendent pas le verrou");
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    release();
+    await holder;
+    const results = await Promise.allSettled([first, second]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
-    expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
     const alive = await db.select({ id: feedPosts.id }).from(feedPosts).where(sql`${feedPosts.deletedAt} is null`);
     expect(alive).toHaveLength(0);
+    expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
   });
 });
 
