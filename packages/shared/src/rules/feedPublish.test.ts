@@ -584,6 +584,31 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
     expect(m.has("orasso:fil:publish-uncertain")).toBe(false);
     expect(m.has("orasso:fil:publish-uncertain:A")).toBe(true);
   });
+  it("quota puis lecture, confirmation ou abandon, rechargement : plus rien (l'ancienne clé aussi)", () => {
+    const m = new Map<string, string>();
+    const store = {
+      get length() {
+        return m.size;
+      },
+      key: (i: number) => [...m.keys()][i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: () => {
+        throw new DOMException("quota", "QuotaExceededError");
+      },
+      removeItem: (k: string) => void m.delete(k),
+    };
+    for (const _end of ["confirmation", "abandon"]) {
+      m.set("orasso:fil:publish-uncertain", JSON.stringify({ account: "A", body: { clientId: "vieux" } }));
+      expect(loadUncertain(store, "A")).toMatchObject({ clientId: "vieux" });
+      clearUncertain(store, "A");
+      expect(loadUncertain(store, "A")).toBeNull();
+      expect(m.size).toBe(0);
+    }
+    // L'ancienne clé d'un autre compte n'est jamais effacée par ce compte.
+    m.set("orasso:fil:publish-uncertain", JSON.stringify({ account: "B", body: { clientId: "b" } }));
+    clearUncertain(store, "A");
+    expect(m.has("orasso:fil:publish-uncertain")).toBe(true);
+  });
   it("le corps d'un envoi porte le compte attendu", () => {
     const body = feedPostBodyR8({
       photos: [],

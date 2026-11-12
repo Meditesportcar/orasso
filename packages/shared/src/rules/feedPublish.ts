@@ -487,6 +487,15 @@ export function clearUncertain(store: PublishStore | null, account: string): voi
   } catch {
     // Rien à effacer.
   }
+  // L'ancienne clé, si elle est à ce compte (migration restée en plan par un stockage plein) : sinon elle ressusciterait.
+  try {
+    const raw = store?.getItem(LEGACY_UNCERTAIN_KEY);
+    if (raw && (JSON.parse(raw) as { account?: unknown } | null)?.account === account) {
+      store?.removeItem(LEGACY_UNCERTAIN_KEY);
+    }
+  } catch {
+    // Contenu illisible ou stockage refusé : la purge de la déconnexion s'en charge.
+  }
 }
 
 /** Déconnexion : tous les envois incertains gardés par l'onglet s'effacent, quel que soit le compte. */

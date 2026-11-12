@@ -521,9 +521,13 @@ describe("inscription express", () => {
     expect(await mailsTo()).toHaveLength(0);
     // Rejeux, dont trois en même temps : le message part une seule fois.
     const again = await Promise.all([1, 2, 3].map(() => call(julie, "POST", path, body)));
-    expect(again.map((r) => r.status)).toEqual([201, 201, 201]);
-    expect(new Set(again.map((r) => r.json.id)).size).toBe(1);
+    // Celui qui prend le verrou envoie et répond 201 ; les autres, pendant la livraison, répondent « pas encore » (503) tout de suite.
+    expect(again.every((r) => r.status === 201 || r.status === 503)).toBe(true);
+    expect(again.some((r) => r.status === 201)).toBe(true);
     expect(await mailsTo()).toHaveLength(1);
+    const settled = await call(julie, "POST", path, body);
+    expect(settled.status).toBe(201);
+    expect(new Set([...again.filter((r) => r.status === 201), settled].map((r) => r.json.id)).size).toBe(1);
     // Un rejeu de plus ne renvoie rien.
     await call(julie, "POST", path, body);
     expect(await mailsTo()).toHaveLength(1);
@@ -557,6 +561,24 @@ describe("inscription express", () => {
     expect(sent).toHaveLength(12);
     expect(sent.every((m) => m.status === "sent")).toBe(true);
   }, 60_000);
+
+  it("tour 9 : plusieurs invitations « en route » répondent 503 tout de suite : rien n'est retardé derrière elles", async () => {
+    const path = `/events/${eventId}/express-invites`;
+    const bodies = [0, 1, 2, 3, 4, 5].map((n) => ({
+      email: `route${n}@exemple.fr`,
+      clientId: `0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0f0${n}`,
+    }));
+    for (const body of bodies) expect((await call(julie, "POST", path, body)).status).toBe(201);
+    // Les six e-mails sont « en attente » depuis peu (livraison en route).
+    await db.update(emailOutbox).set({ status: "queued", createdAt: new Date(clock.now.getTime() - 5_000) });
+    const started = Date.now();
+    const answers = [];
+    for (const body of bodies) answers.push(await call(julie, "POST", path, body));
+    expect(answers.map((r) => r.status)).toEqual(Array(6).fill(503));
+    expect(answers.every((r) => r.json.error.code === "mail_pending")).toBe(true);
+    // Une alerte staff derrière elles partirait sans attendre : six réponses en moins de 3 s (avant : 5 s chacune).
+    expect(Date.now() - started).toBeLessThan(3_000);
+  }, 30_000);
 
   it("tour 8 : arrêt après la validation de l'écriture, avant la livraison : le rejeu immédiat n'annonce pas « envoyée », puis l'e-mail repart", async () => {
     const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e04";

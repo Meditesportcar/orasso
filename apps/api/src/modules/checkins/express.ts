@@ -131,30 +131,18 @@ async function ensureMail(
   return "ok";
 }
 
-/** Durée pendant laquelle un rejeu attend qu'une livraison en route se termine avant de répondre « pas encore ». */
-const MAIL_SETTLE_WAIT_MS = 5_000;
-
 /**
- * Ne répond « envoyée » que si l'e-mail est parti (ou écarté) : une livraison en route est attendue quelques secondes ; si elle ne
- * finit pas (processus arrêté entre l'écriture et la livraison), la réponse est **non définitive** (503 `mail_pending`) : le
- * téléphone garde la demande et réessaie, jusqu'à ce que la ligne devienne trop ancienne et que l'e-mail reparte.
+ * Ne répond « envoyée » que si l'e-mail est parti (ou écarté). Une livraison en route donne **tout de suite** une réponse non
+ * définitive (503 `mail_pending`), sans attente ni sondage : la file du téléphone envoie une demande après l'autre, une attente
+ * ici retarderait tout ce qui est derrière (une alerte staff). La file réessaie ; une livraison arrêtée en route devient reprenable
+ * au bout de 2 minutes.
  */
 async function settleMail(
   row: { id: string; eventId: string; email: string; token: string },
   event: { title: string; startsAt: Date },
 ): Promise<void> {
-  const until = Date.now() + MAIL_SETTLE_WAIT_MS;
-  for (;;) {
-    if ((await ensureMail(row, event)) === "ok") return;
-    if (Date.now() >= until) {
-      throw new AppError(
-        503,
-        "mail_pending",
-        "L'e-mail de l'invitation est en cours d'envoi : réessaie dans un instant.",
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
+  if ((await ensureMail(row, event)) === "ok") return;
+  throw new AppError(503, "mail_pending", "L'e-mail de l'invitation est en cours d'envoi : réessaie dans un instant.");
 }
 
 export const expressService = {
