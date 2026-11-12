@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ApplicationStatus } from "../application";
 import { departmentSchema, type EventFormat } from "../enums";
 import { isoDate, optionalText, pageQuery } from "./common";
+import type { PageFollowState } from "./pageFollows";
 
 /** Adresse web : http ou https seulement (jamais javascript:, data:…). */
 const httpUrl = z.url().refine((u) => /^https?:\/\//i.test(u), "Adresse en http ou https");
@@ -152,6 +153,9 @@ export type MediaPublic = {
   departments: string[];
   verified: boolean;
 };
+
+/** `GET /media/:id` : la fiche publique et son état d'abonnement (`followersCount`, `isFollowing` pour l'acteur, lot R9a). */
+export type MediaPage = MediaPublic & PageFollowState;
 
 export type MediaEventBrief = {
   id: string;

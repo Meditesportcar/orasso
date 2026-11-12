@@ -52,6 +52,7 @@ export * from "./nearAccess";
 export * from "./notifications";
 export * from "./outingCards";
 export * from "./outingWeather";
+export * from "./pageFollows";
 export * from "./pages";
 export * from "./partnerships";
 export * from "./password";

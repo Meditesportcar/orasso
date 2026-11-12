@@ -47,6 +47,7 @@ import {
   structures,
 } from "../../db/schema";
 import { requireOrganizer } from "../../lib/access";
+import { type Actor, isPageActor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -55,6 +56,7 @@ import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { profilesRepo } from "../profiles/repo";
+import { isFollowingAs } from "../social/pageFollows";
 import { locate } from "../structures/service";
 import { followersCounts, toCard } from "./card";
 
@@ -130,7 +132,7 @@ async function publishBlock(p: ProRow): Promise<string | null> {
   return null;
 }
 
-async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
+async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promise<ProPublic> {
   const isOwner = viewer?.user.id === p.ownerUserId;
   const [followers, photos, discounts, partnerRows, postCount, following] = await Promise.all([
     followersCounts([p.id]),
@@ -195,7 +197,12 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
     partners,
     postsCount: vis.hidden.posts && !isOwner ? 0 : (postCount[0]?.n ?? 0),
     posts,
-    isFollowing: viewer ? Boolean(following) : null,
+    // Lot R9a : `isFollowing` se lit pour l'acteur ; `canSeePosts` (plus haut) reste l'abonnement de la personne.
+    isFollowing: !viewer
+      ? null
+      : actor && isPageActor(actor)
+        ? await isFollowingAs(actor, { kind: "pro", id: p.id })
+        : Boolean(following),
     isOwner,
   };
 }
@@ -466,7 +473,7 @@ export const prosService = {
   // --- Annuaire et fiche publique -------------------------------------------------------------------------------
 
   /** `GET /pros/by-slug/:slug` : une fiche publiée (ou la fiche du propriétaire, même en brouillon). */
-  async getPublic(slug: string, viewer: Viewer | null): Promise<ProPublic> {
+  async getPublic(slug: string, viewer: Viewer | null, actor?: Actor): Promise<ProPublic> {
     // Vague R8 (lot R8d) : « Sa fiche » d'une mention ne connaît que l'identifiant de la fiche (clé d'auteur `p:<id>`) :
     // un identifiant se lit comme le slug (un slug n'a jamais la forme d'un UUID).
     const byId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
@@ -481,7 +488,7 @@ export const prosService = {
         throw notFound("Fiche pro introuvable");
       }
     }
-    return toPublic(p, viewer);
+    return toPublic(p, viewer, actor);
   },
 
   /** `POST /pros/by-slug/:slug/track` : vue de la fiche, clic « appeler » ou « itinéraire » (jamais ceux du pro). */

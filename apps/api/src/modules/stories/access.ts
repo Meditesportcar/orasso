@@ -22,7 +22,8 @@ import {
 import { fileNameOf, serializeStories } from "./serialize";
 import { requireVisibleStory } from "./service";
 
-const personal = sql`${stories.persona} not in ('organizer','pro')`;
+/** Les stories d'une personne (casquette passionné) : celles d'une page se lisent sous leur propre clé (lot R9a). */
+const personal = sql`${stories.persona} = 'fan'`;
 
 export const storiesAccess = {
   /** `GET /stories/by-author/:key` : celles que je vois, dans l'ordre. Rien de visible (ou auteur inconnu) : liste vide. */
@@ -36,7 +37,11 @@ export const storiesAccess = {
         ? and(personal, eq(stories.authorId, key.id))
         : key.kind === "structure"
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, key.id))
-          : and(eq(stories.persona, "pro"), eq(stories.proId, key.id));
+          : key.kind === "pro"
+            ? and(eq(stories.persona, "pro"), eq(stories.proId, key.id))
+            : key.kind === "provider"
+              ? and(eq(stories.persona, "provider"), eq(stories.providerId, key.id))
+              : and(eq(stories.persona, "media"), eq(stories.mediaId, key.id));
     const rows = (await selectStories(and(liveStory(at), where))).sort(
       (a, b) => a.story.createdAt.getTime() - b.story.createdAt.getTime(),
     );
