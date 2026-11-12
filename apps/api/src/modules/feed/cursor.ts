@@ -11,18 +11,19 @@
 // - la zone (R8c1) : `A` les cartes pas encore vues, `B` les cartes vues sans interaction (rangées après, par date). La zone B
 //   n'a que la phase 2 (parcours par date).
 //
-// Version 3 (R8c1) : un curseur de la version 2 (APK en ligne en plein parcours) n'est jamais une erreur : `isPreviousCursor`,
+// Version 4 (R8c1) : un curseur de la version 2 (APK en ligne en plein parcours) n'est jamais une erreur : `isPreviousCursor`,
 // et le Fil repart de la première page avec `reset: true`.
 //
 // Une clé de carte est `genre:uuid` ; elle tient sur 17 octets (1 de genre, 16 d'uuid). Plus grand curseur produit :
-// 21 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) (+ 6 d'empreinte des flammes) + 6 de borne = 771 octets = 1028 caractères.
+// 21 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) + 6 de borne = 765 octets = 1020 caractères.
 import { FEED_POOL, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 
 import { validation } from "../../lib/errors";
 import type { Key } from "./sources/types";
 
-const VERSION = 3;
-const PREVIOUS_VERSION = 2;
+const VERSION = 4;
+/** Versions antérieures reconnues (APK et site en ligne en plein parcours) : première page et `reset`, jamais un 400. La 3 avait une empreinte des flammes (6 octets) retirée en 4. */
+const PREVIOUS_VERSIONS: readonly number[] = [2, 3];
 /** 9999-12-31T23:59:59.999Z : la plus grande date qu'un curseur peut porter. */
 const MAX_DATE_MS = 253_402_300_799_999;
 export const MAX_SOURCES = 16;
@@ -54,8 +55,6 @@ export type Cursor = {
       kinds: FeedCardKind[];
       /** Cartes consommées (au-dessus de la frontière) mais non servies : elles passent en premier à la page suivante. */
       deferred: string[];
-      /** Empreinte (6 octets) des flammes qui comptent dans le classement, prise à chaque page : si elle change (flamme retirée), le parcours repart (`reset`). */
-      sc: string;
       /** Borne de rognage des vues (ms, 0 = aucune) figée à la première page : le classement de la phase 1 ne change pas si le plafond rogne en route. */
       floorAt: number;
     }
@@ -176,7 +175,6 @@ export function encodeCursor(c: Cursor): string {
   for (const k of c.x) w.key(k);
   if (c.phase === 1) {
     if (c.deferred.length > MAX_DEFERRED) throw new Error("Trop de cartes différées dans le curseur");
-    w.bytes(Buffer.from(c.sc, "hex"));
     w.u48(c.floorAt);
     w.f64(c.score);
     w.cardId(c.frontier);
@@ -222,7 +220,6 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
     r.end();
     return { ...head, phase: 2, anchor };
   }
-  const sc = r.bytes(6).toString("hex");
   // Borne de rognage : jamais dans le futur du parcours (ramenée entre 0 et `ref`).
   const floorAt = Math.min(r.u48(), ref.getTime());
   const score = r.f64();
@@ -241,7 +238,7 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   const deferred: string[] = [];
   for (let i = 0; i < nd; i++) deferred.push(r.cardId());
   r.end();
-  return { ...head, phase: 1, sc, floorAt, score, frontier, kinds, deferred };
+  return { ...head, phase: 1, floorAt, score, frontier, kinds, deferred };
 }
 
 /**
@@ -250,7 +247,8 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
  */
 export function isPreviousCursor(raw: string | undefined): boolean {
   if (!raw || !/^[A-Za-z0-9_-]+$/.test(raw)) return false;
-  return Buffer.from(raw, "base64url")[0] === PREVIOUS_VERSION;
+  const version = Buffer.from(raw, "base64url")[0];
+  return version !== undefined && PREVIOUS_VERSIONS.includes(version);
 }
 
 /** Identifiant de la carte-clé d'un curseur (frontière en phase 1, dernière clé servie en phase 2) : pour les tests. */

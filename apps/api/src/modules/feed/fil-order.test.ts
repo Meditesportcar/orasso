@@ -412,7 +412,7 @@ describe("pas vu / vu sans interaction", () => {
     await manyPosts(author, 30);
     const first = await fil(me);
     const raw = Buffer.from(first.next as string, "base64url");
-    expect(raw[0]).toBe(3);
+    expect(raw[0]).toBe(4);
     // Version 2 (APK en ligne en plein parcours) : jamais un 400.
     const v2 = Buffer.concat([Buffer.from([2]), raw.subarray(1)]).toString("base64url");
     const res = await fil(me, `?cursor=${v2}`);
