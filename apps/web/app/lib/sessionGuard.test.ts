@@ -1,7 +1,7 @@
 import { createSerialWriter } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { createSessionGuard, guardFor, type Listen, pageSessionStale } from "./sessionGuard";
+import { createSessionGuard, guardFor, type Listen, latchStale, pageSessionStale } from "./sessionGuard";
 
 function bus() {
   const listeners = new Set<(id: string | null) => void>();
@@ -107,5 +107,16 @@ describe("page périmée par une annonce de session (tour 4)", () => {
     expect(pageSessionStale("A", "A")).toBe(false);
     expect(pageSessionStale("A", "B")).toBe(true);
     expect(pageSessionStale("A", null)).toBe(true);
+  });
+});
+
+describe("état périmé verrouillé jusqu'au rechargement (tour 5)", () => {
+  it("B puis une annonce tardive de A : toujours périmé", () => {
+    let stale = latchStale(false, "A", "A"); // hydratation
+    expect(stale).toBe(false);
+    stale = latchStale(stale, "A", "B");
+    expect(stale).toBe(true);
+    stale = latchStale(stale, "A", "A");
+    expect(stale).toBe(true);
   });
 });

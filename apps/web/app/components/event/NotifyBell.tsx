@@ -1,4 +1,4 @@
-import { Icon } from "@orasso/design-system/web";
+import { Button, Icon } from "@orasso/design-system/web";
 import {
   createSerialWriter,
   type EventNotificationPrefsView,
@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { type BellRead, bellControls } from "../../lib/bellControls";
 import "../../styles/event-notify.css";
 import { EssentialBlock, NotifySwitch, useSessionGuard } from "./NotifySignup";
 
@@ -24,6 +25,8 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
   const [news, setNews] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
+  const [read, setRead] = useState<BellRead>("loading");
+  const [reread, setReread] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   const writer = useRef<SerialWriter<boolean> | null>(null);
   const guard = useSessionGuard(userId);
@@ -59,21 +62,26 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
     let alive = true;
     // Aucun envoi de l'ancien compte dans la fenêtre avant la relecture : l'écrivain d'avant n'existe plus.
     writer.current = null;
+    setRead("loading");
     void apiFetch<EventNotificationPrefsView>(`/me/events/${encodeURIComponent(eventId)}/notification-prefs`).then(
       (res) => {
-        if (!alive || !res.ok) return;
+        if (!alive) return;
+        // Lecture impossible : l'interrupteur reste désactivé (il n'enverrait rien), l'erreur et « Réessayer » le disent.
+        if (!res.ok) return setRead("failed");
         setHasPlace(res.data.hasPlace);
         setNews(res.data.news);
         startWriter(res.data.news);
         setGone(false);
+        setRead("ready");
       },
     );
     return () => {
       alive = false;
     };
-  }, [eventId, stamp, guard]);
+  }, [eventId, stamp, guard, reread]);
 
   if (!hasPlace) return null;
+  const controls = bellControls(read);
 
   function change(next: boolean) {
     setNews(next);
@@ -120,9 +128,26 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
             help={L.eventNewsHelpOnFiche}
             checked={news}
             onChange={change}
+            disabled={controls.switchDisabled}
             testId="notify-news-switch"
           />
-          {message ? (
+          {controls.showError ? (
+            <div className="en-box" data-testid="notify-read-error">
+              <p className="en-error" role="alert">
+                {L.readFailed}
+              </p>
+              {controls.showRetry ? (
+                <Button
+                  variant="secondary"
+                  icon="undo"
+                  onClick={() => setReread((n) => n + 1)}
+                  data-testid="notify-read-retry"
+                >
+                  {L.retry}
+                </Button>
+              ) : null}
+            </div>
+          ) : message ? (
             <p className="en-error" role="alert" data-testid="notify-message">
               {message}
             </p>

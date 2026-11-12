@@ -49,3 +49,7 @@ export function guardFor(
 
 /** Une annonce de session rend-elle la page périmée ? Oui si elle nomme un autre compte que celui de la page. */
 export const pageSessionStale = (pageUser: string | null, announced: string | null): boolean => announced !== pageUser;
+
+/** L'état « page périmée » une fois posé reste jusqu'au rechargement : une annonce tardive du compte de la page ne le lève pas. */
+export const latchStale = (wasStale: boolean, pageUser: string | null, announced: string | null): boolean =>
+  wasStale || pageSessionStale(pageUser, announced);

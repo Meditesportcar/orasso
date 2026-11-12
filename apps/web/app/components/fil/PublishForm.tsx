@@ -75,7 +75,7 @@ import { CoAuthorLine } from "./CoAuthorLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
-import { pageSessionStale } from "../../lib/sessionGuard";
+import { latchStale } from "../../lib/sessionGuard";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
@@ -175,7 +175,8 @@ export function PublishForm({
   // Un autre onglet connecte un autre compte : cet écran (casquette, événement, rôle de A) est périmé. Il se masque, avec son envoi en
   // attente, au lieu de rester affiché ; l'API refuse déjà l'envoi (409 `account_changed`).
   const [sessionStale, setSessionStale] = useState(false);
-  useEffect(() => listenSession((announced) => setSessionStale(pageSessionStale(userId, announced))), [userId]);
+  // Verrouillé jusqu'au rechargement : une annonce tardive du compte de la page ne réaffiche pas l'écran périmé.
+  useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [heldEvent, setHeldEvent] = useState<AttachableEventItem | null>(null);
   /** Garde (ou efface) le corps incertain dans l'onglet, rangé par compte : il survit à un rechargement (reconnexion). */
   const setUncertain = (
