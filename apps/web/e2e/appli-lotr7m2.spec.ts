@@ -211,7 +211,6 @@ for (const theme of ["beton", "sable"] as const) {
     const { ctx, page } = await open(browser, "kenji@orasso.local", theme);
     await go(page, "/fil");
     await page.getByTestId("fil-publish-open").click();
-    await page.getByTestId("fil-publish-choose-post").click();
     await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
     const chooser = page.waitForEvent("filechooser");
     await page.getByTestId("fil-publish-add").click();

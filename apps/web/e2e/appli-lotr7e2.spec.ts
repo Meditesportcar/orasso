@@ -213,7 +213,6 @@ test("publier au Fil en 4:5 : bouton grisé expliqué sans décision de plaque, 
   await go(page, "/fil");
   await page.getByTestId("fil-publish-open").click();
   // Lot R7f3 : « Publier » demande où (en story, dans le Fil) ; ici, dans le Fil.
-  await page.getByTestId("fil-publish-choose-post").click();
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
   // Rien : le bouton est grisé, et la ligne dit pourquoi.
   await expect(page.getByTestId("fil-publish-send")).toBeDisabled();

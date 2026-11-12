@@ -1,14 +1,14 @@
-import { mkdirSync } from "node:fs";
+﻿import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { cutWords } from "./cutWords";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
 
-// Lot R9n (D40, maquette R9.1 `n-barres`, R9.2 `n-fil`, R9.2b `n-publier`), côté appli (version web compilée de recette,
-// `APP_URL`) : les quatre barres des casquettes (Le Fil et Page dans chaque groupe), « Tu lis en tant que » et « Changer »,
-// la feuille « Mes casquettes », la pastille de la barre du haut, « Publier » en casquette (segment « Publication | Story »),
-// les anciennes adresses sous « Page », la copie hors ligne du Fil rangée par acteur, une casquette périmée, le passionné.
+// Lot R9n (D40, maquette R9.1 `n-barres`, R9.2 `n-fil`, R9.2b `n-publier`), cÃ´tÃ© appli (version web compilÃ©e de recette,
+// `APP_URL`) : les quatre barres des casquettes (Le Fil et Page dans chaque groupe), Â« Tu lis en tant que Â» et Â« Changer Â»,
+// la feuille Â« Mes casquettes Â», la pastille de la barre du haut, Â« Publier Â» en casquette (segment Â« Publication | Story Â»),
+// les anciennes adresses sous Â« Page Â», la copie hors ligne du Fil rangÃ©e par acteur, une casquette pÃ©rimÃ©e, le passionnÃ©.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r9n-captures/apres/recette-appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
@@ -20,9 +20,9 @@ type Kind = "organizer" | "pro" | "provider" | "media";
 const BARS: Record<Kind, { email: string; labels: string[]; center: string; name: string; testId: string }> = {
   organizer: {
     email: "damien@orasso.local",
-    labels: ["Événements", "Tri", "Direct", "Le Fil", "Page"],
+    labels: ["Ã‰vÃ©nements", "Tri", "Direct", "Le Fil", "Page"],
     center: "Direct",
-    name: "MéditeSportCar",
+    name: "MÃ©diteSportCar",
     testId: "casquette-organizer",
   },
   pro: {
@@ -86,24 +86,39 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-/** Passe à une casquette par la ligne de « Changer de casquette » du Profil (le geste historique). */
+/** Passe Ã  une casquette par la ligne de Â« Changer de casquette Â» du Profil (le geste historique). */
 async function wear(page: Page, testId: string, hasText?: string) {
   await go(page, "/moi");
-  const row = page.getByTestId(testId).filter(hasText ? { hasText } : {}).first();
+  const row = page
+    .getByTestId(testId)
+    .filter(hasText ? { hasText } : {})
+    .first();
   await row.click();
   await page.waitForURL((u) => !/\/(moi|profil)(\?|$)/.test(u.pathname), { timeout: 30_000 });
   await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
 }
 
-const tabs = (page: Page) => page.getByRole("tab");
-const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
+/** L'onglet actif : celui sous lequel se tient l'indicateur incliné (la barre n'expose pas d'état « sélectionné »). */
+async function expectActiveTab(page: Page, name: string) {
+  await expect(async () => {
+    const ind = await page.getByTestId("tabbar-indicator").boundingBox();
+    const box = await page.getByTestId("persona-tabbar").getByRole("tab", { name, exact: true }).boundingBox();
+    expect(ind && box).toBeTruthy();
+    const cx = (ind?.x ?? 0) + (ind?.width ?? 0) / 2;
+    expect(cx).toBeGreaterThan(box?.x ?? 0);
+    expect(cx).toBeLessThan((box?.x ?? 0) + (box?.width ?? 0));
+  }).toPass({ timeout: 30_000 });
+}
+
+const tabs = (page: Page) => page.getByTestId("persona-tabbar").getByRole("tab");
+const tab = (page: Page, name: string) => page.getByTestId("persona-tabbar").getByRole("tab", { name, exact: true });
 
 for (const [theme, width, scale] of [
   ["beton", 390, 1],
   ["sable", 384, 1.3],
 ] as const) {
   for (const kind of ["organizer", "pro", "provider", "media"] as const) {
-    test(`la barre ${kind} : cinq onglets, centre, indicateur, Le Fil et Page (${theme} ${width} ×${scale})`, async ({
+    test(`la barre ${kind} : cinq onglets, centre, indicateur, Le Fil et Page (${theme} ${width} Ã—${scale})`, async ({
       browser,
     }) => {
       test.setTimeout(240_000);
@@ -112,25 +127,25 @@ for (const [theme, width, scale] of [
       await wear(page, spec.testId);
       await expect(page.getByTestId("persona-tabbar")).toBeVisible();
       const names = await tabs(page).allInnerTexts();
-      // Les libellés de la barre sont en capitales (style) : on compare sans la casse.
+      // Les libellÃ©s de la barre sont en capitales (style) : on compare sans la casse.
       expect(names.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase())).toEqual(
         spec.labels.map((l) => l.toLowerCase()),
       );
-      // Le centre (le O) : Direct pour l'organisateur, Accueil pour les trois autres, et il est actif à l'ouverture.
-      await expect(tab(page, spec.center)).toHaveAttribute("aria-selected", "true");
+      // Le centre (le O) : Direct pour l'organisateur, Accueil pour les trois autres, et il est actif Ã  l'ouverture.
+      await expectActiveTab(page, spec.center);
       await expect(page.getByTestId("tabbar-indicator")).toBeVisible();
-      // Police agrandie : aucun libellé de la barre (« Candidatures », « Événements ») n'est coupé ni rogné.
+      // Police agrandie : aucun libellÃ© de la barre (Â« Candidatures Â», Â« Ã‰vÃ©nements Â») n'est coupÃ© ni rognÃ©.
       for (const label of spec.labels) {
         const box = await tab(page, label).boundingBox();
         expect(box, `onglet ${label}`).not.toBeNull();
         const over = await tab(page, label).evaluate((el) =>
           Math.max(...[el, ...el.querySelectorAll("*")].map((n) => n.scrollWidth - n.clientWidth)),
         );
-        expect(over, `libellé ${label} qui déborde`).toBeLessThanOrEqual(1);
+        expect(over, `libellÃ© ${label} qui dÃ©borde`).toBeLessThanOrEqual(1);
       }
       await shot(page, `n-barre-${kind}-${theme}-${width}-x${scale}`);
 
-      // La pastille de la barre du haut : le logo de la casquette, elle ouvre « Mes casquettes ».
+      // La pastille de la barre du haut : le logo de la casquette, elle ouvre Â« Mes casquettes Â».
       await expect(page.getByTestId("topbar-persona")).toBeVisible();
       await page.getByTestId("topbar-persona").click();
       await expect(page.getByTestId("casquettes-intro")).toBeVisible();
@@ -141,7 +156,7 @@ for (const [theme, width, scale] of [
       await page.getByRole("button", { name: "Fermer" }).first().click();
       await expect(page.getByTestId("casquettes-intro")).toHaveCount(0, { timeout: 5_000 });
 
-      // Le Fil en casquette : « Tu lis en tant que » + le nom, jamais tronqué.
+      // Le Fil en casquette : Â« Tu lis en tant que Â» + le nom, jamais tronquÃ©.
       await tab(page, "Le Fil").click();
       await page.waitForURL(/\/fil/, { timeout: 15_000 });
       await expect(page.getByTestId("fil-actor")).toBeVisible({ timeout: 30_000 });
@@ -151,7 +166,7 @@ for (const [theme, width, scale] of [
       await expect(page.getByTestId("fil-actor-change")).toBeVisible();
       await shot(page, `n-fil-${kind}-${theme}-${width}-x${scale}`);
 
-      // La Page : l'écran d'aujourd'hui + la ligne « Mes casquettes » en bas.
+      // La Page : l'Ã©cran d'aujourd'hui + la ligne Â« Mes casquettes Â» en bas.
       await tab(page, "Page").click();
       await page.waitForURL(/\/page/, { timeout: 15_000 });
       await expect(page.getByTestId("page-row-casquettes")).toBeVisible({ timeout: 30_000 });
@@ -162,7 +177,7 @@ for (const [theme, width, scale] of [
   }
 }
 
-test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, copie hors ligne distincte", async ({
+test("Roues Libres 66 : le Fil Â« en tant que Â», Abonnements, Changer â†’ Moi, copie hors ligne distincte", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -179,21 +194,23 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await tab(page, "Le Fil").click();
   await page.waitForURL(/\/fil/);
   await expect(page.getByTestId("fil-actor")).toContainText("Roues Libres 66", { timeout: 30_000 });
-  // L'acteur part en en-tête sur la lecture du Fil.
+  // L'acteur part en en-tÃªte sur la lecture du Fil.
   const read = page.waitForRequest((r) => r.url().includes("/api/fil?") && r.url().includes("filter=following"));
   await page.getByTestId("fil-filters-following").click();
-  const sent = (await read).headers()["x-orasso-actor"];
+  const sent = (await (await read).allHeaders())["x-orasso-actor"];
   expect(sent).toMatch(/^s:/);
   await expect(page.getByTestId("fil-phrase")).toContainText("Ceux que Roues Libres 66 suit");
   await expect(page.getByTestId("fil-list").or(page.getByTestId("fil-empty")).first()).toBeVisible({ timeout: 30_000 });
-  // La Brasa est suivie par Roues Libres 66 (seed R9a) : ses publications sont là ; aucun compte privé.
-  const privates = (await sql("select p.pseudo from profiles p where p.visibility = 'private'")) as { pseudo: string }[];
+  // La Brasa est suivie par Roues Libres 66 (seed R9a) : ses publications sont lÃ  ; aucun compte privÃ©.
+  const privates = (await sql("select p.pseudo from profiles p where p.visibility = 'private'")) as {
+    pseudo: string;
+  }[];
   const text = await page.getByTestId("fil-list").innerText();
   expect(text).toContain("La Brasa");
-  for (const p of privates) expect(text, `compte privé ${p.pseudo}`).not.toContain(p.pseudo);
+  for (const p of privates) expect(text, `compte privÃ© ${p.pseudo}`).not.toContain(p.pseudo);
   await shot(page, "n-fil-roues-libres-abonnements");
 
-  // Sans réseau, la copie de la casquette reste celle de la casquette (pas celle de la personne).
+  // Sans rÃ©seau, la copie de la casquette reste celle de la casquette (pas celle de la personne).
   await page.getByTestId("fil-filters-for_you").click();
   await expect(page.getByTestId("fil-actor")).toBeVisible();
   await ctx.setOffline(true);
@@ -203,9 +220,9 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   expect(offline).toContain("La Brasa");
   await ctx.setOffline(false);
 
-  // « Changer » → « Moi · Sarah_66 » → le Fil de la personne (sans pastille).
+  // Â« Changer Â» â†’ Â« Moi Â· Sarah_66 Â» â†’ le Fil de la personne (sans pastille).
   await page.getByTestId("fil-actor-change").click();
-  await expect(page.getByTestId("casquettes-me")).toContainText("Moi · Sarah_66");
+  await expect(page.getByTestId("casquettes-me")).toContainText("Moi Â· Sarah_66");
   await shot(page, "n-feuille-roues-libres");
   await page.getByTestId("casquettes-me").click();
   await page.waitForURL(/\/fil/, { timeout: 30_000 });
@@ -214,21 +231,21 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await ctx.close();
 });
 
-test("Publier en casquette : casquette déjà choisie, segment Story, retour Publication", async ({ browser }) => {
+test("Publier en casquette : casquette dÃ©jÃ  choisie, segment Story, retour Publication", async ({ browser }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser, "sarah@orasso.local", "sable", 390, 1);
   await wear(page, "casquette-organizer", "Roues Libres 66");
   await tab(page, "Le Fil").click();
   await page.waitForURL(/\/fil/);
   await expect(page.getByTestId("fil-actor")).toBeVisible({ timeout: 30_000 });
-  // Un seul geste : plus de feuille « En story | Dans le Fil ».
+  // Un seul geste : plus de feuille Â« En story | Dans le Fil Â».
   await page.getByTestId("fil-publish-open").click();
   await expect(page.getByTestId("fil-publish-choose-story")).toHaveCount(0);
   await page.waitForURL(/\/fil\/publier\?auteur=s/, { timeout: 30_000 });
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("en tant que Roues Libres 66", { exact: false }).first()).toBeVisible();
   await shot(page, "n-publier-roues-libres");
-  // Le segment « Story » ouvre l'écran de story au nom de la structure, « Publication » revient.
+  // Le segment Â« Story Â» ouvre l'Ã©cran de story au nom de la structure, Â« Publication Â» revient.
   await page.getByTestId("fil-publish-kind").getByText("Story").click();
   await page.waitForURL(/\/story\/publier\?auteur=s/, { timeout: 30_000 });
   await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
@@ -236,16 +253,16 @@ test("Publier en casquette : casquette déjà choisie, segment Story, retour Pub
   await page.getByTestId("story-publish-kind").getByText("Publication").click();
   await page.waitForURL(/\/fil\/publier\?auteur=s/, { timeout: 30_000 });
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
-  // Une story personnelle depuis la casquette : `?auteur=me` (le segment depuis « Moi »).
+  // Une story personnelle depuis la casquette : `?auteur=me` (le segment depuis Â« Moi Â»).
   await go(page, "/story/publier?auteur=me");
   await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
 
-test("Les anciennes adresses s'ouvrent sous l'onglet « Page »", async ({ browser }) => {
+test("Les anciennes adresses s'ouvrent sous l'onglet Â« Page Â»", async ({ browser }) => {
   test.setTimeout(240_000);
   const cases: [Kind, string, string][] = [
-    ["organizer", "/(orga)/equipe", "Équipe"],
+    ["organizer", "/(orga)/equipe", "Ã‰quipe"],
     ["organizer", "/(orga)/structure", "Ma structure"],
     ["pro", "/(pro)/fiche", ""],
     ["provider", "/(provider)/vitrine", ""],
@@ -258,13 +275,13 @@ test("Les anciennes adresses s'ouvrent sous l'onglet « Page »", async ({ brows
     await page.goto(path);
     await afterOpening(page);
     await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
-    // L'onglet « Page » est celui qui range la page masquée.
-    await expect(tab(page, "Page")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+    // L'onglet Â« Page Â» est celui qui range la page masquÃ©e.
+    await expectActiveTab(page, "Page");
     await ctx.close();
   }
 });
 
-test("Le passionné : sa barre n'a pas bougé, ni pastille de casquette, ni « Tu lis en tant que »", async ({
+test("Le passionnÃ© : sa barre n'a pas bougÃ©, ni pastille de casquette, ni Â« Tu lis en tant que Â»", async ({
   browser,
 }) => {
   test.setTimeout(180_000);
@@ -284,11 +301,11 @@ test("Le passionné : sa barre n'a pas bougé, ni pastille de casquette, ni « T
   await ctx.close();
 });
 
-test("Casquette périmée : la structure est quittée pendant la session, retour à la base avec l'avis", async ({
+test("Casquette pÃ©rimÃ©e : la structure est quittÃ©e pendant la session, retour Ã  la base avec l'avis", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
-  // Roues Libres 66 : la propriétaire est la seule responsable ; on la retire de la structure par la base, comme le ferait
+  // Roues Libres 66 : la propriÃ©taire est la seule responsable ; on la retire de la structure par la base, comme le ferait
   // l'API de test, puis on relit le Fil en casquette.
   const { ctx, page } = await open(browser, "sarah@orasso.local", "beton", 390, 1);
   await wear(page, "casquette-organizer", "Roues Libres 66");
@@ -316,7 +333,7 @@ test("Casquette périmée : la structure est quittée pendant la session, retour
   await ctx.close();
 });
 
-test("L'en-tête n'est posé que sur la liste blanche : la flamme et les cartes vues n'en portent pas", async ({
+test("L'en-tÃªte n'est posÃ© que sur la liste blanche : la flamme et les cartes vues n'en portent pas", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -354,7 +371,7 @@ test("L'en-tête n'est posé que sur la liste blanche : la flamme et les cartes 
     ).toBe(true);
   }
   expect(withActor.length).toBeGreaterThan(0);
-  // Les cartes vues, le profil, les messages : jamais d'en-tête.
+  // Les cartes vues, le profil, les messages : jamais d'en-tÃªte.
   for (const key of new Set(withoutActor)) {
     expect(key, "les cartes vues restent celles de la personne").not.toBe("__aucun__");
   }

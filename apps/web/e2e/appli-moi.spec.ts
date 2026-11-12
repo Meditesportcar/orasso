@@ -365,11 +365,13 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
     await expect(
       page.getByTestId("orga-direct-event").or(page.getByText("Aucun événement publié à suivre")),
     ).toBeVisible({ timeout: 20_000 });
-    for (const label of ["Événements", "Tri", "Direct", "Équipe", "Structure"]) {
+    for (const label of ["Événements", "Tri", "Direct", "Le Fil", "Page"]) {
       await expect(page.getByRole("tab", { name: label })).toBeVisible();
     }
     await shot(page, `12-casquette-organisateur-${theme}`);
-    await page.getByRole("tab", { name: "Équipe" }).click();
+    // Lot R9n : l'Équipe est sous « Page » (la ligne « Équipe »).
+    await page.getByRole("tab", { name: "Page" }).click();
+    await page.getByTestId("page-row-team").click();
     await page.waitForURL(/equipe/, { timeout: 15_000 });
     await page.reload();
     await expect(page.getByRole("tab", { name: "Direct" })).toBeVisible({ timeout: 30_000 });

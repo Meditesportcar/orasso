@@ -95,7 +95,7 @@ test("Caches de lecture : un autre compte sur le même appareil ne lit jamais ce
   // Le pro charge sa fiche : le cache est rangé sous son compte.
   await signIn(page, "garage@orasso.local");
   await toPersona(page, "pro", /\/accueil/);
-  await tab(page, "Ma fiche");
+  await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page
   await expect(page.getByTestId("pro-identity")).toBeVisible({ timeout: 30_000 });
   await expect.poll(async () => (await cacheKeys(page)).some((k) => k.endsWith(".my-pro"))).toBe(true);
   const garageScope = await page.evaluate(() => localStorage.getItem("orasso.cache-scope"));
@@ -142,7 +142,7 @@ for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "garage@orasso.local");
     await toPersona(page, "pro", /\/accueil/);
-    await tab(page, "Ma fiche");
+    await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page
     await expect(page.getByTestId("pro-identity")).toBeVisible({ timeout: 30_000 });
 
     // Segments : onglets, sélection annoncée, cible tactile.

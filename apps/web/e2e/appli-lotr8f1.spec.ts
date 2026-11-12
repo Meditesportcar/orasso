@@ -86,11 +86,9 @@ for (const { width, scale } of [
     }
     await shot(page, `haut-${width}-x${scale}`);
     await page.getByTestId("fil-publish-open").click();
-    await expect(page.getByTestId("fil-publish-choose-story")).toBeVisible();
-    await expect(page.getByTestId("fil-publish-choose-post")).toBeVisible();
+    // Lot R9n (T18) : un seul geste, l'écran de publication avec son segment « Publication | Story ».
+    await expect(page.getByTestId("fil-publish-kind")).toBeVisible({ timeout: 30_000 });
     await shot(page, `choix-${width}-x${scale}`);
-    // « Dans le Fil » ouvre aussi la publication au Fil.
-    await page.getByTestId("fil-publish-choose-post").click();
     await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
     await ctx.close();
   });
@@ -105,7 +103,7 @@ test("changer de filtre recharge le Fil ; « En story » ouvre la publication d'
     expect((await loaded).ok()).toBe(true);
   }
   await page.getByTestId("fil-publish-open").click();
-  await page.getByTestId("fil-publish-choose-story").click();
+  await page.getByTestId("fil-publish-kind").getByText("Story").click();
   await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
