@@ -220,13 +220,14 @@ export function PageOffers({
   onPublish: () => void;
   reloadToken?: number;
 }) {
+  const { t } = useTheme();
   const list = useOffers(authorKey, reloadToken);
   // Le nombre de la liste fait foi une fois lue en entier ; sinon celui que la fiche sert.
   const count = list.loaded && !list.next ? list.items.length : (pro.offers?.current ?? list.items.length);
   return (
     <View style={styles.wrap} testID="page-offers">
       <View style={styles.head}>
-        <Text variant="bodyStrong" style={styles.headText} testID="offers-count">
+        <Text variant="bodyStrong" color={t.color.ink} style={styles.headText} testID="offers-count">
           {T.count(count)}
         </Text>
         {owner ? (

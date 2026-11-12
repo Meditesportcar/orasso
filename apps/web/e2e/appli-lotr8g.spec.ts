@@ -264,7 +264,7 @@ test("la fiche d'un pro : « Présentation » complète, onglets collants, « Pu
   await signUpApi(pseudo);
   const fan = await open(browser);
   await signIn(fan.page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
-  await go(fan.page, "/p/garage-du-port");
+  await go(fan.page, "/p/garage-du-port?onglet=presentation");
   await expect(fan.page.getByTestId("follow-pro")).toContainText(/Suivre/i, { timeout: 30_000 });
   await fan.page.getByTestId("follow-pro").click();
   await expect(fan.page.getByTestId("follow-pro")).toContainText(/Suivi/i, { timeout: 20_000 });

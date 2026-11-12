@@ -24,6 +24,8 @@ test("le pro publie une offre sur le site : bloc « Étiquette », refus sans ti
   await expect(page.getByTestId("pro-publish-offer")).toBeVisible();
   await expect(page.getByTestId("offers-empty")).toHaveText("Pas d'offre en cours.");
   await page.getByTestId("pro-publish-offer").click();
+  await page.waitForURL(/app.fil.publier/);
+  await page.waitForLoadState("networkidle");
   await expect(page.getByTestId("fil-publish-offer-title")).toBeVisible();
   await expect(page.getByTestId("fil-publish-says-tag")).toHaveText(/Offre/);
   await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
