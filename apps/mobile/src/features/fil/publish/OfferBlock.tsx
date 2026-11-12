@@ -27,7 +27,7 @@ export function OfferBlock({
   const { t } = useTheme();
   const c = t.color;
   const native = useDateTimePicker();
-  const [editing, setEditing] = useState(true);
+  const [editing, setEditing] = useState(false);
   const patch = (p: Partial<OfferForm>) => onChange({ ...value, ...p });
   return (
     <View style={styles.block} testID="fil-publish-offer">

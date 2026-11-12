@@ -56,6 +56,7 @@ import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
+import { postOkSql } from "../feed/lists";
 import { profilesRepo } from "../profiles/repo";
 import { isFollowingAs } from "../social/pageFollows";
 import { locate } from "../structures/service";
@@ -162,18 +163,14 @@ async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promis
         })
       : Promise.resolve(undefined),
     // Lot R9c : les offres non terminées (jour de fin compris, jour civil de Paris), pour une session seulement (T4).
+    // Avec les mêmes conditions de lecture que la liste (`postOkSql`) : un compteur ne dit jamais plus que la liste.
     viewer
       ? db
-          .select({ n: count() })
-          .from(feedPosts)
-          .where(
-            and(
-              eq(feedPosts.proId, p.id),
-              eq(feedPosts.tag, "offer"),
-              isNull(feedPosts.deletedAt),
-              sql`${feedPosts.offerEndsOn} >= ${parisDayOf(now())}::date`,
-            ),
+          .execute<{ n: number }>(
+            sql`select count(*)::int as n from feed_posts p join profiles a on a.user_id = p.author_id
+              where p.pro_id = ${p.id} and p.tag = 'offer' and p.offer_ends_on >= ${parisDayOf(now())}::date and ${postOkSql(now())}`,
           )
+          .then((r) => r.rows)
       : Promise.resolve(undefined),
   ]);
   const partners: ProPartner[] = partnerRows.map(({ s }) => ({
@@ -212,7 +209,15 @@ async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promis
     partners,
     postsCount: vis.hidden.posts && !isOwner ? 0 : (postCount[0]?.n ?? 0),
     // Lot R9c : absent sans session ; nul si la fiche de base masque ses publications à qui n'est pas le propriétaire.
-    ...(offerCount ? { offers: { current: vis.hidden.posts && !isOwner ? 0 : (offerCount[0]?.n ?? 0) } } : {}),
+    ...(offerCount
+      ? {
+          offers: {
+            current: vis.hidden.posts && !isOwner ? 0 : (offerCount[0]?.n ?? 0),
+            // Au propriétaire seul : ce qu'il reste de la limite du mois (le bouton « Publier une offre » dit pourquoi il est inerte).
+            ...(isOwner ? { remaining: postsRemaining(await postsUsedThisMonth(p.id)) } : {}),
+          },
+        }
+      : {}),
     posts,
     // Lot R9a : `isFollowing` se lit pour l'acteur ; `canSeePosts` (plus haut) reste l'abonnement de la personne.
     isFollowing: !viewer

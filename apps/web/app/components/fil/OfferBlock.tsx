@@ -18,7 +18,7 @@ export function OfferBlock({
   onChange: (next: OfferForm) => void;
   disabled: boolean;
 }) {
-  const [editing, setEditing] = useState(true);
+  const [editing, setEditing] = useState(false);
   const patch = (p: Partial<OfferForm>) => onChange({ ...value, ...p });
   return (
     <section className="s-stack s-stack--tight" data-testid="fil-publish-offer">

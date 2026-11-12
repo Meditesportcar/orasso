@@ -4,7 +4,7 @@
 // Lot M7 : page masquée du groupe ouverte depuis Ma fiche, c'est un parcours : mode B (en-tête de fiche, ✕ revient à Ma
 // fiche), sans barre d'onglets.
 import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { authorKeyOf, countFr, proOffersLabels as O, pluralFr } from "@orasso/shared";
+import { authorKeyOf, proOffersLabels as O } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef } from "react";
 import { StyleSheet, View } from "react-native";
@@ -47,7 +47,7 @@ export default function ProPublier() {
   const blocked = !pro
     ? null
     : !pro.published
-      ? "Publie d'abord ta fiche (onglet Fiche) pour pouvoir écrire à tes abonnés."
+      ? O.blockedUnpublishedApp
       : pro.postsRemaining === 0
         ? "Limite du mois atteinte. Le compteur repart au 1er du mois prochain."
         : null;
@@ -76,7 +76,7 @@ export default function ProPublier() {
                 {pro.postsUsed} / {pro.postsLimit}
               </Text>
               <Text variant="caption" color={t.color.plateMuted}>
-                {`${countFr(pro.followersCount, "abonné")} ${pluralFr(pro.followersCount, "voit", "voient")} tes publications.`}
+                {O.followersLine(pro.followersCount)}
               </Text>
             </Plate>
           ) : null}
@@ -105,7 +105,7 @@ export default function ProPublier() {
               Publier
             </SmButton>
           </View>
-          <Muted variant="caption">Les publications sont visibles par tes abonnés sur ta fiche.</Muted>
+          <Muted variant="caption">{O.visibility}</Muted>
           <SectionTitle>{O.currentTitle}</SectionTitle>
           <OfferRows list={offers} />
           <Posts pro={pro} reload={myPro.reload} />

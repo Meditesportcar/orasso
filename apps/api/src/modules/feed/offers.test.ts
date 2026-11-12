@@ -411,10 +411,26 @@ describe("5. le compteur offers.current de la fiche", () => {
     const viewer = await signUp("Compteur_R9c");
     const seen = await call(viewer, "GET", `/pros/by-slug/${pro.slug}`);
     expect(seen.json.offers).toEqual({ current: 2 });
-    expect((await call(owner, "GET", "/me/pro")).json.offers).toEqual({ current: 2 });
+    expect((await call(owner, "GET", "/me/pro")).json.offers).toEqual({ current: 2, remaining: 1 });
     const anon = await app.request(`/api/pros/by-slug/${pro.slug}`);
     expect(anon.status).toBe(200);
     expect(((await anon.json()) as Record<string, unknown>).offers).toBeUndefined();
+    // Un compteur ne dit jamais plus que la liste : une offre sans visuel (non servie) n'est pas comptée.
+    await db.insert(feedPosts).values({
+      authorId: owner.id,
+      persona: "pro",
+      proId: pro.id,
+      tag: "offer",
+      title: "Sans visuel",
+      offerEndsOn: "2026-12-31",
+    });
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.offers.current).toBe(2);
+    // Au propriétaire seul : ce qu'il reste de la limite du mois.
+    expect((await call(owner, "GET", `/pros/by-slug/${pro.slug}`)).json.offers).toMatchObject({
+      current: 2,
+      remaining: 0,
+    });
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.offers.remaining).toBeUndefined();
     // Le lendemain de la fin de « Une » (30 novembre), il n'en reste qu'une.
     clock.set(fromWallTime({ year: 2026, month: 12, day: 1, hour: 0, minute: 5 }));
     expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.offers).toEqual({ current: 1 });

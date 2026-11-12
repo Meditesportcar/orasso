@@ -143,6 +143,7 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   await pro.getByTestId("fil-publish-none").click();
   await pro.getByTestId("fil-publish-none-yes").click();
   await pro.getByTestId("fil-publish-offer-title").fill("Offre d'automne");
+  await pro.getByTestId("fil-publish-offer-edit").click();
   await pro
     .getByTestId("fil-publish-offer-end")
     .fill(new Date(Date.now() + 15 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));

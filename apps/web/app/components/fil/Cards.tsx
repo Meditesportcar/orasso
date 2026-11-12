@@ -15,7 +15,7 @@ import { useState } from "react";
 import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
 import { FoldedCaption } from "../publications/FoldedCaption";
-import { OfferLine } from "../publications/OfferLine";
+import { OfferLine, OfferTag } from "../publications/OfferLine";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
@@ -280,6 +280,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onMenu={onMenu}
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
+      headTag={post.offer ? <OfferTag offer={post.offer} /> : undefined}
       actions={
         <>
           <PostActions post={post} />

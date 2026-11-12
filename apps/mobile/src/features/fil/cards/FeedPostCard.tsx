@@ -5,7 +5,7 @@ import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { FeedPostView } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
-import { OfferLine } from "@/features/publications/OfferLine";
+import { OfferLine, OfferTag } from "@/features/publications/OfferLine";
 import { Avatar } from "@/ui/Avatar";
 import { CoAuthorSignature, collaborationLine, InviteStatusLine, TwoAvatars } from "../CoAuthorHead";
 import { FeedPhotos } from "../FeedPhotos";
@@ -45,6 +45,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onTitle={post.mine ? undefined : () => router.push(`/u/${encodeURIComponent(post.author.pseudo)}`)}
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
+      headTag={post.offer ? <OfferTag offer={post.offer} /> : undefined}
       testID="feed-card-feed_post"
       actions={
         <>

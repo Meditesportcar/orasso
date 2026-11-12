@@ -46,6 +46,13 @@ export const proOffersLabels = {
   loadError: "Les offres ne se chargent pas pour le moment.",
   more: "Voir plus",
   oldDate: "Publiée le",
+  /** Qui voit quoi (T16) : une offre est lue de tout membre connecté et entre dans le Fil. */
+  visibility: "Tes publications et tes offres sont visibles de tous les membres, sur ta fiche et dans le Fil.",
+  followersLine: (n: number) => `${n} ${pluralFr(n, "abonné suit", "abonnés suivent")} ta fiche.`,
+  blockedUnpublishedApp: "Publie d'abord ta fiche (onglet Fiche) pour pouvoir publier.",
+  blockedUnpublishedSite: "Publie d'abord ta fiche dans l'annuaire pour pouvoir publier.",
+  blockedLimit: (limit: number) =>
+    `Limite atteinte : ${limit} publications par mois. Le compteur repart au 1er du mois prochain.`,
   /** Les offres en cours de l'espace du pro. */
   currentTitle: "Offres en cours",
   /** Refus de l'API (un message par cause). */

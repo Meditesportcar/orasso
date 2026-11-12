@@ -41,6 +41,7 @@ test("le pro publie une offre sur le site : bloc « Étiquette », refus sans ti
   );
   await page.getByTestId("fil-publish-offer-title").fill("Polish S9c");
   await expect(page.getByTestId("fil-publish-missing")).toHaveText("Choisis la date de fin de l'offre.");
+  await page.getByTestId("fil-publish-offer-edit").click();
   await page.getByTestId("fil-publish-offer-start").fill(day(1));
   await page.getByTestId("fil-publish-offer-end").fill(day(10));
   await page.getByTestId("fil-publish-send").click();

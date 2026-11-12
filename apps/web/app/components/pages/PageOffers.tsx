@@ -8,6 +8,7 @@ import {
   type AuthorPostsPage,
   type FeedPostView,
   offerDatesLabel,
+  PRO_POSTS_PER_MONTH,
   type ProPublic,
   publicationPath,
   proOffersLabels as T,
@@ -154,6 +155,11 @@ export function OfferRows({ list }: { list: ReturnType<typeof useOffers> }) {
   );
 }
 
+/** Les offres en cours de la fiche, lues dans le navigateur page par page (« Voir plus » au-delà de 20) : l'espace du pro. */
+export function CurrentOffers({ authorKey }: { authorKey: string }) {
+  return <OfferRows list={useOffers(authorKey)} />;
+}
+
 /** « Anciennes offres » : les `pro_posts` d'avant, lisibles de l'abonné et du propriétaire ; un message pour les autres. */
 export function OldOffers({ pro }: { pro: ProPublic }) {
   if (pro.posts === null) {
@@ -210,16 +216,33 @@ export function PageOffers({
   const list = useOffers(authorKey);
   // Le nombre de la liste fait foi une fois lue en entier ; sinon celui que la fiche sert.
   const count = list.loaded && !list.next ? list.items.length : (pro.offers?.current ?? list.items.length);
+  // Jamais un bouton principal grisé sans sa ligne : fiche non publiée, limite du mois atteinte.
+  const blocked = !pro.published
+    ? T.blockedUnpublishedSite
+    : pro.offers?.remaining === 0
+      ? T.blockedLimit(PRO_POSTS_PER_MONTH)
+      : null;
   return (
     <div className="po-page" data-testid="page-offers">
       <div className="po-head">
         <b data-testid="offers-count">{T.count(count)}</b>
         {owner ? (
-          <Button variant="primary" icon="ticket" href={publishHref} data-testid="offers-publish">
-            {T.publishOffer}
-          </Button>
+          blocked ? (
+            <Button type="button" variant="primary" icon="ticket" disabled data-testid="offers-publish">
+              {T.publishOffer}
+            </Button>
+          ) : (
+            <Button variant="primary" icon="ticket" href={publishHref} data-testid="offers-publish">
+              {T.publishOffer}
+            </Button>
+          )
         ) : null}
       </div>
+      {owner && blocked ? (
+        <p className="s-notice" data-testid="offers-publish-blocked">
+          {blocked}
+        </p>
+      ) : null}
       <OfferRows list={list} />
       <OldOffers pro={pro} />
     </div>

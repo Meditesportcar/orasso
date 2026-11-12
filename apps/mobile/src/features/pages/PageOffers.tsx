@@ -7,6 +7,7 @@ import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native"
 import {
   type FeedPostView,
   offerDatesLabel,
+  PRO_POSTS_PER_MONTH,
   type ProPublic,
   publicationPath,
   proOffersLabels as T,
@@ -26,6 +27,9 @@ import { SectionTitle } from "@/ui/Screens";
 import { Waiting } from "@/ui/Waiting";
 
 const { space1, space2, space3 } = tokens.spacing;
+// Vignette d'une offre : composée depuis les jetons d'espacement (56 × 72, la maquette dit 56 × 70).
+const THUMB_W = tokens.spacing.space12 + space2;
+const THUMB_H = tokens.spacing.space12 + tokens.spacing.space6;
 
 type State = { items: FeedPostView[]; next: string | null; loading: boolean; loaded: boolean; error: boolean };
 
@@ -224,6 +228,12 @@ export function PageOffers({
   const list = useOffers(authorKey, reloadToken);
   // Le nombre de la liste fait foi une fois lue en entier ; sinon celui que la fiche sert.
   const count = list.loaded && !list.next ? list.items.length : (pro.offers?.current ?? list.items.length);
+  // Jamais un bouton principal grisé sans sa ligne : fiche non publiée, limite du mois atteinte.
+  const blocked = !pro.published
+    ? T.blockedUnpublishedApp
+    : pro.offers?.remaining === 0
+      ? T.blockedLimit(PRO_POSTS_PER_MONTH)
+      : null;
   return (
     <View style={styles.wrap} testID="page-offers">
       <View style={styles.head}>
@@ -231,11 +241,16 @@ export function PageOffers({
           {T.count(count)}
         </Text>
         {owner ? (
-          <SmButton kind="p" icon="ticket" onPress={onPublish} testID="offers-publish">
+          <SmButton kind="p" icon="ticket" disabled={blocked !== null} onPress={onPublish} testID="offers-publish">
             {T.publishOffer}
           </SmButton>
         ) : null}
       </View>
+      {owner && blocked ? (
+        <Muted variant="caption" testID="offers-publish-blocked">
+          {blocked}
+        </Muted>
+      ) : null}
       <OfferRows list={list} />
       <OldOffers pro={pro} />
     </View>
@@ -255,8 +270,8 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusMd,
   },
   pressed: { opacity: 0.8 },
-  thumb: { width: 56, height: 70, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
-  thumbImage: { width: 56, height: 70 },
+  thumb: { width: THUMB_W, height: THUMB_H, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
+  thumbImage: { width: THUMB_W, height: THUMB_H },
   text: { flex: 1, minWidth: 0, gap: space1 },
   tagRow: { flexDirection: "row" },
   dates: { flexDirection: "row", alignItems: "center", gap: space1 + 2 },

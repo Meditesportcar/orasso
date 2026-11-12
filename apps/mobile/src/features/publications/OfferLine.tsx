@@ -8,16 +8,23 @@ import { StyleSheet, View } from "react-native";
 
 const { space1, space2 } = tokens.spacing;
 
+/** L'étiquette dans l'en-tête de la carte, à droite du nom (maquette R9.3) ; neutre quand l'offre est terminée. */
+export function OfferTag({ offer }: { offer: OfferView }) {
+  const ended = offer.state === "ended";
+  return (
+    <Tag tone={ended ? "line" : "acc"} testID="feed-post-offer-tag">
+      {ended ? T.tagEnded : T.tag}
+    </Tag>
+  );
+}
+
+/** Les dates et le titre en gras, avant la légende. */
 export function OfferLine({ offer }: { offer: OfferView }) {
   const { t } = useTheme();
   const c = t.color;
-  const ended = offer.state === "ended";
   return (
     <View style={styles.wrap} testID="feed-post-offer">
       <View style={styles.row}>
-        <Tag tone={ended ? "line" : "acc"} testID="feed-post-offer-tag">
-          {ended ? T.tagEnded : T.tag}
-        </Tag>
         <View style={styles.dates}>
           <Icon name="calendar" size={14} color={c.inkMuted} />
           <Text variant="caption" color={c.inkMuted} style={styles.datesText} testID="feed-post-offer-dates">
@@ -25,7 +32,7 @@ export function OfferLine({ offer }: { offer: OfferView }) {
           </Text>
         </View>
       </View>
-      <Text variant="bodyStrong" color={c.ink} style={styles.title} testID="feed-post-offer-title">
+      <Text variant="bodyStrong" color={c.ink} testID="feed-post-offer-title">
         {offer.title}
       </Text>
     </View>
@@ -37,5 +44,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
   dates: { flexDirection: "row", alignItems: "center", gap: space1 + 2, flexShrink: 1 },
   datesText: { flexShrink: 1 },
-  title: { fontSize: 15, lineHeight: 20 },
 });

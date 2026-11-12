@@ -3,6 +3,7 @@
 // (« Événements · 7 »). `spread` répartit les onglets sur la largeur ; `sticky` colle la rangée sous la barre du haut.
 import type { IconName } from "@orasso/design-system/web";
 import { Icon } from "@orasso/design-system/web";
+import { useEffect, useRef } from "react";
 
 import "../styles/under-tabs.css";
 
@@ -30,9 +31,18 @@ export function UnderTabs<T extends string>({
   spread?: boolean;
   sticky?: boolean;
 }) {
+  // Une rangée qui déborde (4 onglets à grande police) : l'onglet choisi est ramené dans la vue, rien ne se coupe.
+  const row = useRef<HTMLDivElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'onglet choisi change la position
+  useEffect(() => {
+    const el = row.current;
+    const on = el?.querySelector<HTMLElement>('[data-on="true"]');
+    if (!el || !on || el.scrollWidth <= el.clientWidth) return;
+    el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
+  }, [value]);
   const cls = ["utabs", spread ? "utabs--spread" : "", sticky ? "utabs--sticky" : ""].filter(Boolean).join(" ");
   return (
-    <div className={cls} role="tablist" aria-label={label} data-testid={testId}>
+    <div ref={row} className={cls} role="tablist" aria-label={label} data-testid={testId}>
       {items.map((it) => {
         const on = it.id === value;
         return (

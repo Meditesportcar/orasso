@@ -61,10 +61,11 @@ export function Posts({ pro, reload }: { pro: ProOwner; reload: () => Promise<un
     if (ok) setRemoving(null);
   }
 
-  if (posts.length === 0) return null;
+  // La dernière ancienne offre supprimée : la confirmation reste affichée (la feuille et la notice ne sont pas démontées).
+  if (posts.length === 0 && !notice && !error && !removing && !editing) return null;
   return (
     <>
-      <SectionTitle>{O.oldTitle}</SectionTitle>
+      {posts.length > 0 ? <SectionTitle>{O.oldTitle}</SectionTitle> : null}
       {posts.map((post) => (
         <Plate key={post.id} style={styles.post} testID="pro-post">
           <Text variant="bodyStrong" color={t.color.plateInk}>

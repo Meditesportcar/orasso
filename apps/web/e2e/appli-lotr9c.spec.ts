@@ -77,6 +77,7 @@ test("le pro publie une offre et la retrouve dans « Offres », « Publications 
   );
   await page.getByTestId("fil-publish-offer-title").fill("Polish complet R9c");
   await expect(page.getByTestId("fil-publish-missing")).toHaveText("Choisis la date de fin de l'offre.");
+  await page.getByTestId("fil-publish-offer-edit").click();
   await page.getByTestId("fil-publish-offer-end").fill(dayFrom(20));
   await expect(page.getByTestId("fil-publish-send")).toBeEnabled();
   await page.getByTestId("fil-publish-send").click();

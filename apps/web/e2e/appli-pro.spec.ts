@@ -113,6 +113,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
       await page.getByTestId("fil-publish-none").click();
       await page.getByTestId("fil-publish-none-yes").click();
       await page.getByTestId("fil-publish-offer-title").fill("Offre appli");
+      await page.getByTestId("fil-publish-offer-edit").click();
       await page
         .getByTestId("fil-publish-offer-end")
         .fill(new Date(Date.now() + 15 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));

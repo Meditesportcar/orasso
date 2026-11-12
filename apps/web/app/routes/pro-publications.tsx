@@ -3,10 +3,10 @@
 // (les « offres et actualités » d'avant, supprimables). Lot R9c : le formulaire de texte a disparu, une offre est une publication
 // avec l'étiquette « Offre ».
 import { Button, Chip, Counters, Plate } from "@orasso/design-system/web";
-import { type AuthorPostsPage, authorKeyOf, proOffersLabels as O, type ProOwner, pluralFr } from "@orasso/shared";
+import { authorKeyOf, proOffersLabels as O, type ProOwner, pluralFr } from "@orasso/shared";
 import { data, Form } from "react-router";
 
-import { OfferList } from "../components/pages/PageOffers";
+import { CurrentOffers } from "../components/pages/PageOffers";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/pro-publications";
@@ -19,10 +19,7 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const pro = await apiOrThrow<ProOwner>(request, "/me/pro");
-  // Les offres en cours de la fiche (`filter=offer`) : une panne n'est jamais « Pas d'offre en cours. ».
-  const key = encodeURIComponent(authorKeyOf("pro", pro.id));
-  const offers = await api<AuthorPostsPage>(request, `/authors/${key}/feed-posts?filter=offer`);
-  return { pro, posts: pro.posts ?? [], offers: offers.ok ? offers.data.items : null };
+  return { pro, posts: pro.posts ?? [] };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -41,13 +38,13 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ProPublications({ loaderData, actionData }: Route.ComponentProps) {
-  const { pro, posts, offers } = loaderData;
+  const { pro, posts } = loaderData;
   const result = actionData as { error?: string; ok?: string } | undefined;
   // Pourquoi les boutons sont inertes (jamais un bouton principal grisé sans sa ligne) : fiche non publiée, limite atteinte.
   const blocked = !pro.published
-    ? "Publie d'abord ta fiche dans l'annuaire pour pouvoir écrire à tes abonnés."
+    ? O.blockedUnpublishedSite
     : pro.postsRemaining === 0
-      ? `Limite atteinte : ${pro.postsLimit} publications par mois. Le compteur repart au 1er du mois prochain.`
+      ? O.blockedLimit(pro.postsLimit)
       : null;
   const publishHref = `/app/fil/publier?fiche=${encodeURIComponent(pro.id)}`;
   return (
@@ -69,7 +66,7 @@ export default function ProPublications({ loaderData, actionData }: Route.Compon
           { value: pro.postsRemaining, label: "publications restantes ce mois-ci" },
           {
             value: pro.followersCount,
-            label: pluralFr(pro.followersCount, "abonné qui les voit", "abonnés qui les voient"),
+            label: pluralFr(pro.followersCount, "abonné suit ta fiche", "abonnés suivent ta fiche"),
           },
         ]}
       />
@@ -119,17 +116,7 @@ export default function ProPublications({ loaderData, actionData }: Route.Compon
         <h2 id="current-offers" className="s-h2">
           {O.currentTitle}
         </h2>
-        {offers === null ? (
-          <p className="s-error" role="alert">
-            {O.loadError}
-          </p>
-        ) : offers.length === 0 ? (
-          <p className="s-muted" data-testid="offers-empty">
-            {O.empty}
-          </p>
-        ) : (
-          <OfferList items={offers} />
-        )}
+        <CurrentOffers authorKey={authorKeyOf("pro", pro.id)} />
       </section>
 
       {posts.length > 0 ? (
@@ -160,7 +147,7 @@ export default function ProPublications({ loaderData, actionData }: Route.Compon
 
       <Plate as="section" kind="note">
         <p className="s-muted">
-          Les publications sont visibles par tes abonnés sur ta fiche publique. Limite : {pro.postsLimit} par mois.
+          {O.visibility} Limite : {pro.postsLimit} par mois.
         </p>
       </Plate>
     </>

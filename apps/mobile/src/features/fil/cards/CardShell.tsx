@@ -19,6 +19,7 @@ export function CardShell({
   titleNode,
   faded = false,
   banner,
+  headTag,
   children,
   actions,
   testID,
@@ -40,6 +41,8 @@ export function CardShell({
   faded?: boolean;
   /** Bandeau en tête de la carte, avant l'en-tête (« Collaboration commerciale », lot R7m2). */
   banner?: ReactNode;
+  /** Une étiquette à droite du nom, dans l'en-tête (R9c : « Offre »). Absente : l'en-tête ne change pas. */
+  headTag?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   testID?: string;
@@ -81,6 +84,7 @@ export function CardShell({
             </Text>
           )}
         </View>
+        {headTag}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={L.moreFor(title)}

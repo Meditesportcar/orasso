@@ -43,7 +43,6 @@
   margin: 0;
   color: var(--ink);
   font-weight: var(--type-body-strong-weight);
-  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
@@ -81,8 +80,8 @@
 }
 .po-row__thumb {
   display: block;
-  width: 56px;
-  height: 70px;
+  width: calc(var(--space-12) + var(--space-2));
+  height: calc(var(--space-12) + var(--space-6));
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -95,8 +94,8 @@
 }
 .po-row__thumb:focus-visible,
 .po-row__title:focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
+  outline: calc(var(--space-1) / 2) solid var(--accent-text);
+  outline-offset: calc(var(--space-1) / 2);
 }
 .po-row__text {
   display: grid;
@@ -168,7 +167,7 @@
 }
 .po-form__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 4), 1fr));
   gap: var(--space-2);
 }
 
@@ -180,5 +179,12 @@
 .po-space__buttons {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* En-tête d'une carte du Fil : l'étiquette « Offre » à droite du nom, avant le « ⋯ ». */
+.po-end {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
 }

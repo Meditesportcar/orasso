@@ -5,7 +5,8 @@
 // largeur (Explorer). Le libellé est plafonné à ×1,12 de police et ne se coupe jamais au milieu d'un mot.
 // Le collant (rangée qui reste en haut au défilement) n'est pas ici : c'est l'écran hôte qui colle la rangée.
 import { archivoAt, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { underTabLabel } from "./underTabLabel";
 
@@ -38,6 +39,14 @@ export function UnderTabs<T extends string>({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Une rangée qui déborde (4 onglets à police agrandie) : l'onglet choisi est ramené dans la vue, rien ne se coupe.
+  const scroll = useRef<ScrollView>(null);
+  const spots = useRef<Record<string, { x: number; w: number }>>({});
+  const { width } = useWindowDimensions();
+  useEffect(() => {
+    const at = spots.current[value];
+    if (at && !spread) scroll.current?.scrollTo({ x: Math.max(0, at.x - (width - at.w) / 2), animated: false });
+  }, [value, spread, width]);
   const tabs = items.map((it) => {
     const on = it.id === value;
     const text = underTabLabel(it.label, it.count);
@@ -50,6 +59,13 @@ export function UnderTabs<T extends string>({
         accessibilityLabel={text}
         hitSlop={{ top: HIT, bottom: HIT }}
         onPress={() => onChange(it.id)}
+        onLayout={(e) => {
+          spots.current[it.id] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width };
+          if (it.id === value && !spread) {
+            const at = spots.current[it.id];
+            if (at) scroll.current?.scrollTo({ x: Math.max(0, at.x - (width - at.w) / 2), animated: false });
+          }
+        }}
         style={[styles.tab, spread ? styles.tabSpread : styles.tabScroll]}
         testID={itemTestID ? itemTestID(it.id) : `${testID}-${it.id}`}
       >
@@ -76,6 +92,7 @@ export function UnderTabs<T extends string>({
   }
   return (
     <ScrollView
+      ref={scroll}
       horizontal
       showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"
