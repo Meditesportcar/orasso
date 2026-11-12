@@ -8,7 +8,7 @@ import { profiles, vehicles } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
 import { vehiclesRepo } from "../../vehicles/repo";
 import { vehicleLabel } from "../../vehicles/serializers";
-import { authorVisibleSql } from "../access";
+import { authorVisibleSql, profileOkSql } from "../access";
 import { personOf } from "../posts";
 import {
   atBounds,
@@ -20,6 +20,7 @@ import {
   type SourceResult,
   sliceRows,
   tsParam,
+  userFollowedSql,
 } from "./types";
 
 /* Une voiture ajoutée il y a plus de 60 jours n'est plus une nouveauté du Fil. */
@@ -33,17 +34,20 @@ export const source: FeedSource<"vehicle_public"> = {
       order by vp.position limit 1)`;
     const filters: (SQL | undefined)[] = [
       eq(vehicles.status, "active"),
-      sql`${vehicles.ownerId} <> ${input.userId}`,
-      authorVisibleSql("profiles", sql`${vehicles.ownerId}`, input.userId, input.ref),
+      // Une page ne lit que des comptes publics (lot R9a) ; la personne, tout ce qu'elle a le droit de voir.
+      ...(input.page
+        ? [sql`(${profileOkSql("profiles", input.ref)} and profiles.visibility = 'public')`]
+        : [
+            sql`${vehicles.ownerId} <> ${input.userId}`,
+            authorVisibleSql("profiles", sql`${vehicles.ownerId}`, input.userId, input.ref),
+          ]),
       sql`${photoKey} is not null`,
       sql`${vehicles.createdAt} <= ${tsParam(input.ref)}`,
       sql`${vehicles.createdAt} >= ${tsParam(input.ref)} - interval '60 days'`,
       ...atBounds(atExpr, sql`${vehicles.id}`, "vehicle_public", input),
     ];
     if (input.filter === "following") {
-      filters.push(
-        sql`exists (select 1 from user_follows uf where uf.follower_id = ${input.userId} and uf.followed_id = ${vehicles.ownerId} and uf.status = 'accepted')`,
-      );
+      filters.push(userFollowedSql(input, sql`${vehicles.ownerId}`));
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${profiles.departments}[1]`, input.nearby));
     const raw = await db

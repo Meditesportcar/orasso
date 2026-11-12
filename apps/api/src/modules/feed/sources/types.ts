@@ -6,6 +6,7 @@ import type { FeedCandidate, FeedCardKind, FeedFilter, FeedPayloads, FeedViewerC
 import { FEED_SEEN_TTL_MS } from "@orasso/shared";
 import { type SQL, sql } from "drizzle-orm";
 
+import type { Actor } from "../../../lib/actor";
 import type { Viewer } from "../../../lib/session";
 
 export type SourceInput = {
@@ -42,6 +43,12 @@ export type SourceInput = {
   excludeMine?: boolean;
   /** Genres que la lecture ne lit pas du tout (`GET /fil/fresh` : « Moins de ce genre »). */
   skipKinds?: ReadonlySet<string>;
+  /**
+   * La page au nom de laquelle on lit le Fil (lot R9a, `X-Orasso-Actor`), ou `null` : la personne. Une page ne lit que du
+   * contenu public (aucun compte privé, même suivi par la personne derrière elle), ses abonnements sont ceux de `ctx`
+   * (`page_follows`), et les sources qui lisent des liens personnels (rendez-vous, souvenir, crews) ne rendent rien.
+   */
+  page?: Actor | null;
   /** Borne de rognage du compte (`feed_seen_floor`) : toute carte datée au plus de cette date est « déjà vue » (zone B). */
   seenFloor?: Date | null;
 };
@@ -169,3 +176,27 @@ export const uuidList = (ids: readonly string[]): SQL =>
     ids.map((i) => sql`${i}::uuid`),
     sql`, `,
   );
+
+/** `col = any(...)` sur un ensemble d'identifiants ; faux s'il est vide. */
+const idsIn = (col: SQL, ids: ReadonlySet<string> | undefined, type: "uuid" | "text"): SQL =>
+  ids?.size ? sql`${col} = any(${sql.param([...ids])}::${sql.raw(type)}[])` : sql`false`;
+
+/** « La personne (ou la page qui lit) suit cette structure », en SQL. Une page : son ensemble `ctx`, lu à la lecture. */
+export function structureFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedStructures, "uuid");
+  return sql`exists (select 1 from structure_follows sf where sf.structure_id = ${col} and sf.user_id = ${input.userId})`;
+}
+
+export function proFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedPros, "uuid");
+  return sql`exists (select 1 from pro_follows pf where pf.pro_id = ${col} and pf.user_id = ${input.userId})`;
+}
+
+/** Un compte suivi (abonnement accepté ; pour une page, un compte public suivi par `page_follows`). */
+export function userFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedUsers, "text");
+  return sql`exists (select 1 from user_follows uf where uf.follower_id = ${input.userId} and uf.followed_id = ${col} and uf.status = 'accepted')`;
+}
+
+/** Le regard « personne » d'une page (aucun lien) : jamais l'identifiant du compte derrière elle. */
+export const PAGE_VIEWER_ID = "__page-sans-lien__";

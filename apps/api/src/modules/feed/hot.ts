@@ -14,8 +14,9 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../../db/client";
 import { feedPostReactions, feedPosts, profiles } from "../../db/schema";
+import type { Actor } from "../../lib/actor";
 import { profileOkSql } from "./access";
-import { feedPostScopeSql, postCards, postRows } from "./sources/feedPosts";
+import { feedPostScopeSql, ownPageSql, postCards, postRows } from "./sources/feedPosts";
 import type { LoadedCard } from "./sources/types";
 
 /** Candidats lus avant la revérification : une publication sans visuel ou d'une page hors règle est écartée ensuite. */
@@ -26,6 +27,9 @@ export async function hotCards(args: {
   ref: Date;
   filter: FeedFilter;
   nearby: readonly string[];
+  /** Lot R9a : le rail d'une page est celui de son périmètre (public seulement), jamais une publication de la page. */
+  page?: Actor | null;
+  follows?: Parameters<typeof feedPostScopeSql>[0]["follows"];
 }): Promise<LoadedCard<"feed_post">[]> {
   if (args.filter === "for_you") return [];
   const { userId, ref } = args;
@@ -45,8 +49,17 @@ export async function hotCards(args: {
         gt(feedPostReactions.createdAt, from),
         lte(feedPostReactions.createdAt, ref),
         sql`${feedPosts.authorId} <> ${userId}`,
+        ...(args.page ? [sql`not ${ownPageSql(args.page)}`] : []),
         profileOkSql("fl", ref),
-        ...feedPostScopeSql({ userId, ref, filter: args.filter, nearby: args.nearby, publicOnly: true }),
+        ...feedPostScopeSql({
+          userId,
+          ref,
+          filter: args.filter,
+          nearby: args.nearby,
+          publicOnly: true,
+          page: args.page ?? null,
+          follows: args.follows,
+        }),
       ),
     )
     .groupBy(feedPosts.id)
@@ -56,7 +69,7 @@ export async function hotCards(args: {
   if (!ranked.length) return [];
   const counts = new Map(ranked.map((r) => [r.id, r.flames]));
   const rows = await postRows(ranked.map((r) => r.id));
-  const cards = await postCards(rows, userId, ref, counts);
+  const cards = await postCards(rows, userId, ref, counts, args.page ?? null);
   const order = new Map(ranked.map((r, i) => [`feed_post:${r.id}`, i]));
   return cards.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)).slice(0, FEED_HOT_MAX);
 }

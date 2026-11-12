@@ -4,6 +4,7 @@
 import { feedFreshQuery, feedSeenSchema } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { readActor } from "../../lib/actor";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query } from "../../lib/validate";
 import { feedSeenService } from "./seen";
@@ -20,5 +21,5 @@ export const feedFilRoutes = new Hono<AppEnv>()
   .get("/fil/fresh", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await feedService.fresh(v, query(c, feedFreshQuery)));
+    return c.json(await feedService.fresh(v, query(c, feedFreshQuery), await readActor(c, v)));
   });

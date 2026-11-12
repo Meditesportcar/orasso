@@ -13,9 +13,11 @@ import {
   type FeedSource,
   inDepartments,
   type LoadedCard,
+  PAGE_VIEWER_ID,
   type SourceInput,
   type SourceResult,
   sliceRows,
+  structureFollowedSql,
   tsParam,
 } from "./types";
 
@@ -33,9 +35,7 @@ export const source: FeedSource<"lineup"> = {
       ...atBounds(atExpr, sql`${events.id}`, "lineup", input),
     ];
     if (input.filter === "following") {
-      filters.push(
-        sql`exists (select 1 from structure_follows sf where sf.structure_id = ${events.structureId} and sf.user_id = ${input.userId})`,
-      );
+      filters.push(structureFollowedSql(input, sql`${events.structureId}`));
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${events.department}`, input.nearby));
     const raw = await db
@@ -48,7 +48,7 @@ export const source: FeedSource<"lineup"> = {
     const { rows, more, tail } = sliceRows(raw, input.limit, (r) => ({ at: new Date(r.at), id: `lineup:${r.e.id}` }));
     const previews = await lineupService.previews(
       rows.map((r) => r.e.id),
-      input.userId,
+      input.page ? PAGE_VIEWER_ID : input.userId,
     );
     const cards = rows.flatMap((r): LoadedCard<"lineup">[] => {
       const p = previews.get(r.e.id);

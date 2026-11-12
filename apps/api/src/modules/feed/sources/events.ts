@@ -15,6 +15,7 @@ import {
   type SourceInput,
   type SourceResult,
   sliceRows,
+  structureFollowedSql,
   tsParam,
 } from "./types";
 
@@ -37,9 +38,7 @@ export const source: FeedSource<"event_recommended"> = {
       ...atBounds(atExpr, sql`${events.id}`, "event_recommended", input),
     ];
     if (input.filter === "following") {
-      filters.push(
-        sql`exists (select 1 from structure_follows sf where sf.structure_id = ${events.structureId} and sf.user_id = ${input.userId})`,
-      );
+      filters.push(structureFollowedSql(input, sql`${events.structureId}`));
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${events.department}`, input.nearby));
     const raw = await db
