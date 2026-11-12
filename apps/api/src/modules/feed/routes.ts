@@ -11,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { readActor } from "../../lib/actor";
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
@@ -23,7 +24,9 @@ export const feedRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     // Lot R7i, tour 3 : le fil porte des cartes de rendez-vous au spot (lieu) : jamais gardé.
     c.header("cache-control", "private, no-store");
-    return c.json(await feedService.feed(v, query(c, feedQuery)));
+    // Vague R9 (lot R9a) : lu au nom d'une page (`X-Orasso-Actor`) ; sans en-tête, le Fil de la personne.
+    const actor = await readActor(c, v);
+    return c.json(await feedService.feed(v, query(c, feedQuery), actor));
   })
   .get("/me/fil/less", async (c) => c.json(feedService.lessKinds(await requireUser(c))))
   .post("/me/feed/less", async (c) => {

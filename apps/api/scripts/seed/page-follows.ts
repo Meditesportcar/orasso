@@ -7,15 +7,17 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import type { AuthUser, Viewer } from "../../src/lib/session";
+import { feedCommentsService } from "../../src/modules/feed/comments/service";
 import { notificationsService } from "../../src/modules/notifications/service";
 import { storiesService } from "../../src/modules/stories/service";
 import { uploadsService } from "../../src/modules/uploads/service";
+import { storeFeedPhoto } from "./feed";
 import { reviewedNoPlateCar } from "./photos";
 
-async function viewerOfUser(userId: string): Promise<Viewer | null> {
+async function viewerOfUser(userId: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({ where: eq(t.profiles.userId, userId) });
   const [u] = await db.select().from(t.user).where(eq(t.user.id, userId));
-  return profile && u ? { user: u as AuthUser, profile, session: { secondFactor: null } } : null;
+  return profile && u ? { user: u as AuthUser, profile, session: { secondFactor } } : null;
 }
 
 type Page = { kind: "provider" | "media" | "structure"; id: string };
@@ -99,8 +101,88 @@ export async function seedPageFollows() {
     );
     made++;
   }
+  await seedPageFeed({ brasa, sudCars, rouesLibres });
   await notificationsService.flush();
   console.log(
     `Abonnements de pages : La Brasa, Sud Cars et Roues Libres 66 (5 liens), ${made} story(ies) de page ajoutée(s).`,
+  );
+}
+
+/**
+ * Lot R9a, partie 2 : de quoi lire le Fil de La Brasa (« Abonnements » non vide : publications de Roues Libres 66 et de Sud Cars,
+ * un rail) et les commentaires en casquette (Roues Libres 66 commente une publication de Kenji_66, La Brasa lui répond).
+ * Rejouable : une publication de Sud Cars, une flamme par compte, un commentaire par casquette (identifiants d'envoi fixes).
+ */
+async function seedPageFeed(pages: {
+  brasa: { id: string; userId: string };
+  sudCars: { id: string; userId: string };
+  rouesLibres: { id: string };
+}) {
+  const at = Date.now();
+  // Une publication de Sud Cars (média), avec une photo du seed relue « aucune plaque lisible ».
+  if (!(await db.query.feedPosts.findFirst({ where: eq(t.feedPosts.mediaId, pages.sudCars.id) }))) {
+    const id = crypto.randomUUID();
+    const createdAt = new Date(at - 3 * 3_600_000);
+    await db.insert(t.feedPosts).values({
+      id,
+      authorId: pages.sudCars.userId,
+      persona: "media",
+      mediaId: pages.sudCars.id,
+      caption: "Les premières images du plateau arrivent dans l'album du Lydia.",
+      department: "66",
+      createdAt,
+      updatedAt: createdAt,
+    });
+    if (!(await storeFeedPhoto(id, 9))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+  }
+  // Le rail « Ça plaît en ce moment » : trois flammes de comptes en règle sur la plus récente publication de Roues Libres 66.
+  const orgaPost = await db.query.feedPosts.findFirst({
+    where: and(eq(t.feedPosts.structureId, pages.rouesLibres.id), isNull(t.feedPosts.deletedAt)),
+    orderBy: sql`${t.feedPosts.createdAt} desc`,
+  });
+  if (orgaPost) {
+    const fans = await db
+      .select({ userId: t.profiles.userId })
+      .from(t.profiles)
+      .where(sql`lower(${t.profiles.pseudo}) in ('kenji_66', 'lea_11', 'marc_66')`);
+    for (const f of fans) {
+      await db.insert(t.feedPostReactions).values({ postId: orgaPost.id, userId: f.userId }).onConflictDoNothing();
+    }
+    await db.execute(
+      sql`update feed_posts set reactions_count = (select count(*)::int from feed_post_reactions where post_id = ${orgaPost.id}) where id = ${orgaPost.id}`,
+    );
+  }
+  // Roues Libres 66 (son propriétaire, second facteur) commente une publication de Kenji_66, La Brasa lui répond.
+  const kenji = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'kenji_66'` });
+  const post = kenji
+    ? await db.query.feedPosts.findFirst({
+        where: and(
+          eq(t.feedPosts.authorId, kenji.userId),
+          eq(t.feedPosts.persona, "fan"),
+          isNull(t.feedPosts.deletedAt),
+        ),
+        orderBy: sql`${t.feedPosts.createdAt} desc`,
+      })
+    : null;
+  const owner = await db.query.structureMembers.findFirst({
+    where: and(eq(t.structureMembers.structureId, pages.rouesLibres.id), eq(t.structureMembers.role, "owner")),
+  });
+  const sarah = owner ? await viewerOfUser(owner.userId, "totp") : null;
+  const sofia = await viewerOfUser(pages.brasa.userId);
+  if (!post || !sarah || !sofia) return;
+  const first = await feedCommentsService.create(
+    sarah,
+    post.id,
+    {
+      text: "Merci d'être venu ! On vous garde une place au prochain rassemblement.",
+      clientId: "00000000-0000-4000-8000-0000000009a1",
+    },
+    { kind: "structure", id: pages.rouesLibres.id, key: `s:${pages.rouesLibres.id}` },
+  );
+  await feedCommentsService.create(
+    sofia,
+    post.id,
+    { text: "Et le brasero vous attend aussi !", clientId: "00000000-0000-4000-8000-0000000009a2", parentId: first.id },
+    { kind: "provider", id: pages.brasa.id, key: `v:${pages.brasa.id}` },
   );
 }

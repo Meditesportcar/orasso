@@ -291,6 +291,8 @@ export async function loadCoAuthors(
   ex: Executor,
   posts: { id: string; mine: boolean }[],
   viewerId: string,
+  /** Lot R9a : les pages dont le lecteur a les droits (la page active en casquette), à la place de celles de son compte. */
+  managedKeys?: ReadonlySet<string>,
 ): Promise<Map<string, CoAuthorLoaded>> {
   const out = new Map<string, CoAuthorLoaded>();
   if (!posts.length) return out;
@@ -310,7 +312,7 @@ export async function loadCoAuthors(
   );
   const mineBy = new Map(posts.map((p) => [p.id, p.mine]));
   const needsManaged = rows.some((r) => r.status === "accepted" && r.coauthorKind !== "user");
-  const managed = needsManaged ? await managedPageKeys(viewerId, ex) : new Set<string>();
+  const managed = managedKeys ?? (needsManaged ? await managedPageKeys(viewerId, ex) : new Set<string>());
   for (const r of rows) {
     const view = views.get(authorKeyOf(r.coauthorKind, r.coauthorId));
     if (!view) continue;

@@ -6,12 +6,13 @@ import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import { feedCommentMentions, feedPostCommentReactions, feedPostComments, profiles } from "../../../db/schema";
-import { canManagePost } from "../../../lib/authorship";
+import { canManagePost, managedPageKeys } from "../../../lib/authorship";
 import { now } from "../../../lib/deps";
 import { AppError, notFound } from "../../../lib/errors";
 import type { Viewer } from "../../../lib/session";
 import type { Executor } from "../../../lib/tx";
 import { authorVisibleSql, profileOkSql, relationOf, requireVisiblePost, UUID_RE, unavailable } from "../access";
+import { loadPageInfo, pageKeyOf } from "../authors";
 import { personAuthorView } from "../posts";
 
 export type PostRow = Awaited<ReturnType<typeof requireVisiblePost>>;
@@ -41,9 +42,54 @@ export const managesPostStrict = (v: Viewer, post: PostRow["post"], ex: Executor
  * supprimé, banni ou suspendu n'est jamais servi.
  */
 export function commentVisibleSql(viewerId: string, manages: boolean, at: Date): SQL {
-  return manages
+  const person = manages
     ? profileOkSql("profiles", at)
     : authorVisibleSql("profiles", sql`${feedPostComments.authorId}`, viewerId, at);
+  // Lot R9a : le commentaire d'une page est servi à qui voit la publication, tant que la page est en règle et que la personne
+  // qui l'a écrit n'est pas bannie, quelle que soit la confidentialité de son compte (comme les publications d'une page).
+  return sql`(case when ${feedPostComments.persona} <> 'fan' then (profiles.banned_at is null and ${commentPageOkSql}) else ${person} end)`;
+}
+
+/** Comme commentPageOkSql, pour une ligne de commentaire sous un alias SQL (suggestions : la racine d'une réponse). */
+export function commentPageOkSqlFor(alias: string): SQL {
+  const a = sql.raw(alias);
+  return sql`(
+    (${a}.persona = 'organizer' and exists (select 1 from structures st where st.id = ${a}.structure_id
+      and st.deleted_at is null and st.verification <> 'suspended'))
+    or (${a}.persona = 'pro' and exists (select 1 from pro_profiles pp where pp.id = ${a}.pro_id and pp.deleted_at is null))
+    or (${a}.persona = 'provider' and exists (select 1 from provider_profiles pv where pv.id = ${a}.provider_id and pv.deleted_at is null))
+    or (${a}.persona = 'media' and exists (select 1 from media_profiles mp where mp.id = ${a}.media_id and mp.deleted_at is null)))`;
+}
+
+/** La page d'un commentaire est en règle (structure ni supprimée ni suspendue, fiche pro, prestataire ou média non supprimé), en SQL. */
+export const commentPageOkSql = sql`(
+  (${feedPostComments.persona} = 'organizer' and exists (select 1 from structures st where st.id = ${feedPostComments.structureId}
+    and st.deleted_at is null and st.verification <> 'suspended'))
+  or (${feedPostComments.persona} = 'pro' and exists (select 1 from pro_profiles pp where pp.id = ${feedPostComments.proId} and pp.deleted_at is null))
+  or (${feedPostComments.persona} = 'provider' and exists (select 1 from provider_profiles pv where pv.id = ${feedPostComments.providerId} and pv.deleted_at is null))
+  or (${feedPostComments.persona} = 'media' and exists (select 1 from media_profiles mp where mp.id = ${feedPostComments.mediaId} and mp.deleted_at is null)))`;
+
+/** La page de ces commentaires est-elle en règle ? (identifiant du commentaire → oui / non ; seulement les commentaires de page.) */
+export async function commentStanding(ex: Executor, comments: readonly CommentRow[]): Promise<Map<string, boolean>> {
+  const pages = comments.filter((c) => c.persona !== "fan");
+  if (!pages.length) return new Map();
+  const info = await loadPageInfo(ex, pages);
+  return new Map(pages.map((c) => [c.id, info.get(pageKeyOf(c) ?? "")?.inGoodStanding === true]));
+}
+
+/**
+ * Ce que la lecture sait de l'auteur d'un commentaire. Une personne : la confidentialité de son compte, et son état. Une
+ * page (lot R9a) : toujours publique, indisponible seulement si la personne qui a écrit est bannie ou si la page n'est plus
+ * en règle (standing : inconnu = en règle). Le compte derrière une page n'est jamais jugé sur sa confidentialité.
+ */
+export function authorStateOf(
+  c: Pick<CommentRow, "id" | "persona">,
+  p: Pick<Profile, "visibility" | "deletedAt" | "bannedAt" | "suspendedUntil">,
+  at: Date,
+  standing: ReadonlyMap<string, boolean> = new Map(),
+): { visibility: "public" | "private"; unavailable: boolean } {
+  if (c.persona === "fan") return { visibility: p.visibility, unavailable: unavailable(p, at) };
+  return { visibility: "public", unavailable: p.bannedAt !== null || standing.get(c.id) === false };
 }
 
 /** Le commentaire (avec son auteur) et la publication, ou `undefined` (identifiant mal formé, inconnu). */
@@ -82,12 +128,15 @@ export async function requireVisibleComment(v: Viewer, id: string, ex: Executor 
   const at = now();
   const rel = await relationOf(v.user.id, row.c.authorId, ex);
   const viewer: CommentViewer = { userId: v.user.id, managesPost: manages };
+  const root = row.c.parentId ? await commentRow(row.c.parentId, ex) : undefined;
+  const standing = await commentStanding(ex, root ? [row.c, root.c] : [row.c]);
+  const state = authorStateOf(row.c, row.p, at, standing);
   const visible = canSeeComment(
     viewer,
     {
       authorId: row.c.authorId,
-      authorVisibility: row.p.visibility,
-      authorUnavailable: unavailable(row.p, at),
+      authorVisibility: state.visibility,
+      authorUnavailable: state.unavailable,
       deleted: row.c.deletedAt !== null || (await rootDeleted(row.c, ex)),
     },
     rel,
@@ -95,15 +144,16 @@ export async function requireVisibleComment(v: Viewer, id: string, ex: Executor 
   if (!visible) throw notFound(feedCommentLabels.commentNotFound);
   // Une réponse ne se lit que si son commentaire de premier niveau se lit aussi (compte privé non suivi : ni flamme, ni signalement, ni citation).
   if (row.c.parentId) {
-    const root = await commentRow(row.c.parentId, ex);
+    const rootState = root ? authorStateOf(root.c, root.p, at, standing) : null;
     const rootOk =
       root &&
+      rootState &&
       canSeeComment(
         viewer,
         {
           authorId: root.c.authorId,
-          authorVisibility: root.p.visibility,
-          authorUnavailable: unavailable(root.p, at),
+          authorVisibility: rootState.visibility,
+          authorUnavailable: rootState.unavailable,
           deleted: root.c.deletedAt !== null,
         },
         await relationOf(v.user.id, root.c.authorId, ex),
@@ -158,17 +208,36 @@ export async function toViews(
   const counted = await repliesCountsOf(ex, ids);
   const mentions = new Map<string, string[]>();
   for (const m of mentionRows) mentions.set(m.id, [...(mentions.get(m.id) ?? []), m.pseudo]);
-  return rows.map(({ c, p }) => ({
-    id: c.id,
-    author: personAuthorView(c.authorId, p),
-    text: c.text,
-    createdAt: c.createdAt.toISOString(),
-    mentions: mentions.get(c.id) ?? [],
-    reactionsCount: c.reactionsCount,
-    reactedByMe: reacted.has(c.id),
-    repliesCount: counted.get(c.id)?.n ?? c.repliesCount,
-    countedAt: counted.get(c.id)?.at ?? c.createdAt.toISOString(),
-    mine: c.authorId === v.user.id,
-    canDelete: c.authorId === v.user.id || manages,
-  }));
+  // Lot R9a : un commentaire de page se montre sous le nom et le logo de la page, jamais sous le compte de qui l'a écrit ;
+  // `mine` et `canDelete` se lisent sur les pages que je gère (affichage seulement : la suppression repasse par `requireAuthorship`).
+  const pageRows = rows.filter((r) => r.c.persona !== "fan");
+  const pages = pageRows.length
+    ? await loadPageInfo(
+        ex,
+        pageRows.map((r) => r.c),
+      )
+    : new Map();
+  const managed = pageRows.length ? await managedPageKeys(v.user.id, ex) : new Set<string>();
+  return rows.flatMap(({ c, p }) => {
+    const key = c.persona === "fan" ? null : pageKeyOf(c);
+    // Une page introuvable : le commentaire est écarté, jamais montré sous le compte de la personne.
+    const pageView = key ? pages.get(key)?.view : undefined;
+    if (c.persona !== "fan" && !pageView) return [];
+    const mine = key ? managed.has(key) : c.authorId === v.user.id;
+    return [
+      {
+        id: c.id,
+        author: pageView ?? personAuthorView(c.authorId, p),
+        text: c.text,
+        createdAt: c.createdAt.toISOString(),
+        mentions: mentions.get(c.id) ?? [],
+        reactionsCount: c.reactionsCount,
+        reactedByMe: reacted.has(c.id),
+        repliesCount: counted.get(c.id)?.n ?? c.repliesCount,
+        countedAt: counted.get(c.id)?.at ?? c.createdAt.toISOString(),
+        mine,
+        canDelete: mine || manages,
+      },
+    ];
+  });
 }

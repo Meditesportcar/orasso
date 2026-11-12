@@ -12,7 +12,7 @@ import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
 import { registerJournalGuard } from "../../notifications/service";
 import { profileOkSql, unavailable } from "../access";
-import { COMMENT_TYPES, groupScopeKeys } from "./notify";
+import { COMMENT_TYPES, groupScopeKeys, pageLineReadable } from "./notify";
 import { readableBatch } from "./readers";
 import { anyOf } from "./sqlany";
 
@@ -59,7 +59,16 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
         ),
       })
       .from(c)
-      .where(and(inScope, isNull(c.deletedAt), anyOf(c.authorId, actorUnion, "text"), ne(c.authorId, userId)))
+      .where(
+        and(
+          inScope,
+          isNull(c.deletedAt),
+          // Jamais un commentaire de page : il ne remplace pas celui d'une personne dans une ligne regroupée (lot R9a).
+          eq(c.persona, "fan"),
+          anyOf(c.authorId, actorUnion, "text"),
+          ne(c.authorId, userId),
+        ),
+      )
       .as("ranked");
   for (const [scopeCol, inScope] of [
     [c.postId, posts.length ? anyOf(c.postId, posts, "uuid") : undefined],
@@ -103,6 +112,17 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
     }
     const cands = byGroup.get(n.id);
     if (!cands) {
+      // Une ligne de page dont le dernier commentaire est retiré tient avec le plus récent de ceux qui se lisent encore.
+      if (!readable.has(id) && (n.data as { page?: unknown }).page) {
+        const left = await pageLineReadable(db, userId, n);
+        out.set(
+          n.id,
+          left
+            ? { shown: true, commentReadable: false, readableCommentId: left.newest.id }
+            : { shown: false, commentReadable: false },
+        );
+        continue;
+      }
       out.set(n.id, { shown: readable.has(id), commentReadable: readable.has(id) });
       continue;
     }

@@ -151,6 +151,9 @@ export type FeedCandidate<K extends string = FeedCardKind> = {
   structureId: string | null;
   /** Pro de la fiche, s'il y en a un. */
   proId: string | null;
+  /** Prestataire ou média de la page qui a publié, s'il y en a un (lot R9a : « Abonnements » les suit par `page_follows`). */
+  providerId?: string | null;
+  mediaId?: string | null;
   /** Centres d'intérêt de la carte (catégories de l'événement ou du véhicule). */
   categoryIds: readonly string[];
   /** Coefficient propre au genre (R7j : le souvenir du jour passe devant) ; absent = 1. */
@@ -167,6 +170,9 @@ export type FeedViewerContext = {
   followedUsers: ReadonlySet<string>;
   followedStructures: ReadonlySet<string>;
   followedPros: ReadonlySet<string>;
+  /** Prestataires et médias suivis (lot R9a) ; absents = aucun. */
+  followedProviders?: ReadonlySet<string>;
+  followedMedias?: ReadonlySet<string>;
   crewmates: ReadonlySet<string>;
   interests: ReadonlySet<string>;
   lessKinds: ReadonlySet<string>;
@@ -179,6 +185,8 @@ export const emptyFeedViewerContext = (): FeedViewerContext => ({
   followedUsers: new Set(),
   followedStructures: new Set(),
   followedPros: new Set(),
+  followedProviders: new Set(),
+  followedMedias: new Set(),
   crewmates: new Set(),
   interests: new Set(),
   lessKinds: new Set(),
@@ -196,7 +204,9 @@ export function isFollowedCard(c: FeedCandidate, ctx: FeedViewerContext): boolea
   return (
     (c.authorId !== null && ctx.followedUsers.has(c.authorId)) ||
     (c.structureId !== null && ctx.followedStructures.has(c.structureId)) ||
-    (c.proId !== null && ctx.followedPros.has(c.proId))
+    (c.proId !== null && ctx.followedPros.has(c.proId)) ||
+    (c.providerId != null && ctx.followedProviders?.has(c.providerId) === true) ||
+    (c.mediaId != null && ctx.followedMedias?.has(c.mediaId) === true)
   );
 }
 
@@ -261,6 +271,9 @@ export function reasonCode(c: FeedCandidate, ctx: FeedViewerContext, official = 
   if (c.authorId !== null && ctx.followedUsers.has(c.authorId)) return "following_author";
   if (c.structureId !== null && ctx.followedStructures.has(c.structureId)) return "following_structure";
   if (c.proId !== null && ctx.followedPros.has(c.proId)) return "following_pro";
+  // Prestataire ou média suivi : la même ligne générique (« Nouveauté d'un abonnement »), sans nouveau code de raison.
+  if (c.providerId != null && ctx.followedProviders?.has(c.providerId) === true) return "following_pro";
+  if (c.mediaId != null && ctx.followedMedias?.has(c.mediaId) === true) return "following_pro";
   if (c.authorId !== null && ctx.crewmates.has(c.authorId)) return "crew_mate";
   if (c.categoryIds.some((id) => ctx.interests.has(id))) return "your_styles";
   if (c.department && ctx.departments.includes(c.department)) return "near_you";

@@ -12,7 +12,7 @@ import type { Executor } from "../../../lib/tx";
 import { postWithAuthor, profileOkSql, unavailable } from "../access";
 import { factsMapOf, postFactsOf } from "./pagefacts";
 import { anyOf } from "./sqlany";
-import { commentRow } from "./view";
+import { authorStateOf, commentRow, commentStanding } from "./view";
 
 type PostRow = NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>;
 type Commenter = { userId: string; visibility: "public" | "private" };
@@ -96,19 +96,22 @@ export async function stillReadable(ex: Executor, userId: string, commentId: str
   const row = await commentRow(commentId, ex);
   if (!row || row.c.deletedAt) return false;
   const at = now();
-  if (unavailable(row.p, at)) return false;
+  const top = row.c.parentId ? await commentRow(row.c.parentId, ex) : undefined;
+  const standing = await commentStanding(ex, top ? [row.c, top.c] : [row.c]);
+  const own = authorStateOf(row.c, row.p, at, standing);
+  if (own.unavailable) return false;
   let root: RootComment | null = null;
   if (row.c.parentId) {
-    const top = await commentRow(row.c.parentId, ex);
     if (!top || top.c.deletedAt) return false;
-    root = { authorId: top.c.authorId, visibility: top.p.visibility, unavailable: unavailable(top.p, at) };
+    const topState = authorStateOf(top.c, top.p, at, standing);
+    root = { authorId: top.c.authorId, visibility: topState.visibility, unavailable: topState.unavailable };
   }
   const post = await postWithAuthor(row.c.postId, ex);
   if (!post) return false;
   const readers = await commentReaders(
     ex,
     post,
-    { userId: row.c.authorId, visibility: row.p.visibility },
+    { userId: row.c.authorId, visibility: own.visibility },
     [userId],
     at,
     root,
@@ -154,6 +157,8 @@ export async function readableBatch(
     .where(anyOf(feedPostComments.id, ids, "uuid"));
   for (const r of rows) {
     authorOf.set(r.c.id, r.c.authorId);
+    // Jamais le pseudo ni l'avatar du compte derrière un commentaire de page (lot R9a).
+    if (r.c.persona !== "fan") continue;
     pseudoOf.set(r.c.authorId, r.p.pseudo);
     avatarOf.set(r.p.pseudo, storage.url(r.p.avatarKey));
   }
@@ -166,6 +171,10 @@ export async function readableBatch(
         .where(anyOf(feedPostComments.id, rootIds, "uuid"))
     : [];
   const rootById = new Map(roots.map((r) => [r.c.id, r]));
+  const standing = await commentStanding(
+    ex,
+    [...rows, ...roots].map((r) => r.c),
+  );
   const postIds = [...new Set(rows.map((r) => r.c.postId))];
   const posts = postIds.length
     ? await ex
@@ -204,7 +213,8 @@ export async function readableBatch(
     : new Set<string>();
   const facts = await factsMapOf(ex, posts, at);
   for (const r of rows) {
-    if (r.c.deletedAt || unavailable(r.p, at)) continue;
+    const state = authorStateOf(r.c, r.p, at, standing);
+    if (r.c.deletedAt || state.unavailable) continue;
     const root = r.c.parentId ? rootById.get(r.c.parentId) : null;
     if (r.c.parentId && (!root || root.c.deletedAt)) continue;
     const post = postById.get(r.c.postId);
@@ -224,8 +234,8 @@ export async function readableBatch(
         viewer,
         {
           authorId: root.c.authorId,
-          authorVisibility: root.p.visibility,
-          authorUnavailable: unavailable(root.p, at),
+          authorVisibility: authorStateOf(root.c, root.p, at, standing).visibility,
+          authorUnavailable: authorStateOf(root.c, root.p, at, standing).unavailable,
           deleted: false,
         },
         { followAccepted: followed.has(root.c.authorId) },
@@ -235,7 +245,7 @@ export async function readableBatch(
     }
     const sees = canSeeComment(
       viewer,
-      { authorId: r.c.authorId, authorVisibility: r.p.visibility, authorUnavailable: false, deleted: false },
+      { authorId: r.c.authorId, authorVisibility: state.visibility, authorUnavailable: false, deleted: false },
       { followAccepted: followed.has(r.c.authorId) },
     );
     if (sees) readable.add(r.c.id);

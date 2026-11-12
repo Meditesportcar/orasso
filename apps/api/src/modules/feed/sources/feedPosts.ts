@@ -15,6 +15,7 @@ import { and, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import { feedPosts, profiles } from "../../../db/schema";
+import type { Actor } from "../../../lib/actor";
 import { authorVisibleSql, profileOkSql } from "../access";
 import { coSignedOwners } from "../coauthors";
 import { loadPostViews } from "../posts";
@@ -24,6 +25,7 @@ import {
   type FeedSource,
   inDepartments,
   type LoadedCard,
+  PAGE_VIEWER_ID,
   type SourceInput,
   type SourceResult,
   sliceRows,
@@ -31,6 +33,17 @@ import {
 } from "./types";
 
 type PostRow = { post: typeof feedPosts.$inferSelect; author: typeof profiles.$inferSelect };
+
+/** Les publications de cette page elle-même (lot R9a), en SQL. */
+export function ownPageSql(page: Actor): SQL {
+  return page.kind === "structure"
+    ? sql`(${feedPosts.persona} = 'organizer' and ${feedPosts.structureId} = ${page.id}::uuid)`
+    : page.kind === "pro"
+      ? sql`(${feedPosts.persona} = 'pro' and ${feedPosts.proId} = ${page.id}::uuid)`
+      : page.kind === "provider"
+        ? sql`(${feedPosts.persona} = 'provider' and ${feedPosts.providerId} = ${page.id}::uuid)`
+        : sql`(${feedPosts.persona} = 'media' and ${feedPosts.mediaId} = ${page.id}::uuid)`;
+}
 
 /**
  * Qui peut entrer dans l'onglet, en SQL (alias `profiles` = la personne qui a publié). `publicOnly` : « Autour de moi » et le
@@ -42,12 +55,22 @@ export function feedPostScopeSql(args: {
   filter: FeedFilter;
   nearby: readonly string[];
   publicOnly?: boolean;
+  /** Lot R9a : le Fil lu au nom d'une page. Aucun compte privé (`publicOnly` forcé), « Abonnements » = `follows` + la page. */
+  page?: Actor | null;
+  follows?: {
+    users: ReadonlySet<string>;
+    structures: ReadonlySet<string>;
+    pros: ReadonlySet<string>;
+    providers: ReadonlySet<string>;
+    medias: ReadonlySet<string>;
+  };
 }): SQL[] {
-  const { userId, ref, filter } = args;
+  const { userId, ref, filter, page } = args;
   const fan = sql`${feedPosts.persona} = 'fan'`;
-  const fanVisible = args.publicOnly
-    ? sql`(${profileOkSql("profiles", ref)} and profiles.visibility = 'public')`
-    : authorVisibleSql("profiles", sql`${feedPosts.authorId}`, userId, ref);
+  const fanVisible =
+    args.publicOnly || page
+      ? sql`(${profileOkSql("profiles", ref)} and profiles.visibility = 'public')`
+      : authorVisibleSql("profiles", sql`${feedPosts.authorId}`, userId, ref);
   const out: SQL[] = [
     sql`((${fan} and ${fanVisible}) or (${feedPosts.persona} <> 'fan' and profiles.banned_at is null))`,
   ];
@@ -61,7 +84,21 @@ export function feedPostScopeSql(args: {
       or (${feedPosts.persona} = 'provider' and exists (select 1 from provider_profiles pv where pv.id = ${feedPosts.providerId} and pv.deleted_at is null))
       or (${feedPosts.persona} = 'media' and exists (select 1 from media_profiles mp where mp.id = ${feedPosts.mediaId} and mp.deleted_at is null))))
     and (exists (select 1 from feed_post_photos ph where ph.post_id = ${feedPosts.id}) or ${feedPosts.eventId} is not null))`);
-  if (filter === "following") {
+  const anyOf = (col: SQL, ids: ReadonlySet<string> | undefined, type: "uuid" | "text") =>
+    ids?.size ? sql`${col} = any(${sql.param([...ids])}::${sql.raw(type)}[])` : sql`false`;
+  if (filter === "following" && page) {
+    // Une page lit ce que la page suit (comptes publics, structures, pros, prestataires, médias) et ses propres publications.
+    // Rien de la personne derrière elle : ni ses abonnements, ni ses publications, ni les co-signatures (lot R9a).
+    const f = args.follows;
+    const own = ownPageSql(page);
+    out.push(sql`(
+      ${own}
+      or (${fan} and ${anyOf(sql`${feedPosts.authorId}`, f?.users, "text")})
+      or (${feedPosts.persona} = 'organizer' and ${anyOf(sql`${feedPosts.structureId}`, f?.structures, "uuid")})
+      or (${feedPosts.persona} = 'pro' and ${anyOf(sql`${feedPosts.proId}`, f?.pros, "uuid")})
+      or (${feedPosts.persona} = 'provider' and ${anyOf(sql`${feedPosts.providerId}`, f?.providers, "uuid")})
+      or (${feedPosts.persona} = 'media' and ${anyOf(sql`${feedPosts.mediaId}`, f?.medias, "uuid")}))`);
+  } else if (filter === "following") {
     out.push(sql`(
       (${fan} and (${feedPosts.authorId} = ${userId}
         or exists (select 1 from user_follows uf where uf.follower_id = ${userId} and uf.followed_id = ${feedPosts.authorId} and uf.status = 'accepted')))
@@ -69,6 +106,11 @@ export function feedPostScopeSql(args: {
         and exists (select 1 from structure_follows sf where sf.user_id = ${userId} and sf.structure_id = ${feedPosts.structureId}))
       or (${feedPosts.persona} = 'pro'
         and exists (select 1 from pro_follows pf where pf.user_id = ${userId} and pf.pro_id = ${feedPosts.proId}))
+      -- Lot R9a : prestataires et médias suivis (table page_follows).
+      or (${feedPosts.persona} = 'provider' and exists (select 1 from page_follows pg where pg.follower_kind = 'user'
+        and pg.follower_id = ${userId} and pg.target_kind = 'provider' and pg.target_id = ${feedPosts.providerId}::text))
+      or (${feedPosts.persona} = 'media' and exists (select 1 from page_follows pg where pg.follower_kind = 'user'
+        and pg.follower_id = ${userId} and pg.target_kind = 'media' and pg.target_id = ${feedPosts.mediaId}::text))
       -- Collaboration (R8o) : une publication co-signée est aussi « suivie » quand je suis son co-auteur accepté.
       or exists (select 1 from feed_post_coauthors fc where fc.post_id = ${feedPosts.id} and fc.status = 'accepted' and (
         (fc.coauthor_kind = 'user' and (fc.coauthor_id = ${userId} or exists (select 1 from user_follows cf
@@ -114,6 +156,8 @@ export async function postCards(
   userId: string,
   ref: Date,
   flames?: Map<string, number>,
+  /** Lot R9a : lu au nom d'une page. `mine` = ses publications ; aucun lien de la personne n'entre dans l'attribution. */
+  page?: Actor | null,
 ): Promise<LoadedCard<"feed_post">[]> {
   if (!rows.length) return [];
   const views = new Map(
@@ -121,8 +165,12 @@ export async function postCards(
       await loadPostViews(
         db,
         rows.map((r) => r.post.id),
-        userId,
+        // En casquette : le regard public de la page (visibilité, aperçu des derniers commentaires) ; la flamme reste celle de la personne.
+        page ? PAGE_VIEWER_ID : userId,
         ref,
+        userId,
+        // Les droits sont ceux de la page active (invitation de co-signature en attente, ses publications).
+        page ? new Set([page.key]) : undefined,
       )
     ).map((v) => [v.id, v]),
   );
@@ -132,13 +180,22 @@ export async function postCards(
     db,
     rows.map((r) => r.post),
     new Map([...views].flatMap(([id, v]) => (v.coAuthor ? [[id, v.coAuthor] as const] : []))),
-    userId,
+    page ? PAGE_VIEWER_ID : userId,
   );
+  const ownPage = (post: typeof feedPosts.$inferSelect) =>
+    page?.kind === "structure"
+      ? post.persona === "organizer" && post.structureId === page.id
+      : page?.kind === "pro"
+        ? post.persona === "pro" && post.proId === page.id
+        : page?.kind === "provider"
+          ? post.persona === "provider" && post.providerId === page.id
+          : page?.kind === "media" && post.persona === "media" && post.mediaId === page.id;
   return rows.flatMap((r): LoadedCard<"feed_post">[] => {
     const view = views.get(r.post.id);
     if (!view) return [];
     const isPage = r.post.persona !== "fan";
     const owner = coOwners.get(r.post.id);
+    const mineOnPage = page ? ownPage(r.post) : false;
     return [
       {
         id: `feed_post:${r.post.id}`,
@@ -149,17 +206,29 @@ export async function postCards(
         authorId: owner ? owner.authorId : isPage ? null : r.post.authorId,
         structureId: owner ? owner.structureId : r.post.persona === "organizer" ? r.post.structureId : null,
         proId: owner ? owner.proId : r.post.persona === "pro" ? r.post.proId : null,
+        providerId: owner ? null : r.post.persona === "provider" ? r.post.providerId : null,
+        mediaId: owner ? null : r.post.persona === "media" ? r.post.mediaId : null,
         categoryIds: [],
         eventId: r.post.eventId,
-        mine: r.post.authorId === userId || owner?.mine === true,
+        mine: page ? ownPage(r.post) : r.post.authorId === userId || owner?.mine === true,
         flames7d: counts.get(r.post.id) ?? 0,
         authorPseudo: owner ? owner.name : isPage ? view.author.name : r.author.pseudo,
         official: owner ? false : isPage ? false : r.author.official,
-        payload: { post: view },
+        // Le regard public d'une page ne sait pas qu'elle gère ses publications : elles restent « les siennes ».
+        payload: { post: mineOnPage ? { ...view, mine: true } : view },
       },
     ];
   });
 }
+
+/** Ce que la page suit, lu dans le contexte du Fil (déjà filtré à la lecture). */
+export const followsOf = (input: Pick<SourceInput, "ctx">) => ({
+  users: input.ctx.followedUsers,
+  structures: input.ctx.followedStructures,
+  pros: input.ctx.followedPros,
+  providers: input.ctx.followedProviders ?? new Set<string>(),
+  medias: input.ctx.followedMedias ?? new Set<string>(),
+});
 
 export const source: FeedSource<"feed_post"> = {
   kind: "feed_post",
@@ -173,9 +242,13 @@ export const source: FeedSource<"feed_post"> = {
         filter: input.filter,
         nearby: input.nearby,
         publicOnly: input.filter === "nearby",
+        page: input.page ?? null,
+        follows: input.page ? followsOf(input) : undefined,
       }),
       sql`${feedPosts.createdAt} <= ${tsParam(input.ref)}`,
-      ...(input.excludeMine ? [sql`${feedPosts.authorId} <> ${input.userId}`] : []),
+      ...(input.excludeMine
+        ? [input.page ? sql`not ${ownPageSql(input.page)}` : sql`${feedPosts.authorId} <> ${input.userId}`]
+        : []),
       ...atBounds(atExpr, sql`${feedPosts.id}`, "feed_post", input),
     ];
     const raw = await db
@@ -189,7 +262,7 @@ export const source: FeedSource<"feed_post"> = {
       at: new Date(r.at),
       id: `feed_post:${r.post.id}`,
     }));
-    return { cards: await postCards(rows, input.userId, input.ref), more, tail };
+    return { cards: await postCards(rows, input.userId, input.ref, undefined, input.page ?? null), more, tail };
   },
 };
 

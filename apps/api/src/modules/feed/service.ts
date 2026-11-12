@@ -47,19 +47,14 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import {
-  crewMembers,
-  crews,
-  proFollows,
-  profileInterests,
-  profiles,
-  structureFollows,
-  userFollows,
-} from "../../db/schema";
+import { crewMembers, crews, profileInterests, profiles } from "../../db/schema";
+import { type Actor, isPageActor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
+import { followSets } from "../social/pageFollows";
+import { pageDepartment } from "./authors";
 import { type Cursor, decodeCursor, encodeCursor, isPreviousCursor, MAX_OFFSET } from "./cursor";
 import { hotCards } from "./hot";
 import { seenFloorOf, seenWithoutInteraction } from "./seen";
@@ -74,9 +69,13 @@ export const WINDOW_CAP = 300;
  * Empreinte (6 octets, hexadécimal) de ce qui change le classement ou ce que les sources laissent entrer : abonnements,
  * crews, centres d'intérêt, départements, mes sorties. « Moins de ce genre » n'en fait pas partie : il est figé dans le curseur.
  */
-export function contextFingerprint(ctx: FeedViewerContext): string {
-  const list = (it: Iterable<string>) => [...it].sort();
+export function contextFingerprint(ctx: FeedViewerContext, actorKey = ""): string {
+  const list = (it: Iterable<string> | undefined) => [...(it ?? [])].sort();
   const json = JSON.stringify([
+    // Lot R9a : un curseur pris sous une autre casquette (ou sans) ne se poursuit jamais : première page et `reset`.
+    actorKey,
+    list(ctx.followedProviders),
+    list(ctx.followedMedias),
     list(ctx.departments),
     list(ctx.followedUsers),
     list(ctx.followedStructures),
@@ -101,16 +100,58 @@ async function myOutingsOf(userId: string, at: Date): Promise<Map<string, Date>>
   return new Map(res.rows.map((r) => [r.id, new Date(r.starts_at)]));
 }
 
+/**
+ * Mes sorties en casquette (T15, lot R9a) : structure = ses événements publiés à venir ou en cours ; prestataire = ceux où il
+ * est retenu ; média = ceux où il est accrédité ; fiche pro = aucun (T2). Les titulaires sont déjà vérifiés par l'acteur.
+ */
+async function pageOutingsOf(v: Viewer, page: Actor, at: Date): Promise<Map<string, Date>> {
+  if (page.kind === "pro" || page.kind === "user") return new Map();
+  const res = await db.execute<{ id: string; starts_at: Date }>(
+    page.kind === "structure"
+      ? sql`select e.id::text as id, e.starts_at from events e
+          where e.status = 'published' and e.ends_at > ${at.toISOString()}::timestamptz and e.structure_id = ${page.id}::uuid
+          order by e.starts_at limit 200`
+      : sql`select e.id::text as id, e.starts_at from events e
+          where e.status = 'published' and e.ends_at > ${at.toISOString()}::timestamptz
+            and exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${v.user.id}
+              and a.kind = ${page.kind} and a.status = 'accepted')
+          order by e.starts_at limit 200`,
+  );
+  return new Map(res.rows.map((r) => [r.id, new Date(r.starts_at)]));
+}
+
+/**
+ * Le contexte d'une page qui lit le Fil (lot R9a) : ses abonnements (`page_follows`, filtrés à la lecture), les départements de
+ * la page (à défaut ceux de la personne), ses sorties ; ni crew ni centres d'intérêt (liens personnels).
+ */
+async function pageContext(v: Viewer, page: Actor, at: Date): Promise<FeedViewerContext> {
+  const [sets, dept, myOutings] = await Promise.all([
+    followSets(page, at),
+    pageDepartment(db, { kind: page.kind, id: page.id }),
+    pageOutingsOf(v, page, at),
+  ]);
+  return {
+    departments: dept ? [dept] : v.profile.departments,
+    followedUsers: sets.users,
+    followedStructures: sets.structures,
+    followedPros: sets.pros,
+    followedProviders: sets.providers,
+    followedMedias: sets.medias,
+    crewmates: new Set(),
+    interests: new Set(),
+    // « Moins de ce genre » reste celui de la personne.
+    lessKinds: new Set(v.profile.feedLessKinds),
+    myOutings,
+  };
+}
+
 /** Ce que le classement sait de la personne (ses liens), calculé pour elle seule. */
-export async function viewerContext(v: Viewer, at: Date = now()): Promise<FeedViewerContext> {
+export async function viewerContext(v: Viewer, at: Date = now(), actor?: Actor | null): Promise<FeedViewerContext> {
+  if (actor && isPageActor(actor)) return pageContext(v, actor, at);
   const id = v.user.id;
-  const [users, structs, pros, mates, interests, myOutings] = await Promise.all([
-    db
-      .select({ id: userFollows.followedId })
-      .from(userFollows)
-      .where(and(eq(userFollows.followerId, id), eq(userFollows.status, "accepted"))),
-    db.select({ id: structureFollows.structureId }).from(structureFollows).where(eq(structureFollows.userId, id)),
-    db.select({ id: proFollows.proId }).from(proFollows).where(eq(proFollows.userId, id)),
+  const [sets, mates, interests, myOutings] = await Promise.all([
+    // Les trois tables d'origine et mes lignes `page_follows` (prestataires et médias).
+    followSets({ kind: "user", id, key: `u:${id}` }, at),
     db
       .selectDistinct({ id: sql<string>`other.user_id` })
       .from(crewMembers)
@@ -130,9 +171,11 @@ export async function viewerContext(v: Viewer, at: Date = now()): Promise<FeedVi
   ]);
   return {
     departments: v.profile.departments,
-    followedUsers: new Set(users.map((r) => r.id)),
-    followedStructures: new Set(structs.map((r) => r.id)),
-    followedPros: new Set(pros.map((r) => r.id)),
+    followedUsers: sets.users,
+    followedStructures: sets.structures,
+    followedPros: sets.pros,
+    followedProviders: sets.providers,
+    followedMedias: sets.medias,
     crewmates: new Set(mates.map((r) => r.id)),
     interests: new Set(interests.map((r) => r.id)),
     lessKinds: new Set(v.profile.feedLessKinds),
@@ -173,8 +216,20 @@ const olderThan = (a: Key, b: Key) => compareByDate(a, b) > 0;
  * Dernière ligne de défense, après les sources : « Mes abonnements » ne garde que ce que la personne suit, « Autour de
  * moi » que les départements proches. Un genre inconnu du Fil est écarté.
  */
-function allowed(c: LoadedCard, filter: FeedFilter, ctx: FeedViewerContext, nearby: readonly string[], self: string) {
+function allowed(
+  c: LoadedCard,
+  filter: FeedFilter,
+  ctx: FeedViewerContext,
+  nearby: readonly string[],
+  self: string,
+  page: Actor | null = null,
+) {
   if (!feedCardKinds.includes(c.kind)) return false;
+  if (filter === "following" && page) {
+    // Une page : ses propres publications (`mine`) et ce qu'elle suit ; jamais la personne derrière elle.
+    if (c.kind === "feed_post" && c.mine === true) return true;
+    return c.authorId !== self && isFollowedCard(c, ctx);
+  }
   if (filter === "following") {
     // Mes publications de passionné y sont (R8c1) ; une page ne suit jamais la personne qui l'a publiée (`authorId` nul).
     if (c.kind === "feed_post" && c.authorId === self) return true;
@@ -209,8 +264,24 @@ async function hotRail(
   nearby: readonly string[],
   ctx: FeedViewerContext,
   seenFloor: Date | null,
+  page: Actor | null = null,
 ): Promise<FeedCard<"feed_post">[]> {
-  const cards = await hotCards({ userId, ref, filter, nearby });
+  const cards = await hotCards({
+    userId,
+    ref,
+    filter,
+    nearby,
+    page,
+    follows: page
+      ? {
+          users: ctx.followedUsers,
+          structures: ctx.followedStructures,
+          pros: ctx.followedPros,
+          providers: ctx.followedProviders ?? new Set<string>(),
+          medias: ctx.followedMedias ?? new Set<string>(),
+        }
+      : undefined,
+  });
   if (!cards.length) return [];
   const seen = await seenWithoutInteraction(
     userId,
@@ -283,21 +354,29 @@ async function olderPage(
 const kindOfId = (id: string) => id.slice(0, id.indexOf(":"));
 
 export const feedService = {
-  async feed(v: Viewer, q: { filter: FeedFilter; cursor?: string | undefined }): Promise<FeedPage> {
+  async feed(
+    v: Viewer,
+    q: { filter: FeedFilter; cursor?: string | undefined },
+    actor?: Actor | null,
+  ): Promise<FeedPage> {
     rateLimit("feedRead", v.user.id);
     const t = now();
-    const [viewerCtx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
-    const fp = contextFingerprint(viewerCtx);
+    // Lot R9a : lu au nom d'une page (`X-Orasso-Actor`) : son contexte, son périmètre public. Les cartes vues, la flamme et
+    // « Moins de ce genre » restent ceux de la personne.
+    const page = actor && isPageActor(actor) ? actor : null;
+    const [viewerCtx, seenFloor] = await Promise.all([viewerContext(v, t, page), seenFloorOf(v.user.id)]);
+    const fp = contextFingerprint(viewerCtx, page?.key ?? "");
     const forYou = q.filter === "for_you";
     // Un curseur de la version précédente (APK en ligne en plein parcours) n'est jamais une erreur : première page, `reset`.
     const previous = isPreviousCursor(q.cursor);
     let cursor = previous ? null : decodeCursor(q.cursor);
-    // La phase classée n'existe que dans « Pour toi » : un tel curseur avec un autre onglet est un curseur forgé.
-    if (cursor?.phase === 1 && !forYou) throw validation("Curseur invalide : recharge le Fil.");
-    // Le contexte a changé en plein parcours (nouvel abonnement, nouveau département…) : le parcours repart de la
-    // première page, et le client remplace sa liste (`reset`).
+    // Le contexte a changé en plein parcours (nouvel abonnement, nouveau département, autre casquette…) : le parcours repart
+    // de la première page, et le client remplace sa liste (`reset`). Avant toute validation du curseur (lot R9a, tour 2) :
+    // un curseur d'une autre casquette n'est jamais une erreur, même combiné à un autre onglet.
     const reset = previous || (cursor !== null && cursor.fp !== fp);
     if (reset) cursor = null;
+    // La phase classée n'existe que dans « Pour toi » : un tel curseur avec un autre onglet est un curseur forgé.
+    if (cursor?.phase === 1 && !forYou) throw validation("Curseur invalide : recharge le Fil.");
     // « Moins de ce genre » : lu à la première page, figé dans le curseur pour tout le parcours.
     const less = cursor ? cursor.less : new Set(feedCardKinds.filter((k) => viewerCtx.lessKinds.has(k)));
     const ctx: FeedViewerContext = { ...viewerCtx, lessKinds: less };
@@ -305,8 +384,18 @@ export const feedService = {
     const ref = new Date(refMs);
     const boundary = new Date(refMs - FEED_SCORE_WINDOW_MS);
     const nearby = nearbyDepartments(ctx.departments);
-    const base = { viewer: v, userId: v.user.id, ref, filter: q.filter, ctx, nearby, until: ref, seenFloor } as const;
-    const keep = (c: LoadedCard) => allowed(c, q.filter, ctx, nearby, v.user.id);
+    const base = {
+      viewer: v,
+      userId: v.user.id,
+      ref,
+      filter: q.filter,
+      ctx,
+      nearby,
+      until: ref,
+      seenFloor,
+      page,
+    } as const;
+    const keep = (c: LoadedCard) => allowed(c, q.filter, ctx, nearby, v.user.id, page);
     /** Identifiants déjà servis par cette page : jamais deux fois la même carte dans une réponse (un rognage peut la changer de zone). */
     const servedIds = new Set<string>();
     const keepNew = (c: LoadedCard) => keep(c) && !servedIds.has(c.id);
@@ -438,7 +527,7 @@ export const feedService = {
     // Au-delà de la borne, `decodeCursor` refuserait le curseur suivant : la liste se termine plutôt que de le fabriquer.
     if (next) next = offset + out.length > MAX_OFFSET ? null : { ...next, offset: offset + out.length };
     // Le rail « Ça plaît en ce moment » : première page d'« Abonnements » et d'« Autour de moi ».
-    const hot = !cursor && !forYou ? await hotRail(v.user.id, ref, q.filter, nearby, ctx, seenFloor) : null;
+    const hot = !cursor && !forYou ? await hotRail(v.user.id, ref, q.filter, nearby, ctx, seenFloor, page) : null;
     return {
       items: out,
       nextCursor: next ? encodeCursor(next) : null,
@@ -454,11 +543,12 @@ export const feedService = {
    * cet onglet, 20 au plus. Hors les siennes, hors « Sponsorisé » (il ne passe pas par les sources) et hors l'événement
    * recommandé (sa date est l'instant du parcours : il paraîtrait neuf à chaque lecture). `since` ne remonte pas au-delà de 48 h.
    */
-  async fresh(v: Viewer, q: { filter: FeedFilter; since: string }): Promise<{ count: number }> {
+  async fresh(v: Viewer, q: { filter: FeedFilter; since: string }, actor?: Actor | null): Promise<{ count: number }> {
+    const page = actor && isPageActor(actor) ? actor : null;
     rateLimit("feedRead", v.user.id);
     const t = now();
     const sinceMs = Math.min(t.getTime(), Math.max(t.getTime() - FEED_FRESH_MAX_AGE_MS, Date.parse(q.since)));
-    const [ctx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
+    const [ctx, seenFloor] = await Promise.all([viewerContext(v, t, page), seenFloorOf(v.user.id)]);
     const nearby = nearbyDepartments(ctx.departments);
     // Les exclusions (mes publications) sont posées dans le SQL des publications, avant le LIMIT ; pour les autres genres, on relit
     // plus large (×4, trois fois au plus) tant que moins de 20 cartes admissibles sont trouvées et qu'une source a encore des lignes.
@@ -478,10 +568,11 @@ export const feedService = {
         excludeMine: true,
         skipKinds: ctx.lessKinds,
         seenFloor,
+        page,
       });
       cards = merge(lists).filter(
         (c) =>
-          allowed(c, q.filter, ctx, nearby, v.user.id) &&
+          allowed(c, q.filter, ctx, nearby, v.user.id, page) &&
           c.at.getTime() > sinceMs &&
           c.authorId !== v.user.id &&
           !c.mine &&
