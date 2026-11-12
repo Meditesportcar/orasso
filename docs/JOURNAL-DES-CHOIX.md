@@ -5642,7 +5642,7 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
 
 ### Tour 7 (R8c1, 11/11/2026)
-- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
+- **Curseur : dates bornées** : toute date d'un curseur au-delà de l'an 9999 est refusée (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage `floorAt` est ramenée entre 0 et `ref` au décodage. Tests : `floorAt` futur et énorme (ramené, 200), `ref` et ancre énormes (400).
 
 ### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
 - **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
@@ -5692,7 +5692,7 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Hors ligne (point 7, outil `lib/offlineCopy.ts` de R8c2, commit 95d091dc fusionné seul)** : `usePublications(…, offline)` (passé par `PublicationsTab` quand `mine`) garde la première page dans la copie du compte (`publications.mine`, sans filtre) après chaque lecture réussie ; si la lecture échoue, la copie s'affiche (liste sans « Voir plus ») avec la phrase de l'Accueil « Hors ligne : voici ce que ton téléphone a gardé. » ; au passage hors ligne → en ligne, la liste se recharge seule. Jamais pour le profil d'un autre. Recette : copie, retour du réseau, profil d'un autre sans copie.
 
 ### Tour 4 (lot R8b2, relecture Codex, 11/11/2026)
-- **Pagination** : si l'acces disparait entre deux pages (estricted d'une page suivante), la restriction vaut pour toute la liste : elements et curseur vides, panneau Compte prive (pplyNextPage, partage, teste ; appli et site). La copie hors ligne n'est pas touchee (mon profil ne peut pas etre restreint).
+- **Pagination** : si l'accès disparaît entre deux pages (`restricted` d'une page suivante), la restriction vaut pour toute la liste : éléments et curseur vides, panneau Compte privé (`applyNextPage`, partagé, testé ; appli et site). La copie hors ligne n'est pas touchée (mon profil ne peut pas être restreint).
 - **Publication creee depuis le profil** : ma liste se relit au retour sur l'ecran (useIsFocused, seulement chez moi) ; recette profil vide -> Publier -> retour -> vignette.
 
 ### Tour 4 (R8n1, 11/11/2026) : corrections de la relecture Codex, après fusion
@@ -5766,8 +5766,8 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Hors ligne sans carte** : le Fil passe hors ligne même si la copie filtrée est vide (liste vide, ou faite de rendez-vous au spot et de « Sponsorisé » seulement).
 
 ### Tour 8 (R8c1, relecture Codex du tour 6, 12/11/2026)
-- **Empreinte des flammes ind�pendante de la zone** : elle est calcul�e sur les publications des deux zones de la fen�tre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compt�, donc plus de \eset\ (co�t : une lecture de plus de la source des publications par page de la phase 1).
-- **Pas de doublon dans une page** : les cartes d�j� servies par la page sont �cart�es de la zone A par date et de la zone B (la page est compl�t�e par les suivantes) ; \ppendCards\ d�doublonne aussi � l'int�rieur de la page re�ue (filet, site et appli). Un doublon entre deux pages reste possible apr�s un rognage et est retir� par l'�cran.
+- **Empreinte des flammes indépendante de la zone** : elle est calculée sur les publications des deux zones de la fenêtre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compté, donc plus de `reset` (coût : une lecture de plus de la source des publications par page de la phase 1).
+- **Pas de doublon dans une page** : les cartes déjà servies par la page sont écartées de la zone A par date et de la zone B (la page est complétée par les suivantes) ; `appendCards` dédoublonne aussi à l'intérieur de la page reçue (filet, site et appli). Un doublon entre deux pages reste possible après un rognage et est retiré par l'écran.
 
 ### Tour 5 (R8n1, 12/11/2026) : relecture Codex du tour 4
 - **La liste des événements du résumé ne part plus dans le push** : elle est rangée sous `data._events` (clé interne, retirée par `stripInternal` du push et de `/me/notifications`) ; la garde de livraison la lit et la réécrit sous la même clé en recomposant. Test : 20 événements aux titres de 120 caractères et aux slugs de 80, message transmis à `push.send` sous 4 096 octets, sans `events`, `_events` ni `_postIds`, ni dans la liste du Journal. Aucune compatibilité avec l'ancienne clé (le résumé n'a jamais été en ligne).
@@ -5818,7 +5818,7 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 
 ### Tour 6 (lot R8d, 12/11/2026)
 - **Site, mentions** : un état « session changée » remplace listes, filtre, menus et « Voir plus » par le chargement jusqu'à la fin de la revalidation (levé par le chargeur ou par la fin de la revalidation). Le même compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant à l'hydratation (vu en recette). Pas de test automatique (aucun modèle de test d'écran du site pour ce canal) ; recette du site 7/7.
-- **Appli, mentions** : « Voir plus » est refusé tant que load() n'a pas installé ses listes et ses curseurs (drapeau eading), le déblocage après une pagination jetée est gardé.
+- **Appli, mentions** : « Voir plus » est refusé tant que `load()` n'a pas installé ses listes et ses curseurs (drapeau `reading`), le déblocage après une pagination jetée est gardé.
 - **Épingle de la façade** : la limite eedWrite est comptée une fois, avant le rejeu sur 40P01 ; test (58 écritures, 40P01 simulé, l'épingle passe).
 
 ### Tour 3 (R9a partie 1, 12/11/2026) : corrections de la relecture Codex
@@ -5841,6 +5841,9 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **L'annonce « aucun compte » transitoire n'existe pas** (recherche faite) : les annonces `null` observées viennent des pages publiques (connexion), sans session ; la mise en page de l'espace connecté n'annonce jamais `null` en cours de navigation. Le rechargement de la position vu aux tours 4 et 5 était une course dans la recette (le bouton « Second lieu » cliqué avant sa navigation) : les recettes attendent maintenant cette navigation.
 - **Test du branchement réel** : `apps/web/app/components/weather/position.test.ts` (annonce de session → magasin) : déconnexion, position effacée, aucune coordonnée ne repart ni en relecture forcée ; un autre compte ne la voit pas.
 - **Repli sous concurrence** : `cellForAt` partage une promesse par case, repli compris : quota plein, trois demandes simultanées sur la même case, trois replis.
+
+### Tour 9 (R8c1, relecture finale de Codex, 12/11/2026)
+- **Plus de `reset` causé par un changement de flammes dans « Pour toi »** (décision du coordinateur, pour sortir de la boucle des tours 4 à 8) : l'empreinte des flammes quitte le curseur (retour à 1 020 caractères au plus) et la lecture supplémentaire de la zone B disparaît (ce qui règle aussi la limite de 300 publications vues). L'empreinte de contexte reste. Un classement qui bouge en route n'a que deux effets : une carte déjà servie qui revient (écartée de la page par l'API, retirée par l'écran) ou une carte qui monte au-dessus de la frontière et n'est vue qu'au parcours suivant. Choix voulu : un retour en haut est pire pour la personne. Tests : flammes retirées et ajoutées entre deux pages, flamme retirée sur une publication de la zone B : aucun `reset`, aucun doublon dans une page.
 
 ### Tour 4 (lot R8o, 12/11/2026) : relecture Codex du tour 3
 - **Index partiel** : la requête et l'index portent maintenant le même prédicat, mot pour mot (`type in ('coauthor_invited', 'coauthor_accepted', 'coauthor_withdrawn')`) ; avant, un `like` non échappé d'un côté et échappé de l'autre empêchait PostgreSQL de s'en servir. Plan vérifié par un test (`EXPLAIN (FORMAT JSON)` de la requête réelle, paramètres compris, 4 000 notifications, `enable_seqscan = off` pour montrer que l'index est utilisable) : le plan cite `notifications_coauthor_post_idx` (scan par index de l'expression `data ->> 'postId'`). Index corrigé dans la migration `0083_feed-coauthors` (renumérotée par le coordinateur).

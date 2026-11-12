@@ -6,7 +6,14 @@
 // efface (`moderation/targets/feedPost.ts`, `afterDecision`).
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { feedCoauthorInviteLog, feedPostCoauthors, feedPostPhotos, feedPostReactions, feedPosts, reports } from "../../db/schema";
+import {
+  feedCoauthorInviteLog,
+  feedPostCoauthors,
+  feedPostPhotos,
+  feedPostReactions,
+  feedPosts,
+  reports,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
 import type { Tx } from "../../lib/tx";
 import { dropCoauthorNotifications } from "./coauthors";

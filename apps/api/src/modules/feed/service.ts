@@ -88,19 +88,6 @@ export function contextFingerprint(ctx: FeedViewerContext): string {
   return createHash("sha1").update(json).digest().subarray(0, 6).toString("hex");
 }
 
-/**
- * Empreinte (6 octets) des flammes qui comptent dans le classement des cartes en lice : une flamme retirée (ou d'un compte devenu
- * hors règle) après la première page change les scores, donc la frontière enregistrée dans le curseur ne tient plus (une carte
- * déjà servie pourrait l'être deux fois). Le parcours repart alors de la première page (`reset`).
- */
-function flamesDigest(cards: readonly { id: string; flames7d?: number }[]): string {
-  const lines = cards
-    .filter((c) => (c.flames7d ?? 0) > 0)
-    .map((c) => `${c.id}=${c.flames7d}`)
-    .sort();
-  return createHash("sha1").update(lines.join("|")).digest().subarray(0, 6).toString("hex");
-}
-
 /** Mes sorties à venir ou en cours (R8c1) : événement publié pas fini, où j'ai une candidature véhicule retenue ou un billet. */
 async function myOutingsOf(userId: string, at: Date): Promise<Map<string, Date>> {
   const res = await db.execute<{ id: string; starts_at: Date }>(
@@ -296,13 +283,8 @@ async function olderPage(
 const kindOfId = (id: string) => id.slice(0, id.indexOf(":"));
 
 export const feedService = {
-  async feed(
-    v: Viewer,
-    q: { filter: FeedFilter; cursor?: string | undefined },
-    /** `false` : relance interne après un `reset`, déjà comptée dans la limite de lecture. */
-    counted = true,
-  ): Promise<FeedPage> {
-    if (counted) rateLimit("feedRead", v.user.id);
+  async feed(v: Viewer, q: { filter: FeedFilter; cursor?: string | undefined }): Promise<FeedPage> {
+    rateLimit("feedRead", v.user.id);
     const t = now();
     const [viewerCtx, seenFloor] = await Promise.all([viewerContext(v, t), seenFloorOf(v.user.id)]);
     const fp = contextFingerprint(viewerCtx);
@@ -377,33 +359,9 @@ export const feedService = {
           .filter(keep)
           .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
           .sort(compareByScore);
-        // Empreinte des flammes des seules cartes déjà consommées (au-dessus de la frontière) : seules elles peuvent être servies
-        // deux fois si leur score change. Une flamme retirée plus bas dans le classement ne renvoie personne en haut.
-        // Calculée sur les publications **des deux zones** (la B lue aussi) : un rognage qui fait passer une carte vue de B en A (sa
-        // ligne évincée) ne change pas l'ensemble des cartes comptées, donc pas l'empreinte.
-        const feedPostSource = rankedSources.find((src) => src.kind === "feed_post");
-        const viewedPosts = feedPostSource
-          ? (
-              await feedPostSource.load({
-                ...base,
-                zone: "B",
-                seenFloor: p1Floor,
-                since: boundary,
-                limit: WINDOW_CAP,
-                before: [],
-                floor: null,
-              })
-            ).cards
-              .filter(keep)
-              .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
-          : [];
-        const counted = [...ranked, ...viewedPosts];
-        const consumedDigest = (edge: { score: number; id: string }) =>
-          flamesDigest(counted.filter((c) => compareByScore(c, edge) <= 0));
-        if (phase1 && phase1.sc !== consumedDigest({ score: phase1.score, id: phase1.frontier })) {
-          // Des flammes ont changé depuis la page précédente : les scores ne sont plus ceux du parcours.
-          return { ...(await feedService.feed(v, { filter: q.filter }, false)), reset: true as const };
-        }
+        // Pas d'empreinte des flammes (décision du tour 9) : si des flammes changent en route, le classement bouge un peu. Au pire une
+        // carte déjà servie revient (écartée de la page par l'API, retirée par l'écran) ou une carte monte au-dessus de la frontière et
+        // n'est vue qu'au parcours suivant. Un retour en haut serait pire pour la personne.
         // Les cartes après la frontière (la dernière consommée), puis celles qui ont été vues sans être servies.
         const rest = phase1
           ? ranked.filter((c) => c.score < phase1.score || (c.score === phase1.score && c.id < phase1.frontier))
@@ -425,7 +383,6 @@ export const feedService = {
           next = {
             ...head("A"),
             phase: 1,
-            sc: consumedDigest(edge),
             floorAt: p1Floor?.getTime() ?? 0,
             score: edge.score,
             frontier: edge.id,
