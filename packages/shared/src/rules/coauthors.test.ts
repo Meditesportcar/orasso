@@ -72,3 +72,15 @@ describe("coauthors : règles pures", () => {
     expect(captionPreview("x".repeat(300)).length).toBe(COAUTHOR_CAPTION_PREVIEW_MAX);
   });
 });
+
+describe("brouillon de « Publier »", () => {
+  it("un envoi incertain garde son co-auteur dans le corps renvoyé, mais le brouillon affiché ne le reprend pas", async () => {
+    const { draftFromBody } = await import("./feedPublish");
+    const body = { persona: "fan", caption: "x", coAuthor: { kind: "user", id: "abc" }, clientId: "c1" };
+    const draft = draftFromBody(body, []);
+    expect(draft.caption).toBe("x");
+    expect(JSON.stringify(draft)).not.toContain("abc");
+    // Le corps lui-même n'est pas touché : le même envoi (même clientId) repart avec son co-auteur.
+    expect(body.coAuthor).toEqual({ kind: "user", id: "abc" });
+  });
+});

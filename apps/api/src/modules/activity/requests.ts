@@ -22,7 +22,7 @@ import type { Executor } from "../../lib/tx";
 import { crewRegistrationService } from "../crews/registration";
 import { crewsService } from "../crews/service";
 import { eventInvitesService } from "../event-invites/service";
-import { pendingCoauthorCount, pendingCoauthorRequests } from "../feed/coauthors";
+import { pendingCoauthorRequests } from "../feed/coauthors";
 import { invitationsService } from "../invitations/service";
 import { contactsService } from "../messaging/contacts";
 import { inboxService, registerInboxExtras } from "../messaging/inbox";
@@ -420,15 +420,16 @@ export const requestsService = {
 // Pastille « Demandes · 3 » de la Boîte : les compteurs déjà déclarés par chaque domaine, plus les deux sortes qui n'en
 // avaient pas (transferts de plaque, invitations entre passionnés). L'activité non vue vient du service de la cloche.
 registerInboxExtras(async (userId, requests: InboxRequestCounts, ex) => {
-  const [plate, peers, partners, coauthors] = await Promise.all([
+  // Les invitations à publier (genre `coauthor`) ne sont pas dans cette pastille : l'ancienne appli n'a pas leur carte (« Demandes · 1 »
+  // sur une liste vide) ; la liste et son `total` les comptent, et l'invitation arrive aussi dans l'Activité (notification).
+  const [plate, peers, partners] = await Promise.all([
     pendingPlateTransfers(userId, ex),
     eventInvitesService.receivedAll(userId, ex, { all: true }).then((x) => x.length),
     partnershipsService.pendingCount(userId, ex),
-    pendingCoauthorCount(userId, ex),
   ]);
   const sum = Object.values(requests).reduce((a, b) => a + b, 0);
   return {
     unseenActivity: await activityService.unseenCount(userId, ex),
-    pendingRequests: sum + plate + peers + partners + coauthors,
+    pendingRequests: sum + plate + peers + partners,
   };
 });

@@ -199,6 +199,10 @@ export const feedPostsService = {
     // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite, pour une
     // publication personnelle seulement. Un co-auteur pro partenaire actif de l'auteur la pose aussi (choix explicite) : elle
     // ne se retire jamais, quel que soit le sort de l'invitation.
+    // Le pro partenaire co-auteur est une source imposée : un autre pro choisi à la main est un conflit, comme une légende qui en désigne un autre.
+    if (invite?.partnerProId && input.commercialPartnerId && input.commercialPartnerId !== invite.partnerProId) {
+      throw new AppError(400, "commercial_conflict", partnershipLabels.errors.commercial_conflict);
+    }
     const commercialPartnerId =
       persona !== "fan"
         ? null

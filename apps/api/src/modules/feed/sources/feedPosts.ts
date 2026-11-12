@@ -72,11 +72,16 @@ export function feedPostScopeSql(args: {
       -- Collaboration (R8o) : une publication co-signée est aussi « suivie » quand je suis son co-auteur accepté.
       or exists (select 1 from feed_post_coauthors fc where fc.post_id = ${feedPosts.id} and fc.status = 'accepted' and (
         (fc.coauthor_kind = 'user' and (fc.coauthor_id = ${userId} or exists (select 1 from user_follows cf
-          where cf.follower_id = ${userId} and cf.followed_id = fc.coauthor_id and cf.status = 'accepted')))
+            join profiles cpr on cpr.user_id = cf.followed_id
+          where cf.follower_id = ${userId} and cf.followed_id = fc.coauthor_id and cf.status = 'accepted'
+            and ${profileOkSql("cpr", ref)})))
         or (fc.coauthor_kind = 'structure' and exists (select 1 from structure_follows cs
-          where cs.user_id = ${userId} and cs.structure_id::text = fc.coauthor_id))
+            join structures cst on cst.id = cs.structure_id
+          where cs.user_id = ${userId} and cs.structure_id::text = fc.coauthor_id
+            and cst.deleted_at is null and cst.verification <> 'suspended'))
         or (fc.coauthor_kind = 'pro' and exists (select 1 from pro_follows cp
-          where cp.user_id = ${userId} and cp.pro_id::text = fc.coauthor_id)))))`);
+            join pro_profiles cpp on cpp.id = cp.pro_id
+          where cp.user_id = ${userId} and cp.pro_id::text = fc.coauthor_id and cpp.deleted_at is null)))))`);
   }
   if (filter === "nearby") out.push(inDepartments(sql`nullif(${feedPosts.department}, '')`, args.nearby));
   return out;

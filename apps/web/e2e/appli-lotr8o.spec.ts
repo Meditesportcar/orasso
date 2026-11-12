@@ -264,3 +264,45 @@ test("l'invitation de l'Activité : une page que Damien gère reçoit sa demande
   await expect(request).toContainText("Kenji_66 te propose de publier avec MéditeSportCar");
   await d.ctx.close();
 });
+
+test("sans recharger : accepter met la publication sur mon onglet « Publications » au retour ; « Me retirer » puis retour la retire", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const kenjiCookie = await login("kenji@orasso.local");
+  const damienCookie = await login("damien@orasso.local");
+  const damienId = await me(damienCookie);
+  const caption = `Navigation sans rechargement ${RUN}`;
+  const id = await publishWith(kenjiCookie, caption, { kind: "user", id: damienId });
+  const d = await open(browser, "damien@orasso.local");
+  await go(d.page, "/profil");
+  await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  const withKenji = d.page.getByTestId("publication-tile-with").filter({ hasText: "Avec Kenji_66" });
+  const before = await withKenji.count();
+  // Navigation dans l'appli (aucun rechargement) : l'Activité, les Demandes, « Accepter », puis retour au profil.
+  await d.page.getByRole("button", { name: "Activité", exact: true }).first().click();
+  await d.page
+    .getByRole("link", { name: /Demandes/ })
+    .first()
+    .click();
+  const request = d.page.getByTestId("request-coauthor").filter({ hasText: caption });
+  await expect(request).toBeVisible({ timeout: 30_000 });
+  await request.getByRole("button", { name: "Accepter" }).click();
+  await expect(d.page.getByTestId("request-coauthor-confirm")).toBeVisible();
+  await d.page.goBack();
+  await d.page.goBack();
+  await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await expect(withKenji).toHaveCount(before + 1, { timeout: 30_000 });
+  // « Me retirer » puis retour immédiat : elle n'est plus sur mon profil.
+  await d.page.getByTestId("publication-tile-open").first().click();
+  await expect(d.page.getByTestId("feed-card-feed_post")).toBeVisible({ timeout: 30_000 });
+  await d.page.getByTestId("feed-card-more").click();
+  d.page.once("dialog", (dialog) => void dialog.accept());
+  await d.page.getByTestId("publication-menu-withdraw").click();
+  await expect(d.page.getByTestId("publication-menu-done")).toBeVisible();
+  await d.page.goBack();
+  await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await expect(withKenji).toHaveCount(before, { timeout: 30_000 });
+  expect(id).toBeTruthy();
+  await d.ctx.close();
+});

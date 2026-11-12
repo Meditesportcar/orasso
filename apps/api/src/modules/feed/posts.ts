@@ -256,8 +256,8 @@ export async function softDeletePost(
   if (!done) return [];
   await tx.delete(feedPostReactions).where(eq(feedPostReactions.postId, postId));
   // La suppression emporte la co-signature (R8o) : plus d'invitation, plus de demande, plus de notification.
-  await tx.delete(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId));
   await dropCoauthorNotifications(tx, postId);
+  await tx.delete(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId));
   if (opts.keepPhotos) return [];
   const photos = await tx
     .delete(feedPostPhotos)

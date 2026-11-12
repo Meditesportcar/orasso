@@ -8,11 +8,20 @@ import { type CoauthorKind, type CoauthorStatus, coauthorKinds } from "../rules/
  * `POST /me/feed-posts` + `coAuthor` : une personne, une structure, une fiche pro publiée ou un média. `id` est celui de la clé
  * d'auteur (`u:<compte>`, `s:<uuid>`…), jamais autre chose ; l'API relit tout (existence, état, droit de voir).
  */
-export const coAuthorInputSchema = z.object({
-  kind: z.enum(coauthorKinds),
-  id: z.string().trim().min(1).max(64),
-});
-export type CoAuthorInput = z.infer<typeof coAuthorInputSchema>;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACCOUNT_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const coAuthorInputSchema = z
+  .object({
+    kind: z.enum(coauthorKinds),
+    id: z.string().trim().min(1).max(64),
+  })
+  .refine((v) => (v.kind === "user" ? ACCOUNT_RE.test(v.id) : UUID_RE.test(v.id)), {
+    message: "Identifiant de co-auteur invalide",
+    path: ["id"],
+  })
+  // Une page s'écrit en minuscules (comme sa clé d'auteur) avant toute comparaison ou écriture.
+  .transform((v) => ({ kind: v.kind, id: v.kind === "user" ? v.id : v.id.toLowerCase() }));
+export type CoAuthorInput = z.output<typeof coAuthorInputSchema>;
 
 /** `GET /me/feed-posts/coauthor-search?q=&kind=` : moins de deux caractères, aucun résultat. */
 export const coAuthorSearchQuery = z.object({

@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
+import { markFeedDirty } from "@/features/fil/feedSignal";
+import { notifyPostChanged } from "@/features/publications/publicationsSignal";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { Avatar } from "@/ui/Avatar";
@@ -44,6 +46,9 @@ export function CoAuthorRequest({ item, onDone }: RequestCardProps) {
     setError(null);
     try {
       await (which === "accept" ? api.acceptCoAuthor(item.id) : api.declineCoAuthor(item.id));
+      // Les listes de profil et le Fil se relisent tout de suite, sans attendre la fin de la confirmation.
+      markFeedDirty();
+      notifyPostChanged(item.id);
       setAnswer(which);
       timer.current = setTimeout(onDone, CONFIRM_MS);
     } catch (e) {

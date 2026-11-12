@@ -5548,3 +5548,14 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **`share`** : `PostActions` reçoit `onShared` (facultatif) ; le Fil note `share` à l'ouverture du partage (la feuille n'a pas de retour de réussite : c'est l'intention de partager, pas son aboutissement). `open` : `isRealTap` (moins de 10 px) testé.
 - **« Pas de réseau »** : `PostActions` reçoit `offline` (facultatif, porté par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent « Pas de réseau » avant toute mutation (recette).
 - **`attachPhrase`** : l'élision l'emporte aussi pour un nom féminin (« pour l'Exposition », « à l'Expo »).
+
+### Tour 2 (lot R8o, 12/11/2026) : relectures Opus et Codex
+- **Plafond d'envois** : un journal `feed_coauthor_invite_log` (compte, instant), écrit avec l'invitation, jamais effacé par une annulation ni par la suppression de la publication, purgé au-delà de 24 h et avec le compte ; `reserveInvite` le compte sous le même verrou. Dans la même migration (régénérée, voir ci-dessous).
+- **Mention imposée** : le pro partenaire co-auteur est une source imposée ; un autre pro choisi à la main : 400 `commercial_conflict`.
+- **Identifiant** : validé selon le genre (UUID pour une page, identifiant de compte pour une personne) et écrit en minuscules ; mal formé : 400. Un compte privé non suivi invité par son identifiant : 422 `coauthor_unavailable`.
+- **Compte supprimé** : après le verrou des publications (publication, puis ligne : même ordre que répondre et se retirer), les notifications `coauthor_*` des publications concernées sont retirées **avant** d'effacer les lignes, en une requête bornée par destinataire (index existant de `notifications`). Même ordre à la suppression d'une publication et à l'annulation par l'auteur.
+- **Pastille** : les invitations ne sont plus comptées dans `pendingRequests` (l'ancienne appli n'a pas leur carte : « Demandes · 1 » sur une liste vide) ; la liste et son `total` les comptent, l'invitation arrive aussi dans l'Activité. À revoir : une pastille propre aux nouveaux clients demanderait un en-tête de version.
+- **Fil** : le co-auteur ne fait entrer la carte dans « Abonnements » que s'il est en règle (compte non suspendu, banni ou supprimé ; page ni supprimée ni suspendue).
+- **Listes et Fil** : `notifyPostChanged` et `markFeedDirty` partent dès le succès de l'API (accepter, refuser, me retirer, annuler, retirer) ; le minuteur ne sert qu'à la confirmation visible ; sur le site la page seule se recharge 2 s après.
+- **Brouillon de « Publier »** : l'envoi incertain garde `coAuthor` dans son corps (même `clientId`, rejeu sans doublon) ; le brouillon affiché ne le reprend pas (choix : le co-auteur se choisit de nouveau). Test dans `rules/coauthors.test.ts`.
+- **Signature** : plus de taille en dur, zone de toucher à la hauteur du jeton `touch`.

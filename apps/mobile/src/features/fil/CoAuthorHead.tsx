@@ -40,27 +40,27 @@ export function CoAuthorSignature({ author, coAuthor }: { author: FeedAuthorView
   const open = (a: FeedAuthorView) =>
     a.kind === "user" ? () => router.push(`/u/${encodeURIComponent(a.pseudo)}`) : undefined;
   return (
-    <Text variant="bodyStrong" color={t.color.ink} style={styles.title} testID="feed-card-signature">
-      <Text
-        variant="bodyStrong"
-        color={t.color.ink}
-        style={styles.title}
-        accessibilityRole={open(author) ? "link" : undefined}
-        onPress={open(author)}
-      >
-        {author.name}
+    <View style={styles.titleBox}>
+      <Text variant="bodyStrong" color={t.color.ink} testID="feed-card-signature">
+        <Text
+          variant="bodyStrong"
+          color={t.color.ink}
+          accessibilityRole={open(author) ? "link" : undefined}
+          onPress={open(author)}
+        >
+          {author.name}
+        </Text>
+        {" et "}
+        <Text
+          variant="bodyStrong"
+          color={t.color.ink}
+          accessibilityRole={open(coAuthor) ? "link" : undefined}
+          onPress={open(coAuthor)}
+        >
+          {coAuthor.name}
+        </Text>
       </Text>
-      {" et "}
-      <Text
-        variant="bodyStrong"
-        color={t.color.ink}
-        style={styles.title}
-        accessibilityRole={open(coAuthor) ? "link" : undefined}
-        onPress={open(coAuthor)}
-      >
-        {coAuthor.name}
-      </Text>
-    </Text>
+    </View>
   );
 }
 
@@ -86,5 +86,6 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusPill,
     borderWidth: tokens.spacing.space1 / 2,
   },
-  title: { fontSize: 14, lineHeight: 18 },
+  // Les noms sont des liens : la ligne de titre garde une zone de toucher de la hauteur du jeton `touch`.
+  titleBox: { minHeight: tokens.spacing.touch, justifyContent: "center" },
 });

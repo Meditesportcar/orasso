@@ -27,10 +27,11 @@ import {
   r8DefaultContent,
   type StoryPersona,
 } from "@orasso/shared";
-import { and, eq, inArray, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  feedCoauthorInviteLog,
   feedPostCoauthors,
   feedPosts,
   mediaProfiles,
@@ -156,6 +157,20 @@ export async function prepareInvite(
   if (kind === "user") {
     const [p] = await ex.select().from(profiles).where(eq(profiles.userId, input.id));
     if (!p || unavailable(p, at)) throw err(422, "coauthor_unavailable");
+    // Un compte privé que je ne suis pas ne s'invite pas, même par son identifiant (la recherche ne le rend jamais).
+    if (p.visibility === "private") {
+      const [follows] = await ex
+        .select({ id: userFollows.followerId })
+        .from(userFollows)
+        .where(
+          and(
+            eq(userFollows.followerId, v.user.id),
+            eq(userFollows.followedId, input.id),
+            eq(userFollows.status, "accepted"),
+          ),
+        );
+      if (!follows) throw err(422, "coauthor_unavailable");
+    }
     name = p.pseudo;
     avatarUrl = storage.url(p.avatarKey);
   } else {
@@ -206,11 +221,13 @@ export async function reserveInvite(
 ): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`coauthor-invites:${input.inviterId}`}, 0))`);
   await input.replayed();
+  // Les envois des dernières 24 h, quel que soit leur sort (annulée, supprimée, refusée) : le journal des envois, pas les lignes.
   const since = new Date(input.at.getTime() - 86_400_000);
+  await tx.delete(feedCoauthorInviteLog).where(lt(feedCoauthorInviteLog.invitedAt, since));
   const [used] = await tx
     .select({ n: sql<number>`count(*)::int` })
-    .from(feedPostCoauthors)
-    .where(and(eq(feedPostCoauthors.invitedBy, input.inviterId), sql`${feedPostCoauthors.invitedAt} > ${since}`));
+    .from(feedCoauthorInviteLog)
+    .where(and(eq(feedCoauthorInviteLog.invitedBy, input.inviterId), gt(feedCoauthorInviteLog.invitedAt, since)));
   if ((used?.n ?? 0) >= COAUTHOR_INVITES_PER_DAY) throw err(429, "coauthor_quota");
 }
 
@@ -229,6 +246,7 @@ export async function writeInvite(
     at: Date;
   },
 ): Promise<void> {
+  await tx.insert(feedCoauthorInviteLog).values({ invitedBy: input.inviterId, invitedAt: input.at });
   await tx.insert(feedPostCoauthors).values({
     postId: input.postId,
     coauthorKind: input.invite.kind,
@@ -399,16 +417,39 @@ async function coAuthorName(tx: Tx, row: { coauthorKind: CoauthorKind | "provide
   return view ?? null;
 }
 
-/** Retire du Journal les notifications d'une invitation qui n'existe plus (les non lues d'abord ; les lues deviennent sans objet). */
-export async function dropCoauthorNotifications(tx: Executor, postId: string, types?: string[]): Promise<void> {
-  await tx
-    .delete(notifications)
-    .where(
-      and(
-        inArray(notifications.type, types ?? ["coauthor_invited", "coauthor_accepted", "coauthor_withdrawn"]),
-        sql`${notifications.data} ->> 'postId' = ${postId}`,
-      ),
-    );
+/**
+ * Retire du Journal les notifications d'une invitation qui n'existe plus (les non lues d'abord ; les lues deviennent sans objet).
+ * Borné par destinataire (index `notifications_user_created_idx`) : l'auteur qui a publié et les comptes de la cible, relevés
+ * **avant** d'effacer la ligne du co-auteur. Une seule requête pour toutes les publications données.
+ */
+export async function dropCoauthorNotifications(
+  tx: Executor,
+  postIds: string | string[],
+  types?: string[],
+): Promise<void> {
+  const ids = Array.isArray(postIds) ? postIds : [postIds];
+  if (!ids.length) return;
+  const posts = await tx.select({ author: feedPosts.authorId }).from(feedPosts).where(inArray(feedPosts.id, ids));
+  const rows = await tx.select().from(feedPostCoauthors).where(inArray(feedPostCoauthors.postId, ids));
+  const audience = new Set(posts.map((p) => p.author));
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = authorKeyOf(r.coauthorKind, r.coauthorId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const u of await recipientsOf(tx, r.coauthorKind, r.coauthorId)) audience.add(u);
+  }
+  if (!audience.size) return;
+  await tx.delete(notifications).where(
+    and(
+      inArray(notifications.userId, [...audience]),
+      inArray(notifications.type, types ?? ["coauthor_invited", "coauthor_accepted", "coauthor_withdrawn"]),
+      sql`${notifications.data} ->> 'postId' in (${sql.join(
+        ids.map((i) => sql`${i}`),
+        sql`, `,
+      )})`,
+    ),
+  );
 }
 
 async function notifyAuthor(
@@ -466,8 +507,8 @@ export const coauthorsService = {
     return withTx(async (tx) => {
       const { post, row } = await lockPost(tx, postId);
       if (await canManagePost(v, post, tx)) {
-        await tx.delete(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId));
         await dropCoauthorNotifications(tx, postId);
+        await tx.delete(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId));
         return { status: "removed" as const };
       }
       await actAs(v, row, tx);
@@ -642,11 +683,6 @@ export async function pendingCoauthorRequests(userId: string, ex: Executor, at: 
     const view = views.get(p.postId);
     return view ? [{ ...p, view, forView: forViews.get(p.forKey) ?? null }] : [];
   });
-}
-
-/** Compte de mes invitations en attente (pastille « Demandes »), pour moi et les pages que je gère. */
-export async function pendingCoauthorCount(userId: string, ex: Executor): Promise<number> {
-  return (await pendingCoauthorRequests(userId, ex, now())).length;
 }
 
 /** Les publications dont l'invitation m'attend (moi, ou une page que je gère), les plus récentes d'abord. */

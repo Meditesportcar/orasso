@@ -71,11 +71,12 @@ export function PostMenu({
     if (target.coAuthoredByMe && !(await confirmWithdraw(target.author.name))) return;
     try {
       await api.withdrawCoAuthor(target.id);
+      // Les listes et le Fil se relisent tout de suite ; le minuteur ne sert qu'à la confirmation visible.
       markFeedDirty();
+      notifyPostChanged(target.id);
       setDone(message);
       timer.current = setTimeout(() => {
         setDone(null);
-        notifyPostChanged(target.id);
         onClose();
       }, DONE_MS);
     } catch (e) {

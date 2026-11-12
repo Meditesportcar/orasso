@@ -23,20 +23,6 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
       ),
     );
   await tx.delete(feedPostReactions).where(eq(feedPostReactions.userId, userId));
-  // Collaboration (R8o) : son nom disparaît des publications des autres (la publication reste chez son auteur) ; les
-  // invitations qu'il avait envoyées pour ses publications personnelles partent avec elles.
-  await tx
-    .delete(feedPostCoauthors)
-    .where(and(eq(feedPostCoauthors.coauthorKind, "user"), eq(feedPostCoauthors.coauthorId, userId)));
-  await tx.delete(feedPostCoauthors).where(
-    inArray(
-      feedPostCoauthors.postId,
-      tx
-        .select({ id: feedPosts.id })
-        .from(feedPosts)
-        .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.persona, "fan"))),
-    ),
-  );
   // Verrou des publications (par identifiant) avant de lire les signalements : un signalement ou une décision qui arrive
   // en même temps est vu, ou attend la fin.
   const posts = await tx
@@ -48,8 +34,29 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
     .orderBy(feedPosts.id)
     .for("update");
   const ids = posts.map((p) => p.id);
+  // Collaboration (R8o), **après** le verrou des publications (même ordre que répondre et se retirer : publication, puis ligne) :
+  // son nom disparaît des publications des autres (elles restent chez leur auteur) et les notifications qui le nomment partent
+  // avec (relevées avant d'effacer la ligne) ; les invitations qu'il avait envoyées pour ses publications personnelles partent
+  // avec elles.
+  const cosigned = (
+    await tx
+      .select({ id: feedPostCoauthors.postId })
+      .from(feedPostCoauthors)
+      .where(and(eq(feedPostCoauthors.coauthorKind, "user"), eq(feedPostCoauthors.coauthorId, userId)))
+  ).map((r) => r.id);
+  if (cosigned.length) {
+    await tx
+      .select({ id: feedPosts.id })
+      .from(feedPosts)
+      .where(inArray(feedPosts.id, cosigned))
+      .orderBy(feedPosts.id)
+      .for("update");
+  }
+  const touched = [...new Set([...cosigned, ...ids])];
+  await dropCoauthorNotifications(tx, touched);
+  if (cosigned.length) await tx.delete(feedPostCoauthors).where(inArray(feedPostCoauthors.postId, cosigned));
+  if (ids.length) await tx.delete(feedPostCoauthors).where(inArray(feedPostCoauthors.postId, ids));
   if (!ids.length) return [];
-  for (const id of ids) await dropCoauthorNotifications(tx, id);
   const heldRows = await tx
     .select({ id: reports.targetId })
     .from(reports)

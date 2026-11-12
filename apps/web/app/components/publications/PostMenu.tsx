@@ -61,10 +61,11 @@ export function PostMenu({
     }
     const res = await apiFetch(`/feed-posts/${target.id}/coauthor`, { method: "DELETE" });
     if (!res.ok) return setError(res.error.message);
+    // Les listes se relisent tout de suite ; le minuteur ne sert qu'à la confirmation visible.
+    notifyPostChanged(target.id);
     setDone(message);
     timer.current = setTimeout(() => {
       setDone(null);
-      notifyPostChanged(target.id);
       onClose();
     }, DONE_MS);
   }

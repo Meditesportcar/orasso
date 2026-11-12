@@ -39,3 +39,20 @@ export const feedPostCoauthors = pgTable(
     check("feed_post_coauthors_id_check", sql`char_length(${t.coauthorId}) between 1 and 64`),
   ],
 );
+
+/**
+ * Journal des invitations **envoyées** (plafond de 10 par 24 h et par compte) : une ligne par envoi, écrite avec l'invitation et
+ * jamais effacée par une annulation ni par la suppression de la publication (sinon « annuler puis réinviter » contourne le
+ * plafond). Purgée au-delà de 24 h et avec le compte.
+ */
+export const feedCoauthorInviteLog = pgTable(
+  "feed_coauthor_invite_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    invitedAt: tstz("invited_at").notNull().defaultNow(),
+  },
+  (t) => [index("feed_coauthor_invite_log_idx").on(t.invitedBy, t.invitedAt)],
+);
