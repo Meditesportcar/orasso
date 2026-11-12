@@ -71,6 +71,7 @@ export * from "./registrationWindow";
 export * from "./registry";
 export * from "./reviews";
 export * from "./scheduleAt";
+export * from "./serialWriter";
 export * from "./signupMissing";
 export * from "./socials";
 export * from "./solar";

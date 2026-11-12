@@ -8,8 +8,7 @@ import { resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedPostComments, feedPosts, notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
-import { readableBatch } from "./batch";
-import { stillReadable } from "./readers";
+import { readableBatch, stillReadable } from "./readers";
 import { comment, dbPost, follow, person, type TestUser } from "./testkit";
 
 afterAll(async () => {

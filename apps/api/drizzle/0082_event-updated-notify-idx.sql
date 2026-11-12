@@ -1,0 +1,1 @@
+CREATE INDEX "notifications_event_updated_idx" ON "notifications" USING btree ("event_id","created_at" DESC NULLS LAST) WHERE "notifications"."type" = 'event_updated';

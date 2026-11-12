@@ -5,6 +5,7 @@ import { type FeedPostView, feedAgo, lastCommentsLine } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { postLive, usePostLive } from "../comments/live";
+import { useNoteOpen } from "../openFromCard";
 
 export function LastComments({
   post: server,
@@ -13,6 +14,7 @@ export function LastComments({
   post: FeedPostView;
   onChange?: (post: FeedPostView) => void;
 }) {
+  const noteOpen = useNoteOpen();
   const { t } = useTheme();
   const c = t.color;
   const { post } = usePostLive(server, onChange);
@@ -33,7 +35,10 @@ export function LastComments({
       ))}
       <Pressable
         accessibilityRole="button"
-        onPress={() => postLive.open(post.id, false)}
+        onPress={() => {
+          noteOpen();
+          postLive.open(post.id, false);
+        }}
         hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
         style={styles.more}
         testID="feed-post-comments-open"
