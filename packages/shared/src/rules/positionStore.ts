@@ -10,6 +10,8 @@ import type { WeatherAt } from "../weather";
 
 /** Une météo de position plus vieille que ça est relue au retour sur l'écran (la case se rafraîchit côté API toutes les 3 h). */
 export const POSITION_REFRESH_MS = 10 * 60_000;
+/** Une demande en vol depuis plus longtemps que ça ne bloque plus les relectures (une requête suspendue sans délai). */
+export const POSITION_INFLIGHT_STALE_MS = 30_000;
 
 export type PositionState<T = WeatherAt> = {
   owner: string | null;
@@ -36,8 +38,9 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   // Numéro de la dernière demande partie (`give` ou `refresh`) : une réponse n'est appliquée que si aucune demande plus récente est partie
   // depuis (deux relocalisations successives, une relecture revenue après un nouveau geste : la plus récente reste).
   let requestSeq = 0;
-  // Nombre de `give` en vol : une relecture ne part pas pendant un geste (elle relirait l'ancienne position et la ferait perdre).
-  let givesInFlight = 0;
+  // La dernière demande partie, tant qu'elle n'a pas répondu : une relecture ne part pas pendant qu'une demande est en vol (sauf si elle
+  // est suspendue depuis plus de `POSITION_INFLIGHT_STALE_MS`). Effacée à l'oubli et à l'invalidation (changement de compte).
+  let inflight: { seq: number; at: number } | null = null;
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -46,6 +49,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
 
   const forget = () => {
     generation += 1;
+    inflight = null;
     set({ owner: null, coarse: null, at: null, fetchedAt: 0 });
   };
 
@@ -80,6 +84,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
     /** Invalide les demandes en cours (tickets) sans toucher à la position gardée : une transition de session a eu lieu. */
     invalidate() {
       generation += 1;
+      inflight = null;
     },
     /** Capture la session et la génération DÈS LE GESTE ; `null` sans session. */
     begin,
@@ -93,7 +98,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       if (!ticket || !this.valid(ticket)) return false;
       const { owner, gen } = ticket;
       const seq = ++requestSeq;
-      givesInFlight += 1;
+      inflight = { seq, at: deps.now() };
       try {
         const at = await deps.weatherAt(coarse);
         if (deps.scope() !== owner || gen !== generation || seq !== requestSeq) return false;
@@ -102,7 +107,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       } catch {
         return false;
       } finally {
-        givesInFlight -= 1;
+        if (inflight?.seq === seq) inflight = null;
       }
     },
     /** Relit la météo de la position gardée : au plus toutes les `POSITION_REFRESH_MS`, sauf `force` (geste manuel). */
@@ -111,12 +116,12 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       const { coarse, owner, fetchedAt } = state;
       if (!coarse || owner === null || owner !== deps.scope()) return;
       if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return;
-      // Un geste est en vol : sa réponse donnera la position la plus récente, la relecture de l'ancienne ne part pas.
-      if (givesInFlight > 0) return;
+      // Une demande est en vol : sa réponse donnera la position la plus récente (deux relectures ne se chevauchent jamais). Une relecture
+      // sautée n'est pas rejouée : le prochain minuteur ou retour au premier plan s'en charge.
+      if (inflight !== null && deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS) return;
       const gen = generation;
-      // La relecture ne prend pas de numéro : elle n'annule jamais un geste. Elle n'est appliquée que si aucun `give` n'est parti depuis
-      // (numéro inchangé) et si la position gardée est toujours celle qu'elle a relue.
-      const seq = requestSeq;
+      const seq = ++requestSeq;
+      inflight = { seq, at: deps.now() };
       try {
         const at = await deps.weatherAt(coarse);
         if (
@@ -130,6 +135,8 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
         set({ at, fetchedAt: deps.now() });
       } catch {
         // Hors ligne ou limite atteinte : la dernière météo connue reste affichée.
+      } finally {
+        if (inflight?.seq === seq) inflight = null;
       }
     },
   };

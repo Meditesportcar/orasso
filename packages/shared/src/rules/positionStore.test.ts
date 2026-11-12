@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WeatherAt } from "../weather";
 
-import { createPositionStore, POSITION_REFRESH_MS } from "./positionStore";
+import { createPositionStore, POSITION_INFLIGHT_STALE_MS, POSITION_REFRESH_MS } from "./positionStore";
 
 const at = (label: string): WeatherAt => ({ label, weather: null });
 const here = { lat: 42.7, lng: 2.9 };
@@ -229,5 +229,71 @@ describe("position en mémoire de « Ma météo »", () => {
     t.pending[1]?.resolve(at("A, relue"));
     await refresh;
     expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 7 : deux relectures concurrentes : la seconde ne part pas, la première s'applique", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const one = t.store.refresh(true);
+    const two = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("A, relue"));
+    await Promise.all([one, two]);
+    expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 7 : une ancienne demande suspendue, l'oubli, une nouvelle position réussie : la relecture suivante part et s'applique", async () => {
+    const t = setup();
+    // La demande d'avant ne répondra jamais.
+    void t.store.give({ lat: 42.5, lng: 3.0 });
+    t.store.forget();
+    const b = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.pending[1]?.resolve(at("B"));
+    expect(await b).toBe(true);
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("B, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B, relue");
+  });
+
+  it("tour 7 : un autre compte : la demande suspendue du premier ne bloque pas la relecture du second", async () => {
+    const t = setup();
+    const a = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await a;
+    void t.store.give({ lat: 42.6, lng: 2.8 });
+    t.setScope("B");
+    t.store.invalidate();
+    t.store.forget();
+    const b = t.store.give(here);
+    t.pending[2]?.resolve(at("B"));
+    await b;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(4);
+    t.pending[3]?.resolve(at("B, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B, relue");
+  });
+
+  it("tour 7 : une demande suspendue depuis plus de 30 s ne bloque plus : la relecture part", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    // Le geste B ne répond jamais.
+    void t.store.give({ lat: 42.7, lng: 2.9 });
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const later = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("A, relue"));
+    await Promise.all([refresh, later]);
   });
 });
