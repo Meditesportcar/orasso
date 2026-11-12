@@ -3,7 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, createPro, createStructure, resetDb, useClock } from "../../../../test/helpers";
+import { call, createPro, createStructure, quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
@@ -15,6 +15,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDb();
+  // Les heures calmes (22 h à 8 h) ne doivent pas dépendre de l'heure réelle du test.
+  quietHours(false);
   useClock(new Date(Date.now() + 10 * 60_000));
 });
 
