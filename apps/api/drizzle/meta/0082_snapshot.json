@@ -1,5 +1,5 @@
 {
-  "id": "6988d21e-dc55-4848-92ae-e60310777c32",
+  "id": "fe8b94d0-edcb-42a7-917a-32e72dce5418",
   "prevId": "d5a81ec3-280a-4679-b2d9-d7ff5f91565f",
   "version": "7",
   "dialect": "postgresql",
@@ -7294,249 +7294,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.feed_coauthor_invite_log": {
-      "name": "feed_coauthor_invite_log",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "invited_by": {
-          "name": "invited_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "invited_at": {
-          "name": "invited_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "feed_coauthor_invite_log_idx": {
-          "name": "feed_coauthor_invite_log_idx",
-          "columns": [
-            {
-              "expression": "invited_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "invited_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "feed_coauthor_invite_log_invited_by_user_id_fk": {
-          "name": "feed_coauthor_invite_log_invited_by_user_id_fk",
-          "tableFrom": "feed_coauthor_invite_log",
-          "tableTo": "user",
-          "columnsFrom": [
-            "invited_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.feed_post_coauthors": {
-      "name": "feed_post_coauthors",
-      "schema": "",
-      "columns": {
-        "post_id": {
-          "name": "post_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "coauthor_kind": {
-          "name": "coauthor_kind",
-          "type": "coauthor_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "coauthor_id": {
-          "name": "coauthor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "coauthor_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "invited_by": {
-          "name": "invited_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "invited_at": {
-          "name": "invited_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "responded_by": {
-          "name": "responded_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "responded_at": {
-          "name": "responded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "feed_post_coauthors_target_idx": {
-          "name": "feed_post_coauthors_target_idx",
-          "columns": [
-            {
-              "expression": "coauthor_kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coauthor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_post_coauthors_invited_by_idx": {
-          "name": "feed_post_coauthors_invited_by_idx",
-          "columns": [
-            {
-              "expression": "invited_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "invited_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_post_coauthors_responded_by_idx": {
-          "name": "feed_post_coauthors_responded_by_idx",
-          "columns": [
-            {
-              "expression": "responded_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "feed_post_coauthors_post_id_feed_posts_id_fk": {
-          "name": "feed_post_coauthors_post_id_feed_posts_id_fk",
-          "tableFrom": "feed_post_coauthors",
-          "tableTo": "feed_posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "feed_post_coauthors_invited_by_user_id_fk": {
-          "name": "feed_post_coauthors_invited_by_user_id_fk",
-          "tableFrom": "feed_post_coauthors",
-          "tableTo": "user",
-          "columnsFrom": [
-            "invited_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "feed_post_coauthors_responded_by_user_id_fk": {
-          "name": "feed_post_coauthors_responded_by_user_id_fk",
-          "tableFrom": "feed_post_coauthors",
-          "tableTo": "user",
-          "columnsFrom": [
-            "responded_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "feed_post_coauthors_id_check": {
-          "name": "feed_post_coauthors_id_check",
-          "value": "char_length(\"feed_post_coauthors\".\"coauthor_id\") between 1 and 64"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.feed_comment_mentions": {
       "name": "feed_comment_mentions",
       "schema": "",
@@ -11416,6 +11173,28 @@
           "where": "\"notifications\".\"group_key\" is not null",
           "concurrently": false,
           "method": "gin",
+          "with": {}
+        },
+        "notifications_event_updated_idx": {
+          "name": "notifications_event_updated_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"notifications\".\"type\" = 'event_updated'",
+          "concurrently": false,
+          "method": "btree",
           "with": {}
         },
         "notifications_undelivered_idx": {
@@ -21891,27 +21670,6 @@
         "safety",
         "weather",
         "other"
-      ]
-    },
-    "public.coauthor_kind": {
-      "name": "coauthor_kind",
-      "schema": "public",
-      "values": [
-        "user",
-        "structure",
-        "pro",
-        "provider",
-        "media"
-      ]
-    },
-    "public.coauthor_status": {
-      "name": "coauthor_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "accepted",
-        "declined",
-        "withdrawn"
       ]
     },
     "public.advertiser_kind": {

@@ -239,3 +239,58 @@ test("site : organisateur, « N inscrits seront prévenus » seulement pour l'he
   });
   await ctx.close();
 });
+
+test("site : lecture impossible, puis « C'est noté » pendant un envoi qui échoue", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const damien = await login("damien@orasso.local");
+  const event = await createEvent(damien, { title: `Tour3 site R8n2 ${unique()}`.slice(0, 40), admission: "filtered" });
+  const a = await person("T3S");
+  const ctx = await siteContext(browser, a.cookie, 390);
+  const page = await ctx.newPage();
+  const prefsUrl = /\/api\/me\/events\/[^/]+\/notification-prefs$/;
+  await page.goto(`/e/${event.slug}/candidater`);
+  await expect(page.locator('[data-step="1"]')).toBeVisible({ timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.locator('[data-step="2"]')).toBeVisible();
+  await page.getByLabel("J'ai lu le règlement").check();
+  const seen = page.getByTestId("arrival-seen");
+  if (await seen.isVisible().catch(() => false)) await page.getByLabel("J'ai vu le créneau d'arrivée.").check();
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.locator('[data-step="3"]')).toBeVisible();
+  // La lecture du réglage échoue : jamais un défaut présenté comme enregistré.
+  await page.route(prefsUrl, (route) => route.abort());
+  await page.getByRole("button", { name: "Envoyer ma candidature" }).click();
+  await expect(page.getByTestId("notify-signup-read-error")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("notify-signup-news")).toHaveCount(0);
+  await page.unroute(prefsUrl);
+  await page.getByTestId("notify-signup-retry").click();
+  const news = page.getByTestId("notify-signup-news");
+  await expect(news).toBeChecked({ timeout: 15_000 });
+  // « C'est noté » pendant un envoi lent qui échoue : l'écran reste, le message est visible, rien n'est faussement noté.
+  await page.route(prefsUrl, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    await new Promise((r) => setTimeout(r, 800));
+    return route.abort();
+  });
+  await news.uncheck();
+  await page.getByTestId("notify-noted").click();
+  await expect(page.getByTestId("notify-signup-message")).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/candidater/);
+  await expect(news).toBeChecked();
+  expect((await prefsOf(a.cookie, event.id)).data.news).toBe(true);
+  await page.unroute(prefsUrl);
+  // Tour 5 : un ancien échec ne neutralise pas « C'est noté » après une réussite (le premier appui ferme).
+  await news.uncheck();
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
+  await news.check();
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(true);
+  // Deux bascules rapprochées : le dernier choix est celui qui est enregistré.
+  await news.uncheck();
+  await news.check();
+  await news.uncheck();
+  await page.getByTestId("notify-noted").click();
+  await page.waitForURL(/\/app\/(acces|sorties)/, { timeout: 30_000 });
+  expect((await prefsOf(a.cookie, event.id)).data.news).toBe(false);
+  await ctx.close();
+});

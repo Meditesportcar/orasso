@@ -4,16 +4,15 @@
 // prochaine lecture du Fil ; ouverte entre-temps, elle dit « terminé » sans lieu.
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { spotLabels as L, type SpotAnswer, type SpotMeetupView, spotTimeLabel, spotUntilLabel } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { useSpotAnswer } from "@/features/spot/useSpotAnswer";
 import { useSpotOver } from "@/features/spot/useSpotOver";
 import { Avatar } from "@/ui/Avatar";
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { reasonLine } from "./parts";
 import type { CardProps } from "./types";
@@ -23,7 +22,7 @@ const { space2, space3 } = tokens.spacing;
 export function SpotMeetupCard({ card, onMenu, faded }: CardProps<"spot_meetup">) {
   const { t } = useTheme();
   const c = t.color;
-  const router = useRouter();
+  const router = useCardRouter();
   const [meetup, setMeetup] = useState<SpotMeetupView>(card.payload.meetup);
   useEffect(() => setMeetup(card.payload.meetup), [card.payload.meetup]);
   const answer = useSpotAnswer(meetup, setMeetup);

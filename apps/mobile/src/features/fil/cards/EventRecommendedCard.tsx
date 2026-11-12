@@ -3,12 +3,11 @@
 // en pastille, une ligne qui dit qui ouvre quoi, et « Voir la fiche ». `EventCardV2` reste la carte de l'Explorer.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Image, StyleSheet, View } from "react-native";
-
 import { stubOf } from "@/features/explorer/EventCardV2";
 import { mediaSource } from "@/lib/media";
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { OrgLogo, reasonLine } from "./parts";
 import type { CardProps } from "./types";
@@ -16,7 +15,7 @@ import type { CardProps } from "./types";
 export function EventRecommendedCard({ card, onMenu, faded }: CardProps<"event_recommended">) {
   const { t } = useTheme();
   const c = t.color;
-  const router = useRouter();
+  const router = useCardRouter();
   const event = card.payload.event;
   const stub = stubOf(event.startsAt);
   const source = mediaSource(event.photoUrl ?? event.posterUrl);

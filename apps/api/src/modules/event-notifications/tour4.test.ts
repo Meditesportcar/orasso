@@ -85,7 +85,8 @@ describe("publication validée après le curseur du résumé", () => {
     expect(rows).toHaveLength(2);
     const second = rows.find((r) => (r.data as { _postIds?: string[] })._postIds?.includes(late));
     expect(second?.title).toBe("1 nouveauté pour tes sorties");
-    expect((second?.data as { _postIds: string[] })._postIds).not.toContain(early);
+    if (!second) throw new Error("second résumé absent");
+    expect((second.data as { _postIds: string[] })._postIds).not.toContain(early);
     // Jour 3 : ni l'une ni l'autre ne reviennent.
     await eventNewsDigest.run(new Date(AT.getTime() + 2 * DAY));
     expect(await digests(u)).toHaveLength(2);
@@ -186,7 +187,8 @@ describe("résumé de plusieurs événements recomposé à la livraison", () => 
     expect(push1?.body).toBe("Sortie du port");
     const [row] = await digests(u);
     expect(row?.title).toBe("1 nouveauté pour tes sorties");
-    expect((row?.data as { link?: string }).link).toMatch(/^\/e\//);
+    if (!row) throw new Error("résumé absent");
+    expect((row.data as { link?: string }).link).toMatch(/^\/e\//);
   });
 });
 
