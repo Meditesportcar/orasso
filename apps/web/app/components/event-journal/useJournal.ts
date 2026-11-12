@@ -23,6 +23,15 @@ export function useJournal(eventId: string, initial: { items: FeedPostView[]; ne
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
 
+  // Nouvelle donnée du chargeur (autre fiche, revalidation) : la liste, le curseur et les requêtes en vol repartent de là.
+  useEffect(() => {
+    seq.current += 1;
+    setItems(initial.items);
+    setNextCursor(initial.nextCursor);
+    setLoadingMore(false);
+    setError(null);
+  }, [initial]);
+
   const reload = useCallback(async () => {
     const mine = ++seq.current;
     setError(null);

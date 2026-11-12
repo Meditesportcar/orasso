@@ -27,6 +27,7 @@ import { db, pool } from "../src/db/client";
 import { feedPostPhotos, feedPosts } from "../src/db/schema";
 import { storage } from "../src/lib/storage";
 import { feedPhotoKey } from "../src/modules/feed/posts";
+import { removeOrRetry } from "../src/modules/vehicles/photos-blur";
 
 export type RepriseStats = {
   dryRun: boolean;
@@ -44,6 +45,8 @@ export type RepriseStats = {
   keptNoAuthor: number;
   /** Restées une annonce : événement brouillon ou sur invitation, structure supprimée, suspendue ou non vérifiée. */
   keptNotServed: number;
+  /** Supprimées pendant le passage (ancien APK) : rien n'est repris. */
+  deletedDuring: number;
   /** Dont l'image avait disparu du stockage (reprises avec l'affiche, ou restées faute de visuel). */
   imageMissing: number;
   /** Publications épinglées par la reprise (une par événement au plus). */
@@ -54,7 +57,14 @@ export type RepriseStats = {
   postsAfter: number;
 };
 
-export type RevertStats = { dryRun: boolean; posts: number; files: number; postsBefore: number; postsAfter: number };
+export type RevertStats = {
+  dryRun: boolean;
+  posts: number;
+  files: number;
+  detached: number;
+  postsBefore: number;
+  postsAfter: number;
+};
 
 type Row = {
   id: string;
@@ -126,6 +136,7 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
     keptNoVisual: 0,
     keptNoAuthor: 0,
     keptNotServed: 0,
+    deletedDuring: 0,
     imageMissing: 0,
     pinned: 0,
     failed: 0,
@@ -214,6 +225,12 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
         let pin = false;
         // Même verrou que l'épinglage en direct (`pin.ts`) : une course avec lui ne fait pas échouer la transaction.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pin:${row.event_id}`}))`);
+        // L'annonce est relue **sous verrou** : supprimée pendant le passage (ancien APK), elle n'est pas reprise. Le retrait de la
+        // façade verrouille lui aussi l'annonce : les deux chemins se suivent.
+        const alive = await tx.execute(
+          sql`select 1 from event_announcements where id = ${row.id} and deleted_at is null for update`,
+        );
+        if (!alive.rows.length) return "gone" as const;
         if (winnerOf.get(row.event_id) === row.id) {
           const taken = await tx.execute(
             sql`select 1 from feed_posts where event_id = ${row.event_id} and pinned_at is not null and deleted_at is null limit 1`,
@@ -257,6 +274,11 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
         }
         return pin;
       });
+      if (pinnedHere === "gone") {
+        if (photoKey) await storage.remove(photoKey).catch(() => undefined);
+        stats.deletedDuring += 1;
+        continue;
+      }
       if (pinnedHere === null) {
         // Reprise par un autre passage entre-temps : rien de plus, le fichier copié ne sert à rien.
         if (photoKey) await storage.remove(photoKey).catch(() => undefined);
@@ -291,6 +313,10 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
         )
       ).rows
     : [];
+  const reported = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from feed_posts p where p.legacy_announcement_id is not null
+      and exists (select 1 from reports r where r.target_type = 'feed_post' and r.target_id = p.id::text)`,
+  );
   if (dryRun) {
     const live = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from feed_posts where legacy_announcement_id is not null and deleted_at is null`,
@@ -299,23 +325,56 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
       dryRun,
       posts: posts.length,
       files: photos.length,
+      detached: Number(reported.rows[0]?.n ?? 0),
       postsBefore,
       postsAfter: postsBefore - Number(live.rows[0]?.n ?? 0),
     };
   }
-  // Lignes d'abord (la transaction décide), fichiers ensuite : un échec laisse au pire un fichier orphelin, jamais une
-  // publication sans fichier.
-  // Signalements et notifications qui pointent vers ces publications partent avec elles (rien ne pend dans le vide). Perdu avec
-  // elles : les flammes et les commentaires reçus depuis la reprise.
-  await db.execute(
-    sql`delete from reports where target_type = 'feed_post' and target_id in (select id::text from feed_posts where legacy_announcement_id is not null)`,
-  );
-  await db.execute(
-    sql`delete from notifications where data ->> 'postId' in (select id::text from feed_posts where legacy_announcement_id is not null)`,
-  );
-  await db.delete(feedPosts).where(isNotNull(feedPosts.legacyAnnouncementId));
-  for (const p of photos) await storage.remove(p.storage_key).catch(() => undefined);
-  return { dryRun, posts: posts.length, files: photos.length, postsBefore, postsAfter: await countPosts() };
+  // **Une seule transaction** : les reprises verrouillées, puis rien ne reste à demi (ni notification effacée avec une publication
+  // encore en ligne, ni signalement arrivé entre deux requêtes). Un signalement n'est **jamais** supprimé (sanctions contestées,
+  // captures) : une reprise visée par un signalement est retirée en douceur (`deleted_at`, photos gardées pour la modération) et
+  // **détachée** (`legacy_announcement_id` remis à nul : l'annonce d'origine est de nouveau servie). Les autres sont supprimées
+  // avec leurs notifications. Perdu avec elles : les flammes et les commentaires reçus depuis la reprise. Fichiers ensuite.
+  const keys: string[] = [];
+  let detached = 0;
+  await db.transaction(async (tx) => {
+    const locked = await tx.execute<{ id: string; reported: boolean }>(
+      sql`select p.id, exists (select 1 from reports r where r.target_type = 'feed_post' and r.target_id = p.id::text) as reported
+        from feed_posts p where p.legacy_announcement_id is not null order by p.id for update`,
+    );
+    const keep = locked.rows.filter((r) => r.reported).map((r) => r.id);
+    const drop = locked.rows.filter((r) => !r.reported).map((r) => r.id);
+    if (keep.length) {
+      const list = sql.join(
+        keep.map((i) => sql`${i}::uuid`),
+        sql`, `,
+      );
+      await tx.execute(
+        sql`update feed_posts set deleted_at = coalesce(deleted_at, now()), legacy_announcement_id = null where id in (${list})`,
+      );
+      await tx.execute(sql`delete from feed_post_reactions where post_id in (${list})`);
+      await tx.execute(
+        sql`delete from notifications where data ->> 'postId' in (select id::text from feed_posts where id in (${list}))`,
+      );
+      detached = keep.length;
+    }
+    if (drop.length) {
+      const list = sql.join(
+        drop.map((i) => sql`${i}::uuid`),
+        sql`, `,
+      );
+      const ph = await tx.execute<{ storage_key: string }>(
+        sql`select storage_key from feed_post_photos where post_id in (${list})`,
+      );
+      keys.push(...ph.rows.map((r) => r.storage_key));
+      await tx.execute(
+        sql`delete from notifications where data ->> 'postId' in (select id::text from feed_posts where id in (${list}))`,
+      );
+      await tx.execute(sql`delete from feed_posts where id in (${list})`);
+    }
+  });
+  for (const key of keys) await removeOrRetry(key);
+  return { dryRun, posts: posts.length, files: keys.length, detached, postsBefore, postsAfter: await countPosts() };
 }
 
 /** Le compte rendu, en clair (pour Damien). */
@@ -327,6 +386,7 @@ export function describeReprise(s: RepriseStats): string {
     `  - ${s.keptNoVisual} restée(s) annonce(s) faute de visuel (ni image, ni affiche, ni photo de l'événement)`,
     `  - ${s.keptNoAuthor} restée(s) annonce(s) faute d'auteur (aucun propriétaire actif)`,
     `  - ${s.keptNotServed} restée(s) annonce(s) : événement brouillon ou sur invitation, structure supprimée, suspendue ou non vérifiée`,
+    `  - ${s.deletedDuring} supprimée(s) pendant la reprise (non reprises)`,
     `  - ${s.alreadyMigrated} déjà reprise(s)`,
     `  - dont ${s.pinned} épinglée(s) en tête de leur fiche ; ${s.imageMissing} image(s) disparue(s) du stockage ; ${s.failed} échec(s)`,
     `Publications : ${s.postsBefore} avant, ${s.postsAfter} ${s.dryRun ? "après (prévu)" : "après"}.`,
@@ -341,7 +401,7 @@ async function main() {
   if (args.has("--revert")) {
     const s = await revertAnnouncementsToPosts({ dryRun });
     console.log(
-      `${dryRun ? "[À BLANC : rien n'est écrit] " : ""}Retrait : ${s.posts} publication(s) reprise(s), ${s.files} fichier(s) copié(s). Publications : ${s.postsBefore} avant, ${s.postsAfter} après${dryRun ? " (prévu)" : ""}.`,
+      `${dryRun ? "[À BLANC : rien n'est écrit] " : ""}Retrait : ${s.posts} publication(s) reprise(s) (dont ${s.detached} gardée(s) en retrait doux, détachée(s) : un signalement les vise), ${s.files} fichier(s) copié(s). Publications : ${s.postsBefore} avant, ${s.postsAfter} après${dryRun ? " (prévu)" : ""}.`,
     );
   } else {
     console.log(describeReprise(await announcementsToPosts({ dryRun })));

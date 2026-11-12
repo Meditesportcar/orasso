@@ -246,3 +246,22 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* Journal sans session : lecture complète, une publication sous l'autre. */
+.evj-public {
+  display: grid;
+  gap: var(--space-4);
+}
+.evj-public__item {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.evj-public__item img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.evj-public__item p {
+  margin: 0;
+}

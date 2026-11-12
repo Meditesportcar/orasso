@@ -227,7 +227,8 @@ test("sans session : la fiche ne montre que le journal (ni mentions, ni menu, ni
   await go(page, `/e/${SLUG}`);
   const section = page.getByTestId("event-journal");
   await expect(section).toBeVisible({ timeout: 60_000 });
-  await expect(section.getByTestId("publication-tile")).toHaveCount(anon.data.publications?.count ?? 0);
+  await expect(section.getByTestId("journal-public-item")).toHaveCount(anon.data.publications?.count ?? 0);
+  await expect(section.getByTestId("journal-public-caption").first()).toBeVisible();
   await expect(section.getByTestId("journal-pinned")).toHaveCount(1);
   await expect(page.getByTestId("event-mentions-row")).toHaveCount(0);
   await expect(section.getByTestId("journal-tile-menu")).toHaveCount(0);

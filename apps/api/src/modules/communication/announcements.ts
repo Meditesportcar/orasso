@@ -29,17 +29,19 @@ import {
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { arrivalsOf } from "../events/arrivals";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { postOkSql } from "../feed/lists";
-import { setPinned as setPostPinned } from "../feed/pin";
+import { pinInTx } from "../feed/pin";
 import { softDeletePost } from "../feed/posts";
 import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
+import { removeOrRetry } from "../vehicles/photos-blur";
 import { memberRole, requireEventReader, requireEventSpeaker } from "./guards";
 
 type AnnouncementRow = typeof eventAnnouncements.$inferSelect;
@@ -309,20 +311,32 @@ export const announcementsService = {
   /** `PATCH /events/:id/announcements/:aid {pinned}` : épingler ou désépingler (modération par l'organisateur). */
   async setPinned(v: Viewer, eventId: string, id: string, pinned: boolean): Promise<AnnouncementView> {
     const { e, s } = await requireEventSpeaker(v, eventId);
-    const [row] = await db
-      .update(eventAnnouncements)
-      .set({ pinned })
-      .where(
-        and(eq(eventAnnouncements.id, id), eq(eventAnnouncements.eventId, e.id), isNull(eventAnnouncements.deletedAt)),
-      )
-      .returning();
+    // Lot R8d : l'annonce et sa publication reprise s'épinglent **dans la même transaction**, sous le verrou de l'épingle de
+    // l'événement (`pinInTx`) : jamais une épingle sur l'ancien APK sans la fiche. Une erreur (limite d'écritures, droits)
+    // remonte et rien n'est écrit.
+    const row = await withTx(async (tx) => {
+      const [taken] = await tx
+        .select({ id: feedPosts.id })
+        .from(feedPosts)
+        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+      if (taken) {
+        rateLimit("feedWrite", v.user.id);
+        await pinInTx(tx, v, e.id, taken.id, pinned);
+      }
+      const [updated] = await tx
+        .update(eventAnnouncements)
+        .set({ pinned })
+        .where(
+          and(
+            eq(eventAnnouncements.id, id),
+            eq(eventAnnouncements.eventId, e.id),
+            isNull(eventAnnouncements.deletedAt),
+          ),
+        )
+        .returning();
+      return updated;
+    });
     if (!row) throw notFound("Entrée introuvable");
-    // Lot R8d : une annonce reprise épingle aussi sa publication (le journal est la fiche), comme `DELETE` la retire aussi.
-    const [taken] = await db
-      .select({ id: feedPosts.id })
-      .from(feedPosts)
-      .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
-    if (taken) await setPostPinned(v, e.id, taken.id, pinned).catch(() => undefined);
     return serialize(row, s.name);
   },
 
@@ -330,6 +344,13 @@ export const announcementsService = {
   async remove(v: Viewer, eventId: string, id: string) {
     const { e } = await requireEventSpeaker(v, eventId);
     const { imageKey, postKeys } = await withTx(async (tx) => {
+      // Même ordre de verrous que le retrait d'une publication (publication, puis annonce) : pas d'interblocage entre
+      // le retrait de la reprise dans l'appli et celui de l'annonce par l'ancien APK.
+      const [taken] = await tx
+        .select({ id: feedPosts.id })
+        .from(feedPosts)
+        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)))
+        .for("update");
       const [current] = await tx
         .select({ imageKey: eventAnnouncements.imageKey })
         .from(eventAnnouncements)
@@ -348,15 +369,12 @@ export const announcementsService = {
         .where(eq(eventAnnouncements.id, id));
       // L'ancien APK retire une annonce que le journal a reprise : la publication reprise est retirée avec elle (sinon
       // l'organisateur la verrait revenir sur la fiche). Ses photos copiées partent après la validation.
-      const [taken] = await tx
-        .select({ id: feedPosts.id })
-        .from(feedPosts)
-        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
       const postKeys = taken ? await softDeletePost(tx, taken.id, v.user.id, now()) : [];
       return { imageKey: current.imageKey, postKeys };
     });
-    if (imageKey) await storage.remove(imageKey).catch(() => undefined);
-    for (const key of postKeys) await storage.remove(key).catch(() => undefined);
+    // Une suppression qui échoue est reprise par la tâche `storage.remove` (jamais une image retirée qui reste servie).
+    if (imageKey) await removeOrRetry(imageKey);
+    for (const key of postKeys) await removeOrRetry(key);
   },
 
   /**

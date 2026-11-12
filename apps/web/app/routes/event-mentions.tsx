@@ -1,4 +1,4 @@
-import { Chip, Icon } from "@orasso/design-system/web";
+import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
   authorFichePath,
   type EventMentionsSection,
@@ -8,9 +8,10 @@ import {
   type MentionItem,
   type MentionsPage,
   mentionsPhase,
+  type PageCounts,
   publicationPath,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -27,21 +28,10 @@ import type { Route } from "./+types/event-mentions";
 // Un responsable de la fiche a un « … » par mention (« Masquer de la fiche » / « Remettre sur la fiche ») et le filtre « Masquées ».
 export const handle = ficheHandle;
 
-async function readAll(request: Request, eventId: string, section: EventMentionsSection, hidden: boolean) {
-  const out: MentionItem[] = [];
-  let cursor: string | null = null;
-  for (let i = 0; i < 10; i++) {
-    const q: string = new URLSearchParams({
-      section,
-      ...(cursor ? { cursor } : {}),
-      ...(hidden ? { hidden: "1" } : {}),
-    }).toString();
-    const res: MentionsPage = await apiOrThrow<MentionsPage>(request, `/events/${eventId}/mentions?${q}`);
-    out.push(...res.items);
-    cursor = res.nextCursor;
-    if (!cursor) break;
-  }
-  return out;
+/** La première page d'une rubrique ; la suite se lit dans le navigateur (« Voir plus »), rien n'est abandonné sans le dire. */
+async function readPage(request: Request, eventId: string, section: EventMentionsSection, hidden: boolean) {
+  const q = new URLSearchParams({ section, ...(hidden ? { hidden: "1" } : {}) }).toString();
+  return apiOrThrow<MentionsPage>(request, `/events/${eventId}/mentions?${q}`);
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -50,10 +40,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const manager = Boolean(me.personas?.some((p) => p.kind === "organizer" && p.id === event.structure.id));
   const get = async (section: EventMentionsSection) => {
     try {
-      return await readAll(request, event.id, section, manager);
+      return { page: await readPage(request, event.id, section, manager), hidden: manager };
     } catch (error) {
       // Un responsable refusé (second facteur) lit comme tout le monde.
-      if (manager) return readAll(request, event.id, section, false);
+      if (manager) return { page: await readPage(request, event.id, section, false), hidden: false };
       throw error;
     }
   };
@@ -61,8 +51,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     event: { id: event.id, slug: event.slug, title: event.title, endsAt: event.endsAt },
     manager,
-    onSite,
-    fans,
+    onSite: onSite.page.items,
+    fans: fans.page.items,
+    cursors: { on_site: onSite.page.nextCursor, fans: fans.page.nextCursor },
+    withHidden: onSite.hidden,
+    count: (event as EventPublic & PageCounts).mentions?.count ?? null,
     after: mentionsPhase(event, new Date(nowMs())) === "after",
   };
 }
@@ -75,11 +68,45 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function EventMentions({ loaderData }: Route.ComponentProps) {
-  const { event, manager, onSite, fans, after } = loaderData;
+  const { event, manager, after, cursors: firstCursors, withHidden, count } = loaderData;
+  // Les pages suivantes se lisent ici ; une nouvelle donnée du chargeur (retour de masquage) repart de sa première page.
+  const [more, setMore] = useState<{ on_site: MentionItem[]; fans: MentionItem[] }>({ on_site: [], fans: [] });
+  const [cursors, setCursors] = useState(firstCursors);
+  const [busy, setBusy] = useState<EventMentionsSection | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repart du chargeur à chaque nouvelle donnée
+  useEffect(() => {
+    setMore({ on_site: [], fans: [] });
+    setCursors(firstCursors);
+  }, [loaderData]);
+  const onSite = [...loaderData.onSite, ...more.on_site];
+  const fans = [...loaderData.fans, ...more.fans];
+  async function readMore(section: EventMentionsSection) {
+    const cursor = cursors[section];
+    if (!cursor || busy) return;
+    setBusy(section);
+    const q = new URLSearchParams({ section, cursor, ...(withHidden ? { hidden: "1" } : {}) }).toString();
+    const res = await apiFetch<MentionsPage>(`/events/${event.id}/mentions?${q}`);
+    setBusy(null);
+    if (!res.ok) return;
+    setMore((m) => ({ ...m, [section]: [...m[section], ...res.data.items] }));
+    setCursors((c) => ({ ...c, [section]: res.data.nextCursor }));
+  }
+  const moreButton = (section: EventMentionsSection) =>
+    cursors[section] ? (
+      <Button
+        variant="secondary"
+        icon="down"
+        loading={busy === section}
+        onClick={() => void readMore(section)}
+        data-testid={`mentions-more-${section}`}
+      >
+        {L.more}
+      </Button>
+    ) : null;
   const revalidator = useRevalidator();
   const [filter, setFilter] = useState<"visible" | "hidden">("visible");
   const [menu, setMenu] = useState<MentionItem | null>(null);
-  const total = onSite.filter((i) => !i.hidden).length + fans.filter((i) => !i.hidden).length;
+  const total = count ?? onSite.filter((i) => !i.hidden).length + fans.filter((i) => !i.hidden).length;
   const shown = (items: MentionItem[]) =>
     items.filter((i) => (manager ? (filter === "hidden" ? i.hidden : !i.hidden) : true));
   const places = shown(onSite);
@@ -180,6 +207,7 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
                 </article>
               );
             })}
+            {moreButton("on_site")}
           </section>
         ) : null}
 
@@ -227,6 +255,7 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
             <p className="s-muted o-t-caption" data-testid="mentions-fans-note">
               {after ? L.fansNoteAfter : L.fansNoteBefore}
             </p>
+            {moreButton("fans")}
           </section>
         ) : null}
 

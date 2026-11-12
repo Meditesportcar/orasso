@@ -31,7 +31,7 @@ const EMPTY: JournalState = {
 /** Une ligne de la réponse : `PublicPostView` (sans session) n'a ni `mine` ni `reactedByMe`. */
 const isPublic = (p: FeedPostView | PublicPostView): p is PublicPostView => !("mine" in p);
 
-export function useJournal(eventId: string | null, enabled = true) {
+export function useJournal(eventId: string | null, enabled = true, refreshKey = 0) {
   const [state, setState] = useState<JournalState>(EMPTY);
   const gate = useRef(createRequestGate(cacheScope)).current;
   const cursorRef = useRef<string | null>(null);
@@ -65,6 +65,12 @@ export function useJournal(eventId: string | null, enabled = true) {
     void reload();
     return () => gate.invalidate();
   }, [enabled, eventId, reload, gate]);
+
+  // Actualisation manuelle de la fiche : la liste se relit.
+  const firstKey = useRef(refreshKey);
+  useEffect(() => {
+    if (refreshKey !== firstKey.current && enabled) void reload();
+  }, [refreshKey, enabled, reload]);
 
   const more = useCallback(async () => {
     const cursor = cursorRef.current;

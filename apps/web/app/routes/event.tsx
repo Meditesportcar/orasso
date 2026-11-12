@@ -474,7 +474,7 @@ function EventPage({
     going,
     invited,
   } = loaderData;
-  const fil = remainingFil(feed);
+  const fil = remainingFil(feed, journal !== null);
   const showFeed = fil.length > 0 || !journal || (counts.publications?.count ?? 0) === 0;
   const inviteResult = actionData as InviteNoticeData | undefined;
   const mine = event.myApplications ?? [];
@@ -828,12 +828,14 @@ function EventPage({
         {/* Lot R8d : le journal de l'événement et « Mentions · N » ; dessous, ce qui reste de l'ancien fil. */}
         {journal ? (
           <EventJournal
+            key={event.id}
             eventId={event.id}
             eventSlug={event.slug}
             structureId={event.structure.id}
             structureName={event.structure.name}
             count={counts.publications?.count}
             mentions={counts.mentions?.count}
+            hiddenMentions={counts.hiddenMentions?.count}
             manager={manager}
             signedIn={connected}
             userId={userId}

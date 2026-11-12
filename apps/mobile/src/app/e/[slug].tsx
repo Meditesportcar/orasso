@@ -40,8 +40,8 @@ import {
   withYear,
   wizardEndLabels,
 } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
@@ -157,7 +157,20 @@ export default function EventPage() {
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   // Fil de l'événement (lot 20) : public, enrichi pour les retenus (consignes, annonces réservées).
   const feed = useApi(() => api.eventAnnouncements(slug), [slug, status], { enabled: status !== "loading" });
-  const fil = remainingFil(feed.data?.items ?? []);
+  // Le journal est-il lu ? Sinon l'ancien fil reste complet (une panne du journal ne fait pas disparaître les annonces reprises).
+  const [journalRead, setJournalRead] = useState(false);
+  const [journalTick, setJournalTick] = useState(0);
+  // Retour sur la fiche (après « Publier pour cet événement ») : la fiche et son journal se relisent.
+  const focused = useIsFocused();
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (focused && !wasFocused.current) {
+      void event.reload();
+      setJournalTick((t) => t + 1);
+    }
+    wasFocused.current = focused;
+  }, [focused, event.reload]);
+  const fil = remainingFil(feed.data?.items ?? [], journalRead);
   const structure = useApi(() => api.structureBySlug(e?.structure.slug ?? ""), [e?.structure.slug, status], {
     enabled: Boolean(e) && status !== "loading",
   });
@@ -521,7 +534,10 @@ export default function EventPage() {
       }
       liftHero
       onClose={close}
-      onRefresh={event.reload}
+      onRefresh={async () => {
+        setJournalTick((t) => t + 1);
+        await event.reload();
+      }}
       overlays={
         <>
           {status === "in" ? <WriteSheet event={e} visible={writing} onClose={() => setWriting(false)} /> : null}
@@ -758,8 +774,11 @@ export default function EventPage() {
         structureName={e.structure.name}
         count={counts.publications?.count}
         mentions={counts.mentions?.count}
+        hiddenMentions={counts.hiddenMentions?.count}
         manager={Boolean(me?.personas?.some((p) => p.kind === "organizer" && p.id === e.structure.id))}
         signedIn={status === "in"}
+        onRead={setJournalRead}
+        refreshKey={journalTick}
       />
       {feed.data && (fil.length > 0 || (counts.publications?.count ?? 0) === 0) ? (
         <EventFeed items={fil} reportable={status === "in"} />

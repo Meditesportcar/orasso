@@ -71,7 +71,12 @@ export type PublicPostView = {
 export type PublicPostsPage = { items: PublicPostView[]; nextCursor: string | null };
 
 /** Compteurs d'une fiche (décoration des pages). `mentions` absent sans session ; `publications` nul : liste restreinte. */
-export type PageCounts = { publications?: { count: number }; mentions?: { count: number } };
+export type PageCounts = {
+  publications?: { count: number };
+  mentions?: { count: number };
+  /** Lot R8d : mentions masquées de la fiche, **pour un responsable seulement** (la ligne « Mentions » reste tant qu'il y en a). */
+  hiddenMentions?: { count: number };
+};
 export type ProfileCounts = { publications: { count: number } | null };
 
 export type { FeedAttachPhase };

@@ -197,7 +197,10 @@ test("sans session : la fiche ne montre que le journal (ni mentions, ni menu, ni
     await page.goto(`/e/${SLUG}`);
     const section = page.getByTestId("event-journal");
     await expect(section).toBeVisible({ timeout: 30_000 });
-    await expect(section.getByTestId("publication-tile")).toHaveCount(anon.data.publications?.count ?? 0);
+    await expect(section.getByTestId("journal-public-item")).toHaveCount(anon.data.publications?.count ?? 0);
+    // T4 : le texte des publications se lit sans session (légende entière), pas seulement la vignette.
+    expect(await section.getByTestId("journal-public-caption").count()).toBeGreaterThanOrEqual(3);
+    await expect(section).toContainText("Le plateau JDM prend forme");
     await expect(section.getByTestId("journal-pinned")).toHaveCount(1);
     await expect(page.getByTestId("event-mentions-row")).toHaveCount(0);
     await expect(section.getByTestId("journal-tile-menu")).toHaveCount(0);
@@ -270,4 +273,26 @@ test("l'organisateur d'une fiche sans publication voit l'invitation « Publier p
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/e/msc-edition-27");
   await page.goto("/e/msc-edition-27");
   await expect(page.getByTestId("event-journal")).toHaveCount(0);
+});
+
+test("masquer la dernière mention : la ligne « Mentions » reste au responsable, qui peut la remettre", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const sarah = await login("sarah@orasso.local");
+  const ev = await detail(sarah);
+  const list = await apiCall<{ items: { hidden: boolean; post: { id: string } }[] }>(
+    sarah,
+    "GET",
+    `/events/${ev.id}/mentions?section=on_site`,
+  );
+  const target = list.data.items[0]?.post.id as string;
+  expect((await apiCall(sarah, "PUT", `/mentions/e:${ev.id}/${target}/hidden`)).status).toBe(200);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "sarah@orasso.local", undefined, `/e/${SLUG}`);
+  await page.goto(`/e/${SLUG}`);
+  await expect(page.getByTestId("event-mentions-row")).toBeVisible({ timeout: 30_000 });
+  await page.goto(`/app/e/${SLUG}/mentions`);
+  await page.getByTestId("mentions-filter-hidden").click();
+  await expect(page.getByTestId("mention-on-site")).toHaveCount(1);
 });

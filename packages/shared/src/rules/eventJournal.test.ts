@@ -27,6 +27,9 @@ describe("remainingFil : ce qui reste de l'ancien fil", () => {
     ];
     expect(remainingFil(items).map((i) => i.id)).toEqual(["b", "c"]);
   });
+  it("journal non lu (panne, ni réponse ni copie) : rien n'est caché", () => {
+    expect(remainingFil([{ id: "a", migratedPostId: "p1" }, { id: "b" }], false).map((i) => i.id)).toEqual(["a", "b"]);
+  });
   it("une réponse sans le champ (API plus ancienne) garde tout", () => {
     expect(remainingFil([{ id: "a" }, { id: "b" }])).toHaveLength(2);
   });
@@ -195,5 +198,31 @@ describe("lastJournalNotice et lastLegacyNotice", () => {
       { id: "a", kind: "announcement", body: "Hier", publishedAt: "2026-11-10T08:00:00Z" },
     ]);
     expect(latestNotice(journal, legacy)?.source).toBe("journal");
+  });
+});
+
+describe("lastJournalNotice : l'info importante du jour passe devant", () => {
+  const now = new Date("2026-11-11T12:00:00Z");
+  const important = {
+    id: "imp",
+    caption: "Entrée déplacée",
+    createdAt: "2026-11-11T07:00:00Z",
+    important: { reason: "access" },
+  };
+  const photo = { id: "ph", caption: "Photo", createdAt: "2026-11-11T08:00:00Z" };
+  it("importante 8 h (heure de Paris) + photo 9 h : l'importante", () => {
+    expect(lastJournalNotice([photo, important], "x", { now, timeZone: "Europe/Paris" })?.id).toBe("imp");
+  });
+  it("importante d'hier + photo d'aujourd'hui : la photo", () => {
+    const old = { ...important, createdAt: "2026-11-10T07:00:00Z" };
+    expect(lastJournalNotice([photo, old], "x", { now, timeZone: "Europe/Paris" })?.id).toBe("ph");
+  });
+  it("le jour est celui du fuseau de l'événement", () => {
+    const late = { ...important, createdAt: "2026-11-10T23:30:00Z" };
+    expect(lastJournalNotice([photo, late], "x", { now, timeZone: "Europe/Paris" })?.id).toBe("imp");
+    expect(lastJournalNotice([photo, late], "x", { now, timeZone: "America/New_York" })?.id).toBe("ph");
+  });
+  it("sans jour donné : la plus récente", () => {
+    expect(lastJournalNotice([photo, important], "x")?.id).toBe("ph");
   });
 });

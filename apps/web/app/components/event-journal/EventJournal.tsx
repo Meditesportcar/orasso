@@ -22,6 +22,7 @@ import { PublicationsGrid } from "../publications/PublicationsGrid";
 import { PublicationsOneByOne } from "../publications/PublicationsOneByOne";
 import { ViewToggle } from "../publications/ViewToggle";
 import { viewChoiceKey } from "../publications/viewChoice";
+import { PublicJournalList } from "./PublicJournalList";
 import { useJournal } from "./useJournal";
 
 /** Le choix d'affichage est celui de la liste d'un profil (même clé, retenu par compte, dans le navigateur). */
@@ -56,6 +57,7 @@ export function EventJournal({
   structureName,
   count,
   mentions,
+  hiddenMentions,
   manager,
   signedIn,
   userId,
@@ -70,6 +72,8 @@ export function EventJournal({
   count: number | undefined;
   /** `mentions.count` de la fiche (absent sans session). */
   mentions: number | undefined;
+  /** Responsable seulement : mentions masquées (la ligne reste pour les retrouver). */
+  hiddenMentions?: number;
   /** Je suis responsable de la structure de l'événement : menus et invitation. */
   manager: boolean;
   signedIn: boolean;
@@ -84,7 +88,7 @@ export function EventJournal({
   const [menu, setMenu] = useState<FeedPostView | null>(null);
   const isManager = manager && signedIn;
   const kind = journalSection({ count: list.items.length > 0 ? list.items.length : count, manager: isManager });
-  const mentionsRow = showMentionsRow({ signedIn, count: mentions });
+  const mentionsRow = showMentionsRow({ signedIn, count: mentions, hidden: hiddenMentions });
   if (kind === "none" && !mentionsRow) return null;
 
   const journal = signedIn ? (isManager ? { onMenu: setMenu } : {}) : { readOnly: true };
@@ -126,8 +130,10 @@ export function EventJournal({
           ) : null}
           {signedIn && mode === "one" ? (
             <PublicationsOneByOne posts={list.items} journal={journal} />
-          ) : (
+          ) : signedIn ? (
             <PublicationsGrid posts={list.items} journal={journal} />
+          ) : (
+            <PublicJournalList posts={list.items} />
           )}
           {list.error ? (
             <p className="s-notice" role="alert" data-testid="journal-error">

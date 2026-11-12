@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { fromWallTime } from "@orasso/shared";
 import { eq, isNotNull, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app";
 import { db, pool } from "../src/db/client";
 import {
@@ -20,7 +20,10 @@ import {
 } from "../src/db/schema";
 import { resetRateLimits } from "../src/lib/rateLimit";
 import { storage } from "../src/lib/storage";
+import { withTx } from "../src/lib/tx";
+import { materializeMentions } from "../src/modules/feed/mentions";
 import { softDeletePost } from "../src/modules/feed/posts";
+import { removeOrRetry, retryRemove } from "../src/modules/vehicles/photos-blur";
 import {
   call,
   createEvent,
@@ -94,6 +97,9 @@ async function mkAnnouncement(eventId: string, over: AnnOver & { image?: { w: nu
     .returning();
   return { row: row!, data, imageKey };
 }
+
+const bodies = async (u: TestUser | null, slug: string) =>
+  ((await call(u, "GET", `/events/by-slug/${slug}/announcements`)).json.items as { body: string }[]).map((i) => i.body);
 
 const postOf = async (announcementId: string) =>
   (await db.select().from(feedPosts).where(eq(feedPosts.legacyAnnouncementId, announcementId)))[0];
@@ -439,11 +445,6 @@ describe("façades et Fil", () => {
 });
 
 describe("tour 2 : retrait, épingle, reprise non servie, retrait de la reprise", () => {
-  const bodies = async (u: TestUser | null, slug: string) =>
-    ((await call(u, "GET", `/events/by-slug/${slug}/announcements`)).json.items as { body: string }[]).map(
-      (i) => i.body,
-    );
-
   it("une reprise retirée (par l'auteur ou par la modération) emporte l'annonce : plus servie, ni sans session ni à un inscrit, image effacée", async () => {
     const ref2 = ref;
     const e = await mkEvent();
@@ -560,11 +561,158 @@ describe("tour 2 : retrait, épingle, reprise non servie, retrait de la reprise"
     } as never);
     await revertAnnouncementsToPosts();
     const r = await db.execute<{ n: number }>(sql`select count(*)::int as n from reports where target_id = ${post.id}`);
-    expect(Number(r.rows[0]?.n)).toBe(0);
+    expect(Number(r.rows[0]?.n)).toBe(1);
     const n = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from notifications where data ->> 'postId' = ${post.id}`,
     );
     expect(Number(n.rows[0]?.n)).toBe(0);
+  });
+});
+
+describe("tour 3 : reprise et retrait sous contrainte", () => {
+  it("l'effacement d'une image d'annonce retirée est repris par la tâche (motif strict)", async () => {
+    const key = `announcements/${randomUUID()}/${randomUUID()}.webp`;
+    await storage.put(key, await webp(10, 10));
+    await retryRemove(key);
+    expect(await storage.get(key)).toBeNull();
+    const other = "announcements/x/y.webp";
+    await storage.put(other, await webp(10, 10));
+    await retryRemove(other);
+    expect(await storage.get(other)).not.toBeNull();
+    await storage.remove(other);
+    const k2 = `announcements/${randomUUID()}/${randomUUID()}.webp`;
+    await storage.put(k2, await webp(10, 10));
+    const spy = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("refusé"));
+    await removeOrRetry(k2);
+    spy.mockRestore();
+    expect(await storage.get(k2)).not.toBeNull();
+    await retryRemove(k2);
+    expect(await storage.get(k2)).toBeNull();
+  });
+
+  it("une annonce supprimée pendant la reprise n'est pas republiée (fichier copié effacé)", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { image: { w: 1080, h: 1350 }, body: "Supprimée en route" });
+    const realCopy = storage.copy.bind(storage);
+    const spy = vi.spyOn(storage, "copy").mockImplementation(async (from: string, to: string) => {
+      await realCopy(from, to);
+      await db.update(eventAnnouncements).set({ deletedAt: new Date() }).where(eq(eventAnnouncements.id, a.row.id));
+    });
+    const stats = await announcementsToPosts();
+    spy.mockRestore();
+    expect(stats).toMatchObject({ deletedDuring: 1, withImage: 0, failed: 0 });
+    expect(await postOf(a.row.id)).toBeUndefined();
+    expect(await db.select().from(feedPostPhotos)).toHaveLength(0);
+  });
+
+  it("--revert : un signalement n'est jamais supprimé ; la reprise visée est retirée en douceur, détachée, l'annonce est de nouveau servie", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Annonce signalée" });
+    const b = await mkAnnouncement(e.id, { body: "Annonce sans signalement" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const reporter = await signUp("Signale3_R8d");
+    await db.execute(
+      sql`insert into reports (reporter_id, target_type, target_id, reason, screenshot_key) values (${reporter.id}, 'feed_post', ${post.id}, 'other', 'reports/capture-r8d.webp')`,
+    );
+    const stats = await revertAnnouncementsToPosts();
+    expect(stats).toMatchObject({ posts: 2, detached: 1 });
+    const reports = await db.execute<{ n: number; k: string | null }>(
+      sql`select count(*)::int as n, max(screenshot_key) as k from reports where target_id = ${post.id}`,
+    );
+    expect(Number(reports.rows[0]?.n)).toBe(1);
+    expect(reports.rows[0]?.k).toBe("reports/capture-r8d.webp");
+    const [kept] = await db.select().from(feedPosts).where(eq(feedPosts.id, post.id));
+    expect(kept?.deletedAt).not.toBeNull();
+    expect(kept?.legacyAnnouncementId).toBeNull();
+    expect(await postOf(b.row.id)).toBeUndefined();
+    const list = await bodies(null, e.slug);
+    expect(list).toContain("Annonce signalée");
+    expect(list).toContain("Annonce sans signalement");
+  });
+
+  it("--revert est atomique : un échec en cours de route annule tout", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Atomique" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const user = await signUp("Notifie3_R8d");
+    await db.insert(notifications).values({
+      userId: user.id,
+      type: "feed_post_mention",
+      family: "social",
+      title: "x",
+      body: "y",
+      deliverAfter: new Date(),
+      data: { postId: post.id },
+    } as never);
+    await db.execute(
+      sql`create or replace function r8d_boom() returns trigger language plpgsql as 'begin raise exception ''boom''; end'`,
+    );
+    await db.execute(sql`create trigger r8d_boom before delete on feed_posts for each row execute function r8d_boom()`);
+    try {
+      await expect(revertAnnouncementsToPosts()).rejects.toThrow();
+    } finally {
+      await db.execute(sql`drop trigger r8d_boom on feed_posts`);
+    }
+    expect(await postOf(a.row.id)).toBeTruthy();
+    const n = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from notifications where data ->> 'postId' = ${post.id}`,
+    );
+    expect(Number(n.rows[0]?.n)).toBe(1);
+  });
+
+  it("deux retraits simultanés (reprise dans l'appli, annonce par l'ancien APK) : aucun 500", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Course" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const [r1, r2] = await Promise.all([
+      call(owner, "DELETE", `/me/feed-posts/${post.id}`),
+      call(owner, "DELETE", `/events/${e.id}/announcements/${a.row.id}`),
+    ]);
+    expect(r1.status).toBeLessThan(500);
+    expect(r2.status).toBeLessThan(500);
+    expect(await bodies(null, e.slug)).not.toContain("Course");
+  });
+
+  it("deux épingles opposées simultanées par l'ancien APK : l'annonce et la publication disent la même chose", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Épingle en course" });
+    await announcementsToPosts();
+    await Promise.all([
+      call(owner, "PATCH", `/events/${e.id}/announcements/${a.row.id}`, { pinned: true }),
+      call(owner, "PATCH", `/events/${e.id}/announcements/${a.row.id}`, { pinned: false }),
+    ]);
+    const [ann] = await db.select().from(eventAnnouncements).where(eq(eventAnnouncements.id, a.row.id));
+    expect(Boolean((await postOf(a.row.id))?.pinnedAt)).toBe(ann?.pinned);
+  });
+
+  it("fiche : le responsable lit le nombre de mentions masquées, un passionné jamais", async () => {
+    const e = await mkEvent();
+    const fan = await signUp("Fan3_R8d");
+    const [post] = await db
+      .insert(feedPosts)
+      .values({ authorId: fan.id, caption: "J'y serai", department: "66", eventId: e.id, eventRole: "attendee" })
+      .returning();
+    await db.insert(feedPostPhotos).values({
+      postId: post!.id,
+      storageKey: `private/feed/${post!.id}/${"a".repeat(32)}.webp`,
+      width: 1080,
+      height: 1350,
+      position: 0,
+      noPlateConfirmed: true,
+    });
+    await withTx((tx) => materializeMentions(tx, post!.id));
+    const before = await call(owner, "GET", `/events/by-slug/${e.slug}`);
+    expect(before.json.mentions.count).toBe(1);
+    expect(before.json.hiddenMentions.count).toBe(0);
+    expect((await call(owner, "PUT", `/mentions/e:${e.id}/${post!.id}/hidden`)).status).toBe(200);
+    const after = await call(owner, "GET", `/events/by-slug/${e.slug}`);
+    expect(after.json.mentions.count).toBe(0);
+    expect(after.json.hiddenMentions.count).toBe(1);
+    expect((await call(fan, "GET", `/events/by-slug/${e.slug}`)).json.hiddenMentions).toBeUndefined();
+    expect((await call(null, "GET", `/events/by-slug/${e.slug}`)).json.hiddenMentions).toBeUndefined();
   });
 });
 

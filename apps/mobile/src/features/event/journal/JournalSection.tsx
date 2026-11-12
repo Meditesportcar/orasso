@@ -27,6 +27,7 @@ import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Waiting } from "@/ui/Waiting";
+import { PublicJournalList } from "./PublicJournalList";
 import { useJournal } from "./useJournal";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
@@ -59,8 +60,11 @@ export function JournalSection({
   structureName,
   count,
   mentions,
+  hiddenMentions,
   manager,
   signedIn,
+  onRead,
+  refreshKey = 0,
 }: {
   eventId: string;
   eventSlug: string;
@@ -70,22 +74,30 @@ export function JournalSection({
   count: number | undefined;
   /** `mentions.count` de la fiche (absent sans session). */
   mentions: number | undefined;
+  /** Responsable seulement : mentions masquées (la ligne reste pour les retrouver). */
+  hiddenMentions?: number;
   /** Je suis responsable de la structure de l'événement (casquette organisateur) : menus et invitation. */
   manager: boolean;
   signedIn: boolean;
+  /** Le journal a-t-il été lu (réponse de l'API) ? La fiche ne cache les annonces reprises que s'il l'est. */
+  onRead?: (read: boolean) => void;
+  /** Change à chaque actualisation de la fiche (tirer pour actualiser, retour sur l'écran) : le journal se relit. */
+  refreshKey?: number;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
   const kind = journalSection({ count: count ?? 1, manager: manager && signedIn });
   // Le compteur dit 0 : rien à lire (pas de requête). Inconnu : on lit.
-  const list = useJournal(eventId, count !== 0);
+  const list = useJournal(eventId, count !== 0, refreshKey);
   const [mode, setMode] = useViewMode();
+  const read = list.loaded || count === 0;
+  useEffect(() => onRead?.(read), [read, onRead]);
   const [menu, setMenu] = useState<FeedPostView | null>(null);
 
   const publish = () =>
     router.push({ pathname: "/fil/publier", params: { structure: structureId, evenement: eventId } });
-  const mentionsRow = showMentionsRow({ signedIn, count: mentions });
+  const mentionsRow = showMentionsRow({ signedIn, count: mentions, hidden: hiddenMentions });
 
   const showList = count !== 0 && (list.loading || list.items.length > 0 || Boolean(list.error));
   if (!showList && kind !== "invite" && !mentionsRow) return null;
@@ -121,8 +133,10 @@ export function JournalSection({
           ) : null}
           {signedIn && mode === "one" ? (
             <PublicationsOneByOne posts={list.items} journal={journal} />
-          ) : (
+          ) : signedIn ? (
             <PublicationsGrid posts={list.items} journal={journal} />
+          ) : (
+            <PublicJournalList posts={list.items} />
           )}
           {list.error ? (
             <LoadError message={L.error} onRetry={() => void (list.nextCursor ? list.more() : list.reload())} />

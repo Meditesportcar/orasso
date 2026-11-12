@@ -10,6 +10,7 @@ import {
   eventJournalLabels as L,
   type MentionItem,
   mentionsPhase,
+  type PageCounts,
   publicationPath,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -40,18 +41,9 @@ const { space1, space2, space3, space4 } = tokens.spacing;
 type Section = "on_site" | "fans";
 type Filter = "visible" | "hidden";
 
-/** Une rubrique entière, page après page (la suite se lit jusqu'au bout : elles sont courtes). */
-async function readAll(eventId: string, section: Section, hidden: boolean): Promise<MentionItem[]> {
-  const out: MentionItem[] = [];
-  let cursor: string | null = null;
-  for (let i = 0; i < 10; i++) {
-    const page = await api.eventMentions(eventId, section, cursor, hidden);
-    out.push(...page.items);
-    cursor = page.nextCursor;
-    if (!cursor) break;
-  }
-  return out;
-}
+/** Une page d'une rubrique (curseur gardé : « Voir plus » lit la suite, rien n'est abandonné sans le dire). */
+const readPage = (eventId: string, section: Section, hidden: boolean, cursor: string | null) =>
+  api.eventMentions(eventId, section, cursor, hidden);
 
 function PhotoBox({ post, style }: { post: FeedPostView; style: object }) {
   const photo = post.photos[0];
@@ -69,6 +61,9 @@ export function MentionsScreen() {
   const manager = Boolean(e && me?.personas?.some((p) => p.kind === "organizer" && p.id === e.structure.id));
   const [filter, setFilter] = useState<Filter>("visible");
   const [items, setItems] = useState<Record<Section, MentionItem[]>>({ on_site: [], fans: [] });
+  const [cursors, setCursors] = useState<Record<Section, string | null>>({ on_site: null, fans: null });
+  const [loadingMore, setLoadingMore] = useState<Section | null>(null);
+  const withHidden = useRef(false);
   const [read, setRead] = useState<"loading" | "ok" | "error" | "signin">("loading");
   const [menu, setMenu] = useState<MentionItem | null>(null);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -86,15 +81,20 @@ export function MentionsScreen() {
       // Un responsable lit aussi les masquées (le filtre les sépare) ; un refus (403) retombe sur la lecture ordinaire.
       const get = async (section: Section) => {
         try {
-          return await readAll(eventId, section, manager);
+          withHidden.current = manager;
+          return await readPage(eventId, section, manager, null);
         } catch (error) {
-          if (manager) return readAll(eventId, section, false);
+          if (manager) {
+            withHidden.current = false;
+            return readPage(eventId, section, false, null);
+          }
           throw error;
         }
       };
       const [on_site, fans] = await Promise.all([get("on_site"), get("fans")]);
       if (!ticket.current()) return;
-      setItems({ on_site, fans });
+      setItems({ on_site: on_site.items, fans: fans.items });
+      setCursors({ on_site: on_site.nextCursor, fans: fans.nextCursor });
       setRead("ok");
     } catch {
       if (ticket.current()) setRead("error");
@@ -106,6 +106,37 @@ export function MentionsScreen() {
     return () => gate.invalidate();
   }, [load, gate]);
 
+  async function more(section: Section) {
+    const cursor = cursors[section];
+    if (!cursor || !eventId || loadingMore) return;
+    setLoadingMore(section);
+    try {
+      const page = await readPage(eventId, section, withHidden.current, cursor);
+      setItems((s) => ({
+        ...s,
+        [section]: [...s[section], ...page.items.filter((n) => !s[section].some((o) => o.post.id === n.post.id))],
+      }));
+      setCursors((s) => ({ ...s, [section]: page.nextCursor }));
+    } catch {
+      setRead("error");
+    } finally {
+      setLoadingMore(null);
+    }
+  }
+  const moreButton = (section: Section) =>
+    cursors[section] ? (
+      <SmButton
+        kind="s"
+        wide
+        icon="down"
+        disabled={loadingMore === section}
+        onPress={() => void more(section)}
+        testID={`mentions-more-${section}`}
+      >
+        {L.more}
+      </SmButton>
+    ) : null;
+
   const close = () =>
     router.canGoBack() ? router.back() : router.replace({ pathname: "/e/[slug]", params: { slug: String(slug) } });
 
@@ -113,7 +144,10 @@ export function MentionsScreen() {
     items[section].filter((i) => (manager ? (filter === "hidden" ? i.hidden : !i.hidden) : true));
   const onSite = shown("on_site");
   const fans = shown("fans");
-  const total = items.on_site.filter((i) => !i.hidden).length + items.fans.filter((i) => !i.hidden).length;
+  // Le titre dit le nombre de la fiche (toutes les mentions visibles), pas celui des pages déjà lues.
+  const total =
+    (e as PageCounts | undefined)?.mentions?.count ??
+    items.on_site.filter((i) => !i.hidden).length + items.fans.filter((i) => !i.hidden).length;
   const phase = e ? mentionsPhase(e, now()) : "before";
 
   async function toggleHidden(item: MentionItem) {
@@ -228,6 +262,7 @@ export function MentionsScreen() {
                   </View>
                 );
               })}
+              {moreButton("on_site")}
             </View>
           ) : null}
 
@@ -270,6 +305,7 @@ export function MentionsScreen() {
                   </View>
                 ))}
               </View>
+              {moreButton("fans")}
               <Muted variant="caption" testID="mentions-fans-note">
                 {phase === "after" ? L.fansNoteAfter : L.fansNoteBefore}
               </Muted>

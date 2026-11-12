@@ -140,8 +140,8 @@ function JourJScreen() {
     cacheKey: journalEventId ? `journal.${journalEventId}` : undefined,
   });
   const lastAnnouncement = latestNotice(
-    lastJournalNotice(journal.data?.items ?? [], JL.newsPhoto),
-    lastLegacyNotice(remainingFil(feed.data?.items ?? [])),
+    lastJournalNotice(journal.data?.items ?? [], JL.newsPhoto, { now, timeZone: kit?.event.timezone }),
+    lastLegacyNotice(remainingFil(feed.data?.items ?? [], Boolean(journal.data))),
   );
 
   // 1. Le kit enregistré s'affiche tout de suite, sans réseau.

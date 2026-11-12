@@ -1,5 +1,6 @@
 // La fiche d'un événement : ce que montrent le journal, l'ancien fil, « Mentions · N » et le jour J (vague R8, lot R8d, maquette
 // R8.5 `e-fiche`). Pures : le site et l'appli les lisent, aucune n'est écrite dans un écran. `now` est toujours passé.
+import { BUSINESS_TIMEZONE } from "../enums";
 import type { FeedPostView } from "../schemas/feed";
 import type { PublicPostView } from "../schemas/feedLists";
 import type { AuthorKind } from "./authors";
@@ -11,9 +12,11 @@ export type LegacyEntry = { id: string; migratedPostId?: string | null };
 /**
  * Ce qui reste de l'ancien fil sous le journal : consignes, changements de statut, annonces réservées aux inscrits et annonces
  * non reprises. Les annonces reprises (`migratedPostId`) sont dans le journal : elles ne s'affichent pas deux fois. Une API
- * plus ancienne ne pose pas le champ : tout reste affiché.
+ * plus ancienne ne pose pas le champ : tout reste affiché. `journalRead` faux : rien n'est caché.
  */
-export function remainingFil<T extends LegacyEntry>(items: readonly T[]): T[] {
+export function remainingFil<T extends LegacyEntry>(items: readonly T[], journalRead = true): T[] {
+  // Le journal n'a pas pu être lu (panne, ni réponse ni copie) : l'ancien fil complet, l'information ne disparaît pas des deux côtés.
+  if (!journalRead) return [...items];
   return items.filter((i) => !i.migratedPostId);
 }
 
@@ -25,8 +28,14 @@ export function journalSection(input: { count: number | null | undefined; manage
 }
 
 /** La ligne « Mentions · N » : seulement avec une session et au moins une mention visible. */
-export function showMentionsRow(input: { signedIn: boolean; count: number | null | undefined }): boolean {
-  return input.signedIn && typeof input.count === "number" && input.count > 0;
+export function showMentionsRow(input: {
+  signedIn: boolean;
+  count: number | null | undefined;
+  /** Responsable de la fiche : le nombre de mentions masquées (la ligne reste tant qu'il y en a). */
+  hidden?: number | null;
+}): boolean {
+  if (!input.signedIn) return false;
+  return (typeof input.count === "number" && input.count > 0) || (typeof input.hidden === "number" && input.hidden > 0);
 }
 
 /** L'événement est-il fini ? Avant, « j'y serai » ; après, « j'y étais » (et la présence validée). */
@@ -65,6 +74,8 @@ export type Notice = { source: NoticeSource; id: string; text: string; at: strin
 export function latestNotice(journal: Notice | null, legacy: Notice | null): Notice | null {
   if (!journal) return legacy;
   if (!legacy) return journal;
+  // Une « Info importante » du journal (choisie d'aujourd'hui par `lastJournalNotice`) n'est jamais masquée par une annonce plus récente.
+  if (journal.important) return journal;
   return new Date(legacy.at).getTime() > new Date(journal.at).getTime() ? legacy : journal;
 }
 
@@ -72,8 +83,16 @@ export function latestNotice(journal: Notice | null, legacy: Notice | null): Not
 export function lastJournalNotice(
   items: readonly { id: string; caption: string | null; createdAt: string; important?: unknown }[],
   photoText: string,
+  today?: { now: Date; timeZone?: string },
 ): Notice | null {
-  const latest = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const byDate = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Une « Info importante » d'aujourd'hui (jour pris dans le fuseau de l'événement) passe devant une publication plus récente.
+  const day = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: today?.timeZone ?? BUSINESS_TIMEZONE, dateStyle: "short" }).format(d);
+  const important = today
+    ? byDate.find((i) => i.important && day(new Date(i.createdAt)) === day(today.now))
+    : undefined;
+  const latest = important ?? byDate[0];
   if (!latest) return null;
   return {
     source: "journal",
