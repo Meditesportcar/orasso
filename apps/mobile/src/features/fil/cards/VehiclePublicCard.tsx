@@ -2,18 +2,17 @@
 // immatriculé) ; le nom du véhicule ne se tronque jamais ; le pseudo ouvre le profil.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet } from "react-native";
-
 import { mediaSource } from "@/lib/media";
 import { Avatar } from "@/ui/Avatar";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { reasonLine } from "./parts";
 import type { CardProps } from "./types";
 
 export function VehiclePublicCard({ card, onMenu, faded }: CardProps<"vehicle_public">) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const { vehicle, owner } = card.payload;
   return (
     <CardShell
