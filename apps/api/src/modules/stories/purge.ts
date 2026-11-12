@@ -38,8 +38,8 @@ export async function softDeleteWithCopies(ex: Tx | typeof db, ids: string[]): P
 
 /**
  * Retire les copies des stories d'une personne : `all` (compte suspendu, banni) = toutes ses stories, copies de ses
- * stories personnelles ou signées d'une structure ou d'un pro ; sinon (compte passé en privé) seulement ses stories
- * personnelles, la structure et le pro restant publics. Rend les identifiants supprimés (fichiers effacés après la validation).
+ * stories personnelles ou signées d'une page ; sinon (compte passé en privé) seulement ses stories
+ * personnelles, les pages (structure, pro, prestataire, média) restant publiques. Rend les identifiants supprimés (fichiers effacés après la validation).
  */
 export async function dropCopiesOfAuthor(
   ex: Tx | typeof db,
@@ -48,7 +48,7 @@ export async function dropCopiesOfAuthor(
 ): Promise<string[]> {
   const res = await ex.execute<{ id: string }>(sql`
     select c.id from stories c join stories o on o.id = c.shared_from_story_id
-    where o.author_id = ${authorId} ${scope === "all" ? sql`` : sql`and o.persona not in ('organizer', 'pro')`}
+    where o.author_id = ${authorId} ${scope === "all" ? sql`` : sql`and o.persona = 'fan'`}
       and c.deleted_at is null`);
   const ids = res.rows.map((r) => r.id);
   if (!ids.length) return [];

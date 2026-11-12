@@ -382,7 +382,7 @@ describe("audiences × regards", () => {
     await addMember(structure.id, staff.id, "staff");
     expect((await publish(stranger, { persona: "organizer", structureId: structure.id })).status).toBe(403);
     expect((await publish(staff, { persona: "organizer", structureId: structure.id })).status).toBe(403);
-    await ok(co, { persona: "organizer", structureId: structure.id, audience: "followers" });
+    await ok(co, { persona: "organizer", structureId: structure.id, audience: "public" });
     await db.insert(structureFollows).values({ structureId: structure.id, userId: fan.id, source: "manual" });
     const bar = (await req(fan, "GET", "/stories/bar")).json;
     expect(bar.authors).toHaveLength(1);
@@ -477,8 +477,8 @@ describe("barre", () => {
     const orga = await signUp("OrgaMine", { twoFactor: true });
     const structure = await createStructure(orga.id);
     const pro = await createPro(orga.id);
-    await ok(orga, { persona: "organizer", structureId: structure.id, audience: "followers" });
-    await ok(orga, { persona: "pro", proId: pro.id, audience: "followers" });
+    await ok(orga, { persona: "organizer", structureId: structure.id, audience: "public" });
+    await ok(orga, { persona: "pro", proId: pro.id, audience: "public" });
     // Que des stories au nom d'une structure ou d'un pro : « Ta story » reste vide (sinon elle ouvrirait `u:<moi>`, vide).
     let bar = (await req(orga, "GET", "/stories/bar")).json;
     expect(bar.mine).toBeNull();
@@ -931,23 +931,33 @@ describe("tour 2 : cache, comptes privés, plaques", () => {
     expect((await req(paul, "GET", "/stories/bar")).json.authors).toHaveLength(0);
   });
 
-  it("casquettes « prestataire » et « média » d'un compte privé : la story publique reste réservée aux abonnés", async () => {
+  it("casquettes « prestataire » et « média » d'un compte privé : la story est publique (D38, lot R9a), sous la clé de la page", async () => {
     const kenji = await signUp("Kenji");
     const nina = await signUp("Nina");
     const paul = await signUp("Paul");
-    await db.insert(providerProfiles).values({ userId: kenji.id, type: "photographer", name: "Studio Kenji" });
-    await db.insert(mediaProfiles).values({ userId: kenji.id, name: "Kenji Média" });
+    const [prov] = await db
+      .insert(providerProfiles)
+      .values({ userId: kenji.id, type: "photographer", name: "Studio Kenji" })
+      .returning();
+    const [med] = await db.insert(mediaProfiles).values({ userId: kenji.id, name: "Kenji Média" }).returning();
     await follow(nina, kenji);
     await makePrivate(kenji);
-    // Compte privé : « public » est refusé à la casquette « passionné » (400) ; les autres casquettes l'acceptent, mais la
-    // lecture le traite comme « abonnés ».
+    // Compte privé : « public » est refusé à la casquette « passionné » (400) ; une page est publique, quel que soit le
+    // compte de son titulaire.
     expect((await publish(kenji, { persona: "fan", audience: "public" })).status).toBe(400);
     await ok(kenji, { persona: "provider", audience: "public" });
     await ok(kenji, { persona: "media", audience: "public" });
-    expect((await byAuthor(nina, keyOf(kenji))).json.stories).toHaveLength(2);
+    // Sous la clé du compte : rien (les stories d'une page ont leur clé, le compte n'en sert que les personnelles).
+    expect((await byAuthor(nina, keyOf(kenji))).json.stories).toEqual([]);
     expect((await byAuthor(paul, keyOf(kenji))).json.stories).toEqual([]);
+    // Sous la clé de la page : tout membre la lit, abonné ou non.
+    for (const reader of [nina, paul]) {
+      expect((await byAuthor(reader, `v:${prov?.id}`)).json.stories).toHaveLength(1);
+      expect((await byAuthor(reader, `m:${med?.id}`)).json.stories).toHaveLength(1);
+    }
     const [one] = await db.select().from(stories).where(eq(stories.persona, "provider"));
-    expect((await req(paul, "GET", `/stories/${one?.id}/thumb`)).status).toBe(403);
+    expect((await req(paul, "GET", `/stories/${one?.id}/thumb`)).status).toBe(200);
+    // La barre ne montre que les pages suivies.
     expect((await req(paul, "GET", "/stories/bar")).json.authors).toHaveLength(0);
   });
 

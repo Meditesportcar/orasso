@@ -322,32 +322,45 @@ describe("création idempotente (tour 2)", () => {
 });
 
 describe("prestataire et média : l'audience réelle d'un compte privé (tour 2)", () => {
-  it("compte privé : la story publiée en « abonnés » n'est vue que d'un abonné accepté, jamais d'un inconnu", async () => {
+  it("compte privé : « abonnés » est refusé à une page (400), « public » passe ; sous le compte, rien (lot R9a)", async () => {
     const owner = await signUp("Presta");
     const fan = await signUp("Abonne");
     const stranger = await signUp("Inconnu");
     await makePrivate(owner);
-    await db.insert(providerProfiles).values({ userId: owner.id, type: "photographer", name: "Studio Presta" });
-    await db.insert(mediaProfiles).values({ userId: owner.id, name: "Média Presta" });
+    const [prov] = await db
+      .insert(providerProfiles)
+      .values({ userId: owner.id, type: "photographer", name: "Studio Presta" })
+      .returning();
+    const [med] = await db.insert(mediaProfiles).values({ userId: owner.id, name: "Média Presta" }).returning();
     await follow(fan, owner);
     for (const persona of ["provider", "media"] as const) {
-      const res = await publish(owner, { persona, audience: "followers" });
+      expect((await publish(owner, { persona, audience: "followers" })).status).toBe(400);
+      const res = await publish(owner, { persona, audience: "public" });
       expect(res.status, JSON.stringify(res.json)).toBe(201);
     }
-    const key = `u:${owner.id}`;
-    expect((await req(fan, "GET", `/stories/by-author/${key}`)).json.stories).toHaveLength(2);
-    const seenByStranger = await req(stranger, "GET", `/stories/by-author/${key}`);
-    expect(seenByStranger.json?.stories ?? []).toHaveLength(0);
+    // Sous le compte du titulaire : jamais ses stories de page, même pour son abonné accepté.
+    expect((await req(fan, "GET", `/stories/by-author/u:${owner.id}`)).json.stories ?? []).toHaveLength(0);
+    // Sous la clé de la page : tout membre, abonné ou non (une page est publique, D38).
+    for (const key of [`v:${prov?.id}`, `m:${med?.id}`]) {
+      for (const reader of [fan, stranger]) {
+        expect((await req(reader, "GET", `/stories/by-author/${key}`)).json.stories).toHaveLength(1);
+      }
+    }
   });
 
-  it("même « publique » (ancien envoi), la story d'un compte privé se lit comme abonnés", async () => {
+  it("une story « publique » de page se lit sous la clé de la page, même d'un compte privé (D38) ; sous le compte, rien", async () => {
     const owner = await signUp("Presta");
     const stranger = await signUp("Inconnu");
     await makePrivate(owner);
-    await db.insert(providerProfiles).values({ userId: owner.id, type: "photographer", name: "Studio Presta" });
+    const [prov] = await db
+      .insert(providerProfiles)
+      .values({ userId: owner.id, type: "photographer", name: "Studio Presta" })
+      .returning();
     const res = await publish(owner, { persona: "provider", audience: "public" });
     expect(res.status).toBe(201);
-    const seen = await req(stranger, "GET", `/stories/by-author/u:${owner.id}`);
-    expect(seen.json?.stories ?? []).toHaveLength(0);
+    const seen = await req(stranger, "GET", `/stories/by-author/v:${prov?.id}`);
+    expect(seen.json?.stories ?? []).toHaveLength(1);
+    const viaAccount = await req(stranger, "GET", `/stories/by-author/u:${owner.id}`);
+    expect(viaAccount.json?.stories ?? []).toHaveLength(0);
   });
 });

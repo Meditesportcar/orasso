@@ -30,6 +30,7 @@ import {
   storyPlayable,
   storyPlayerKey,
   storyPrev,
+  storyReplyable,
   storyShareLabels,
   storyStartIndex,
   tapTarget,
@@ -243,7 +244,7 @@ function AuthorViewer({
   const mine = story ? story.viewsCount !== null : false;
   const author = data?.author ?? null;
   const authorName = author?.pseudoOrName ?? "";
-  const canReply = Boolean(author && author.persona !== "pro");
+  const canReply = Boolean(author && storyReplyable(author.persona));
 
   // --- Fermer, avancer, reculer ---------------------------------------------------------------------------------------
   // Un seul `close()`, et la minuterie de « Ne plus voir ses stories » est annulée au démontage (sinon, sortie pendant les

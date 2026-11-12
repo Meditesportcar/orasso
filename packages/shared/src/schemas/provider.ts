@@ -14,6 +14,7 @@ import {
 import { type MenuItem, parseMenuLines } from "../rules/menu";
 import { PROVIDER_REVIEW_MAX_RATING, PROVIDER_REVIEW_MIN_RATING } from "../rules/missions";
 import { optionalText } from "./common";
+import type { PageFollowState } from "./pageFollows";
 
 /** Texte facultatif : absent reste absent (inchangé), vide devient `null` (effacé). */
 const nullIfEmpty = (v: string | null | undefined) => (v === undefined ? undefined : v ? v : null);
@@ -388,6 +389,9 @@ export type ProviderReviewsSummary = {
 
 /** `GET /providers/:id` : la vitrine et ses avis. */
 export type ProviderPublicWithReviews = ProviderPublic & { reviews: ProviderReviewsSummary };
+
+/** `GET /providers/:id` : la vitrine, ses avis et son état d'abonnement (`followersCount`, `isFollowing` pour l'acteur, lot R9a). */
+export type ProviderPage = ProviderPublicWithReviews & PageFollowState;
 
 /** Ce que cherche un événement (fiche publique, sans les candidats). */
 export type EventNeedPublic = Omit<EventNeedView, "filled" | "notes" | "position" | "clientKey">;
