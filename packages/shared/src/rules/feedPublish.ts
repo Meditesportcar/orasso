@@ -409,6 +409,8 @@ export type PublishStore = Pick<Storage, "getItem" | "setItem" | "removeItem" | 
 /** Une clé **par compte** : l'envoi incertain de A n'est jamais touché par B (A → B → A le retrouve). */
 const UNCERTAIN_PREFIX = "orasso:fil:publish-uncertain:";
 const uncertainKey = (account: string) => `${UNCERTAIN_PREFIX}${account}`;
+/** L'ancien format (tour 4) : une clé unique `{ account, body }` ; migré vers la clé du compte au premier chargement. */
+const LEGACY_UNCERTAIN_KEY = "orasso:fil:publish-uncertain";
 export type UncertainBody = { clientId: string } & Record<string, unknown>;
 
 /** Garde le corps d'un envoi incertain pour ce compte (un seul par compte). */
@@ -423,12 +425,34 @@ export function saveUncertain(store: PublishStore | null, account: string, body:
 /** Le corps incertain de ce compte, ou `null` (jamais celui d'un autre : il vit sous une autre clé). */
 export function loadUncertain(store: PublishStore | null, account: string): UncertainBody | null {
   try {
+    migrateLegacyUncertain(store, account);
     const raw = store?.getItem(uncertainKey(account));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<UncertainBody> | null;
     return parsed && typeof parsed.clientId === "string" ? (parsed as UncertainBody) : null;
   } catch {
     return null;
+  }
+}
+
+/** L'envoi incertain gardé par l'ancien format, s'il est de ce compte, passe sous la clé du compte (sinon il reste à son compte). */
+function migrateLegacyUncertain(store: PublishStore | null, account: string): void {
+  if (!store) return;
+  const raw = store.getItem(LEGACY_UNCERTAIN_KEY);
+  if (!raw) return;
+  try {
+    const old = JSON.parse(raw) as { account?: unknown; body?: { clientId?: unknown } } | null;
+    if (!old || typeof old.account !== "string") {
+      store.removeItem(LEGACY_UNCERTAIN_KEY);
+      return;
+    }
+    if (old.account !== account) return;
+    if (typeof old.body?.clientId === "string" && !store.getItem(uncertainKey(account))) {
+      store.setItem(uncertainKey(account), JSON.stringify(old.body));
+    }
+    store.removeItem(LEGACY_UNCERTAIN_KEY);
+  } catch {
+    store.removeItem(LEGACY_UNCERTAIN_KEY);
   }
 }
 
@@ -448,7 +472,7 @@ export function purgeUncertain(store: PublishStore | null): void {
     const keys: string[] = [];
     for (let i = 0; i < store.length; i++) {
       const key = store.key(i);
-      if (key?.startsWith(UNCERTAIN_PREFIX)) keys.push(key);
+      if (key?.startsWith(UNCERTAIN_PREFIX) || key === LEGACY_UNCERTAIN_KEY) keys.push(key);
     }
     for (const key of keys) store.removeItem(key);
   } catch {

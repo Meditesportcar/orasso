@@ -11,6 +11,7 @@ import { env } from "../env";
 import { now } from "./deps";
 import { type MailFooter, paragraphsHtml, renderShell, renderShellText } from "./mail-template";
 import { dataDir } from "./storage";
+import type { Executor } from "./tx";
 
 /**
  * `from` : expéditeur propre à cet e-mail (newsletter, lot 33), sinon `MAIL_FROM`. `headers` : en-têtes ajoutés par
@@ -146,26 +147,28 @@ export function startOfBusinessDay(at: Date): Date {
 
 export type MailOutcome = "sent" | "failed" | "skipped_quota";
 
+/** Une ligne de la boîte d'envoi, écrite et pas encore livrée (R8p, tour 7 : l'écriture et la livraison se séparent). */
+export type MailQueued = { id: string; status: "queued" | "skipped_quota"; transport: "journal" | "brevo" };
+
 export const mail = {
   /**
-   * `configured` : transport de la configuration ; paramètre pour les tests seulement. Renvoie ce qui s'est passé
-   * (lot 33 : la newsletter s'arrête au premier `skipped_quota` et reprend le lendemain).
+   * Écrit la ligne de la boîte d'envoi (budget du jour compté sous verrou) **sans livrer** : à appeler dans la transaction de
+   * l'appelant (`tx`), qui valide d'abord, puis livre (`deliver`) hors transaction : aucune connexion n'attend le transport.
    */
-  async send(
+  async enqueue(
     template: string,
     to: string,
     content: MailContent,
     payload: Record<string, unknown> = {},
     configured: "journal" | "brevo" = env.MAIL_TRANSPORT,
-  ): Promise<MailOutcome> {
+    tx?: Executor,
+  ): Promise<MailQueued | undefined> {
     const transport = transportFor(to, configured);
-    // Budget du jour (Brevo seulement) : compté et réservé sous un verrou, pour que deux envois simultanés ne le
-    // dépassent pas. Au-delà, l'e-mail n'est pas envoyé (`skipped_quota`) : la notification reste au Journal.
-    const row = await db.transaction(async (tx) => {
+    const run = async (x: Executor) => {
       let skipped = false;
       if (transport === "brevo") {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('mail-daily-budget'))`);
-        const [sent] = await tx
+        await x.execute(sql`select pg_advisory_xact_lock(hashtext('mail-daily-budget'))`);
+        const [sent] = await x
           .select({ n: count() })
           .from(emailOutbox)
           .where(
@@ -177,7 +180,7 @@ export const mail = {
           );
         skipped = !withinMailBudget(template, sent?.n ?? 0);
       }
-      const [inserted] = await tx
+      const [inserted] = await x
         .insert(emailOutbox)
         .values({
           to,
@@ -195,12 +198,16 @@ export const mail = {
               : null,
         })
         .returning({ id: emailOutbox.id, status: emailOutbox.status });
-      return inserted;
-    });
-    if (!row) return "failed";
+      return inserted ? { id: inserted.id, status: inserted.status as MailQueued["status"], transport } : undefined;
+    };
+    return tx ? run(tx) : db.transaction(run);
+  },
+
+  /** Livre une ligne écrite par `enqueue` (hors transaction) et note le résultat dans la boîte d'envoi. */
+  async deliver(row: MailQueued, to: string, content: MailContent): Promise<MailOutcome> {
     if (row.status === "skipped_quota") return "skipped_quota";
     try {
-      if (transport === "brevo") await deliverBrevo(to, content);
+      if (row.transport === "brevo") await deliverBrevo(to, content);
       else await deliverJournal(row.id, to, content);
       await db.update(emailOutbox).set({ status: "sent", sentAt: now() }).where(eq(emailOutbox.id, row.id));
       return "sent";
@@ -211,5 +218,21 @@ export const mail = {
         .where(eq(emailOutbox.id, row.id));
       return "failed";
     }
+  },
+
+  /**
+   * `configured` : transport de la configuration ; paramètre pour les tests seulement. Renvoie ce qui s'est passé
+   * (lot 33 : la newsletter s'arrête au premier `skipped_quota` et reprend le lendemain).
+   */
+  async send(
+    template: string,
+    to: string,
+    content: MailContent,
+    payload: Record<string, unknown> = {},
+    configured: "journal" | "brevo" = env.MAIL_TRANSPORT,
+  ): Promise<MailOutcome> {
+    const row = await mail.enqueue(template, to, content, payload, configured);
+    if (!row) return "failed";
+    return mail.deliver(row, to, content);
   },
 };
