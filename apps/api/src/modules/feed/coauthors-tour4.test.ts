@@ -7,13 +7,24 @@ import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { call, quietHours, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
+import {
+  call,
+  createStructure,
+  quietHours,
+  resetDb,
+  seedReference,
+  signUp,
+  type TestUser,
+  useClock,
+} from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { notifications, profiles } from "../../db/schema";
+import { feedPostCoauthors, feedPosts, notifications, profiles } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { withTx } from "../../lib/tx";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
+import { anonymizeFeedForDeletedAccount } from "./anonymize";
 import { coauthorNotificationsWhere, pendingCoauthorCount, pendingCoauthorRequests } from "./coauthors";
 import { follow, person } from "./fil-test-helpers";
 
@@ -99,6 +110,33 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     expect(hidden.status).toBe(201);
   });
 
+  it("un auteur suspendu qui invite une page qu'il gère : la pastille compte la demande que la liste montre (petit lot API, P46)", async () => {
+    const kenji = await signUp("Kenji_Susp", { twoFactor: true });
+    await db
+      .update(profiles)
+      .set({ visibility: "public", departments: ["66"] })
+      .where(eq(profiles.userId, kenji.id));
+    const structure = await createStructure(kenji.id);
+    const sent = await publishWith(kenji, { kind: "structure", id: structure.id });
+    expect(sent.status).toBe(201);
+    const readBoth = async () => {
+      // Même horloge simulée pour les deux lectures.
+      const at = new Date();
+      const list = await pendingCoauthorRequests(kenji.id, db, at);
+      return { list: list.length, count: await pendingCoauthorCount(kenji.id, db) };
+    };
+    expect(await readBoth()).toEqual({ list: 1, count: 1 });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 86_400_000) })
+      .where(eq(profiles.userId, kenji.id));
+    // L'auteur lit sa publication même suspendu : la liste la montre, le compteur aussi.
+    expect(await readBoth()).toEqual({ list: 1, count: 1 });
+    // Les contrôles de suppression restent : publication supprimée, plus de demande dans l'un comme dans l'autre.
+    await db.update(feedPosts).set({ deletedAt: new Date() }).where(eq(feedPosts.id, sent.json.id));
+    expect(await readBoth()).toEqual({ list: 0, count: 0 });
+  });
+
   it("le nombre de requêtes ne dépend pas du nombre d'invitations", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
@@ -119,6 +157,26 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     expect(many.n).toBe(7);
     expect(many.queries).toBe(one.queries);
     expect(many.queries).toBeLessThan(8);
+  });
+});
+
+describe("anonymisation : verrou de l'union des publications (petit lot API, P44)", () => {
+  it("deux co-auteurs mutuels anonymisés en même temps : aucune erreur, les deux aboutissent", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    // Chacun a invité l'autre sur plusieurs publications : chacun auteur de publications que l'autre cosigne.
+    for (let i = 0; i < 4; i++) {
+      expect((await publishWith(kenji, { kind: "user", id: damien.id })).status).toBe(201);
+      expect((await publishWith(damien, { kind: "user", id: kenji.id })).status).toBe(201);
+    }
+    const results = await Promise.allSettled([
+      withTx((tx) => anonymizeFeedForDeletedAccount(tx, kenji.id)),
+      withTx((tx) => anonymizeFeedForDeletedAccount(tx, damien.id)),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+    expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
+    const alive = await db.select({ id: feedPosts.id }).from(feedPosts).where(sql`${feedPosts.deletedAt} is null`);
+    expect(alive).toHaveLength(0);
   });
 });
 

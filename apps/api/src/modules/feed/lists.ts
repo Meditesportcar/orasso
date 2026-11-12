@@ -83,9 +83,11 @@ const servedSql = sql`(exists (select 1 from feed_post_photos ph where ph.post_i
 /**
  * Une publication qui peut figurer dans une liste, quel que soit le lecteur : non retirée, avec un visuel, d'un auteur en
  * règle. Page : la personne qui a publié n'est pas bannie et la page est en règle ; personne : compte en règle.
+ * `authorViewerId` : le lecteur est l'auteur de sa publication personnelle, qu'il lit même suspendu ou banni (règle `canSeeFeedPost` :
+ * « lui-même » passe avant « auteur indisponible ») ; les contrôles de suppression et de visuel restent.
  */
-export const postOkSql = (at: Date): SQL => sql`(p.deleted_at is null and ${servedSql} and
-  (case when p.persona = 'fan' then ${profileOkSql("a", at)} else (a.banned_at is null and ${pageStandingSql}) end))`;
+export const postOkSql = (at: Date, authorViewerId?: string): SQL => sql`(p.deleted_at is null and ${servedSql} and
+  (case when p.persona = 'fan' then (${profileOkSql("a", at)}${authorViewerId ? sql` or p.author_id = ${authorViewerId}` : sql``}) else (a.banned_at is null and ${pageStandingSql}) end))`;
 
 /** La présence de l'auteur de `p` à l'événement de `p` est validée (pointage, billet contrôlé, présence GPS). */
 const presenceSql = sql`(exists (select 1 from checkins c join applications ap on ap.id = c.application_id
