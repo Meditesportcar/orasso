@@ -5520,3 +5520,9 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 ### Tour 8 (R8c1, relecture Codex du tour 6, 12/11/2026)
 - **Empreinte des flammes ind�pendante de la zone** : elle est calcul�e sur les publications des deux zones de la fen�tre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compt�, donc plus de \eset\ (co�t : une lecture de plus de la source des publications par page de la phase 1).
 - **Pas de doublon dans une page** : les cartes d�j� servies par la page sont �cart�es de la zone A par date et de la zone B (la page est compl�t�e par les suivantes) ; \ppendCards\ d�doublonne aussi � l'int�rieur de la page re�ue (filet, site et appli). Un doublon entre deux pages reste possible apr�s un rognage et est retir� par l'�cran.
+
+### Tour 5 (R8n1, 12/11/2026) : relecture Codex du tour 4
+- **La liste des événements du résumé ne part plus dans le push** : elle est rangée sous `data._events` (clé interne, retirée par `stripInternal` du push et de `/me/notifications`) ; la garde de livraison la lit et la réécrit sous la même clé en recomposant. Test : 20 événements aux titres de 120 caractères et aux slugs de 80, message transmis à `push.send` sous 4 096 octets, sans `events`, `_events` ni `_postIds`, ni dans la liste du Journal. Aucune compatibilité avec l'ancienne clé (le résumé n'a jamais été en ligne).
+- **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
+- Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
+- Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.

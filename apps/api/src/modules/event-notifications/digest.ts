@@ -33,8 +33,6 @@ const FIRST_WINDOW_MS = DAY;
  * des résumés envoyés).
  */
 const OVERLAP_MS = 60 * 60_000;
-/** Les résumés envoyés qui servent à dédoublonner (la marge est d'une heure : trois jours suffisent largement). */
-const DEDUP_LOOKBACK_MS = 3 * DAY;
 /** Un événement fini depuis plus de 7 jours ne compte plus. */
 const FINISHED_WINDOW_MS = 7 * DAY;
 /** Copie des statuts de `modules/events/place.ts` (non modifiable ici) : un test garde les deux d'accord. */
@@ -60,7 +58,7 @@ type Reserved = {
   muted: string[] | null;
 };
 type NewsRow = { user_id: string; event_id: string; title: string; slug: string; n: number; post_ids: string[] };
-/** Un événement d'un résumé, gardé dans `data.events` pour le recomposer à la livraison. */
+/** Un événement d'un résumé, gardé dans `data._events` (clé interne : jamais rendue ni envoyée dans le push) pour le recomposer à la livraison. */
 export type DigestEvent = { id: string; title: string; slug: string; n: number };
 
 export const eventNewsDigest = {
@@ -126,7 +124,7 @@ export const eventNewsDigest = {
             where coalesce(np.news, true)
               and ${postOkSql(at)}
               and not exists (select 1 from notifications n where n.user_id = h.user_id and n.type = 'event_news_digest'
-                and n.created_at >= ${new Date(at.getTime() - DEDUP_LOOKBACK_MS).toISOString()}::timestamptz
+                and n.created_at >= u.since
                 and n.data -> '_postIds' @> to_jsonb(p.id::text))
             group by h.user_id, e.id, e.title, e.slug, e.starts_at
             order by h.user_id, e.starts_at, e.id`);
@@ -137,7 +135,7 @@ export const eventNewsDigest = {
           return {
             userId,
             ...composeDigest(events),
-            data: { events, _postIds: rows.flatMap((r) => r.post_ids) },
+            data: { _events: events, _postIds: rows.flatMap((r) => r.post_ids) },
           };
         });
         await notificationsService.notifyEachNow(tx, DIGEST_TYPE, items);
@@ -185,8 +183,8 @@ registerDeliveryGuard([DIGEST_TYPE], async (n) => {
     columns: { notificationPrefs: true },
   });
   if (!profile || profile.notificationPrefs?.eventNews === false) return false;
-  const data = n.data as { events?: DigestEvent[]; link?: string; linkLabel?: string };
-  if (!Array.isArray(data.events) || !data.events.length) return true;
+  const data = n.data as { _events?: DigestEvent[]; link?: string; linkLabel?: string };
+  if (!Array.isArray(data._events) || !data._events.length) return true;
   const muted = await db
     .select({ eventId: eventNotificationPrefs.eventId })
     .from(eventNotificationPrefs)
@@ -196,16 +194,16 @@ registerDeliveryGuard([DIGEST_TYPE], async (n) => {
         eq(eventNotificationPrefs.news, false),
         inArray(
           eventNotificationPrefs.eventId,
-          data.events.map((e) => e.id),
+          data._events.map((e) => e.id),
         ),
       ),
     );
   const off = new Set(muted.map((m) => m.eventId));
-  const remaining = data.events.filter((e) => !off.has(e.id));
+  const remaining = data._events.filter((e) => !off.has(e.id));
   if (!remaining.length) return false;
-  if (remaining.length === data.events.length) return true;
+  if (remaining.length === data._events.length) return true;
   const { title, body, link } = composeDigest(remaining);
-  const next = { ...n.data, events: remaining, link: link.path, linkLabel: link.label };
+  const next = { ...n.data, _events: remaining, link: link.path, linkLabel: link.label };
   await db.update(notifications).set({ title, body, data: next }).where(eq(notifications.id, n.id));
   return { ...n, title, body, data: next };
 });
