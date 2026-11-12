@@ -272,7 +272,9 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   expect((await apiCall(d, "PATCH", "/me/profile", { visibility: "private" })).status).toBe(200);
   await page.goto(`/u/${dPseudo}`);
-  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
+  // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+  await page.getByTestId("profil-tab-publications").click();
+  await expect(page.getByTestId("publications-private")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   await audit(page);
   await page.screenshot({ path: `${DIR}/tour2-prive-suivi-beton-390.png`, fullPage: true });

@@ -34,3 +34,15 @@ export function createSessionGuard(pageUser: string | null, listen: Listen): Ses
     },
   };
 }
+
+/**
+ * La garde d'une page : la même tant que le compte de la page est le même, une neuve (donc des écrivains neufs, côté appelant)
+ * quand il change sans démontage (A -> B sur la même fiche).
+ */
+export function guardFor(
+  previous: { userId: string | null; guard: SessionGuard } | null,
+  userId: string | null,
+  listen: Listen,
+): { userId: string | null; guard: SessionGuard } {
+  return previous && previous.userId === userId ? previous : { userId, guard: createSessionGuard(userId, listen) };
+}

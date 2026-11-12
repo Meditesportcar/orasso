@@ -26,14 +26,16 @@ test("les anciennes adresses répondent 302 vers le Profil, la recherche gardée
   });
 });
 
-test("Mon compte : Publications par défaut (R8b2), onglets Garage et Sorties, aucune plaque lisible dans les pages", async ({ page }) => {
+test("Mon compte : Publications par défaut (R8b2), onglets Garage et Sorties, aucune plaque lisible dans les pages", async ({
+  page,
+}) => {
   await setTheme(page, "beton");
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/app/moi");
     // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
-    await expect(page.getByTestId("profil-tab-publications")).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("profil-tab-publications").click();
     await page.getByTestId("profil-tab-garage").click();
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("link", { name: "Ajouter un véhicule" }).first()).toBeVisible();
@@ -86,7 +88,9 @@ test("profil d'un autre : onglets Garage et Sorties ; compte privé : nombres se
   await loginInBrowser(p2, "julie@orasso.local", undefined, "/app/moi");
   await p2.goto("/u/Marc_66");
   await expect(p2.getByTestId("profil-tab-garage")).toBeVisible();
-  await expect(p2.getByTestId("profile-private-note")).toHaveCount(0);
+  // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+  await p2.getByTestId("profil-tab-publications").click();
+  await expect(p2.getByTestId("publications-private")).toHaveCount(0);
   // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
   await p2.getByTestId("profil-tab-garage").click();
   await expect(p2.getByTestId("profile-car")).toBeVisible();

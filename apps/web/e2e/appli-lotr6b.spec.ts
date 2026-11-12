@@ -137,7 +137,9 @@ for (const theme of ["beton", "sable"] as const) {
     // Moi voit maintenant tout son profil, avec « Abonné ».
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Abonné/i);
-    await expect(mine.page.getByTestId("profile-private-note")).toHaveCount(0);
+    // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+    await mine.page.getByTestId("profil-tab-publications").click();
+    await expect(mine.page.getByTestId("publications-private")).toHaveCount(0);
 
     // 4. « Suivre en retour » : la personne privée suit Moi (public : tout de suite) ; Moi voit « Te suit ».
     expect((await apiCall<{ mine: string }>(asker.cookie, "POST", `/users/${me.pseudo}/follow`)).data.mine).toBe(

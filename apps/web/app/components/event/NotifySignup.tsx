@@ -12,8 +12,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { createReadSeq } from "../../lib/readSeq";
 import { listenSession } from "../../lib/sessionChannel";
-import { createSessionGuard, type SessionGuard } from "../../lib/sessionGuard";
+import { guardFor, type SessionGuard } from "../../lib/sessionGuard";
 import "../../styles/event-notify.css";
 
 // Lot R8n2 (maquette R8.11) : les pièces des notifications d'un événement sur le site, partagées par la fin de la
@@ -27,9 +28,7 @@ import "../../styles/event-notify.css";
  */
 export function useSessionGuard(userId: string | null): SessionGuard {
   const ref = useRef<{ userId: string | null; guard: SessionGuard } | null>(null);
-  if (!ref.current || ref.current.userId !== userId) {
-    ref.current = { userId, guard: createSessionGuard(userId, listenSession) };
-  }
+  ref.current = guardFor(ref.current, userId, listenSession);
   const guard = ref.current.guard;
   useEffect(() => guard.attach(), [guard]);
   return guard;
@@ -230,10 +229,13 @@ export function NotifySignup({
     };
   }, []);
 
+  // Lectures numérotées : la réponse d'une lecture dépassée (compte de la page changé, « Réessayer ») est jetée.
+  const reads = useRef(createReadSeq());
   const load = useCallback(() => {
+    const mine = reads.current.start();
     setStatus("loading");
     void apiFetch<EventNotificationPrefsView>(url).then((res) => {
-      if (!alive.current) return;
+      if (!alive.current || !reads.current.isCurrent(mine)) return;
       if (!res.ok) return setStatus("error");
       writer.current = createSerialWriter<boolean>({
         initial: res.data.news,

@@ -86,7 +86,9 @@ for (const theme of ["beton", "sable"] as const) {
       ).toBe("none");
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Abonné/i);
-      await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
+      // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+      await page.getByTestId("profil-tab-publications").click();
+      await expect(page.getByTestId("publications-private")).toHaveCount(0);
 
       // 4. « Suivre en retour » et « Te suit ».
       await apiCall(asker.cookie, "POST", `/users/${me.pseudo}/follow`);

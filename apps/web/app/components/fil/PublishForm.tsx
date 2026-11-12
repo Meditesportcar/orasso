@@ -77,7 +77,7 @@ import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
-import { mustDropChosenEvent } from "./eventDrop";
+import { mustDropChosenEvent, shownEvent } from "./eventDrop";
 import { rememberPublished } from "./mine";
 import { convertAll, holdLock } from "./prepare";
 
@@ -167,11 +167,26 @@ export function PublishForm({
   const [uncertain, setUncertainState] = useState<(ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null>(
     null,
   );
+  // L'événement tel qu'il était affiché à l'envoi (titre, date, rôle, phase…), gardé avec le corps incertain : si la liste relue ne
+  // l'a plus, l'écran le montre quand même, coché et figé, car « Réessayer » renvoie ce corps avec son `eventId` (P14a).
+  const [heldEvent, setHeldEvent] = useState<AttachableEventItem | null>(null);
   /** Garde (ou efface) le corps incertain dans l'onglet, rangé par compte : il survit à un rechargement (reconnexion). */
-  const setUncertain = (body: (ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null) => {
+  const setUncertain = (
+    body: (ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null,
+    shown?: AttachableEventItem | null,
+  ) => {
     setUncertainState(body);
-    if (body) saveUncertain(tabStore(), userId, body);
-    else clearUncertain(tabStore(), userId);
+    if (body) {
+      saveUncertain(tabStore(), userId, body);
+      if (shown && shown.id === body.eventId) {
+        setHeldEvent(shown);
+        saveHeldEvent(tabStore(), userId, shown);
+      }
+    } else {
+      clearUncertain(tabStore(), userId);
+      setHeldEvent(null);
+      saveHeldEvent(tabStore(), userId, null);
+    }
   };
   const [checking, setChecking] = useState(false);
   const [found, setFound] = useState(false);
@@ -204,6 +219,7 @@ export function PublishForm({
     const saved = loadUncertain(tabStore(), userId);
     if (!saved) return;
     setUncertainState(saved as never);
+    setHeldEvent(loadHeldEvent(tabStore(), userId, (saved as { eventId?: string | null }).eventId ?? null));
     setClientId(saved.clientId as `${string}-${string}-${string}-${string}-${string}`);
     // Le brouillon affichable est celui du corps gardé : casquette, événement, légende… (les photos ne se restaurent pas).
     const draft = draftFromBody(saved, authors);
@@ -267,7 +283,13 @@ export function PublishForm({
   const events = eventBlock ? eventsOf(loaded, userId, author.key) : [];
   const eventsLoading =
     eventBlock && (loaded.account !== userId || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
-  const event = events.find((e) => e.id === choice.eventId) ?? null;
+  const event = shownEvent({
+    listed: events.find((e) => e.id === choice.eventId) ?? null,
+    uncertainEventId: uncertain ? (uncertain.eventId ?? null) : null,
+    held: heldEvent,
+  });
+  // Les choix affichés : la liste relue, plus l'événement gardé quand elle ne l'a plus (coché, la saisie est figée).
+  const shownEvents = event && !events.some((e) => e.id === event.id) ? [event, ...events] : events;
   // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste.
   // Jamais pendant un envoi figé en attente de vérification : « Réessayer » renvoie le corps gardé, la saisie affichée
   // doit rester celle de ce corps (petit lot site, P14a).
@@ -534,7 +556,7 @@ export function PublishForm({
     setProgress(null);
     if (res.status === 0 || res.status >= 500) {
       // Pas de réponse : la publication est peut-être partie. Le formulaire se fige sur ce corps et ce `clientId`.
-      setUncertain(body);
+      setUncertain(body, event);
       return setError(T.noNetwork);
     }
     // 429 et 401 tombent avant le contrôle de rejeu de l'API : ils ne prouvent rien, l'envoi incertain est gardé (401 : jusqu'à
@@ -898,7 +920,7 @@ export function PublishForm({
                 <small>{T.attachNoneHint[author.destination]}</small>
               </span>
             </button>
-            {events.map((e) => (
+            {shownEvents.map((e) => (
               <button
                 key={e.id}
                 type="button"
@@ -1037,6 +1059,28 @@ export function PublishForm({
 
 /** La case « Info importante », ses cinq motifs et le plafond (même règles et mêmes mots que l'appli). */
 /** Le stockage de l'onglet (absent côté serveur, refusé en navigation privée). */
+const heldEventKey = (account: string) => `fil.publish.held-event:${account}`;
+
+function saveHeldEvent(store: Storage | null, account: string, event: AttachableEventItem | null): void {
+  try {
+    if (event) store?.setItem(heldEventKey(account), JSON.stringify(event));
+    else store?.removeItem(heldEventKey(account));
+  } catch {
+    // Stockage refusé : l'événement gardé ne survit pas à un rechargement.
+  }
+}
+
+/** L'événement gardé avec l'envoi incertain de ce compte, s'il correspond au corps gardé. */
+function loadHeldEvent(store: Storage | null, account: string, eventId: string | null): AttachableEventItem | null {
+  try {
+    const raw = store?.getItem(heldEventKey(account));
+    const parsed = raw ? (JSON.parse(raw) as AttachableEventItem | null) : null;
+    return parsed && eventId && parsed.id === eventId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function tabStore(): Storage | null {
   try {
     return typeof window === "undefined" ? null : window.sessionStorage;

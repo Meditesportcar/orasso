@@ -1,7 +1,7 @@
 import { createSerialWriter } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { createSessionGuard, type Listen } from "./sessionGuard";
+import { createSessionGuard, guardFor, type Listen } from "./sessionGuard";
 
 function bus() {
   const listeners = new Set<(id: string | null) => void>();
@@ -83,5 +83,21 @@ describe("garde de compte (P24)", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(b.count()).toBe(0);
+  });
+});
+
+describe("garde d'une page dont le compte change (tour 3)", () => {
+  it("même compte : la même garde ; autre compte : une garde neuve qui refuse l'annonce de l'ancien", () => {
+    const b = bus();
+    const a1 = guardFor(null, "A", b.listen);
+    expect(guardFor(a1, "A", b.listen)).toBe(a1);
+    const b1 = guardFor(a1, "B", b.listen);
+    expect(b1).not.toBe(a1);
+    expect(b1.guard).not.toBe(a1.guard);
+    b1.guard.attach();
+    b.say("A");
+    expect(b1.guard.alive()).toBe(false); // une annonce de A n'accorde rien à une page de B
+    b.say("B");
+    expect(b1.guard.alive()).toBe(true);
   });
 });

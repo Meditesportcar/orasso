@@ -253,6 +253,43 @@ async function lostThenUncertain(page: Page, caption: string, reachServer: boole
   await page.unroute("**/api/me/feed-posts");
 }
 
+test("site : envoi incertain repris après rechargement, événement absent de la liste relue : il reste affiché, coché et figé, « Réessayer » le renvoie", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await structure(page).click();
+  await eventByTitle(page, "Expo Rivesaltes").click();
+  await page.getByTestId("fil-publish-caption").fill(`Événement gardé ${Date.now()}`);
+  await page.route("**/api/me/feed-posts", (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  // La liste relue au rechargement ne contient plus l'événement (plus rattachable).
+  await page.route("**/api/me/feed-posts/attachable-events**", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    await route.fulfill({
+      response: res,
+      json: { items: json.items.filter((e: { title: string }) => e.title !== "Expo Rivesaltes") },
+    });
+  });
+  await page.reload();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  const kept = eventByTitle(page, "Expo Rivesaltes");
+  await expect(kept).toBeVisible();
+  await expect(kept).toHaveAttribute("aria-pressed", "true");
+  await expect(kept).toBeDisabled();
+  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("Expo Rivesaltes");
+  // « Réessayer » renvoie le corps gardé, avec son événement.
+  const sent = page.waitForRequest((r) => r.url().includes("/api/me/feed-posts") && r.method() === "POST");
+  await page.getByTestId("fil-publish-send").click();
+  expect(JSON.parse((await sent).postData() ?? "{}").eventId).toBeTruthy();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+});
+
 test("site : « Modifier » vérifie d'abord : publiée, « Ta publication est en ligne »", async ({ page }) => {
   test.setTimeout(240_000);
   await openAs(page, "damien@orasso.local");

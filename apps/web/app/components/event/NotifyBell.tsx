@@ -52,6 +52,8 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
   };
 
   // `stamp` : l'état des candidatures de la fiche (la place est relue quand il change).
+  // Le compte de la page change sans démontage (A -> B sur la même fiche) : `guard` change, l'écrivain est recréé avec la garde de
+  // B et les préférences de B sont relues.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la lecture, il n'est pas lu.
   useEffect(() => {
     let alive = true;
@@ -67,7 +69,7 @@ export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId
     return () => {
       alive = false;
     };
-  }, [eventId, stamp]);
+  }, [eventId, stamp, guard]);
 
   if (!hasPlace) return null;
 

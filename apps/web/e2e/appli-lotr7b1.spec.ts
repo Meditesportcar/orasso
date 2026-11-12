@@ -52,7 +52,9 @@ async function shot(page: Page, name: string) {
 
 const selected = (page: Page) => page.getByTestId("profil-tabs").getByRole("tab", { selected: true });
 
-test("mon profil : Publications s'ouvre par défaut (R8b2), Garage, puis Sorties montre ma saison et le passeport", async ({ browser }) => {
+test("mon profil : Publications s'ouvre par défaut (R8b2), Garage, puis Sorties montre ma saison et le passeport", async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
@@ -151,7 +153,9 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await signIn(b.page, "julie@orasso.local");
   await go(b.page, "/u/Marc_66");
   await expect(b.page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
-  await expect(b.page.getByTestId("profile-private-note")).toHaveCount(0);
+  // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+  await b.page.getByTestId("profil-tab-publications").click();
+  await expect(b.page.getByTestId("publications-private")).toHaveCount(0);
   // Le profil s'ouvre sur « Publications » (R8b2) : la voiture est dans l'onglet « Garage ».
   await b.page.getByTestId("profil-tab-garage").click();
   await expect(b.page.getByTestId("profile-car")).toBeVisible();

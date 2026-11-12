@@ -11,3 +11,17 @@ export function mustDropChosenEvent(input: {
   if (input.uncertain || !input.chosenEventId || !input.readableIds) return false;
   return !input.readableIds.includes(input.chosenEventId);
 }
+
+/**
+ * L'événement à afficher. Normalement celui de la liste relue. Pendant un envoi incertain, si la liste ne l'a plus (plus
+ * rattachable), celui gardé avec le corps : « Réessayer » renvoie ce corps avec son `eventId`, l'écran doit le dire.
+ */
+export function shownEvent<T extends { id: string }>(input: {
+  listed: T | null;
+  uncertainEventId: string | null;
+  held: T | null;
+}): T | null {
+  if (input.listed) return input.listed;
+  if (input.uncertainEventId && input.held && input.held.id === input.uncertainEventId) return input.held;
+  return null;
+}
