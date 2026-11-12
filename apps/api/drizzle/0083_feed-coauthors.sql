@@ -28,4 +28,4 @@ CREATE INDEX "feed_post_coauthors_invited_by_idx" ON "feed_post_coauthors" USING
 CREATE INDEX "feed_post_coauthors_responded_by_idx" ON "feed_post_coauthors" USING btree ("responded_by");
 --> statement-breakpoint
 -- Défaire les notifications d une invitation par leur publication (compte supprimé, publication supprimée) : index partiel d expression.
-CREATE INDEX "notifications_coauthor_post_idx" ON "notifications" USING btree (("data" ->> 'postId')) WHERE "type" like 'coauthor\_%';
+CREATE INDEX "notifications_coauthor_post_idx" ON "notifications" USING btree (("data" ->> 'postId')) WHERE "type" in ('coauthor_invited', 'coauthor_accepted', 'coauthor_withdrawn');

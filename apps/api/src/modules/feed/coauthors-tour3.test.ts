@@ -111,8 +111,9 @@ describe("même partenaire, UUID de casses différentes", () => {
     const pro = await createPro((await signUp("Garagiste_T3")).id, { name: "Pro T3", verifiedAt: new Date() });
     await db.insert(partnerships).values({ proId: pro.id, userId: kenji.id, message: "ok", status: "active" });
     const sent = await publishWith(kenji, { kind: "pro", id: pro.id }, { commercialPartnerId: pro.id.toUpperCase() });
-    // Le schéma refuse peut-être la casse (400) ; il ne doit jamais répondre « conflit ».
-    expect(sent.json?.error?.code).not.toBe("commercial_conflict");
+    // Le même partenaire, d'une autre casse : publié, avec sa mention.
+    expect(sent.status).toBe(201);
+    expect(sent.json.commercialPartner?.name).toBe("Pro T3");
   });
 });
 

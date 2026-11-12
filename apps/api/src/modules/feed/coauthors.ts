@@ -57,6 +57,7 @@ import { activePartnerCandidates } from "../partnerships/commercial";
 import { proShown } from "../partnerships/shown";
 import { requireVisiblePost, unavailable } from "./access";
 import { loadPageInfo } from "./authors";
+import { postOkSql } from "./lists";
 import { loadPostViews as loadPostViewsFor } from "./posts";
 
 const err = (status: 400 | 409 | 422 | 429, code: keyof typeof coauthorLabels.errors) =>
@@ -425,6 +426,18 @@ async function coAuthorName(tx: Tx, row: { coauthorKind: CoauthorKind | "provide
  * responsable de la page, retiré depuis, ne garde rien. Appuyée par l'index partiel d'expression de la migration
  * (`notifications_coauthor_post_idx`). Une seule requête pour toutes les publications données.
  */
+/** Les notifications `coauthor_*` de ces publications (la condition de la suppression ; exportée pour le test du plan). */
+export const coauthorNotificationsWhere = (ids: string[], types?: string[]): SQL | undefined =>
+  and(
+    // Le même prédicat, mot pour mot, que l'index partiel de la migration : sans lui PostgreSQL ne peut pas s'en servir.
+    sql`${notifications.type} in ('coauthor_invited', 'coauthor_accepted', 'coauthor_withdrawn')`,
+    inArray(notifications.type, types ?? ["coauthor_invited", "coauthor_accepted", "coauthor_withdrawn"]),
+    sql`${notifications.data} ->> 'postId' in (${sql.join(
+      ids.map((i) => sql`${i}`),
+      sql`, `,
+    )})`,
+  );
+
 export async function dropCoauthorNotifications(
   tx: Executor,
   postIds: string | string[],
@@ -432,16 +445,7 @@ export async function dropCoauthorNotifications(
 ): Promise<void> {
   const ids = Array.isArray(postIds) ? postIds : [postIds];
   if (!ids.length) return;
-  await tx.delete(notifications).where(
-    and(
-      sql`${notifications.type} like 'coauthor_%'`,
-      inArray(notifications.type, types ?? ["coauthor_invited", "coauthor_accepted", "coauthor_withdrawn"]),
-      sql`${notifications.data} ->> 'postId' in (${sql.join(
-        ids.map((i) => sql`${i}`),
-        sql`, `,
-      )})`,
-    ),
-  );
+  await tx.delete(notifications).where(coauthorNotificationsWhere(ids, types));
 }
 
 async function notifyAuthor(
@@ -649,7 +653,21 @@ export const coauthorsService = {
 
 /** Nombre de mes invitations en attente que je peux lire (pour les nouveaux clients : `pendingCoauthors` du résumé). */
 export async function pendingCoauthorCount(userId: string, ex: Executor): Promise<number> {
-  return (await pendingCoauthorRequests(userId, ex, now())).length;
+  // Un comptage, jamais les cartes (`GET /me` le lit à chaque fois) : les invitations en attente pour moi ou mes pages, puis les
+  // mêmes contrôles de visibilité que la liste (publication servie, auteur en règle, compte privé suivi), en une requête.
+  const pending = await pendingCoauthorPostIds(userId, ex);
+  if (!pending.length) return 0;
+  const at = now();
+  const res = await ex.execute<{ n: number }>(sql`select count(*)::int as n
+    from feed_posts p join profiles a on a.user_id = p.author_id
+    where p.id in (${sql.join(
+      pending.map((r) => sql`${r.postId}::uuid`),
+      sql`, `,
+    )})
+      and ${postOkSql(at)}
+      and (p.persona <> 'fan' or a.visibility = 'public' or p.author_id = ${userId}
+        or exists (select 1 from user_follows uf where uf.follower_id = ${userId} and uf.followed_id = p.author_id and uf.status = 'accepted'))`);
+  return Number(res.rows[0]?.n ?? 0);
 }
 
 /**
