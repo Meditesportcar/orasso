@@ -507,14 +507,14 @@ export function PublishForm({
     if (res.ok) {
       // Succès : l'écran de confirmation prend la place du formulaire tout de suite (jamais un formulaire modifiable avec
       // l'identifiant déjà publié, même si le contrôle du compte qui suit tarde).
+      // La publication est transmise au Fil **avant** toute navigation : l'entrée porte l'identifiant du compte (le contrôle de
+      // compte vient de passer avant l'envoi ; un autre compte, dans le même onglet, n'en voit jamais rien).
+      rememberPublished(userId, res.data as FeedPostView);
       setUncertain(null);
       setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
       setDone(true);
       setBusy(false);
       setProgress(null);
-      void accountCheck().then((c) => {
-        if (c === "same") rememberPublished(userId, res.data as FeedPostView);
-      });
       return;
     }
     setBusy(false);

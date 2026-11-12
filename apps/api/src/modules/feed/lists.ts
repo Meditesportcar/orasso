@@ -13,6 +13,7 @@ import {
   type PageCounts,
   type ProfileCounts,
   parseAuthorKey,
+  proVisibility,
 } from "@orasso/shared";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 
@@ -121,6 +122,21 @@ export function visibleMentionsFrom(
       and ${postOkSql(at)}
       and not (p.persona = 'fan' and a.visibility = 'private')
       and (${roleOk} or ${citation})`;
+}
+
+/**
+ * Fiche de base (lot 21, `proVisibility`) : après la fin de gratuité, les publications et les mentions d'une fiche pro sont
+ * masquées à tout lecteur qui n'en est pas le propriétaire (même règle que les anciennes « offres et actualités »).
+ */
+export async function proPostsHidden(
+  ex: Executor,
+  key: AuthorKey,
+  viewerId: string | null,
+  at: Date,
+): Promise<boolean> {
+  if (key.kind !== "pro" || !proVisibility(null, null, at).hidden.posts) return false;
+  const [r] = await ex.select({ owner: proProfiles.ownerUserId }).from(proProfiles).where(eq(proProfiles.id, key.id));
+  return !(viewerId && r?.owner === viewerId);
 }
 
 // --- Pages : existence et état --------------------------------------------------------------------------------------
@@ -267,7 +283,12 @@ export async function listAuthorPosts(
   } else if (!(await pageInGoodStanding(db, key))) {
     throw notFound(feedListErrors.authorNotFound);
   }
+<<<<<<< HEAD
   const rows = await authorPostIds(db, key, q.filter, cursor, at, v.user.id);
+=======
+  if (await proPostsHidden(db, key, v.user.id, at)) return { items: [], nextCursor: null, restricted: false };
+  const rows = await authorPostIds(db, key, q.filter, cursor, at);
+>>>>>>> vague-r8
   const { page, nextCursor } = pageOf(rows);
   const items: FeedPostView[] = await loadPostViews(
     db,
@@ -363,6 +384,8 @@ export async function countsForAuthor(
 ): Promise<PageCounts> {
   if (key.kind === "user") return {};
   if (!viewerId && key.kind !== "structure") return {};
+  if (await proPostsHidden(ex, key, viewerId, at))
+    return viewerId ? { publications: { count: 0 }, mentions: { count: 0 } } : { publications: { count: 0 } };
   const cited = key.kind === "structure" || key.kind === "pro";
   const res = await ex.execute<{ publications: number; mentions: number }>(sql`select
     (select count(*)::int from feed_posts p join profiles a on a.user_id = p.author_id
