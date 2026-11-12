@@ -180,7 +180,11 @@ describe("lastJournalNotice et lastLegacyNotice", () => {
       { id: "new", caption: null, createdAt: "2026-11-11T08:00:00Z", important: { reason: "other" } },
       { id: "mid", caption: "Milieu", createdAt: "2026-11-05T08:00:00Z" },
     ];
-    expect(lastJournalNotice(items, "Photo")).toMatchObject({ id: "new", text: "Photo", important: true });
+    const today = { now: new Date("2026-11-11T12:00:00Z") };
+    expect(lastJournalNotice(items, "Photo", today)).toMatchObject({ id: "new", text: "Photo", important: true });
+    // Une « Info importante » d'hier n'est plus « importante » au jour J : elle ne masque pas une annonce du jour.
+    const tomorrow = { now: new Date("2026-11-12T12:00:00Z") };
+    expect(lastJournalNotice(items, "Photo", tomorrow)).toMatchObject({ id: "new", important: false });
     expect(lastJournalNotice([], "Photo")).toBeNull();
   });
   it("la dernière annonce seulement : ni consigne ni changement de statut", () => {

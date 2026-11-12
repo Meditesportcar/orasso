@@ -99,7 +99,8 @@ export function lastJournalNotice(
     id: latest.id,
     text: latest.caption?.trim() ? latest.caption : photoText,
     at: latest.createdAt,
-    important: Boolean(latest.important),
+    // « Info importante » seulement si elle est d'aujourd'hui (choisie plus haut) : une ancienne ne masque pas une annonce du jour.
+    important: Boolean(important),
   };
 }
 
