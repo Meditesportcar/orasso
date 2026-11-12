@@ -3,14 +3,18 @@
 
 import { attachPhraseOf } from "../labels/feedPublish.fr";
 import { pagesLabels as L } from "../labels/pages.fr";
+import { proOffersLabels } from "../labels/proOffers.fr";
 import type { AuthorPostsFilter, MentionItem, PageCounts } from "../schemas/feedLists";
 import type { StoriesSummary } from "../schemas/stories";
 import { FEED_ASPECT_RATIOS, type FeedAspect, feedAspects } from "./feed";
 
 export type PageKind = "structure" | "pro";
 
-/** Les onglets d'une page : « Événements » (structure) ou « Présentation » (pro), puis « Publications » et « Mentions ». */
-export type PageTab = "events" | "presentation" | "publications" | "mentions";
+/**
+ * Les onglets d'une page : « Événements » (structure) ou « Présentation » (pro), puis « Publications », « Offres » (fiche pro, R9c)
+ * et « Mentions ».
+ */
+export type PageTab = "events" | "presentation" | "publications" | "offers" | "mentions";
 
 /** Le paramètre d'adresse qui porte l'onglet ouvert (`?onglet=`) : un lien partagé ouvre le bon. */
 export const PAGE_TAB_PARAM = "onglet";
@@ -19,6 +23,7 @@ const SLUG: Record<PageTab, string> = {
   events: "evenements",
   presentation: "presentation",
   publications: "publications",
+  offers: "offres",
   mentions: "mentions",
 };
 
@@ -31,12 +36,13 @@ const LABEL: Record<PageTab, string> = {
   events: L.tabEvents,
   presentation: L.tabPresentation,
   publications: L.tabPublications,
+  offers: proOffersLabels.tab,
   mentions: L.tabMentions,
 };
 
 /**
  * Les onglets proposés, dans l'ordre. Structure : « Événements », « Publications », « Mentions · N ». Pro : « Présentation »,
- * « Publications », « Mentions · N ». **Sans session** : pas de « Mentions » (l'API ne les sert qu'à un membre connecté) et, pour
+ * « Publications », « Offres » (R9c, avec une session), « Mentions · N ». **Sans session** : pas de « Mentions » (l'API ne les sert qu'à un membre connecté) et, pour
  * un pro, pas de « Publications » non plus (T4 : un visiteur ne voit que les publications d'un organisateur). `count` : le nombre
  * de la rangée (« Mentions · N ») ; `null` quand il n'est pas connu (jamais « · 0 » à la place d'une panne).
  */
@@ -45,6 +51,7 @@ export function pageTabs(kind: PageKind, input: { session: boolean; mentionsCoun
   const out: PageTabItem[] = [{ id: first, label: LABEL[first], count: null }];
   if (kind === "pro" && !input.session) return out;
   out.push({ id: "publications", label: LABEL.publications, count: null });
+  if (kind === "pro" && input.session) out.push({ id: "offers", label: LABEL.offers, count: null });
   if (input.session) {
     const n = input.mentionsCount;
     out.push({ id: "mentions", label: LABEL.mentions, count: typeof n === "number" ? n : null });
@@ -91,12 +98,18 @@ export function pageShownTab(
 export const pageFilters: readonly AuthorPostsFilter[] = ["all", "event", "no_event"] as const;
 
 export function pageFilterLabel(filter: AuthorPostsFilter): string {
-  return filter === "event" ? L.filterEvent : filter === "no_event" ? L.filterNoEvent : L.filterAll;
+  return filter === "event"
+    ? L.filterEvent
+    : filter === "no_event"
+      ? L.filterNoEvent
+      : filter === "offer"
+        ? proOffersLabels.tab
+        : L.filterAll;
 }
 
 /** L'adresse d'un filtre dans `?filtre=` : « Tout » n'a pas de paramètre. */
 export const PAGE_FILTER_PARAM = "filtre";
-const FILTER_SLUG = { all: "tout", event: "evenements", no_event: "hors-evenement" } as const;
+const FILTER_SLUG = { all: "tout", event: "evenements", no_event: "hors-evenement", offer: "offres" } as const;
 export const pageFilterSlug = (f: AuthorPostsFilter): string => FILTER_SLUG[f];
 export function explicitPageFilter(raw: unknown): AuthorPostsFilter {
   const found = pageFilters.find((f) => FILTER_SLUG[f] === raw);
@@ -107,20 +120,21 @@ export function explicitPageFilter(raw: unknown): AuthorPostsFilter {
 export function pageEmptyText(filter: AuthorPostsFilter, name: string): string {
   if (filter === "event") return L.emptyEvent;
   if (filter === "no_event") return L.emptyNoEvent;
+  if (filter === "offer") return proOffersLabels.empty;
   return L.emptyText(name);
 }
 
 // --- L'en-tête ----------------------------------------------------------------------------------------------------------
 
 export type PageCounter = {
-  key: "followers" | "events" | "partners" | "organizers";
+  key: "followers" | "events" | "offers" | "partners" | "organizers";
   value: number | null;
   label: string;
 };
 
 /**
  * La bande de compteurs. Structure : « abonnés », « événements », « partenaires » (les pros partenaires). Pro : « abonnés », puis
- * « partenaires » (les passionnés à partenariat actif : servis aux connectés seulement) et « organisateurs » (les organisateurs
+ * « offres en cours » (R9c), « partenaires » (les passionnés à partenariat actif : servis aux connectés seulement) et « organisateurs » (les organisateurs
  * partenaires) **seulement quand ils existent** : une case à zéro n'est pas montrée, un nombre non servi non plus. Un nombre
  * dont la lecture a échoué (`null`) garde sa case : « – ».
  */
@@ -131,6 +145,8 @@ export function pageCounters(
     events?: number | null;
     partners?: number | null;
     organizers?: number | null;
+    /** Les offres en cours d'une fiche pro (R9c) : servies aux connectés seulement. */
+    offers?: number | null;
   },
 ): PageCounter[] {
   const cells: PageCounter[] = [{ key: "followers", value: input.followers, label: L.followers(input.followers) }];
@@ -141,6 +157,8 @@ export function pageCounters(
     cells.push({ key: "partners", value: partners, label: L.partners(partners ?? 2) });
     return cells;
   }
+  if (typeof input.offers === "number" && input.offers > 0)
+    cells.push({ key: "offers", value: input.offers, label: proOffersLabels.counter(input.offers) });
   if (typeof input.partners === "number" && input.partners > 0)
     cells.push({ key: "partners", value: input.partners, label: L.partners(input.partners) });
   if (typeof input.organizers === "number" && input.organizers > 0)

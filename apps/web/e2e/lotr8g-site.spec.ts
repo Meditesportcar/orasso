@@ -175,27 +175,30 @@ test("la fiche d'un pro : « Présentation » complète, « Publications », « 
   const ac = await page(kenji, "pros", "atelier-covering-66");
   for (const width of [390, 1280]) {
     await p.setViewportSize({ width, height: 900 });
-    await p.goto("/p/atelier-covering-66");
+    // Lot R9c : Atelier Covering 66 a des publications (offres) : « Présentation » est demandée par l'adresse.
+    await p.goto("/p/atelier-covering-66?onglet=presentation");
     await expect(p.getByTestId("page-name")).toHaveText("Atelier Covering 66");
     await expect(p.getByTestId("page-type")).toHaveText("Pro");
     await expect(p.getByTestId("verified-badge")).toHaveText("Pro vérifié");
     await expect(p.getByTestId("page-tabs").getByRole("tab")).toHaveText([
       "Présentation",
       "Publications",
+      "Offres",
       `Mentions · ${ac.mentions?.count}`,
     ]);
-    // Sans publication : « Présentation » s'ouvre, avec tout le contenu d'hier.
-    expect(ac.publications?.count).toBe(0);
+    // Avec des publications, « Publications » s'ouvre par défaut (R9c) ; « Présentation » garde tout le contenu d'hier.
+    expect(ac.publications?.count).toBeGreaterThan(0);
     await expect(selected(p)).toHaveAccessibleName("Présentation");
     await expect(p.getByTestId("pro-presentation")).toBeVisible();
     await expect(p.getByTestId("pro-photos").locator("img").first()).toBeVisible();
     await expect(p.getByTestId("pro-discounts")).toContainText("−5 %");
-    await expect(p.getByTestId("pro-posts")).toBeVisible();
+    // R9c : avec une session, les anciennes offres sont dans l'onglet « Offres » (déplacées, pas dupliquées).
+    await expect(p.getByTestId("pro-posts")).toHaveCount(0);
     await expect(p.getByTestId("call")).toBeVisible();
     await expect(p.getByTestId("route")).toBeVisible();
     await shot(p, `pro-presentation-${width}`);
   }
-  await p.goto("/p/atelier-covering-66?onglet=publications");
+  await p.goto("/p/detailing-pyrenees?onglet=publications");
   await expect(p.getByTestId("publications-empty")).toContainText("Pas encore de publication", { timeout: 30_000 });
   await p.getByTestId("page-tab-mentions").click();
   await expect(selected(p)).toHaveAccessibleName(/^Mentions/);

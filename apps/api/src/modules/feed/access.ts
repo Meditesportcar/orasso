@@ -1,11 +1,11 @@
 // Le Fil (lot R7e1) : qui voit quoi. Une publication se voit avec une session, d'un auteur en règle, et — compte privé —
 // seulement des abonnés acceptés (`canSeeFeedPost`, règle commune dans `packages/shared`). Les rubriques du Fil lisent
 // leurs lignes avec les mêmes conditions en SQL (`authorVisibleSql`) ; les deux sont testées ensemble.
-import { type AudienceRel, canSeeFeedPost, type FeedPostFacts } from "@orasso/shared";
+import { type AudienceRel, canSeeFeedPost, type FeedPostFacts, proVisibility } from "@orasso/shared";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { feedPosts, profiles, reports, userFollows } from "../../db/schema";
+import { feedPosts, profiles, proProfiles, reports, userFollows } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
@@ -72,6 +72,26 @@ export async function relationOf(viewerId: string, authorId: string, ex: Executo
   return { followAccepted: Boolean(row) };
 }
 
+/**
+ * Les identifiants des fiches pro dont les publications sont **masquées** à ce lecteur : la fiche est passée en « fiche de base »
+ * (`proVisibility`, après la fin de gratuité), et le lecteur n'en est pas le propriétaire. Même règle que les listes
+ * (`proPostsHidden`) : lecture directe, photos et Fil la reprennent. Vide tant que la gratuité dure (aucune requête).
+ */
+export async function maskedProIds(
+  ex: Executor,
+  posts: readonly { persona: string; proId: string | null }[],
+  viewerId: string,
+  at: Date,
+): Promise<Set<string>> {
+  const ids = [...new Set(posts.flatMap((p) => (p.persona === "pro" && p.proId ? [p.proId] : [])))];
+  if (!ids.length || !proVisibility(null, null, at).hidden.posts) return new Set();
+  const owners = await ex
+    .select({ id: proProfiles.id, owner: proProfiles.ownerUserId })
+    .from(proProfiles)
+    .where(inArray(proProfiles.id, ids));
+  return new Set(owners.filter((o) => o.owner !== viewerId).map((o) => o.id));
+}
+
 /** La publication et son auteur, ou `undefined` (identifiant mal formé, inconnu). */
 export async function postWithAuthor(id: string, ex: Executor = db) {
   if (!UUID_RE.test(id)) return undefined;
@@ -111,6 +131,7 @@ export async function requireVisiblePost(v: Viewer, id: string, ex: Executor = d
   const row = await postWithAuthor(id, ex);
   const at = now();
   if (!row) throw notFound("Publication introuvable");
+  if ((await maskedProIds(ex, [row.post], v.user.id, at)).size) throw notFound("Publication introuvable");
   const rel = await relationOf(v.user.id, row.post.authorId, ex);
   const key = pageKeyOf(row.post);
   const standing = key ? ((await loadPageInfo(ex, [row.post])).get(key)?.inGoodStanding ?? false) : false;

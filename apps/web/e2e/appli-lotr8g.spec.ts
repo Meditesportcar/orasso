@@ -214,7 +214,8 @@ test("la fiche d'un pro : « Présentation » complète, onglets collants, « Pu
   ] as const) {
     const { ctx, page } = await open(browser, scale, theme, width);
     await signIn(page, "kenji@orasso.local");
-    await go(page, "/p/atelier-covering-66");
+    // Lot R9c : Atelier Covering 66 a maintenant des publications (offres) : « Présentation » est demandée par l'adresse.
+    await go(page, "/p/atelier-covering-66?onglet=presentation");
     await expect(page.getByTestId("page-name")).toHaveText("Atelier Covering 66", { timeout: 30_000 });
     await expect(page.getByTestId("page-type")).toHaveText("PRO");
     await expect(page.getByTestId("page-verified")).toContainText("Pro vérifié");
@@ -222,10 +223,11 @@ test("la fiche d'un pro : « Présentation » complète, onglets collants, « Pu
     await expect(page.getByTestId("page-tabs").getByRole("tab")).toHaveText([
       "Présentation",
       "Publications",
+      "Offres",
       `Mentions · ${ac.mentions?.count}`,
     ]);
-    // Sans publication : « Présentation », avec tout le contenu d'hier.
-    expect(ac.publications?.count).toBe(0);
+    // Avec des publications, « Publications » s'ouvre par défaut (R9c) ; « Présentation » garde tout le contenu d'hier.
+    expect(ac.publications?.count).toBeGreaterThan(0);
     await expect(selected(page)).toHaveAccessibleName("Présentation");
     await expect(page.getByTestId("pro-presentation")).toBeVisible();
     await expect(page.getByTestId("pro-public-photos")).toBeVisible();
@@ -243,10 +245,12 @@ test("la fiche d'un pro : « Présentation » complète, onglets collants, « Pu
       expect(after, `les onglets collent (avant ${before}, après ${after})`).toBeLessThan(before);
       expect(after).toBeLessThan(160);
     }
-    await page.getByTestId("page-tab-publications").click();
+    // Une fiche sans publication (Detailing Pyrénées) : l'état vide.
+    await go(page, "/p/detailing-pyrenees?onglet=publications");
     await expect(page.getByTestId("publications-empty")).toContainText("Pas encore de publication", {
       timeout: 30_000,
     });
+    await go(page, "/p/atelier-covering-66?onglet=presentation");
     await page.getByTestId("page-tab-mentions").click();
     await expect(page.getByTestId("mention-row").or(page.getByTestId("mentions-empty"))).toBeVisible({
       timeout: 30_000,
@@ -260,7 +264,7 @@ test("la fiche d'un pro : « Présentation » complète, onglets collants, « Pu
   await signUpApi(pseudo);
   const fan = await open(browser);
   await signIn(fan.page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
-  await go(fan.page, "/p/garage-du-port");
+  await go(fan.page, "/p/garage-du-port?onglet=presentation");
   await expect(fan.page.getByTestId("follow-pro")).toContainText(/Suivre/i, { timeout: 30_000 });
   await fan.page.getByTestId("follow-pro").click();
   await expect(fan.page.getByTestId("follow-pro")).toContainText(/Suivi/i, { timeout: 20_000 });

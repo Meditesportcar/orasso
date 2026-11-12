@@ -13,13 +13,16 @@ import {
   feedPublishLabels as T,
 } from "../labels/feedPublish.fr";
 import { feedScreenLabels as L } from "../labels/feedScreen.fr";
+import { proOffersLabels } from "../labels/proOffers.fr";
 import type { AttachableEventItem } from "../schemas/feed";
 import type { PersonaEntry } from "../schemas/profile";
 import type { StoryPersona } from "./audience";
+import { displayNow } from "./dateYear";
 import { ESSENTIAL_URGENT_WITHIN_MS } from "./eventNotifications";
 import { FEED_CAPTION_MAX, FEED_POST_PHOTOS_MAX, type FeedAspect } from "./feed";
 import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, type ImportantReason, importantWindow } from "./feedAttach";
 import { type DraftFeedPhoto, firstUndecidedPhoto } from "./feedList";
+import { type OfferForm, offerBody, offerFromBody, offerIssue } from "./proOffers";
 import { deliverAfter } from "./quietHours";
 
 // --- Au nom de qui ---------------------------------------------------------------------------------------------------
@@ -210,14 +213,16 @@ export type PublishDraft = {
   important: { on: boolean; reason: ImportantReason | null };
   /** La liste des événements a été refusée pour cette casquette : on ne publie pas à son nom. */
   forbidden?: EventsForbidden | null;
+  /** Étiquette « Offre » (R9c) : comptée seulement pour la casquette pro. */
+  offer?: OfferForm | null;
 };
 
 /**
  * La ligne « ce qui manque » (jamais un bouton principal grisé sans elle), ou `null`. Dans cet ordre : préparation en cours ;
  * visuel (T1 : une photo, sauf pour une publication rattachée à un événement qui a une affiche, avec une légende) ;
- * décision de plaque de chaque photo ; légende trop longue ; « Info importante » sans motif.
+ * décision de plaque de chaque photo ; légende trop longue ; offre (R9c : titre, dates) ; « Info importante » sans motif.
  */
-export function publishIssueR8(draft: PublishDraft): string | null {
+export function publishIssueR8(draft: PublishDraft, now: Date = displayNow()): string | null {
   if (draft.preparing) return L.preparing;
   if (draft.forbidden)
     return draft.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore;
@@ -235,6 +240,10 @@ export function publishIssueR8(draft: PublishDraft): string | null {
   const max = captionMaxOf(draft.author);
   if (draft.caption.trim().length > max)
     return draft.author.persona === "fan" ? L.captionTooLong : T.captionTooLongPage;
+  if (draft.offer?.on && draft.author.persona === "pro") {
+    const problem = offerIssue(draft.offer, now);
+    if (problem) return problem.message;
+  }
   if (draft.important.on && !draft.important.reason) return publicationErrors.importantReasonRequired;
   return null;
 }
@@ -254,6 +263,8 @@ export function feedPostBodyR8(draft: {
   placeLabel: string;
   important: { on: boolean; reason: ImportantReason | null };
   commercialPartnerId?: string | null;
+  /** Étiquette « Offre » (R9c) : n'est envoyée que pour la casquette pro et l'étiquette choisie. */
+  offer?: OfferForm | null;
   /** Le compte qui croit publier : l'API refuse (409) si la session est devenue celle d'un autre. */
   expectedUserId?: string;
 }) {
@@ -274,6 +285,7 @@ export function feedPostBodyR8(draft: {
     ...(draft.important.on && draft.important.reason && draft.eventId
       ? { important: { reason: draft.important.reason } }
       : {}),
+    ...(draft.author.persona === "pro" && draft.offer?.on ? { offer: offerBody(draft.offer) } : {}),
     photos: draft.photos.map((p) =>
       p.rects.length
         ? { uploadKey: p.uploadKey, plateRects: [...p.rects], noPlateConfirmed: false }
@@ -291,6 +303,8 @@ export type PublishSays = {
   phrase: string | null;
   /** Le tampon « Présent » : seulement une sortie passée (elle n'est proposée que si ma présence est validée). */
   stamp: boolean;
+  /** L'étiquette à droite du nom (R9c : « Offre »), `null` sinon. */
+  tag: string | null;
   where: string;
 };
 
@@ -298,12 +312,15 @@ export function publishSays(
   author: PublishAuthor,
   event: Pick<AttachableEventItem, "title" | "role" | "phase"> | null,
   important: boolean,
+  /** L'étiquette « Offre » est choisie (R9c). */
+  offer = false,
 ): PublishSays {
   return {
     authorName: author.name,
     logoUrl: author.logoUrl,
     phrase: event ? attachPhraseOf(event.role, event.phase, event.title) : null,
     stamp: event !== null && author.persona === "fan" && event.role === "attendee" && event.phase === "after",
+    tag: offer && author.persona === "pro" ? proOffersLabels.tagOffer : null,
     where: publishWhereText({
       destination: author.destination,
       role: event?.role ?? null,
@@ -526,6 +543,8 @@ export function draftFromBody(
   caption: string;
   aspect: FeedAspect | null;
   photoCount: number;
+  /** L'étiquette « Offre » du corps gardé (R9c) : titre et jours, `on` faux sans offre. */
+  offer: OfferForm;
 } {
   const persona = typeof body.persona === "string" ? body.persona : "fan";
   const author =
@@ -549,5 +568,6 @@ export function draftFromBody(
     caption: typeof body.caption === "string" ? body.caption : "",
     aspect: typeof body.aspect === "string" && aspects.includes(body.aspect) ? (body.aspect as FeedAspect) : null,
     photoCount: Array.isArray(body.photos) ? body.photos.length : 0,
+    offer: offerFromBody(body.offer),
   };
 }

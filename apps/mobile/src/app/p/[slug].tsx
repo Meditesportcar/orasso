@@ -4,7 +4,8 @@
 // Lot R8g (D40, maquettes R8.6 `pu-publi` et R9.3 `n-page`) : le haut compact du Profil (logo dans l'anneau de ses stories, nom,
 // « Pro » et « Pro vérifié », « Suivre », bio sur une ligne, icônes « Itinéraire » et « Plus ») puis des onglets soulignés et
 // collants : « Présentation » (tout le contenu d'hier), « Publications » (les siennes, ouvert par défaut quand il y en a),
-// « Mentions · N » (ses collaborations commerciales et ceux qui le citent). Sans session : « Présentation » seule (T4).
+// « Offres » (lot R9c : ses offres non terminées et, dessous, ses anciennes « offres et actualités »), « Mentions · N » (ses collaborations
+// commerciales et ceux qui le citent). Sans session : « Présentation » seule (T4).
 import { tokens, useTheme } from "@orasso/design-system/native";
 import {
   authorKeyOf,
@@ -29,6 +30,7 @@ import { Linking, Share, StyleSheet } from "react-native";
 import { siteUrl } from "@/api";
 import { FollowLine, PageHead } from "@/features/pages/PageHead";
 import { PageMentions } from "@/features/pages/PageMentions";
+import { PageOffers } from "@/features/pages/PageOffers";
 import { PagePublications } from "@/features/pages/PagePublications";
 import { PageTabs } from "@/features/pages/PageTabs";
 import { ProPresentation } from "@/features/pages/ProPresentation";
@@ -134,6 +136,7 @@ export default function ProPage() {
     followers: p.followersCount,
     partners: p.memberPartnersTotal,
     organizers: p.partners.length,
+    offers: p.offers?.current,
   });
   const key = authorKeyOf("pro", p.id);
   const ring = session ? profileRingState(p.stories) : null;
@@ -240,7 +243,15 @@ export default function ProPage() {
       </StickyHeader>
 
       {tab === "presentation" ? (
-        <ProPresentation pro={p} onOpenPhoto={setViewer} onTrack={track} />
+        <ProPresentation pro={p} onOpenPhoto={setViewer} onTrack={track} session={session} />
+      ) : tab === "offers" ? (
+        <PageOffers
+          reloadToken={reloadToken}
+          authorKey={key}
+          pro={p}
+          owner={owner}
+          onPublish={() => router.push({ pathname: "/fil/publier", params: { fiche: p.id, etiquette: "offre" } })}
+        />
       ) : tab === "publications" ? (
         <PagePublications
           reloadToken={reloadToken}

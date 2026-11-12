@@ -313,6 +313,14 @@ export function Says({ says }: { says: PublishSays }) {
             {says.phrase ?? T.sayNow}
           </Text>
         </View>
+        {says.tag ? (
+          <View style={[styles.stamp, { backgroundColor: c.accent }]} testID="fil-publish-says-tag">
+            <Icon name="ticket" size={14} color={c.accentInk} />
+            <Text variant="label" color={c.accentInk}>
+              {says.tag}
+            </Text>
+          </View>
+        ) : null}
         {says.stamp ? (
           <View style={[styles.stamp, { backgroundColor: c.accent }]} testID="fil-publish-stamp">
             <Icon name="stamp" size={14} color={c.accentInk} />

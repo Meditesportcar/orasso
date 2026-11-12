@@ -2,11 +2,19 @@
 // paysage acceptés), flamme. Une publication est visible de tout membre connecté (compte public) ou des abonnés acceptés
 // (compte privé) ; jamais d'un crew. Les photos portent une décision de plaque vraie (floutée, ou « aucune plaque
 // visible » confirmée) et sont stockées sous une clé privée `private/feed/<postId>/<hex>.webp` (servie par `GET /feed-posts/:id/photos/:nom`, jamais par `/api/files`).
-import { feedAspects, feedEventRoles, importantReasons, mentionSources, mentionTargetKinds } from "@orasso/shared";
+import {
+  feedAspects,
+  feedEventRoles,
+  feedPostTags,
+  importantReasons,
+  mentionSources,
+  mentionTargetKinds,
+} from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   pgEnum,
@@ -32,6 +40,8 @@ export const feedAspectEnum = pgEnum("feed_aspect", feedAspects);
 /** Rôle d'un rattachement à un événement : déduit des droits à la création, jamais reçu du client (R8a1). */
 export const feedEventRoleEnum = pgEnum("feed_event_role", feedEventRoles);
 export const importantReasonEnum = pgEnum("important_reason", importantReasons);
+/** Étiquette d'une publication (R9c, migration 0087) : « Offre » (fiche pro). */
+export const feedPostTagEnum = pgEnum("feed_post_tag", feedPostTags);
 export const feedMentionTargetEnum = pgEnum("feed_mention_target", mentionTargetKinds);
 export const feedMentionSourceEnum = pgEnum("feed_mention_source", mentionSources);
 
@@ -70,6 +80,14 @@ export const feedPosts = pgTable(
     commentsOff: boolean("comments_off").notNull().default(false),
     /** Annonce d'origine d'une publication reprise par `scripts/announcements-to-posts.ts` (R8d, 0081) : rejouable, et la façade retrouve la reprise. */
     legacyAnnouncementId: uuid("legacy_announcement_id"),
+    /**
+     * Étiquette « Offre » (R9c) : `tag`, `title` (2 à 80 caractères) et les jours de l'offre (`AAAA-MM-JJ`, jours civils de Paris ; début
+     * facultatif, fin obligatoire). Fiche pro seulement ; tous nuls sans étiquette (CHECK de la base).
+     */
+    tag: feedPostTagEnum("tag"),
+    title: text("title"),
+    offerStartsOn: date("offer_starts_on", { mode: "string" }),
+    offerEndsOn: date("offer_ends_on", { mode: "string" }),
     aspect: feedAspectEnum("aspect").notNull().default("portrait_4_5"),
     /** Département de l'auteur à la publication ; chaîne vide si l'auteur n'en a pas choisi. */
     department: text("department").notNull().default(""),
@@ -94,6 +112,17 @@ export const feedPosts = pgTable(
       "feed_posts_caption_check",
       sql`${t.caption} is null or char_length(${t.caption}) <= case when ${t.persona} = 'fan' then 500 else 2000 end`,
     ),
+    // R9c : une étiquette « Offre » exige la casquette pro, un titre de 2 à 80 caractères et un jour de fin ; sans étiquette, ni titre ni jours.
+    check(
+      "feed_posts_tag_check",
+      sql`(${t.tag} is null and ${t.title} is null and ${t.offerStartsOn} is null and ${t.offerEndsOn} is null)
+        or (${t.tag} = 'offer' and ${t.persona} = 'pro' and ${t.title} is not null and char_length(${t.title}) between 2 and 80 and ${t.offerEndsOn} is not null)`,
+    ),
+    check(
+      "feed_posts_offer_days_check",
+      sql`${t.offerStartsOn} is null or ${t.offerEndsOn} is null or ${t.offerStartsOn} <= ${t.offerEndsOn}`,
+    ),
+    index("feed_posts_offer_idx").on(t.proId, t.offerEndsOn).where(sql`${t.tag} = 'offer' and ${t.deletedAt} is null`),
     check("feed_posts_reactions_check", sql`${t.reactionsCount} >= 0`),
     check("feed_posts_comments_check", sql`${t.commentsCount} >= 0`),
     check("feed_posts_place_label_check", sql`${t.placeLabel} is null or char_length(${t.placeLabel}) <= 80`),
