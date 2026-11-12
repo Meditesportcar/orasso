@@ -118,7 +118,14 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       // Seule une erreur réseau est « hors ligne » et se relance ; un refus (403, 404, 429) n'est jamais relancé.
       const network = error instanceof ApiRequestError && error.isNetwork;
       setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: network }));
-      if (network) {
+      // Un échec pendant le calendrier des chargements en cours (3, 6, 12, 24 s) ne l'arrête pas.
+      const pendingNext = retried.current > 0 ? practicalPendingDelay(retried.current) : null;
+      if (pendingNext !== null) {
+        retried.current += 1;
+        retryTimer.schedule(() => {
+          if (alive.current) void load();
+        }, pendingNext);
+      } else if (network) {
         retryTimer.schedule(
           () => {
             const foreground = AppState.currentState === "active";
@@ -197,18 +204,31 @@ export function usePracticalSources(eventId?: string): PracticalSources {
   // Position donnée avec des lieux partiels : une seule relecture, après le délai.
   const partial = at?.data.partial === true;
   const partialAttempts = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle réponse (`at`) programme la relecture suivante du calendrier.
+  // Le calendrier (3, 6, 12, 24 s) se poursuit après un échec de relecture : la minuterie suivante est programmée à la fin de chaque
+  // relecture, réussie ou non ; il s'arrête quand la réponse est complète, au bout de la série ou au démontage.
   useEffect(() => {
     if (!partial) {
       partialAttempts.current = 0;
       return undefined;
     }
-    const delay = practicalPendingDelay(partialAttempts.current);
-    if (delay === null) return undefined;
-    partialAttempts.current += 1;
-    const timer = setTimeout(() => void refreshPracticalPosition(true), delay);
-    return () => clearTimeout(timer);
-  }, [partial, at]);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const next = () => {
+      const delay = practicalPendingDelay(partialAttempts.current);
+      if (delay === null || !active) return;
+      partialAttempts.current += 1;
+      timer = setTimeout(() => {
+        void refreshPracticalPosition(true).finally(() => {
+          if (active) next();
+        });
+      }, delay);
+    };
+    next();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [partial]);
   return {
     me: at
       ? { data: at.data, loading: false, offline: false, exact: at.exact, onPosition: true }

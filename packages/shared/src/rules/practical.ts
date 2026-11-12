@@ -1,6 +1,7 @@
 // Lot R8q : règles pures de « Pratique » (maquette R8.12) : la station-service et le lavage les plus proches, de moi ou d'une
 // sortie. Aucune règle ici ne lit l'heure. La position d'une personne n'est jamais une donnée du serveur : l'API ne connaît
 // que la case de 0,1° (`weatherCell`), le téléphone calcule les distances avec sa position exacte, qui ne le quitte pas.
+import { BOUNDS_MARGIN_KM, departmentBounds } from "../departmentBounds";
 import { departmentCentroids, distanceKm, type LatLng, nearestDepartment } from "../geo";
 import { NBSP } from "../labels/units.fr";
 
@@ -14,10 +15,8 @@ export const PRACTICAL_MAX = 200;
 /** Les départements dont on lit les lieux : les deux dont le centre est le plus proche de l'origine. */
 export const PRACTICAL_DEPARTMENTS = 2;
 
-/** Demi-longueur des départements allongés (km) : préfiltre de `departmentsAround`. */
-export const PRACTICAL_DEPARTMENT_HALF_SIZE_KM = 65;
 /** Plafond du nombre de départements lus pour une demande. */
-export const PRACTICAL_DEPARTMENTS_MAX = 10;
+export const PRACTICAL_DEPARTMENTS_MAX = 12;
 
 /** Un lieu servi par `POST /practical` : ni prix, ni heure de mise à jour, ni distance. */
 export type PracticalPlace = {
@@ -77,47 +76,47 @@ export function nearestDepartments(point: LatLng, count = PRACTICAL_DEPARTMENTS)
 }
 
 /**
- * Les départements qui coupent la zone recherchée (le cercle de `radiusKm` autour du point, plus une marge) : on ne connaît que le
- * centre de chaque département, un département est donc celui dont le centre est le plus proche d'au moins un point du cercle (échantillon
- * de points à au plus 6 km les uns des autres). Aucun plafond arbitraire : autour de Paris, les départements de la petite couronne y sont
- * tous ; en rase campagne, souvent deux ou trois. Les `minimum` plus proches du point y sont toujours.
+ * Les départements qui coupent la zone recherchée : un département est lu si son emprise (rectangle lat/lng, `departmentBounds`, plus
+ * `BOUNDS_MARGIN_KM`) coupe le carré qui enferme le cercle de `radiusKm` autour du point. Un rectangle contient tout le département :
+ * on peut en lire un de trop (une emprise déborde sur un voisin), jamais un de moins. Plafond de `PRACTICAL_DEPARTMENTS_MAX`, les plus
+ * proches du point d'abord (distance au rectangle, 0 s'il y est). Le département du point (le plus proche par son centre) y est toujours.
  */
-export function departmentsAround(
-  point: LatLng,
-  radiusKm = PRACTICAL_RADIUS_KM,
-  marginKm = 6,
-  minimum = PRACTICAL_DEPARTMENTS,
-): string[] {
-  const found = new Set<string>(nearestDepartments(point, minimum));
-  // Préfiltre conservateur (un département peut déborder loin de son centre) : tout département dont le centre est à moins de
-  // rayon + 65 km (demi-longueur des départements allongés : le centre de la Meurthe-et-Moselle est à 88 km de Longuyon, qui est à 10 km) est lu, même si l'échantillon du cercle ne l'a pas touché.
-  for (const [code, centre] of Object.entries(departmentCentroids)) {
-    if (distanceKm(point, centre) <= radiusKm + PRACTICAL_DEPARTMENT_HALF_SIZE_KM) found.add(code);
-  }
-  const reach = radiusKm + marginKm;
+export function departmentsAround(point: LatLng, radiusKm = PRACTICAL_RADIUS_KM): string[] {
   const kmPerDegLat = 111.2;
-  const kmPerDegLng = kmPerDegLat * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180));
-  const at = (dxKm: number, dyKm: number): LatLng => ({
-    lat: point.lat + dyKm / kmPerDegLat,
-    lng: point.lng + dxKm / kmPerDegLng,
-  });
-  const note = (p: LatLng) => {
-    const code = nearestDepartment(p);
-    if (code) found.add(code);
-  };
-  note(point);
-  const step = 6;
-  for (let r = step; r <= reach + step / 2; r += step) {
-    const radius = Math.min(r, reach);
-    const count = Math.max(8, Math.ceil((2 * Math.PI * radius) / step));
-    for (let i = 0; i < count; i++) {
-      const angle = (2 * Math.PI * i) / count;
-      note(at(radius * Math.cos(angle), radius * Math.sin(angle)));
-    }
+  const margin = BOUNDS_MARGIN_KM;
+  const reach = radiusKm + margin;
+  // Les méridiens se resserrent vers le pôle : le carré est plus large du côté où le cosinus est le plus petit.
+  const worstLat = Math.min(89, Math.abs(point.lat) + reach / kmPerDegLat);
+  const kmPerDegLng = kmPerDegLat * Math.cos((worstLat * Math.PI) / 180);
+  const dLat = reach / kmPerDegLat;
+  const dLng = reach / kmPerDegLng;
+  const south = point.lat - dLat;
+  const north = point.lat + dLat;
+  const west = point.lng - dLng;
+  const east = point.lng + dLng;
+  const marginLat = margin / kmPerDegLat;
+  const found: { code: string; km: number }[] = [];
+  for (const code of Object.keys(departmentCentroids)) {
+    const box = departmentBounds[code];
+    if (!box) continue;
+    const [bs, bw, bn, be] = box;
+    const lngMargin = margin / (kmPerDegLat * Math.max(0.2, Math.cos((((bs + bn) / 2) * Math.PI) / 180)));
+    const intersects =
+      bs - marginLat <= north && bn + marginLat >= south && bw - lngMargin <= east && be + lngMargin >= west;
+    if (!intersects) continue;
+    // Distance du point au rectangle (0 s'il y est), pour classer.
+    const clampedLat = Math.min(Math.max(point.lat, bs), bn);
+    const clampedLng = Math.min(Math.max(point.lng, bw), be);
+    found.push({ code, km: distanceKm(point, { lat: clampedLat, lng: clampedLng }) });
   }
-  // Plafond : les `PRACTICAL_DEPARTMENTS_MAX` dont le centre est le plus proche (chaque département froid coûte un appel à Overpass).
-  const byCentre = (code: string) => distanceKm(point, departmentCentroids[code] as LatLng);
-  return [...found].sort((a, b) => byCentre(a) - byCentre(b) || a.localeCompare(b)).slice(0, PRACTICAL_DEPARTMENTS_MAX);
+  // Le département du point, même hors table ou hors rectangle (position en mer, imprécision) : le plus proche par son centre.
+  const own = nearestDepartment(point);
+  if (own && !found.some((f) => f.code === own)) found.push({ code: own, km: 0 });
+  return found
+    .sort((x, y) => x.km - y.km || x.code.localeCompare(y.code))
+    .slice(0, PRACTICAL_DEPARTMENTS_MAX)
+    .map((f) => f.code)
+    .sort();
 }
 
 /** Les lieux à `radiusKm` de l'origine au plus, les `max` plus proches (sans doublon d'identifiant). */

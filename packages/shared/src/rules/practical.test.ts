@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { departmentBounds } from "../departmentBounds";
 import { departmentCentroids } from "../geo";
 import { practicalInput } from "../schemas/practical";
 import {
@@ -173,14 +174,25 @@ describe("départements autour d'un point et tri exact (suite R8q)", () => {
   });
 });
 
-describe("préfiltre conservateur et plafond des départements (suite R8q, tour 2)", () => {
-  it("le contre-exemple de Codex : près de (49,5 ; 5,5), Longuyon (54) est lu", () => {
-    const around = departmentsAround({ lat: 49.5, lng: 5.5 });
-    expect(around).toContain("54");
-    for (const code of ["08", "55", "57"]) expect(around, code).toContain(code);
+describe("emprises des départements et plafond (suite R8q, tour 3)", () => {
+  it("les contre-exemples de Codex : près de (49,5 ; 5,5) et de (49,6 ; 5,5), le 54 est lu", () => {
+    for (const point of [
+      { lat: 49.5, lng: 5.5 },
+      { lat: 49.6, lng: 5.5 },
+    ]) {
+      const around = departmentsAround(point);
+      expect(around, JSON.stringify(point)).toContain("54");
+      for (const code of ["08", "55", "57"]) expect(around, code).toContain(code);
+    }
   });
 
-  it("Paris et la limite 66/11 restent lus", () => {
+  it("un département dont l'emprise est hors du carré de recherche n'est pas lu", () => {
+    const inside = departmentsAround({ lat: 42.6, lng: 2.5 });
+    expect(inside).toContain("66");
+    for (const code of ["29", "74", "67", "59"]) expect(inside, code).not.toContain(code);
+  });
+
+  it("Paris et la limite 66/11", () => {
     const paris = departmentsAround({ lat: 48.85, lng: 2.35 });
     for (const code of ["75", "92", "93", "94"]) expect(paris, code).toContain(code);
     const border = departmentsAround({ lat: 42.85, lng: 2.85 });
@@ -188,17 +200,32 @@ describe("préfiltre conservateur et plafond des départements (suite R8q, tour 
     expect(border).toContain("11");
   });
 
-  it("plafond de 10 départements, les plus proches par leur centre d'abord", () => {
-    const paris = departmentsAround({ lat: 48.85, lng: 2.35 });
-    expect(paris.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
-    // Les deux plus proches du point sont toujours dans la liste plafonnée.
-    for (const code of nearestDepartments({ lat: 48.85, lng: 2.35 }, 2)) expect(paris).toContain(code);
+  it("plafond de 12 départements, le département du point toujours lu", () => {
     for (const point of [
+      { lat: 48.85, lng: 2.35 },
       { lat: 49.5, lng: 5.5 },
       { lat: 47.2, lng: 2.4 },
       { lat: 43.6, lng: 1.44 },
+      { lat: 45.76, lng: 4.84 },
     ]) {
-      expect(departmentsAround(point).length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+      const around = departmentsAround(point);
+      expect(around.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+      expect(around).toContain(nearestDepartments(point, 1)[0]);
+    }
+    // Un très grand rayon dépasse le plafond : la liste reste bornée.
+    expect(departmentsAround({ lat: 48.85, lng: 2.35 }, 150).length).toBe(PRACTICAL_DEPARTMENTS_MAX);
+  });
+
+  it("les emprises couvrent les 101 départements, chaque centre y est contenu", () => {
+    for (const [code, centre] of Object.entries(departmentCentroids)) {
+      const box = departmentBounds[code];
+      expect(box, code).toBeTruthy();
+      const [south, west, north, east] = box as readonly [number, number, number, number];
+      // Les centres sont approchés (quelques km) : une marge de 0,1° suffit.
+      expect(centre.lat, code).toBeGreaterThanOrEqual(south - 0.1);
+      expect(centre.lat, code).toBeLessThanOrEqual(north + 0.1);
+      expect(centre.lng, code).toBeGreaterThanOrEqual(west - 0.1);
+      expect(centre.lng, code).toBeLessThanOrEqual(east + 0.1);
     }
   });
 });

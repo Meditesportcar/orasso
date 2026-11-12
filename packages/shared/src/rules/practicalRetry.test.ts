@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createFollowTracker,
+  createReadGate,
   createSingleTimer,
   PRACTICAL_MIN_GAP_MS,
   practicalPendingDelay,
@@ -89,5 +90,19 @@ describe("relances de Pratique (R8q, tour 3)", () => {
 describe("relectures tant que des chargements sont en cours (suite R8q, tour 2)", () => {
   it("3 s, 6 s, 12 s, 24 s, puis arrêt", () => {
     expect([0, 1, 2, 3, 4, 10].map(practicalPendingDelay)).toEqual([3_000, 6_000, 12_000, 24_000, null, null]);
+  });
+});
+
+describe("une lecture à la fois sans en perdre (suite R8q, tour 3)", () => {
+  it("une demande qui arrive pendant une lecture attend et repart à sa fin (changement de compte pendant la requête)", () => {
+    const gate = createReadGate();
+    expect(gate.enter()).toBe(true);
+    // Le nouveau compte demande sa lecture pendant celle de l'ancien : elle est mise en attente, une seule fois.
+    expect(gate.enter()).toBe(false);
+    expect(gate.enter()).toBe(false);
+    expect(gate.leave()).toBe(true);
+    // La lecture relancée est seule : à sa fin, rien n'attend.
+    expect(gate.enter()).toBe(true);
+    expect(gate.leave()).toBe(false);
   });
 });

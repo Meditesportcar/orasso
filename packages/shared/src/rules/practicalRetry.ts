@@ -83,3 +83,31 @@ export const PRACTICAL_PENDING_DELAYS_MS = [3_000, 6_000, 12_000, 24_000] as con
 export function practicalPendingDelay(attempt: number): number | null {
   return PRACTICAL_PENDING_DELAYS_MS[Math.max(0, Math.floor(attempt))] ?? null;
 }
+
+/**
+ * Une lecture à la fois, sans en perdre : une demande qui arrive pendant une lecture en cours est mise en attente (une seule) ; à la
+ * fin de la lecture, `leave` dit s'il faut en relancer une (changement de compte pendant la requête : la lecture du nouveau compte
+ * part dès que la précédente est terminée).
+ */
+export function createReadGate() {
+  let busy = false;
+  let queued = false;
+  return {
+    /** `true` : la lecture peut partir. `false` : une lecture est en cours, celle-ci est mise en attente. */
+    enter(): boolean {
+      if (busy) {
+        queued = true;
+        return false;
+      }
+      busy = true;
+      return true;
+    },
+    /** La lecture est terminée : `true` si une demande attendait (il faut relire). */
+    leave(): boolean {
+      busy = false;
+      const rerun = queued;
+      queued = false;
+      return rerun;
+    },
+  };
+}

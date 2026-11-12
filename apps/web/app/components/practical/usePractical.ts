@@ -3,6 +3,7 @@
 // affiché (il n'est pas dans `GET /me/home`). Rien n'est écrit dans le navigateur : la dernière réponse de la séance reste en mémoire.
 // Réponse partielle : une seule relecture, après 3 secondes.
 import {
+  createReadGate,
   createSessionGuard,
   createSingleTimer,
   type PracticalChoice,
@@ -67,7 +68,7 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   // Le composant est monté : plus aucune lecture ni relance après son démontage (tour 2 de la suite).
   const alive = useRef(true);
   // Une seule lecture à la fois (reprises, « Réessayer », minuteries).
-  const reading = useRef(false);
+  const gate = useRef(createReadGate()).current;
   // Une seule relance de lieux partiels, annulée au démontage (tour 3).
   const partialTimer = useRef(createSingleTimer()).current;
   const retryTimer = useRef(createSingleTimer()).current;
@@ -83,15 +84,22 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
 
   // Sans identité connue, rien ne part (la lecture attend l'annonce de la session, `who` change alors et relance l'effet).
   const load = useCallback(async () => {
-    if (!enabled || !who || !alive.current || reading.current) return;
+    if (!enabled || !who || !alive.current) return;
+    // Une lecture est déjà en cours (celle de l'ancien compte, par exemple) : celle-ci attend et repart à sa fin.
+    if (!gate.enter()) return;
     const ticket = guard.begin();
-    if (!ticket) return;
-    reading.current = true;
+    if (!ticket) {
+      gate.leave();
+      return;
+    }
     let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
     try {
       res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near } });
     } finally {
-      reading.current = false;
+      // Une demande attendait : on relit pour la session courante (la réponse qui vient d'arriver est laissée de côté).
+      if (gate.leave() && alive.current) {
+        void load();
+      }
     }
     // Une réponse devenue étrangère (autre compte, autre génération de session) ou arrivée après le démontage est jetée.
     if (!alive.current || !guard.valid(ticket)) return;
@@ -99,7 +107,14 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       failed.current = true;
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
       // Panne réseau (statut 0) : relance espacée, seulement page visible ; sans données, le retour en ligne la reprend aussi.
-      if (res.status === 0) {
+      // Un échec pendant le calendrier des chargements en cours (3, 6, 12, 24 s) ne l'arrête pas : la relecture suivante part à son heure.
+      const pendingNext = retried.current > 0 ? practicalPendingDelay(retried.current) : null;
+      if (pendingNext !== null) {
+        retried.current += 1;
+        partialTimer.schedule(() => {
+          if (alive.current) void load();
+        }, pendingNext);
+      } else if (res.status === 0) {
         retryTimer.schedule(
           () => {
             if (alive.current && (typeof document === "undefined" || document.visibilityState === "visible"))
@@ -122,7 +137,7 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
         if (alive.current) void load();
       }, pending);
     }
-  }, [enabled, near, who, partialTimer, retryTimer]);
+  }, [enabled, near, who, partialTimer, retryTimer, gate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {
@@ -171,18 +186,31 @@ export function usePracticalSources(): PracticalSources {
   const outing = useRead("outing", true);
   const partial = at?.data.partial === true;
   const partialAttempts = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle réponse (`at`) programme la relecture suivante du calendrier.
+  // Le calendrier (3, 6, 12, 24 s) se poursuit après un échec de relecture : la minuterie suivante est programmée à la fin de chaque
+  // relecture, réussie ou non ; il s'arrête quand la réponse est complète, au bout de la série ou au démontage.
   useEffect(() => {
     if (!partial) {
       partialAttempts.current = 0;
       return undefined;
     }
-    const delay = practicalPendingDelay(partialAttempts.current);
-    if (delay === null) return undefined;
-    partialAttempts.current += 1;
-    const timer = setTimeout(() => void refreshPracticalPosition(true), delay);
-    return () => clearTimeout(timer);
-  }, [partial, at]);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const next = () => {
+      const delay = practicalPendingDelay(partialAttempts.current);
+      if (delay === null || !active) return;
+      partialAttempts.current += 1;
+      timer = setTimeout(() => {
+        void refreshPracticalPosition(true).finally(() => {
+          if (active) next();
+        });
+      }, delay);
+    };
+    next();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [partial]);
   return {
     me: at
       ? { data: at.data, loading: false, offline: false, retry: city.retry, exact: at.exact, onPosition: true }
