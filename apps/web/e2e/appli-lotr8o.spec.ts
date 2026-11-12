@@ -276,11 +276,17 @@ test("sans recharger : accepter met la publication sur mon onglet « Publication
   const id = await publishWith(kenjiCookie, caption, { kind: "user", id: damienId });
   const d = await open(browser, "damien@orasso.local");
   await go(d.page, "/profil");
-  await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await expect(d.page.getByTestId("publications-grid").or(d.page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
   const withKenji = d.page.getByTestId("publication-tile-with").filter({ hasText: "Avec Kenji_66" });
   const before = await withKenji.count();
   // Navigation dans l'appli (aucun rechargement) : l'Activité, les Demandes, « Accepter », puis retour au profil.
-  await d.page.getByRole("button", { name: "Activité", exact: true }).first().click();
+  await d.page.getByText("Accueil", { exact: true }).last().click();
+  await d.page
+    .getByRole("button", { name: /^Activité/ })
+    .first()
+    .click();
   await d.page
     .getByRole("link", { name: /Demandes/ })
     .first()
@@ -291,6 +297,7 @@ test("sans recharger : accepter met la publication sur mon onglet « Publication
   await expect(d.page.getByTestId("request-coauthor-confirm")).toBeVisible();
   await d.page.goBack();
   await d.page.goBack();
+  await d.page.getByText("Profil", { exact: true }).last().click();
   await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
   await expect(withKenji).toHaveCount(before + 1, { timeout: 30_000 });
   // « Me retirer » puis retour immédiat : elle n'est plus sur mon profil.
@@ -301,7 +308,9 @@ test("sans recharger : accepter met la publication sur mon onglet « Publication
   await d.page.getByTestId("publication-menu-withdraw").click();
   await expect(d.page.getByTestId("publication-menu-done")).toBeVisible();
   await d.page.goBack();
-  await expect(d.page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await expect(d.page.getByTestId("publications-grid").or(d.page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(withKenji).toHaveCount(before, { timeout: 30_000 });
   expect(id).toBeTruthy();
   await d.ctx.close();

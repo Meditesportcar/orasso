@@ -68,7 +68,12 @@ for (const [theme, width, scale] of variants) {
     await shot(page, `demandes-${tag}`);
     await page.goto("/profil");
     await afterOpening(page);
-    await expect(page.getByTestId("publications-tab")).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page
+        .getByTestId("publications-tab")
+        .or(page.getByTestId("publications-empty"))
+        .or(page.getByTestId("publications-grid")),
+    ).toBeVisible({ timeout: 30_000 });
     await shot(page, `profil-${tag}`);
     // La carte signée, vue de Damien : la publication de Kenji_66 co-signée par Garage du Port, ouverte seule.
     const kenji = await login("kenji@orasso.local");
@@ -77,7 +82,8 @@ for (const [theme, width, scale] of variants) {
     if (signed) {
       await page.goto(`/publication/${signed.id}`);
       await afterOpening(page);
-      await expect(page.getByTestId("feed-card-signature")).toBeVisible({ timeout: 30_000 });
+      if (PHASE === "apres") await expect(page.getByTestId("feed-card-signature")).toBeVisible({ timeout: 30_000 });
+      else await expect(page.getByTestId("feed-card-feed_post")).toBeVisible({ timeout: 30_000 });
       await shot(page, `carte-signee-${tag}`);
     }
     await ctx.close();
