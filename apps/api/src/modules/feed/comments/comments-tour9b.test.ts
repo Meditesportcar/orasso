@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, resetDb, useClock } from "../../../../test/helpers";
+import { call, quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedPostComments, notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
@@ -17,6 +17,8 @@ afterAll(async () => {
 let clock: ReturnType<typeof useClock>;
 beforeEach(async () => {
   await resetDb();
+  // Les heures calmes (22 h à 8 h) ne doivent pas dépendre de l'heure réelle du test.
+  quietHours(false);
   clock = useClock(new Date(Date.now() + 10 * 60_000));
 });
 

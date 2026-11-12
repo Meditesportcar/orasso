@@ -5174,6 +5174,19 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 
 
 
+### Tour 6 (R8p, 12/11/2026) : corrections de la relecture Codex du tour 5
+- **Invitation express : l'e-mail n'est plus oublié** : `mail.send` écrit déjà la ligne de `email_outbox` puis livre, mais rien ne relit les lignes « en attente » ; au lieu d'une file de reprise, `ensureMail` (dans `modules/checkins/express.ts`) envoie l'e-mail **s'il n'a laissé aucune trace** (en attente, envoyé ou écarté par le budget) pour cette invitation, sous un verrou propre à l'invitation, à la création comme à chaque rejeu : une panne entre l'invitation et l'e-mail est réparée au rejeu, un rejeu simultané ou tardif ne l'envoie jamais deux fois, un envoi en échec (transport) est retenté au rejeu. Aucune migration. Test : panne avant la boîte d'envoi (500), puis trois rejeux simultanés et un de plus → un seul e-mail.
+- **`ExpressSheet`** : l'identifiant d'un envoi incertain (réseau, 5xx) est gardé par adresse (`expressIdFor`, `isUncertainSend`) pour le nouvel essai et pour la file de reprise (qui n'est alimentée qu'une fois) ; une réponse du serveur (succès, 4xx) le libère. Un 502/504 est traité comme une réponse perdue : la demande est gardée et partira avec le même identifiant.
+- **Site, la publication confirmée est transmise au Fil avant toute navigation** : `rememberPublished` est écrit tout de suite à la réponse du POST (l'entrée porte l'identifiant du compte ; le contrôle du compte qui précède l'envoi suffit, un autre compte du même onglet n'en voit jamais rien) ; plus de contrôle détaché. Test : `/me` qui ne revient jamais, l'entrée du Fil est déjà dans l'onglet.
+- **Ancienne clé du `sessionStorage`** (`orasso:fil:publish-uncertain`) : migrée sous la clé de son compte au premier chargement de ce compte (un autre compte la laisse à son propriétaire), effacée aussi par `purgeUncertain` ; un contenu illisible est écarté. Test de la transition.
+
+### Tour 7 (R8p, 12/11/2026) : relecture Opus du tour 6
+- **Aucune connexion gardée pendant la livraison** : `mail.send` se découpe en `mail.enqueue` (écrit la ligne de `email_outbox`, budget compté sous verrou, dans la transaction de l'appelant s'il en donne une) et `mail.deliver` (livre hors transaction et note le résultat) ; `send` les enchaîne, son comportement ne change pas. `ensureMail` écrit la ligne **dans sa transaction, sous le verrou de l'invitation**, valide, puis livre : le verrou est relâché avant le transport, la ligne est déjà visible des autres. Test : douze invitations simultanées (plus que la réserve de 10 connexions) à livraison retenue ne bloquent pas une autre route, puis partent toutes.
+- **Relance** : la dernière trace de l'invitation décide. « envoyé » ou « écarté par le budget » : rien ; « en attente » depuis moins de 10 minutes : on patiente ; « échec » ou « en attente » depuis plus de 10 minutes (processus arrêté en route) : l'e-mail repart au rejeu. Test des quatre cas.
+- Les deux tests d'invitation express qui espionnaient `mail.send` espionnent maintenant `mail.enqueue` et `mail.deliver` (le contenu du message est le 3e argument de `deliver`).
+- **À noter (non corrigé)** : sur le site, un changement de session dans un autre onglet entre le contrôle du compte et le POST reste possible sur une fenêtre de quelques millisecondes ; l'API répondrait alors au nom du compte d'aujourd'hui.
+- Base de recette : le PC s'est éteint en pleine récupération ; la base du worktree a été recréée (`.data/pg` supprimé, migrations rejouées), sans conséquence (données de démonstration).
+
 ## Lot R8k1 : API des commentaires d'une publication du Fil (migration 0078 `feed-comments`, D40, 11/11/2026)
 
 
@@ -5509,12 +5522,20 @@ API seule (aucun écran). Partie 2 (le Fil et les commentaires « en tant que »
 - **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
 
 ### Tour 7 (R8c1, 11/11/2026)
-- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
+- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
 
 ### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
 - **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
 - **Marque au départ de chaque lecture, pagination comprise** (`since` est pris pour la première page comme pour « Voir plus », et pour les réponses) ; le compteur de réponses se réconcilie pour **toutes** les pages. Test : page suivante tardive contenant une ancienne version du parent.
 - **Plancher, jamais d'addition** : le compteur reçu est remplacé par le compteur local seulement si une réponse a été confirmée depuis le départ de la lecture et que le local est plus grand (le plus grand des deux) : un GET lu avant l'enregistrement (0) comme après (1) donne 1. Limite connue : une réponse supprimée ailleurs pendant la lecture ne fait redescendre le compteur qu'à la réouverture.
+
+### Tour 3 (lot R8g, relecture Codex, 11/11/2026)
+- **`proVisibility` sur les publications et mentions d'un pro (API, au plus petit)** : `proPostsHidden` (`modules/feed/lists.ts`) : après la fin de gratuité, pour un lecteur qui n'est pas le propriétaire de la fiche, `GET /authors/p:…/feed-posts` rend une liste vide (`restricted: false`), `GET /authors/p:…/mentions` aussi, et les compteurs `publications` et `mentions` de `GET /pros/by-slug/:slug` valent 0. Le propriétaire garde les siens. Même règle que les « offres et actualités » (`modules/pros/service.ts`, abonnement lu comme nul). Test `lists.test.ts` (avant et après `PRO_FREE_UNTIL`, autre lecteur et propriétaire).
+- **Sans session : toutes les photos** : le site réutilise `FeedPhotos` du Fil (défilement, « 1 / 3 », cadrage de la publication) ; `aspectOfPhotos` (partagé, testé) déduit le format de la première photo, `PublicPostView` ne portant pas `aspect`. L'appli (la brique du Fil lit ses photos avec le jeton de session) empile toutes les photos, chacune à ses dimensions. Recettes avec une publication de structure à deux photos paysage.
+- **Appli : relecture des listes** : tirer pour recharger, et revenir sur l'écran (depuis une publication), changent un jeton (`useReloadToken`) qui sert de clé aux publications et aux mentions : elles repartent d'une lecture neuve ; le geste relit aussi événements et partenaires. Recette : une publication faite entre-temps apparaît au retour.
+- **Site : « Réessayer » à la page suivante des mentions** : après un échec de « Voir plus », le bouton reste (libellé « Réessayer ») et relit avec le curseur gardé. Recette avec une page 2 simulée en panne puis rétablie.
+- **Nombre de « Mentions · N »** : la correction locale (masqué / remis) repart de zéro à chaque nombre servi neuf et à chaque autre page (appli et site). Recettes « masquer, relire la fiche (suivre), nombre inchangé ».
+
 
 ### Tour 3 (R8n2, 11/11/2026) : corrections de la relecture Codex
 - **Écritures sérialisées** (`packages/shared/src/rules/serialWriter.ts`, partagé appli et site, testé avec réponses désordonnées) : les envois d'un interrupteur ne se chevauchent jamais, le dernier choix est celui qui est enregistré, la réponse d'un envoi dépassé n'est jamais affichée. Utilisé par la cloche (appli et site) et par le bloc d'inscription (appli et site).
@@ -5582,6 +5603,10 @@ API seule (aucun écran). Partie 2 (le Fil et les commentaires « en tant que »
 - **Coût** : la recherche de remplacement de la garde de livraison vérifie la lisibilité en un lot (`readableBatch`, déplacé dans `readers.ts`), l état des pages lu une fois. Test : une page suspendue ne notifie personne.
 - Note : le crash du PC (03:26) avait corrompu la base locale de développement ; elle a été recréée (données de test seulement).
 
+### Tour 11 (R8k1, 12/11/2026) : tests seulement
+- `comments-tour10.test.ts` : le responsable actuel vérifié est celui qui a publié (le destinataire) ; la page est suspendue **après** le commentaire (heures calmes, livraison le matin).
+- `comments-batch.test.ts` : l horloge simulée avance entre les commentaires du test (deux commentaires de la même milliseconde se départageaient au hasard, d où l échec en suite) ; les fichiers qui livrent des notifications posent `quietHours(false)` pour ne pas dépendre de l heure réelle.
+
 ### Tour 5 (R8c2, relecture Codex des tours 2 à 4, 12/11/2026)
 - **Retrait d'une carte des copies** : `dropFromCopies` (désormais dans `copyPhotos.ts`) capture le compte avant toute lecture et le passe à chaque `readCopy` et `saveCopy` ; rien n'est écrit sous un autre compte (test A → B entre la lecture et l'écriture).
 - **Photo refusée dans le repli** : `CrewPhotoImage` reçoit `onFailed` ; un 401, 403, 404 ou 410 reçu par le repli efface aussi la photo gardée (`forgetIfRefused`, testé : 500 sans effet, puis 404 efface).
@@ -5602,3 +5627,9 @@ API seule (aucun écran). Partie 2 (le Fil et les commentaires « en tant que »
 - **`Cache-Control: private, no-store`** dès qu'il y a une session (fiches prestataire, média, structure, pro, `GET /users/:pseudo`), casquette ou non.
 - **Réponse à une story** : règle partagée `storyReplyable(persona)` (faux pour pro, prestataire, média), utilisée par l'API et les deux visionneuses (appli et site).
 - **Repartage** : le plafond personnel ne compte que les stories `fan` ; le lien de la notification « repartagée » est la clé de l'originale (`s: p: v: m: u:`).
+
+### Tour 4 (lot R8g, relecture Codex de la nuit et mineurs d'Opus, 12/11/2026)
+- **Relire une page ne démonte plus ses listes** (appli) : le jeton ne sert plus de clé React. `PublicationsTab` (prop facultative `reloadToken`) et `PageMentions` relisent par `reload()` : les éléments déjà lus restent affichés pendant la lecture et après un échec (réseau coupé), une relecture réussie remplace la liste ; plus de remontage à chaque retour (la position et le chargement ne sont plus perdus). Recette : réseau coupé, retour depuis une publication, les vignettes restent.
+- **Delta de « Mentions · N »** : il repart de zéro à chaque **réponse servie** (l'objet de la fiche relue), non à chaque changement de valeur (appli et site). Recettes : masquer, le serveur redit le même nombre, relecture : le nombre servi s'affiche.
+- **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur présents avant la fin de gratuité, absents pour un autre lecteur après, maintenus pour le propriétaire).
+- **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors décision, à noter : une publication d'un pro qui cite une structure ou un événement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` après la fin de gratuité.

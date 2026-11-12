@@ -34,6 +34,7 @@ import { PageMentions } from "@/features/pages/PageMentions";
 import { PagePublications } from "@/features/pages/PagePublications";
 import { PageTabs } from "@/features/pages/PageTabs";
 import { StructureEvents } from "@/features/pages/StructureEvents";
+import { useReloadToken } from "@/features/pages/useReloadToken";
 import { SideIcon } from "@/features/profil/ProfileHead";
 import { SetList, SetRow } from "@/features/profil/parts";
 import { api } from "@/lib/api";
@@ -72,6 +73,12 @@ export default function StructurePage() {
   const [picked, setPicked] = useState<PageTab | null>(null);
   const [filter, setFilter] = useState<"all" | "event" | "no_event">("all");
   const [mentionsDelta, setMentionsDelta] = useState(0);
+  // Tirer pour recharger et revenir sur l'écran relisent aussi les publications et les mentions.
+  const mentionsBase = s ? pageMentionsCount(s) : undefined;
+  // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque réponse servie neuve (même valeur comprise).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [s, slug]);
+  const [reloadToken, bumpReload] = useReloadToken();
 
   // `?onglet=` s'applique à chaque navigation ; une fois lu, on le retire.
   useEffect(() => {
@@ -160,7 +167,6 @@ export default function StructurePage() {
   }
 
   const isOrganizer = isPageManager("structure", { structureId: s.id, memberships: me?.memberships });
-  const mentionsBase = pageMentionsCount(s);
   const mentionsCount = mentionsBase === undefined ? undefined : Math.max(0, mentionsBase + mentionsDelta);
   const tabs = pageTabs("structure", { session, mentionsCount });
   const wanted = picked ?? pageOpenTab("structure", { publications: pagePublicationsCount(s) }, session);
@@ -185,7 +191,10 @@ export default function StructurePage() {
     <FlowScreen
       title={s.name}
       onClose={close}
-      onRefresh={structure.reload}
+      onRefresh={async () => {
+        bumpReload();
+        await Promise.all([structure.reload(), upcoming.reload(), past.reload(), partners.reload()]);
+      }}
       overlays={
         <Overlay>
           <AppSheet visible={more} onClose={() => setMore(false)} accessibilityLabel={L.moreTitle}>
@@ -256,6 +265,7 @@ export default function StructurePage() {
         <StructureEvents structure={s} upcoming={upcomingItems} past={pastItems} partners={partnerItems} />
       ) : tab === "publications" ? (
         <PagePublications
+          reloadToken={reloadToken}
           authorKey={key}
           name={s.name}
           withFilter
@@ -266,6 +276,7 @@ export default function StructurePage() {
         />
       ) : (
         <PageMentions
+          reloadToken={reloadToken}
           pageKey={key}
           pageName={s.name}
           manage={isOrganizer}
