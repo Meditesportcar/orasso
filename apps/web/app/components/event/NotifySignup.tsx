@@ -1,20 +1,42 @@
 import { Button, CheckboxField, Icon } from "@orasso/design-system/web";
 import {
+  createSerialWriter,
   type EventNotificationPrefsView,
   eventNotifyLabels as L,
   type NotificationType,
   notificationFamilyLabels,
   notificationTypeLabels,
+  type SerialWriter,
   settingsEventRows,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
 import "../../styles/event-notify.css";
 
 // Lot R8n2 (maquette R8.11) : les pièces des notifications d'un événement sur le site, partagées par la fin de la
 // candidature (« Ce que tu recevras pour cet événement »), la cloche de la fiche, les Réglages et la confirmation de
 // l'organisateur. Mêmes mots que l'appli (`eventNotifyLabels`).
+
+/**
+ * Garde de compte : faux dès qu'un compte est annoncé (connexion, déconnexion, autre fenêtre) : une écriture différée ne
+ * part jamais avec la session d'un autre compte (`createSerialWriter`, option `alive`).
+ */
+export function useSessionGuard(): () => boolean {
+  const changed = useRef(false);
+  // La fenêtre annonce d'abord son propre compte (hydratation) : la première annonce fixe le compte, une autre le change.
+  const known = useRef<string | null | undefined>(undefined);
+  useEffect(
+    () =>
+      listenSession((userId) => {
+        if (known.current === undefined) known.current = userId;
+        else if (known.current !== userId) changed.current = true;
+      }),
+    [],
+  );
+  return useCallback(() => !changed.current, []);
+}
 
 /** Le bloc « Essentiel » : cadenas, « toujours actif », les six lignes. */
 export function EssentialBlock() {
@@ -180,38 +202,72 @@ export function RecipientsBanner({ count, timing }: { count: number | null; timi
 
 /**
  * Fin d'une candidature : « Ce que tu recevras pour cet événement ». « Nouveautés » part du réglage déjà enregistré et
- * s'enregistre au changement (quitter l'écran n'en perd rien) ; « C'est noté » (le bouton principal) continue. Un échec
- * rend l'interrupteur à sa valeur et ne remet jamais la candidature en cause.
+ * s'enregistre au changement (envois sérialisés, dernier choix gardé) ; « C'est noté » (le bouton principal) attend la
+ * fin de l'écriture avant de continuer. Une lecture impossible n'est jamais présentée comme « activé » : erreur et
+ * « Réessayer ».
  */
 export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () => void }) {
   const [news, setNews] = useState(true);
-  // Tant que le réglage enregistré n'est pas lu, l'interrupteur est à son défaut et ne se touche pas.
-  const [loaded, setLoaded] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const alive = useRef(true);
+  const accountAlive = useSessionGuard();
+  // Un échec d'écriture pas encore « vu » à l'appui : le premier appui le montre, le suivant ferme.
+  const unseenFailure = useRef(false);
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
 
   useEffect(() => {
-    let alive = true;
-    void apiFetch<EventNotificationPrefsView>(`/me/events/${encodeURIComponent(eventId)}/notification-prefs`).then(
-      (res) => {
-        if (!alive) return;
-        if (res.ok) setNews(res.data.news);
-        setLoaded(true);
-      },
-    );
+    alive.current = true;
     return () => {
-      alive = false;
+      alive.current = false;
     };
-  }, [eventId]);
+  }, []);
 
-  async function change(next: boolean) {
-    const previous = news;
-    setNews(next);
-    setMessage(null);
-    const res = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: next } });
-    if (res.ok) return setNews(res.data.news);
-    setNews(previous);
-    setMessage(L.saveFailed);
+  const load = useCallback(() => {
+    setStatus("loading");
+    void apiFetch<EventNotificationPrefsView>(url).then((res) => {
+      if (!alive.current) return;
+      if (!res.ok) return setStatus("error");
+      writer.current = createSerialWriter<boolean>({
+        initial: res.data.news,
+        alive: accountAlive,
+        write: async (value) => {
+          const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
+          if (!saved.ok) throw new Error(saved.error.message);
+          return saved.data.news;
+        },
+        onSettled: (value) => {
+          // La dernière intention est enregistrée : un ancien échec n'a plus rien à montrer.
+          unseenFailure.current = false;
+          if (alive.current) setNews(value);
+        },
+        onError: (confirmed) => {
+          unseenFailure.current = true;
+          if (!alive.current) return;
+          setNews(confirmed);
+          setMessage(L.saveFailed);
+        },
+      });
+      setNews(res.data.news);
+      setStatus("ready");
+    });
+  }, [url, accountAlive]);
+  useEffect(load, [load]);
+
+  async function noted() {
+    if (busy) return;
+    setBusy(true);
+    await writer.current?.whenIdle();
+    if (!alive.current) return;
+    setBusy(false);
+    // Un échec reste visible : un second appui continue quand même (la candidature n'est jamais remise en cause).
+    if (unseenFailure.current) {
+      unseenFailure.current = false;
+      return;
+    }
+    onDone();
   }
 
   return (
@@ -220,14 +276,29 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
         {L.signupTitle}
       </h2>
       <EssentialBlock />
-      <NotifySwitch
-        title={L.eventNewsTitle}
-        help={L.eventNewsHelpOnSignup}
-        checked={news}
-        onChange={(v) => void change(v)}
-        disabled={!loaded}
-        testId="notify-signup-news"
-      />
+      {status === "error" ? (
+        <div className="en-box" data-testid="notify-signup-read-error">
+          <p className="en-error" role="alert">
+            {L.readFailed}
+          </p>
+          <Button variant="secondary" icon="undo" onClick={load} data-testid="notify-signup-retry">
+            {L.retry}
+          </Button>
+        </div>
+      ) : (
+        <NotifySwitch
+          title={L.eventNewsTitle}
+          help={L.eventNewsHelpOnSignup}
+          checked={news}
+          onChange={(v) => {
+            setNews(v);
+            setMessage(null);
+            writer.current?.set(v);
+          }}
+          disabled={status !== "ready"}
+          testId="notify-signup-news"
+        />
+      )}
       {message ? (
         <p className="en-error" role="alert" data-testid="notify-signup-message">
           {message}
@@ -235,7 +306,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       ) : (
         <p className="en-note o-t-caption">{L.signupNote}</p>
       )}
-      <Button icon="check" onClick={onDone} data-testid="notify-noted">
+      <Button icon="check" onClick={() => void noted()} loading={busy} data-testid="notify-noted">
         {L.noted}
       </Button>
     </section>

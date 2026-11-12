@@ -286,3 +286,41 @@ test("appli : organisateur, « N inscrits seront prévenus » seulement pour l'h
   await expect(page.getByText(/Enregistré : 2 inscrits (seront )?prévenus/)).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
+
+test("appli : la feuille de la cloche se ferme tout de suite, une écriture qui échoue ensuite se voit", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const damien = await login("damien@orasso.local");
+  const event = await createEvent(damien, { title: `Cloche R8n2 ${unique()}`.slice(0, 40), admission: "filtered" });
+  const a = await person("Clo");
+  const vehicles = await apiCall<{ id: string }[]>(a.cookie, "GET", "/me/vehicles");
+  await apiCall(a.cookie, "POST", `/events/${event.id}/applications`, {
+    vehicleIds: [vehicles.data[0]?.id],
+    rulesAccepted: true,
+    followStructure: false,
+    newsletterOptIn: false,
+    companions: 0,
+  });
+  const { ctx, page } = await open(browser);
+  await signIn(page, a.email);
+  await goto(page, `/e/${event.slug}`);
+  await expect(page.getByTestId("notify-bell")).toBeVisible({ timeout: 30_000 });
+  const prefsUrl = /\/api\/me\/events\/[^/]+\/notification-prefs$/;
+  await page.getByTestId("notify-bell").click();
+  const sw = page.getByTestId("notify-news-switch");
+  await expect(sw).toBeVisible();
+  // L'envoi est lent puis échoue ; on ferme aussitôt.
+  await page.route(prefsUrl, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    await new Promise((r) => setTimeout(r, 1000));
+    return route.abort();
+  });
+  await sw.click();
+  await page.getByRole("button", { name: "Fermer" }).first().click({ force: true });
+  // La feuille se rouvre avec le message : l'échec n'est pas perdu en silence.
+  await expect(page.getByTestId("notify-message")).toBeVisible({ timeout: 20_000 });
+  expect((await prefsOf(a.cookie, event.id)).data.news).toBe(true);
+  await page.unroute(prefsUrl);
+  await ctx.close();
+});

@@ -1,8 +1,8 @@
 // Lot R8n2 : règles d'écran des notifications d'un événement (maquette R8.11). `now` toujours passé.
 import { describe, expect, it } from "vitest";
-
 import { initialEventDraft } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
+import { essentialQuietOverride } from "./eventNotifications";
 import {
   type NotifyFields,
   notifyChanged,
@@ -12,6 +12,7 @@ import {
   notifyStart,
   notifyTiming,
   notifyTimingLine,
+  notifyTimingOfSave,
   settingsEventRows,
 } from "./eventNotifyScreen";
 
@@ -206,5 +207,32 @@ describe("Nouveautés de mes sorties : le résumé coupé par type se lit coupé
     expect(settingsEventRows({ event: true, eventNews: true }, ["event_news_digest"]).news.on).toBe(false);
     expect(settingsEventRows({ event: true, eventNews: true }, ["event_announcement"]).news.on).toBe(true);
     expect(settingsEventRows({ event: true, eventNews: false }, []).news.on).toBe(false);
+  });
+});
+
+describe("le message d'après enregistrement suit l'échéance de l'API", () => {
+  it("nouveau changement différé : à 8 h ; immédiat : tout de suite", () => {
+    expect(notifyTimingOfSave("a", { createdAt: "b", deferred: true })).toBe("at_8");
+    expect(notifyTimingOfSave("a", { createdAt: "b", deferred: false })).toBe("now");
+    expect(notifyTimingOfSave(null, { createdAt: "b", deferred: false })).toBe("now");
+  });
+  it("aucun nouveau changement annoncé : rien à dire (même la nuit, même à une borne franchie)", () => {
+    expect(notifyTimingOfSave("a", { createdAt: "a", deferred: true })).toBeNull();
+    expect(notifyTimingOfSave("a", null)).toBeNull();
+    expect(notifyTimingOfSave(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("événement terminé : même verdict que l'API (tour 5)", () => {
+  it("terminé la veille, modifié à 23 h : à 8 h (jamais « tout de suite »)", () => {
+    const now = paris("23:00");
+    const startsAt = paris("18:00", "2026-11-09");
+    const endsAt = paris("23:00", "2026-11-09");
+    expect(notifyTiming({ now, startsAt, endsAt })).toBe("at_8");
+    expect(essentialQuietOverride("event_updated", { endsAt, now })).toBeUndefined();
+    // En cours (fin à venir) : tout de suite, comme avant.
+    expect(notifyTiming({ now, startsAt, endsAt: paris("23:30") })).toBe("now");
+    // Sans fin connue : l'ancien comportement (début seul).
+    expect(notifyTiming({ now, startsAt })).toBe("now");
   });
 });
