@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetDb, useClock } from "../../../../test/helpers";
+import { quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedPostComments, feedPosts, notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
@@ -15,9 +15,12 @@ afterAll(async () => {
   await pool.end();
 });
 
+let clock: ReturnType<typeof useClock>;
 beforeEach(async () => {
   await resetDb();
-  useClock(new Date(Date.now() + 10 * 60_000));
+  // Les heures calmes (22 h à 8 h) ne doivent pas dépendre de l'heure réelle du test.
+  quietHours(false);
+  clock = useClock(new Date(Date.now() + 10 * 60_000));
 });
 
 /** Compte les requêtes envoyées à la base pendant `fn`. */
@@ -149,11 +152,13 @@ describe("corps de la ligne", () => {
     const r = await person("Racine_66");
     const x = await person("Xavier_66");
     const id = await dbPost(author);
+    clock.advance(1000);
     await comment(x, id, "Un ancien commentaire de X");
     await notificationsService.deliverDue();
     await notificationsService.markRead(author.id, "all");
     const root = await comment(r, id, "Racine");
     await notificationsService.markRead(author.id, "all");
+    clock.advance(1000);
     await comment(x, id, "Réponse sensible de X", { parentId: root.json.id });
     await notificationsService.deliverDue();
     const before = (await notificationsService.list(author.id, 20)).items;
