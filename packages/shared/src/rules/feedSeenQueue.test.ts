@@ -311,6 +311,15 @@ describe("la copie hors ligne du Fil", () => {
     expect(parseFeedCopy(null, "following")).toBeNull();
     expect(parseFeedCopy({ filter: "following", items: "x" }, "following")).toBeNull();
   });
+  it("un Fil vide, ou fait seulement de rendez-vous au spot et de « Sponsorisé » : une copie vide (le Fil passe hors ligne quand même)", () => {
+    expect(feedCopyCards([])).toEqual([]);
+    expect(
+      feedCopyCards([
+        card(1, { kind: "spot_meetup" } as Partial<FeedCard>),
+        card(2, { kind: "sponsored" } as Partial<FeedCard>),
+      ]),
+    ).toEqual([]);
+  });
   it("une clé par onglet", () => {
     expect(new Set(["for_you", "nearby", "following"].map((f) => feedCopyKey(f as never))).size).toBe(3);
   });

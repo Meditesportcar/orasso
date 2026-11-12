@@ -501,3 +501,38 @@ test("partager une carte la retient comme interaction (`share`)", async ({ brows
     .toBeGreaterThan(0);
   await ctx.close();
 });
+
+test("`open` : seulement depuis une vraie ouverture (la ligne rattachée), jamais par un défilement puis un changement d'onglet", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  const sent: { cards: { id: string; action: string }[] }[] = [];
+  page.on("request", (req) => {
+    if (req.method() === "POST" && req.url().includes("/api/me/fil/seen")) sent.push(req.postDataJSON());
+  });
+  await goFil(page, "following");
+  // Défilement, puis un autre onglet : aucune carte n'est « ouverte ».
+  for (let i = 0; i < 3; i++) {
+    await page.mouse.wheel(0, 500);
+    await page.waitForTimeout(400);
+  }
+  await page.getByRole("tab", { name: /Accueil/i }).click();
+  await page.waitForURL(/accueil/, { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  expect(sent.flatMap((b) => b.cards).filter((c) => c.action === "open")).toHaveLength(0);
+  // Une vraie ouverture : la ligne rattachée ouvre la fiche, la carte est notée « open ».
+  await page.getByRole("tab", { name: /Le Fil/i }).click();
+  await expect(page.getByTestId("fil-list")).toBeVisible({ timeout: 30_000 });
+  const card = await cardOf(page, "Kenji_66", "Nocturne de rentrée");
+  expect(card).not.toBeNull();
+  await (card as Locator).getByTestId("feed-attach").first().click();
+  await page.waitForURL(/\/e\/[^/]+/, { timeout: 30_000 });
+  await expect
+    .poll(() => sent.flatMap((b) => b.cards).filter((c) => c.action === "open").length, {
+      timeout: 30_000,
+      intervals: [1_000],
+    })
+    .toBeGreaterThan(0);
+  await ctx.close();
+});

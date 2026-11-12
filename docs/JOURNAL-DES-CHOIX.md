@@ -5529,3 +5529,16 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Identifiant servi** : `data.commentId` d une ligne dont le commentaire cité ne se lit plus est remplacé par un commentaire lisible de la ligne (Journal et Activité).
 - **Coût** : la recherche de remplacement de la garde de livraison vérifie la lisibilité en un lot (`readableBatch`, déplacé dans `readers.ts`), l état des pages lu une fois. Test : une page suspendue ne notifie personne.
 - Note : le crash du PC (03:26) avait corrompu la base locale de développement ; elle a été recréée (données de test seulement).
+
+### Tour 5 (R8c2, relecture Codex des tours 2 à 4, 12/11/2026)
+- **Retrait d'une carte des copies** : `dropFromCopies` (désormais dans `copyPhotos.ts`) capture le compte avant toute lecture et le passe à chaque `readCopy` et `saveCopy` ; rien n'est écrit sous un autre compte (test A → B entre la lecture et l'écriture).
+- **Photo refusée dans le repli** : `CrewPhotoImage` reçoit `onFailed` ; un 401, 403, 404 ou 410 reçu par le repli efface aussi la photo gardée (`forgetIfRefused`, testé : 500 sans effet, puis 404 efface).
+- **`open`** : `useCardRouter` (appli) note `open` pour la carte courante avant toute navigation partie d'une carte (fiche, profil, plateau, vote, souvenir, annonce, pro, ligne rattachée) ; « Voir les commentaires » aussi. Contexte `CardIdContext` posé par le Fil ; hors du Fil, rien n'est noté ; jamais pour « Sponsorisé ». Recette : défilement puis changement d'onglet = aucun `open` ; ligne rattachée = `open`.
+- **Site, file des cartes vues** : `send` vérifie que sa file est toujours celle du module ; `resetSeen()` à la déconnexion (`clientAction`) ; test d'un envoi lent de A puis déconnexion.
+- **Hors ligne sans carte** : le Fil passe hors ligne même si la copie filtrée est vide (liste vide, ou faite de rendez-vous au spot et de « Sponsorisé » seulement).
+
+### Tour 5 (R8n1, 12/11/2026) : relecture Codex du tour 4
+- **La liste des événements du résumé ne part plus dans le push** : elle est rangée sous `data._events` (clé interne, retirée par `stripInternal` du push et de `/me/notifications`) ; la garde de livraison la lit et la réécrit sous la même clé en recomposant. Test : 20 événements aux titres de 120 caractères et aux slugs de 80, message transmis à `push.send` sous 4 096 octets, sans `events`, `_events` ni `_postIds`, ni dans la liste du Journal. Aucune compatibilité avec l'ancienne clé (le résumé n'a jamais été en ligne).
+- **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
+- Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
+- Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.

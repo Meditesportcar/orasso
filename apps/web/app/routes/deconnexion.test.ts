@@ -23,7 +23,9 @@ beforeEach(() => {
   outcome = { ok: true, status: 200 };
 });
 
-describe("action de déconnexion", () => {
+// La route importe maintenant les purges des copies du navigateur (choix de vue, envoi incertain, cartes vues) : l'import à
+// froid est lent quand toute la suite du site tourne en parallèle.
+describe("action de déconnexion", { timeout: 30_000 }, () => {
   it("API en panne : cookie de session effacé et retour sur la connexion avec l'avertissement", async () => {
     outcome = { ok: false, status: 503 };
     const { action } = await import("./deconnexion");
