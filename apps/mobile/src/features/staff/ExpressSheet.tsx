@@ -7,7 +7,7 @@ import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { record } from "@/lib/staff/runtime";
+import { newId, record } from "@/lib/staff/runtime";
 import { AppSheet } from "@/ui/AppSheet";
 import { QrCode } from "@/ui/QrCode";
 
@@ -34,14 +34,16 @@ export function ExpressSheet({
   async function send() {
     if (!userId) return;
     const target = email.trim().toLowerCase();
+    // Un identifiant par envoi : le même est gardé dans la file si la réponse se perd (aucun doublon au rejeu).
+    const id = newId();
     setBusy(true);
     setError(null);
     try {
-      const r = await api.expressInvite(eventId, target);
+      const r = await api.expressInvite(eventId, target, id);
       setSent({ email: r.email, url: r.url });
     } catch (e) {
       if (e instanceof ApiRequestError && e.isNetwork) {
-        await record(eventId, userId, "express", { email: target });
+        await record(eventId, userId, "express", { email: target, id });
         setSent({ email: target, url: null });
       } else setError(errorMessage(e));
     } finally {

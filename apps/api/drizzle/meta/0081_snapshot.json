@@ -1,5 +1,5 @@
 {
-  "id": "bb8f3d26-20c1-4932-9cae-fd267ee72383",
+  "id": "d5a81ec3-280a-4679-b2d9-d7ff5f91565f",
   "prevId": "08380732-26dc-4373-9e1b-d85126819e1e",
   "version": "7",
   "dialect": "postgresql",
@@ -2542,6 +2542,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2569,6 +2575,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "express_invites_client_key": {
+          "name": "express_invites_client_key",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"express_invites\".\"client_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6811,12 +6839,6 @@
           "notNull": true,
           "default": false
         },
-        "legacy_announcement_id": {
-          "name": "legacy_announcement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "aspect": {
           "name": "aspect",
           "type": "feed_aspect",
@@ -7105,21 +7127,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_legacy_announcement_key": {
-          "name": "feed_posts_legacy_announcement_key",
-          "columns": [
-            {
-              "expression": "legacy_announcement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

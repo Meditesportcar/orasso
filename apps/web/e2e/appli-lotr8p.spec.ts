@@ -524,3 +524,46 @@ test("la réponse d'envoi de A, arrivée après la connexion de B, n'écrit rien
   await expect(page.getByText(secret)).toHaveCount(0);
   await ctx.close();
 });
+
+// --- Tour 5 ------------------------------------------------------------------------------------------------------------
+
+test("vérification en cours : « Réessayer » et « Modifier » sont inertes ; une réponse en retard n'efface pas les photos du formulaire rouvert", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  await page.getByTestId("fil-publish-caption").fill(`Course ${Date.now()}`);
+  await loseResponses(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  // La vérification part, sa réponse est retenue.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/me/feed-posts/by-client/**", async (route) => {
+    const real = await route.fetch();
+    await held;
+    await route.fulfill({ response: real });
+  });
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
+  await expect(page.getByTestId("fil-publish-uncertain-edit")).toBeDisabled();
+  // Le formulaire est quitté puis rouvert avec un autre brouillon, avant l'arrivée de la réponse.
+  const spa = (to: string) =>
+    page.evaluate((path) => {
+      window.history.pushState({}, "", path);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, to);
+  await spa("/fil");
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await spa("/fil/publier");
+  await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
+  await addPhoto(page, "car-mx5.jpg");
+  release();
+  await page.waitForTimeout(2_500);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1);
+  await ctx.close();
+});

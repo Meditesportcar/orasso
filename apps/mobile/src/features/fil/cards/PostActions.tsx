@@ -15,9 +15,18 @@ import { postLive, usePostLive } from "../comments/live";
 export function PostActions({
   post: server,
   onChange,
+  offline = false,
+  onShared,
+  onOpened,
 }: {
   post: FeedPostView;
   onChange?: (post: FeedPostView) => void;
+  /** Lot R8c2 : la carte vient de la copie gardée (sans réseau) : flamme et commentaire disent « Pas de réseau », sans rien envoyer. */
+  offline?: boolean;
+  /** Lot R8c2 : le partage est ouvert depuis cette carte (le Fil le retient comme une interaction). */
+  onShared?: () => void;
+  /** Lot R8c2 : la feuille des commentaires est ouverte depuis cette carte (le Fil retient `open`). */
+  onOpened?: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -52,8 +61,10 @@ export function PostActions({
     if (opening && isHost) setEverOpened(true);
   }, [opening, isHost]);
 
+  const [noNet, setNoNet] = useState(false);
   async function toggle() {
     if (busy) return;
+    if (offline) return setNoNet(true);
     const before = fire;
     const on = !before.on;
     setBusy(true);
@@ -86,7 +97,7 @@ export function PostActions({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={C.comment}
-        onPress={() => postLive.open(post.id, true)}
+        onPress={() => (offline ? setNoNet(true) : (onOpened?.(), postLive.open(post.id, true)))}
         style={[styles.pill, { backgroundColor: c.ground }]}
         testID="feed-post-comment"
       >
@@ -98,13 +109,27 @@ export function PostActions({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={shareLabels.title}
-        onPress={() => setSharing(true)}
+        onPress={() => {
+          onShared?.();
+          setSharing(true);
+        }}
         style={[styles.pill, { backgroundColor: c.ground }]}
         testID="feed-post-share"
       >
         <Icon name="share" size={17} color={c.ink} />
       </Pressable>
       <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "feed_post", id: post.id }} />
+      {offline && noNet ? (
+        <Text
+          variant="caption"
+          color={c.inkMuted}
+          style={styles.gone}
+          accessibilityRole="alert"
+          testID="feed-post-no-network"
+        >
+          {L.noNetwork}
+        </Text>
+      ) : null}
       {postLive.isGone(post.id) ? (
         <Text variant="caption" color={c.inkMuted} style={styles.gone} testID="feed-post-gone">
           {C.goneNotice}
