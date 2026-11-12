@@ -1,4 +1,5 @@
 import {
+  ACTOR_HEADER,
   CLOCK_OFFSET_HEADER,
   feedLabels,
   isReservedPseudo,
@@ -73,6 +74,7 @@ import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
+import { pageFollowsRoutes } from "./modules/social/routes-page-follows";
 import { spotMeetupsRoutes } from "./modules/spot-meetups/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { storiesRoutes } from "./modules/stories/routes";
@@ -111,7 +113,7 @@ if (corsOrigins.length) {
     "*",
     cors({
       origin: corsOrigins,
-      allowHeaders: ["authorization", "content-type", "x-device-id"],
+      allowHeaders: ["authorization", "content-type", "x-device-id", ACTOR_HEADER],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       // `date` : le navigateur (recette web de l'appli) mesure le décalage avec l'heure du serveur (lot 48, code tournant).
       exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER, "date"],
@@ -277,6 +279,7 @@ app.route("/", crewsRoutes);
 // Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
 app.route("/", crewFeedRoutes);
 app.route("/", storiesRoutes);
+app.route("/", pageFollowsRoutes);
 // Lot R7f4 : partager un contenu (feuille, carte, fichiers qui sortent d'Orasso).
 app.route("/", shareRoutes);
 app.route("/", invitationsRoutes);

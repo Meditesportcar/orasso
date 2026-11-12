@@ -41,6 +41,7 @@ import {
   mediaContentKindLabels,
   mediaPlatformLabels,
   nearCountdown,
+  type PageCounts,
   presenceLabels,
   previewSummary,
   publicAccessText,
@@ -48,6 +49,7 @@ import {
   registrationBlock,
   registrationBlockText,
   registrationFullText,
+  remainingFil,
   type StructurePublic,
   storyShareLabels,
   type TicketOffer,
@@ -64,6 +66,8 @@ import { InviteBanner, WhoGoes } from "../components/EventInvite";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
 import { NotifyBell } from "../components/event/NotifyBell";
+import { EventJournal } from "../components/event-journal/EventJournal";
+import { type JournalPage, toFeedPosts } from "../components/event-journal/useJournal";
 import { CarGrid, ProItem, VisitorNotice } from "../components/Lineup";
 import { ContactOrganizer } from "../components/Messaging";
 import { PhotoGallery } from "../components/PhotoGallery";
@@ -103,7 +107,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const event = found.ok
     ? found.data
     : await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, lineup, weather, feed, media] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, lineup, weather, feed, media, journal] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -120,6 +124,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<{ items: AnnouncementView[] }>(request, `/events/by-slug/${encodeURIComponent(slug)}/announcements`),
     // Contenus des médias accrédités (lot 45) : liens et galeries publiés sur l'événement.
     api<MediaContentView[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/media-contents`),
+    // Lot R8d : le journal de l'événement (publications de l'organisateur, l'épinglée en tête) ; sans session, la liste blanche
+    // publique (T4). Une panne ne casse pas la fiche : la section disparaît.
+    api<JournalPage>(request, `/events/${event.id}/feed-posts`),
   ]);
   // Inscription en crew (lot 19) : proposée au chef d'un crew, sauf événement sur invitation seulement.
   const crews = me && event.admission !== "invite_only" ? await api<MyCrew[]>(request, "/me/crews") : null;
@@ -147,6 +154,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     grade: me?.profile.grade ?? null,
     weather: weather.ok ? weather.data : null,
     feed: feed.ok ? feed.data.items : [],
+    // Lot R8d : compteurs de la fiche (`publications`, `mentions` absent sans session), la première page du journal, mes droits.
+    counts: event as PageCounts,
+    journal: journal.ok ? { items: toFeedPosts(journal.data.items), nextCursor: journal.data.nextCursor } : null,
+    manager: Boolean(me?.personas?.some((p) => p.kind === "organizer" && p.id === event.structure.id)),
+    userId: me?.user.id ?? null,
     media: media.ok ? media.data : [],
     prize: board?.ok && board.data.settled ? board.data.winner : null,
     offer: tickets.ok ? tickets.data.offer : null,
@@ -445,6 +457,10 @@ function EventPage({
     reviews,
     weather,
     feed,
+    counts,
+    journal,
+    manager,
+    userId,
     ended,
     offer,
     myTickets,
@@ -458,6 +474,8 @@ function EventPage({
     going,
     invited,
   } = loaderData;
+  const fil = remainingFil(feed, journal !== null);
+  const showFeed = fil.length > 0 || !journal || (counts.publications?.count ?? 0) === 0;
   const inviteResult = actionData as InviteNoticeData | undefined;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
@@ -809,7 +827,25 @@ function EventPage({
           </section>
         )}
 
-        <EventFeed items={feed} connected={connected} />
+        {/* Lot R8d : le journal de l'événement et « Mentions · N » ; dessous, ce qui reste de l'ancien fil. */}
+        {journal ? (
+          <EventJournal
+            key={event.id}
+            eventId={event.id}
+            eventSlug={event.slug}
+            structureId={event.structure.id}
+            structureName={event.structure.name}
+            count={counts.publications?.count}
+            mentions={counts.mentions?.count}
+            hiddenMentions={counts.hiddenMentions?.count}
+            manager={manager}
+            signedIn={connected}
+            userId={userId}
+            initial={journal}
+            anchorFil={!showFeed}
+          />
+        ) : null}
+        {showFeed ? <EventFeed items={fil} connected={connected} /> : null}
 
         {event.instructions && (
           <section className="s-section">

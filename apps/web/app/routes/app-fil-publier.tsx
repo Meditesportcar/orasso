@@ -13,7 +13,10 @@ export const handle = ficheHandle;
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const vehicles = await api<{ id: string; label: string; status?: string }[]>(request, "/me/vehicles");
+  // Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis.
+  const url = new URL(request.url);
   return {
+    start: { structure: url.searchParams.get("structure"), evenement: url.searchParams.get("evenement") },
     userId: me.user.id,
     pseudo: me.profile.pseudo,
     avatarUrl: me.profile.avatarUrl,
@@ -39,6 +42,7 @@ export default function AppFilPublier({ loaderData }: Route.ComponentProps) {
       personas={loaderData.personas}
       vehicles={loaderData.vehicles}
       optionsFailed={loaderData.optionsFailed}
+      start={loaderData.start}
     />
   );
 }

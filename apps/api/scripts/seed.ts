@@ -19,7 +19,7 @@ import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
 import { seedBase, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
-import { seedCommunication } from "./seed/communication";
+import { seedAnnouncementsReprise, seedCommunication } from "./seed/communication";
 import { seedCrewPage } from "./seed/crew-page";
 import { seedCrews } from "./seed/crews";
 import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
@@ -43,6 +43,7 @@ import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
 import { seedOrgaV2 } from "./seed/orga-v2";
+import { seedPageFollows } from "./seed/page-follows";
 import { seedPartnerships } from "./seed/partnerships";
 import { seedPassport } from "./seed/passport";
 import { seedPosters } from "./seed/posters";
@@ -169,6 +170,8 @@ async function main() {
   await seedDaV2Events();
   // Lot 47 : créneaux d'arrivée de la Nocturne, notes d'arrivée, affiches générées de tous les événements.
   await seedPosters();
+  // Lot R8d : annonces des quatre sortes, puis leur reprise en publications du journal (après les affiches).
+  await seedAnnouncementsReprise();
   // Lot 43 : billet de Paul (visiteur), remises, vues et abonnés du garage du port pour l'Accueil par profil.
   await seedHomeProfiles();
   // Lot 52 : brouillon incomplet, engagement de l'équipe (bulles), structure en cours de vérification.
@@ -200,6 +203,8 @@ async function main() {
   await seedFeedSeen();
   // Lot R8n1 : Nouveautés coupées pour un événement de Damien_66, un résumé et un exemple d'Essentiel dans son Activité.
   await seedEventNotifications();
+  // Lot R9a : La Brasa et Roues Libres 66 suivent, Damien_66 suit La Brasa et Sud Cars, une story de page chacune.
+  await seedPageFollows();
 }
 
 try {

@@ -3,11 +3,16 @@
 // Idempotent : rien n'est recréé s'il existe déjà.
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { storage } from "../../src/lib/storage";
 import { groupMessagesService } from "../../src/modules/communication/group-messages";
 import { segmentRecipients } from "../../src/modules/communication/segments";
 import { staffChatsService } from "../../src/modules/communication/staff-chats";
+import { announcementsToPosts, describeReprise } from "../announcements-to-posts";
+import { createEvent, DAY } from "./helpers";
+import { reviewedNoPlateCar } from "./photos";
 
 /** Modèles proposés par Orasso (docs/01 : « modèles de messages réutilisables d'un événement à l'autre »). */
 const ORASSO_TEMPLATES = [
@@ -127,4 +132,117 @@ export async function seedCommunication() {
       .set({ lastMessageAt: at, lastMessagePreview: body.slice(0, 80), messagesCount: 1 })
       .where(eq(t.conversations.id, chat.id));
   }
+}
+
+// --- Reprise des annonces en publications (vague R8, lot R8d) ------------------------------------------------------------
+// À lancer **après** les affiches (`seedPosters`) : une annonce sans image ne se reprend que si son événement a un visuel.
+// Les annonces des quatre sortes : publique avec image (Nocturne de Canet, photo du seed), publique sans image sur un événement
+// à affiche (Lydia, Canet : déjà là), publique sans image sur un événement sans visuel (la sortie du Canigou, qui reste une
+// annonce), réservée aux inscrits (Canet). Puis la reprise, comme au déploiement (rejouable).
+const NO_VISUAL_SLUG = "sortie-du-canigou-2026";
+
+export async function seedAnnouncementsReprise() {
+  const nocturne = await db.query.events.findFirst({ where: eq(t.events.slug, "nocturne-de-canet-2026") });
+  const damien = await byPseudo("Damien_66");
+  const herault = await db.query.structures.findFirst({ where: eq(t.structures.slug, "herault-mecaniques") });
+  if (!nocturne || !damien) return;
+
+  // Publique avec image : une photo du seed rangée sous la clé publique d'une annonce, comme le fait `POST …/announcements`.
+  const withImage = "Plan du parking : l'entrée des exposants est côté capitainerie, les visiteurs par le quai.";
+  const [hasImage] = await db
+    .select({ id: t.eventAnnouncements.id })
+    .from(t.eventAnnouncements)
+    .where(and(eq(t.eventAnnouncements.eventId, nocturne.id), eq(t.eventAnnouncements.body, withImage)));
+  const photo = hasImage ? null : await reviewedNoPlateCar(2);
+  if (photo) {
+    const data = await sharp(photo.data).resize(1080, 810, { fit: "cover" }).webp({ quality: 80 }).toBuffer();
+    const key = `announcements/${nocturne.id}/${randomUUID()}.webp`;
+    await storage.put(key, data);
+    await db.insert(t.eventAnnouncements).values({
+      eventId: nocturne.id,
+      authorId: damien.userId,
+      kind: "announcement",
+      audience: "public",
+      body: withImage,
+      imageKey: key,
+      imageWidth: 1080,
+      imageHeight: 810,
+      publishedAt: new Date(Date.now() - 20 * 3_600_000),
+    });
+  }
+
+  // Réservée aux inscrits : reste lisible des inscrits, n'est jamais reprise.
+  const reserved =
+    "Réservé aux exposants : emplacement du camion plateau derrière la scène, badge à présenter à l'accueil.";
+  const [hasReserved] = await db
+    .select({ id: t.eventAnnouncements.id })
+    .from(t.eventAnnouncements)
+    .where(and(eq(t.eventAnnouncements.eventId, nocturne.id), eq(t.eventAnnouncements.body, reserved)));
+  if (!hasReserved) {
+    await db.insert(t.eventAnnouncements).values({
+      eventId: nocturne.id,
+      authorId: damien.userId,
+      kind: "announcement",
+      audience: "participants",
+      body: reserved,
+      publishedAt: new Date(Date.now() - 6 * 3_600_000),
+    });
+  }
+
+  // Publique sans image sur un événement sans visuel : un événement passé de Hérault Mécaniques, sans affiche ni photo (les
+  // affiches se régénèrent à chaque seed : on les retire ici, après elles, comme pour le brouillon de l'organisateur v2).
+  if (herault) {
+    const owner = await db.query.structureMembers.findFirst({
+      where: and(eq(t.structureMembers.structureId, herault.id), eq(t.structureMembers.role, "owner")),
+    });
+    if (owner) {
+      let bare = await db.query.events.findFirst({ where: eq(t.events.slug, NO_VISUAL_SLUG) });
+      if (!bare) {
+        const startsAt = new Date(Date.now() - 70 * DAY);
+        bare = await createEvent(herault.id, owner.userId, {
+          title: "Sortie du Canigou",
+          slug: NO_VISUAL_SLUG,
+          format: "gathering",
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + 6 * 3_600_000),
+          city: "Vernet-les-Bains",
+          department: "66",
+          capacity: 40,
+        });
+      }
+      await db
+        .update(t.events)
+        .set({
+          posterStyle: null,
+          posterPostKey: null,
+          posterStoryKey: null,
+          posterPhotoKey: null,
+          posterTitle: null,
+          posterKey: null,
+        })
+        .where(eq(t.events.id, bare.id));
+      const text = "Merci aux 40 équipages de la sortie du Canigou : les photos arrivent cette semaine.";
+      const [has] = await db
+        .select({ id: t.eventAnnouncements.id })
+        .from(t.eventAnnouncements)
+        .where(and(eq(t.eventAnnouncements.eventId, bare.id), eq(t.eventAnnouncements.body, text)));
+      if (!has) {
+        await db.insert(t.eventAnnouncements).values({
+          eventId: bare.id,
+          authorId: owner.userId,
+          kind: "announcement",
+          audience: "public",
+          body: text,
+          publishedAt: new Date(Date.now() - 60 * DAY),
+        });
+      }
+    }
+  }
+
+  // La reprise, comme au déploiement : aucune notification, rejouable.
+  const stats = await announcementsToPosts();
+  console.log(
+    `Annonces reprises en publications : ${stats.withImage} avec image, ${stats.withPoster} avec l'affiche, ${stats.keptNoVisual} restée(s) faute de visuel, ${stats.alreadyMigrated} déjà reprise(s).`,
+  );
+  if (stats.failed) console.log(describeReprise(stats));
 }

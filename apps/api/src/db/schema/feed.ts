@@ -68,6 +68,8 @@ export const feedPosts = pgTable(
     importantSentAt: tstz("important_sent_at"),
     commentsCount: integer("comments_count").notNull().default(0),
     commentsOff: boolean("comments_off").notNull().default(false),
+    /** Annonce d'origine d'une publication reprise par `scripts/announcements-to-posts.ts` (R8d, 0081) : rejouable, et la façade retrouve la reprise. */
+    legacyAnnouncementId: uuid("legacy_announcement_id"),
     aspect: feedAspectEnum("aspect").notNull().default("portrait_4_5"),
     /** Département de l'auteur à la publication ; chaîne vide si l'auteur n'en a pas choisi. */
     department: text("department").notNull().default(""),
@@ -110,6 +112,7 @@ export const feedPosts = pgTable(
     index("feed_posts_media_idx").on(t.mediaId, t.createdAt.desc()),
     index("feed_posts_event_role_idx").on(t.eventId, t.eventRole, t.createdAt.desc()),
     // Une seule publication épinglée par fiche d'événement (R8a2).
+    uniqueIndex("feed_posts_legacy_announcement_key").on(t.legacyAnnouncementId),
     uniqueIndex("feed_posts_pinned_key").on(t.eventId).where(sql`${t.pinnedAt} is not null and ${t.deletedAt} is null`),
   ],
 );

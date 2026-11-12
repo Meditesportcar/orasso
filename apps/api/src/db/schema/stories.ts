@@ -2,6 +2,7 @@
 // R7g1 : les colonnes sont posées ici). Le fichier est privé (`private/stories/<id>/…`), servi par une route qui vérifie
 // l'audience à chaque lecture. Une story n'est `ready` que si sa plaque est traitée (check `stories_plate_check`).
 import {
+  authorKinds,
   storyAudiences,
   storyLinkTypes,
   storyMediaKinds,
@@ -30,7 +31,9 @@ import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
 import { events } from "./events";
+import { mediaProfiles } from "./media";
 import { proProfiles } from "./pros";
+import { providerProfiles } from "./providers";
 import { structures } from "./structures";
 import { vehicles } from "./vehicles";
 
@@ -40,8 +43,10 @@ export const storyMediaEnum = pgEnum("story_media", storyMediaKinds);
 export const storyStatusEnum = pgEnum("story_status", storyStatuses);
 export const storyPlateEnum = pgEnum("story_plate", storyPlateStates);
 export const storyLinkEnum = pgEnum("story_link", storyLinkTypes);
-/** Cible d'une identification, et nature de l'auteur d'un mute (même trois valeurs : personne, structure, pro). */
+/** Cible d'une identification : une personne, une structure ou un pro (jamais un prestataire ni un média). */
 export const storyTagTargetEnum = pgEnum("story_tag_target", storyTagKinds);
+/** Auteur d'un mute (lot R9a) : les cinq genres d'auteur (personne, structure, pro, prestataire, média). */
+export const storyAuthorKindEnum = pgEnum("story_author_kind", authorKinds);
 
 export const stories = pgTable(
   "stories",
@@ -55,6 +60,10 @@ export const stories = pgTable(
     structureId: uuid("structure_id").references(() => structures.id, { onDelete: "set null" }),
     /** Casquette pro : la story se montre sous la fiche du pro. */
     proId: uuid("pro_id").references(() => proProfiles.id, { onDelete: "set null" }),
+    /** Casquette prestataire (lot R9a) : la story se montre sous la page du prestataire, jamais sous le compte. */
+    providerId: uuid("provider_id").references(() => providerProfiles.id, { onDelete: "cascade" }),
+    /** Casquette média (lot R9a) : la story se montre sous la page du média. */
+    mediaId: uuid("media_id").references(() => mediaProfiles.id, { onDelete: "cascade" }),
     audience: storyAudienceEnum("audience").notNull(),
     /** Renseigné si et seulement si `audience = crew`. */
     crewId: uuid("crew_id").references(() => crews.id, { onDelete: "cascade" }),
@@ -98,6 +107,8 @@ export const stories = pgTable(
     index("stories_public_event_idx").on(t.eventId).where(sql`${t.audience} = 'public'`),
     index("stories_structure_idx").on(t.structureId, t.expiresAt).where(sql`${t.structureId} is not null`),
     index("stories_pro_idx").on(t.proId, t.expiresAt).where(sql`${t.proId} is not null`),
+    index("stories_provider_idx").on(t.providerId, t.expiresAt).where(sql`${t.providerId} is not null`),
+    index("stories_media_idx").on(t.mediaId, t.expiresAt).where(sql`${t.mediaId} is not null`),
     index("stories_crew_idx").on(t.crewId, t.expiresAt).where(sql`${t.crewId} is not null`),
     index("stories_shared_from_idx").on(t.sharedFromStoryId).where(sql`${t.sharedFromStoryId} is not null`),
     index("stories_sweep_idx").on(t.deletedAt).where(sql`${t.deletedAt} is not null`),
@@ -170,7 +181,7 @@ export const storyReactions = pgTable(
 
 /**
  * « Ne plus voir ses stories » : mute personnel, invisible pour l'auteur, ce n'est pas un blocage. Porte sur la barre ;
- * l'auteur est une personne, une structure ou un pro (clé `u:|s:|p:`).
+ * l'auteur est une personne, une structure, un pro, un prestataire ou un média (clé `u:|s:|p:|v:|m:`).
  */
 export const storyMutes = pgTable(
   "story_mutes",
@@ -178,7 +189,7 @@ export const storyMutes = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    authorKind: storyTagTargetEnum("author_kind").notNull(),
+    authorKind: storyAuthorKindEnum("author_kind").notNull(),
     authorId: text("author_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -131,15 +131,14 @@ describe("à qui s'adresse la story", () => {
     }
   });
 
-  it("prestataire, média : « Public » si le compte est public, « Mes abonnés » seul s'il est privé (jamais annoncé public)", () => {
+  it("prestataire, média : « Public » seul, quel que soit le compte de leur titulaire (lot R9a, D38 : une page est publique)", () => {
     for (const persona of ["provider", "media"] as const) {
-      const open = storyAudienceOptions({ persona, name: "Garage Sud" }, "public", crews);
-      expect(open).toHaveLength(1);
-      expect(open[0]).toMatchObject({ audience: "public", crewId: null, label: "Public" });
-      const closed = storyAudienceOptions({ persona, name: "Garage Sud" }, "private", crews);
-      expect(closed).toHaveLength(1);
-      expect(closed[0]).toMatchObject({ audience: "followers", crewId: null, label: "Mes abonnés" });
-      expect(closed[0]?.hint).toContain("abonnés acceptés");
+      for (const visibility of ["public", "private"] as const) {
+        const options = storyAudienceOptions({ persona, name: "Garage Sud" }, visibility, crews);
+        expect(options).toHaveLength(1);
+        expect(options[0]).toMatchObject({ audience: "public", crewId: null, label: "Public" });
+        expect(options[0]?.hint).toContain("Garage Sud");
+      }
     }
   });
 
