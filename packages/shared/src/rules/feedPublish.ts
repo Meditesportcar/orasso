@@ -254,6 +254,8 @@ export function feedPostBodyR8(draft: {
   placeLabel: string;
   important: { on: boolean; reason: ImportantReason | null };
   commercialPartnerId?: string | null;
+  /** Le compte qui croit publier : l'API refuse (409) si la session est devenue celle d'un autre. */
+  expectedUserId?: string;
 }) {
   const fan = draft.author.persona === "fan";
   const place = draft.placeLabel.trim().slice(0, FEED_PLACE_LABEL_MAX);
@@ -262,6 +264,7 @@ export function feedPostBodyR8(draft: {
     aspect: draft.aspect,
     clientId: draft.clientId,
     persona: draft.author.persona,
+    ...(draft.expectedUserId ? { expectedUserId: draft.expectedUserId } : {}),
     ...(draft.author.structureId ? { structureId: draft.author.structureId } : {}),
     ...(draft.author.proId ? { proId: draft.author.proId } : {}),
     eventId: draft.eventId,
@@ -425,9 +428,9 @@ export function saveUncertain(store: PublishStore | null, account: string, body:
 /** Le corps incertain de ce compte, ou `null` (jamais celui d'un autre : il vit sous une autre clé). */
 export function loadUncertain(store: PublishStore | null, account: string): UncertainBody | null {
   try {
-    migrateLegacyUncertain(store, account);
+    const fallback = migrateLegacyUncertain(store, account);
     const raw = store?.getItem(uncertainKey(account));
-    if (!raw) return null;
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<UncertainBody> | null;
     return parsed && typeof parsed.clientId === "string" ? (parsed as UncertainBody) : null;
   } catch {
@@ -435,25 +438,46 @@ export function loadUncertain(store: PublishStore | null, account: string): Unce
   }
 }
 
-/** L'envoi incertain gardé par l'ancien format, s'il est de ce compte, passe sous la clé du compte (sinon il reste à son compte). */
-function migrateLegacyUncertain(store: PublishStore | null, account: string): void {
-  if (!store) return;
+/**
+ * L'envoi incertain gardé par l'ancien format, s'il est de ce compte, passe sous la clé du compte. L'ancienne clé n'est
+ * effacée qu'une fois la copie réussie (ou si son contenu est illisible) : si le stockage refuse l'écriture (quota), elle reste,
+ * et son corps est rendu en secours pour que l'envoi incertain ne se perde pas.
+ */
+function migrateLegacyUncertain(store: PublishStore | null, account: string): UncertainBody | null {
+  if (!store) return null;
   const raw = store.getItem(LEGACY_UNCERTAIN_KEY);
-  if (!raw) return;
+  if (!raw) return null;
+  let body: UncertainBody | null = null;
   try {
-    const old = JSON.parse(raw) as { account?: unknown; body?: { clientId?: unknown } } | null;
+    const old = JSON.parse(raw) as { account?: unknown; body?: UncertainBody } | null;
     if (!old || typeof old.account !== "string") {
       store.removeItem(LEGACY_UNCERTAIN_KEY);
-      return;
+      return null;
     }
-    if (old.account !== account) return;
-    if (typeof old.body?.clientId === "string" && !store.getItem(uncertainKey(account))) {
-      store.setItem(uncertainKey(account), JSON.stringify(old.body));
-    }
-    store.removeItem(LEGACY_UNCERTAIN_KEY);
+    if (old.account !== account) return null;
+    body = typeof old.body?.clientId === "string" ? old.body : null;
   } catch {
+    // Contenu illisible : rien à sauver.
     store.removeItem(LEGACY_UNCERTAIN_KEY);
+    return null;
   }
+  if (!body) {
+    store.removeItem(LEGACY_UNCERTAIN_KEY);
+    return null;
+  }
+  if (store.getItem(uncertainKey(account))) {
+    // Le format du compte existe déjà : il prime, l'ancien est devenu inutile.
+    store.removeItem(LEGACY_UNCERTAIN_KEY);
+    return null;
+  }
+  try {
+    store.setItem(uncertainKey(account), JSON.stringify(body));
+  } catch {
+    // Stockage plein ou refusé : l'ancienne clé reste, son corps sert de secours.
+    return body;
+  }
+  store.removeItem(LEGACY_UNCERTAIN_KEY);
+  return null;
 }
 
 /** Efface le corps incertain **de ce compte** (envoi confirmé, ou abandon vérifié) : jamais celui d'un autre. */

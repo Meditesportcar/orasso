@@ -67,7 +67,7 @@ async function replayed(userId: string, clientId: string, event: Awaited<ReturnT
     .where(and(eq(expressInvites.createdBy, userId), eq(expressInvites.clientId, clientId)));
   if (!row) return undefined;
   // Une panne entre l'invitation et l'e-mail laisse une invitation sans message : le rejeu le répare (une seule fois).
-  await ensureMail(row, event);
+  await settleMail(row, event);
   return {
     id: row.id,
     email: row.email,
@@ -76,12 +76,15 @@ async function replayed(userId: string, clientId: string, event: Awaited<ReturnT
   };
 }
 
-/** Une ligne « en attente » plus vieille que cela est restée en route (arrêt du processus) : l'e-mail est considéré non envoyé. */
-const STALE_QUEUED_MS = 10 * 60_000;
+/**
+ * Une ligne « en attente » plus vieille que cela est restée en route (arrêt du processus) : l'e-mail est considéré non envoyé.
+ * Une livraison saine finit en moins de 10 s (délai de Brevo) : deux minutes suffisent à écarter toute livraison en cours.
+ */
+const STALE_QUEUED_MS = 2 * 60_000;
 
 /**
  * Envoie l'e-mail de l'invitation **sauf s'il est parti ou en route** : la dernière trace de la boîte d'envoi est « envoyé »,
- * « écarté par le budget » ou « en attente » depuis moins de 10 minutes. Pas de trace, un échec (`failed`) ou une attente
+ * « écarté par le budget » ou « en attente » depuis moins de 2 minutes (« en route » : `pending`). Pas de trace, un échec (`failed`) ou une attente
  * trop ancienne : il repart. Sous un verrou propre à l'invitation, la ligne d'envoi est écrite **dans la transaction** (donc
  * visible des autres dès le verrou relâché) ; la livraison se fait **après**, hors transaction : aucune connexion de la base
  * n'attend le transport (la réserve du pool est de 10).
@@ -89,7 +92,7 @@ const STALE_QUEUED_MS = 10 * 60_000;
 async function ensureMail(
   row: { id: string; eventId: string; email: string; token: string },
   event: { title: string; startsAt: Date },
-): Promise<void> {
+): Promise<"ok" | "pending"> {
   const content = renderMail(
     `Inscription express · ${event.title}`,
     [
@@ -113,7 +116,7 @@ async function ensureMail(
       (last.status === "sent" ||
         last.status === "skipped_quota" ||
         (last.status === "queued" && now().getTime() - last.createdAt.getTime() < STALE_QUEUED_MS));
-    if (onItsWay) return undefined;
+    if (onItsWay) return last.status === "queued" ? ("pending" as const) : undefined;
     return mail.enqueue(
       "express_invite",
       row.email,
@@ -123,7 +126,35 @@ async function ensureMail(
       tx,
     );
   });
+  if (queued === "pending") return "pending";
   if (queued) await mail.deliver(queued, row.email, content);
+  return "ok";
+}
+
+/** Durée pendant laquelle un rejeu attend qu'une livraison en route se termine avant de répondre « pas encore ». */
+const MAIL_SETTLE_WAIT_MS = 5_000;
+
+/**
+ * Ne répond « envoyée » que si l'e-mail est parti (ou écarté) : une livraison en route est attendue quelques secondes ; si elle ne
+ * finit pas (processus arrêté entre l'écriture et la livraison), la réponse est **non définitive** (503 `mail_pending`) : le
+ * téléphone garde la demande et réessaie, jusqu'à ce que la ligne devienne trop ancienne et que l'e-mail reparte.
+ */
+async function settleMail(
+  row: { id: string; eventId: string; email: string; token: string },
+  event: { title: string; startsAt: Date },
+): Promise<void> {
+  const until = Date.now() + MAIL_SETTLE_WAIT_MS;
+  for (;;) {
+    if ((await ensureMail(row, event)) === "ok") return;
+    if (Date.now() >= until) {
+      throw new AppError(
+        503,
+        "mail_pending",
+        "L'e-mail de l'invitation est en cours d'envoi : réessaie dans un instant.",
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 }
 
 export const expressService = {
@@ -172,7 +203,7 @@ export const expressService = {
       throw new Error("Invitation non enregistrée");
     }
     const url = `${env.PUBLIC_URL}/express/${token}`;
-    await ensureMail(row, event);
+    await settleMail(row, event);
     // Le lien est aussi rendu au staff : il peut le montrer en QR si l'e-mail tarde.
     return { id: row.id, email: row.email, expiresAt: row.expiresAt.toISOString(), url };
   },

@@ -434,6 +434,7 @@ function PublishForm() {
           caption,
           aspect,
           clientId,
+          expectedUserId: account,
           author,
           eventId: event ? event.id : null,
           vehicleId: choice.vehicleId,

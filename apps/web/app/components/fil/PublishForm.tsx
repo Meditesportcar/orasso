@@ -481,6 +481,7 @@ export function PublishForm({
         caption,
         aspect,
         clientId,
+        expectedUserId: userId,
         author,
         eventId: event ? event.id : null,
         vehicleId: choice.vehicleId,

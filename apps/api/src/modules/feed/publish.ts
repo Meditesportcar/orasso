@@ -102,6 +102,10 @@ export const feedPostsService = {
   async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
     const userId = v.user.id;
+    // Le compte attendu par le formulaire : avant toute lecture ou écriture (une session changée dans un autre onglet).
+    if (input.expectedUserId && input.expectedUserId !== userId) {
+      throw new AppError(409, "account_changed", publicationErrors.account_changed);
+    }
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {
       const [again] = await db

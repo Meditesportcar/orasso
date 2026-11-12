@@ -5187,6 +5187,11 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **À noter (non corrigé)** : sur le site, un changement de session dans un autre onglet entre le contrôle du compte et le POST reste possible sur une fenêtre de quelques millisecondes ; l'API répondrait alors au nom du compte d'aujourd'hui.
 - Base de recette : le PC s'est éteint en pleine récupération ; la base du worktree a été recréée (`.data/pg` supprimé, migrations rejouées), sans conséquence (données de démonstration).
 
+### Tour 8 (R8p, 12/11/2026) : relecture finale de Codex
+- **Compte attendu à l'envoi** : `POST /me/feed-posts` accepte `expectedUserId` ; si la session est devenue celle d'un autre compte, l'API répond 409 `account_changed` **avant** toute lecture ou écriture (rien n'est créé, rien ne se range sous le mauvais compte). Le site et l'appli l'envoient avec le corps (il fait partie du corps incertain rejoué). Test API : mauvais compte → 409 et rien d'écrit, bon compte → 201.
+- **Invitation express, reprise durable** : une ligne d'e-mail « en attente » ne vaut plus succès. Le rejeu attend 5 s qu'une livraison en route se termine ; sinon il répond 503 `mail_pending` (non définitif : la file du téléphone garde la demande et réessaie). Seuil de reprise ramené de 10 à 2 minutes (une livraison saine finit en moins de 10 s) : passé ce délai, l'e-mail repart et la réponse est 201. Test : arrêt entre `enqueue` validé et `deliver`, rejeu immédiat → 503, aucun second message ; ligne vieillie → 201 et un seul e-mail parti.
+- **Migration de l'ancienne clé** : l'ancienne clé n'est effacée qu'une fois la copie réussie (ou si son contenu est illisible) ; si le stockage refuse l'écriture (quota), elle reste et son corps est rendu en secours. Test avec `QuotaExceededError`.
+
 ## Lot R8k1 : API des commentaires d'une publication du Fil (migration 0078 `feed-comments`, D40, 11/11/2026)
 
 

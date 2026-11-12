@@ -84,6 +84,8 @@ export const feedPostCreateSchema = z
     commercialPartnerId: z.uuid().nullish(),
     /** Vague R8 : la casquette au nom de laquelle on publie (défaut : la personne). */
     persona: z.enum(storyPersonas).default("fan"),
+    /** Le compte qui croit publier (R8p, tour 8) : si la session est devenue celle d'un autre, rien n'est écrit (409 `account_changed`). */
+    expectedUserId: z.string().max(64).nullish(),
     structureId: z.uuid().nullish(),
     proId: z.uuid().nullish(),
     /** Lieu libre d'une publication sans événement. */

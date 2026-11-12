@@ -561,6 +561,44 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
     expect(loadUncertain(store, "A")).toBeNull();
     expect(store.getItem("orasso:fil:publish-uncertain")).toBeNull();
   });
+  it("migration : stockage plein (quota) → l'ancienne clé reste et son corps sert de secours ; réessai réussi → migrée", () => {
+    const m = new Map<string, string>();
+    let full = true;
+    const store = {
+      get length() {
+        return m.size;
+      },
+      key: (i: number) => [...m.keys()][i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (full) throw new DOMException("quota", "QuotaExceededError");
+        m.set(k, v);
+      },
+      removeItem: (k: string) => void m.delete(k),
+    };
+    m.set("orasso:fil:publish-uncertain", JSON.stringify({ account: "A", body: { clientId: "vieux", caption: "x" } }));
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "vieux", caption: "x" });
+    expect(m.has("orasso:fil:publish-uncertain")).toBe(true);
+    full = false;
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "vieux" });
+    expect(m.has("orasso:fil:publish-uncertain")).toBe(false);
+    expect(m.has("orasso:fil:publish-uncertain:A")).toBe(true);
+  });
+  it("le corps d'un envoi porte le compte attendu", () => {
+    const body = feedPostBodyR8({
+      photos: [],
+      caption: "x",
+      aspect: "portrait_4_5",
+      clientId: "c",
+      author: authors[0] as PublishAuthor,
+      eventId: null,
+      vehicleId: null,
+      placeLabel: "",
+      important: { on: false, reason: null },
+      expectedUserId: "compte-A",
+    });
+    expect(body).toMatchObject({ expectedUserId: "compte-A" });
+  });
   it("un contenu abîmé n'est pas un corps incertain", () => {
     const store = memory();
     store.setItem("orasso:fil:publish-uncertain:A", "{pas du json");
