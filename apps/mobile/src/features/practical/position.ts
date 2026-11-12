@@ -14,6 +14,7 @@ import {
   type LatLng,
   PRACTICAL_PARTIAL_RETRY_MS,
   type PracticalAt,
+  weatherFollowKey,
 } from "@orasso/shared";
 import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
@@ -119,9 +120,9 @@ export const PARTIAL_RETRY_MS = PRACTICAL_PARTIAL_RETRY_MS;
 export function useFollowWeatherPosition(): void {
   const weather = useWeatherPosition();
   const mine = usePracticalPosition();
-  // Clé de suivi : le lieu de la position de la météo (sa case de 0,1° se nomme par sa commune), jamais l'heure de sa prévision : un
-  // rafraîchissement de la météo (10 min) ne relance ni lecture de position ni requête.
-  const weatherKey = weather.at ? weather.at.label : null;
+  // Clé de suivi : la case arrondie (0,1°) gardée par le magasin de la météo, jamais son libellé (« Ma position » quand le géocodage
+  // échoue, même commune pour deux cases) ni l'heure de sa prévision : un rafraîchissement (même case) ne relance rien.
+  const weatherKey = weatherFollowKey(weather.coarse);
   const busy = mine.busy;
   useEffect(() => {
     // Une tentative par lieu de la météo, pour toute la séance (pas à chaque montage de l'écran) : un échec ne relance pas en boucle.

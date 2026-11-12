@@ -5640,3 +5640,9 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Lot R8q : Tour 5 (relecture Codex de la nuit, 12/11/2026)
+
+- **Fusion de `vague-r8`** : journal et index (`index.ts`, `rules/index.ts`) gardés des deux côtés ; **la migration de « Ma météo » est régénérée en `0083_weather-places`** sur la chaîne de la vague (la 0077 de R8m entrait en collision avec `0077_publications` : journal et instantané de la vague repris, l'ancien fichier retiré, `drizzle-kit generate` sur le schéma fusionné : deux tables, rien d'autre). Le coordinateur renumérote de toute façon à la fusion finale.
+- **Suivi de la météo par la case, pas par le libellé** : le magasin expose la case arrondie gardée (`view().coarse`), la clé de suivi est `weatherFollowKey(case)` (shared, testé) : deux cases distinctes portant « Ma position » sont toutes deux suivies, la même case rafraîchie ne relance rien.
+- **Réponse ancienne qui écrase la récente** (`positionStore.ts`) : un numéro de demande est pris au départ de chaque `give` et `refresh`, une réponse n'est appliquée que si aucune demande plus récente est partie ; un `give` rend caduque une relecture en vol. Tests : A lent puis B rapide, B reste ; relecture lente puis `give` B, B reste avec sa météo.

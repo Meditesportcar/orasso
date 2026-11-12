@@ -72,3 +72,8 @@ export function createFollowTracker(now: () => number = Date.now, echoMs = 10_00
     },
   };
 }
+
+/** La clé de suivi de la météo : sa case arrondie (0,1°), jamais le libellé ni l'heure de la prévision. */
+export function weatherFollowKey(coarse: { lat: number; lng: number } | null): string | null {
+  return coarse ? `${coarse.lat.toFixed(1)},${coarse.lng.toFixed(1)}` : null;
+}

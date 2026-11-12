@@ -7,6 +7,7 @@ import {
   practicalReadAllowed,
   practicalRetryDelay,
   shouldRetryPractical,
+  weatherFollowKey,
 } from "./practicalRetry";
 
 describe("relances de Pratique (R8q, tour 3)", () => {
@@ -69,5 +70,17 @@ describe("relances de Pratique (R8q, tour 3)", () => {
     expect(tracker.shouldFollow("Canet-en-Roussillon")).toBe(false);
     t += 11_000;
     expect(tracker.shouldFollow("Argelès-sur-Mer")).toBe(true);
+  });
+
+  it("tour 5 : deux cases distinctes qui portent toutes deux « Ma position » : la seconde est suivie ; la même case rafraîchie, rien", () => {
+    const tracker = createFollowTracker(() => 0, 0);
+    const a = weatherFollowKey({ lat: 42.5, lng: 3.0 });
+    const b = weatherFollowKey({ lat: 42.7, lng: 2.9 });
+    expect(a).not.toBe(b);
+    expect(tracker.shouldFollow(a)).toBe(true);
+    // Un rafraîchissement de la météo (même case, autre heure de prévision, même libellé) ne relance rien.
+    expect(tracker.shouldFollow(weatherFollowKey({ lat: 42.5, lng: 3.0 }))).toBe(false);
+    expect(tracker.shouldFollow(b)).toBe(true);
+    expect(weatherFollowKey(null)).toBeNull();
   });
 });

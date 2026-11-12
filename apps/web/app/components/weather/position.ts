@@ -33,11 +33,11 @@ if (typeof window !== "undefined") {
   });
 }
 
-const EMPTY = { at: null, busy: false } as const;
+const EMPTY = { at: null, busy: false, coarse: null } as const;
 let last = store.view();
 const snapshot = () => {
   const next = store.view();
-  if (next.at !== last.at || next.busy !== last.busy) last = next;
+  if (next.at !== last.at || next.busy !== last.busy || next.coarse !== last.coarse) last = next;
   return last;
 };
 

@@ -33,6 +33,9 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   const empty: PositionState<T> = { owner: null, coarse: null, at: null, fetchedAt: 0, busy: false };
   let state: PositionState<T> = empty;
   let generation = 0;
+  // Numéro de la dernière demande partie (`give` ou `refresh`) : une réponse n'est appliquée que si aucune demande plus récente est partie
+  // depuis (deux relocalisations successives, une relecture revenue après un nouveau geste : la plus récente reste).
+  let requestSeq = 0;
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -63,9 +66,9 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       };
     },
     /** La position visible pour la session courante. */
-    view(): { at: T | null; busy: boolean } {
+    view(): { at: T | null; busy: boolean; coarse: LatLng | null } {
       const mine = state.owner !== null && state.owner === deps.scope();
-      return { at: mine ? state.at : null, busy: state.busy };
+      return { at: mine ? state.at : null, busy: state.busy, coarse: mine ? state.coarse : null };
     },
     setBusy(busy: boolean) {
       set({ busy });
@@ -87,9 +90,10 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       // Rien n'est envoyé ni gardé si la session a changé depuis le geste (attente du GPS comprise).
       if (!ticket || !this.valid(ticket)) return false;
       const { owner, gen } = ticket;
+      const seq = ++requestSeq;
       try {
         const at = await deps.weatherAt(coarse);
-        if (deps.scope() !== owner || gen !== generation) return false;
+        if (deps.scope() !== owner || gen !== generation || seq !== requestSeq) return false;
         set({ owner, coarse, at, fetchedAt: deps.now() });
         return true;
       } catch {
@@ -103,9 +107,10 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       if (!coarse || owner === null || owner !== deps.scope()) return;
       if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return;
       const gen = generation;
+      const seq = ++requestSeq;
       try {
         const at = await deps.weatherAt(coarse);
-        if (deps.scope() !== owner || gen !== generation || state.owner !== owner) return;
+        if (deps.scope() !== owner || gen !== generation || state.owner !== owner || seq !== requestSeq) return;
         set({ at, fetchedAt: deps.now() });
       } catch {
         // Hors ligne ou limite atteinte : la dernière météo connue reste affichée.

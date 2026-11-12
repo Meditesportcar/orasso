@@ -151,4 +151,33 @@ describe("position en mémoire de « Ma météo »", () => {
     await r;
     expect(t.store.view().at?.label).toBe("Canet");
   });
+
+  it("tour 5 : deux relocalisations A puis B, la réponse de A arrive après celle de B : B reste", async () => {
+    const t = setup();
+    const a = t.store.give({ lat: 42.5, lng: 3.0 });
+    const b = t.store.give({ lat: 42.7, lng: 2.9 });
+    // B répond d'abord, A (plus lente) ensuite.
+    t.pending[1]?.resolve(at("B"));
+    expect(await b).toBe(true);
+    t.pending[0]?.resolve(at("A"));
+    expect(await a).toBe(false);
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 5 : une relecture partie avant un nouveau geste et revenue après ne réécrit pas la nouvelle position", async () => {
+    const t = setup();
+    const first = t.store.give({ lat: 42.5, lng: 3.0 });
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.pending[2]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    // La relecture de l'ancienne case revient en retard : elle n'écrase pas la météo de B.
+    t.pending[1]?.resolve(at("A, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+  });
 });

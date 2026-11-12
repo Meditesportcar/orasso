@@ -20,13 +20,13 @@ const store = createPositionStore({
 // A → déconnexion → A pendant l'attente du GPS ne ramène pas l'ancienne demande.
 onCacheScopeDropped(async () => store.forget());
 
-export type WeatherPosition = { at: ReturnType<typeof store.view>["at"]; busy: boolean };
+export type WeatherPosition = ReturnType<typeof store.view>;
 
 let lastView = store.view();
 const snapshot = () => {
   const next = store.view();
   // Même contenu : même objet, pour `useSyncExternalStore`.
-  if (next.at !== lastView.at || next.busy !== lastView.busy) lastView = next;
+  if (next.at !== lastView.at || next.busy !== lastView.busy || next.coarse !== lastView.coarse) lastView = next;
   return lastView;
 };
 
