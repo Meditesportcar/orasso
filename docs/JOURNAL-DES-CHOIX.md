@@ -5610,3 +5610,9 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Tour 3 (lot R8o, 12/11/2026) : relecture Codex du tour 2
+- **Notifications d'invitation** : retirées par les notifications réellement écrites (type `coauthor_*` et `postId`), plus par des destinataires recalculés : un ancien responsable retiré depuis ne garde rien. Index partiel d'expression `notifications_coauthor_post_idx` ajouté **à la main** à la fin de ma migration (la table `notifications` n'est pas à moi, le schéma Drizzle ne le connaît pas). Migration régénérée en `0083_feed-coauthors` (la vague a pris 0082) ; le coordinateur renumérote.
+- **« Demandes »** : `pendingRequests` garde l'exclusion (ancienne appli) ; champ `pendingCoauthors` du résumé, que `inboxRowCounts` ajoute côté nouveaux clients (l'ancienne appli l'ignore). La ligne « Demandes · 1 » se montre avec la seule invitation.
+- **Journal des envois** : supprimé à l'anonymisation du compte ; la purge des envois de plus de 24 h ne vise que l'inviteur.
+- **UUID** : `commercialPartnerId` passé en minuscules avant les comparaisons.

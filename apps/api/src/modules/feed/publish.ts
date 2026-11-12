@@ -101,8 +101,10 @@ class Replayed extends Error {
 
 export const feedPostsService = {
   /** `POST /me/feed-posts` */
-  async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
+  async create(v: Viewer, raw: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
+    // Un UUID s'écrit en minuscules avant toute comparaison (le même partenaire, de casses différentes, n'est pas un conflit).
+    const input = raw.commercialPartnerId ? { ...raw, commercialPartnerId: raw.commercialPartnerId.toLowerCase() } : raw;
     const userId = v.user.id;
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {

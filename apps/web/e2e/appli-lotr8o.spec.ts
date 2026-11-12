@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { portraitPhoto } from "./publications-helpers";
 import { RELAIS } from "./relais";
 
@@ -314,4 +314,22 @@ test("sans recharger : accepter met la publication sur mon onglet « Publication
   await expect(withKenji).toHaveCount(before, { timeout: 30_000 });
   expect(id).toBeTruthy();
   await d.ctx.close();
+});
+
+test("une seule invitation à publier : la ligne « Demandes · 1 » de l'Activité se montre et ouvre l'invitation", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const pseudo = `Solo_${unique()}`;
+  const cookie = await signUpApi(pseudo);
+  const soloId = await me(cookie);
+  await publishWith(await login("kenji@orasso.local"), `Invitation seule ${RUN}`, { kind: "user", id: soloId });
+  const s = await open(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await go(s.page, "/activite");
+  const row = s.page.getByTestId("activity-requests-row");
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row).toContainText("Demandes · 1");
+  await row.click();
+  await expect(s.page.getByTestId("request-coauthor")).toHaveCount(1, { timeout: 30_000 });
+  await s.ctx.close();
 });

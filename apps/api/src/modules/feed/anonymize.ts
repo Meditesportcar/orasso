@@ -6,7 +6,7 @@
 // efface (`moderation/targets/feedPost.ts`, `afterDecision`).
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { feedPostCoauthors, feedPostPhotos, feedPostReactions, feedPosts, reports } from "../../db/schema";
+import { feedCoauthorInviteLog, feedPostCoauthors, feedPostPhotos, feedPostReactions, feedPosts, reports } from "../../db/schema";
 import { now } from "../../lib/deps";
 import type { Tx } from "../../lib/tx";
 import { dropCoauthorNotifications } from "./coauthors";
@@ -34,6 +34,8 @@ export async function anonymizeFeedForDeletedAccount(tx: Tx, userId: string): Pr
     .orderBy(feedPosts.id)
     .for("update");
   const ids = posts.map((p) => p.id);
+  // Le journal des envois du compte part avec lui (la cascade attend une suppression physique, que l'anonymisation ne fait pas).
+  await tx.delete(feedCoauthorInviteLog).where(eq(feedCoauthorInviteLog.invitedBy, userId));
   // Collaboration (R8o), **après** le verrou des publications (même ordre que répondre et se retirer : publication, puis ligne) :
   // son nom disparaît des publications des autres (elles restent chez leur auteur) et les notifications qui le nomment partent
   // avec (relevées avant d'effacer la ligne) ; les invitations qu'il avait envoyées pour ses publications personnelles partent

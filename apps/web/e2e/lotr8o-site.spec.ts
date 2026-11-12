@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser, setTheme } from "./helpers";
+import { apiCall, login, loginInBrowser, setTheme, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R8o (maquette R8.13 `p-collab`), côté site (API et site lancés) : mêmes blocs, mêmes mots, mêmes règles que l'appli. Kenji_66
@@ -199,4 +199,40 @@ test("la demande d'une page que Damien gère s'écrit « avec <page> »", async 
   const request = page.getByTestId("request-coauthor").filter({ hasText: "avec MéditeSportCar" });
   await expect(request).toBeVisible();
   await expect(request).toContainText("Kenji_66 te propose de publier avec MéditeSportCar");
+});
+
+test("une seule invitation à publier : la ligne « Demandes · 1 » de l'Activité se montre et ouvre l'invitation", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const pseudo = `Solo_${unique()}`;
+  const cookie = await signUpApi(pseudo);
+  const soloId = (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data.user.id;
+  const kenji = await login("kenji@orasso.local");
+  const { portraitPhoto } = await import("./publications-helpers");
+  const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
+  const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+  const form = new FormData();
+  form.append("purpose", "feed_post");
+  form.append("file", new Blob([new Uint8Array(portraitPhoto([30, 120, 90]))], { type: "image/png" }), "photo.png");
+  const up = await fetch(`${API}/api/me/uploads`, {
+    method: "POST",
+    headers: { origin: WEB, cookie: kenji },
+    body: form,
+  });
+  const { key } = (await up.json()) as { key: string };
+  const made = await apiCall(kenji, "POST", "/me/feed-posts", {
+    caption: `Invitation seule (site) ${RUN}`,
+    aspect: "portrait_4_5",
+    clientId: crypto.randomUUID(),
+    photos: [{ uploadKey: key, noPlateConfirmed: true }],
+    coAuthor: { kind: "user", id: soloId },
+  });
+  expect(made.status).toBe(201);
+  await openAs(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, "/app/activite");
+  const row = page.getByTestId("activity-requests-row");
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("Demandes · 1");
+  await row.click();
+  await expect(page.getByTestId("request-coauthor")).toHaveCount(1);
 });

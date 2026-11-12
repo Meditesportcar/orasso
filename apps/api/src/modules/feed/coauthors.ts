@@ -223,7 +223,9 @@ export async function reserveInvite(
   await input.replayed();
   // Les envois des dernières 24 h, quel que soit leur sort (annulée, supprimée, refusée) : le journal des envois, pas les lignes.
   const since = new Date(input.at.getTime() - 86_400_000);
-  await tx.delete(feedCoauthorInviteLog).where(lt(feedCoauthorInviteLog.invitedAt, since));
+  await tx
+    .delete(feedCoauthorInviteLog)
+    .where(and(eq(feedCoauthorInviteLog.invitedBy, input.inviterId), lt(feedCoauthorInviteLog.invitedAt, since)));
   const [used] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(feedCoauthorInviteLog)
@@ -419,8 +421,9 @@ async function coAuthorName(tx: Tx, row: { coauthorKind: CoauthorKind | "provide
 
 /**
  * Retire du Journal les notifications d'une invitation qui n'existe plus (les non lues d'abord ; les lues deviennent sans objet).
- * Borné par destinataire (index `notifications_user_created_idx`) : l'auteur qui a publié et les comptes de la cible, relevés
- * **avant** d'effacer la ligne du co-auteur. Une seule requête pour toutes les publications données.
+ * Par les notifications **réellement écrites** (type `coauthor_*` et `postId`), pas par des destinataires recalculés : un ancien
+ * responsable de la page, retiré depuis, ne garde rien. Appuyée par l'index partiel d'expression de la migration
+ * (`notifications_coauthor_post_idx`). Une seule requête pour toutes les publications données.
  */
 export async function dropCoauthorNotifications(
   tx: Executor,
@@ -429,20 +432,9 @@ export async function dropCoauthorNotifications(
 ): Promise<void> {
   const ids = Array.isArray(postIds) ? postIds : [postIds];
   if (!ids.length) return;
-  const posts = await tx.select({ author: feedPosts.authorId }).from(feedPosts).where(inArray(feedPosts.id, ids));
-  const rows = await tx.select().from(feedPostCoauthors).where(inArray(feedPostCoauthors.postId, ids));
-  const audience = new Set(posts.map((p) => p.author));
-  const seen = new Set<string>();
-  for (const r of rows) {
-    const key = authorKeyOf(r.coauthorKind, r.coauthorId);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    for (const u of await recipientsOf(tx, r.coauthorKind, r.coauthorId)) audience.add(u);
-  }
-  if (!audience.size) return;
   await tx.delete(notifications).where(
     and(
-      inArray(notifications.userId, [...audience]),
+      sql`${notifications.type} like 'coauthor_%'`,
       inArray(notifications.type, types ?? ["coauthor_invited", "coauthor_accepted", "coauthor_withdrawn"]),
       sql`${notifications.data} ->> 'postId' in (${sql.join(
         ids.map((i) => sql`${i}`),
@@ -654,6 +646,11 @@ export const coauthorsService = {
     return { items };
   },
 };
+
+/** Nombre de mes invitations en attente que je peux lire (pour les nouveaux clients : `pendingCoauthors` du résumé). */
+export async function pendingCoauthorCount(userId: string, ex: Executor): Promise<number> {
+  return (await pendingCoauthorRequests(userId, ex, now())).length;
+}
 
 /**
  * Mes invitations en attente que je peux lire (moi, ou une page que je gère), les plus récentes d'abord : la liste des

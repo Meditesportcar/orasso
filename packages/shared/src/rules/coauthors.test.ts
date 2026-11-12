@@ -84,3 +84,20 @@ describe("brouillon de « Publier »", () => {
     expect(body.coAuthor).toEqual({ kind: "user", id: "abc" });
   });
 });
+
+describe("ligne « Demandes » avec la seule invitation à publier", () => {
+  it("le résumé donne 1 et la ligne est montrée ; l'ancien résumé sans le champ reste à 0", async () => {
+    const { requestRowCounts, requestRowShown } = await import("../messaging");
+    const summary = {
+      unreadMessages: 0,
+      unseenActivity: 0,
+      pendingRequests: 0,
+      pendingCoauthors: 1,
+      requests: { contact: 0 },
+    };
+    const counts = requestRowCounts(summary);
+    expect(counts.activityRequests).toBe(1);
+    expect(requestRowShown(counts.activityRequests, counts.status)).toBe(true);
+    expect(requestRowCounts({ ...summary, pendingCoauthors: undefined }).activityRequests).toBe(0);
+  });
+});
