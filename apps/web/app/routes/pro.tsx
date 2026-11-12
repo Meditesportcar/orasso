@@ -115,9 +115,8 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
   const { pro, connected, origin, tab } = loaderData;
   const [mentionsDelta, setMentionsDelta] = useState(0);
   // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
-  const servedMentions = pageMentionsCount(pro);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nombre servi neuf remet le delta à zéro
-  useEffect(() => setMentionsDelta(0), [servedMentions, pro.id]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [pro]);
   const path = `/p/${pro.slug}`;
   const retour = `/connexion?retour=${encodeURIComponent(path)}`;
   const route =

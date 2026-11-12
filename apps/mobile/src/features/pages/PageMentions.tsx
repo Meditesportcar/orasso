@@ -179,11 +179,12 @@ function Row({
   );
 }
 
-function PageMentionsList({
+export function PageMentions({
   pageKey,
   pageName,
   manage,
   onHiddenChange,
+  reloadToken,
 }: {
   /** La clé de la page : `s:<structure>` ou `p:<fiche pro>` (aussi la cible de « Masquer »). */
   pageKey: string;
@@ -192,8 +193,17 @@ function PageMentionsList({
   manage: boolean;
   /** Une mention masquée (`-1`) ou remise (`+1`) : le nombre de l'onglet suit. */
   onHiddenChange?: (delta: number) => void;
+  /** Change quand la page est relue (geste, retour) : la liste se relit sans être démontée (en cas d échec elle garde ses éléments). */
+  reloadToken?: number;
 }) {
   const list = useMentions(pageKey, manage);
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un jeton neuf relit la liste
+  useEffect(() => {
+    if (reloadToken === undefined || seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void list.reload();
+  }, [reloadToken]);
   const [menu, setMenu] = useState<MentionItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -289,11 +299,3 @@ const styles = StyleSheet.create({
   tag: { flexDirection: "row", alignItems: "center", gap: 4 },
   more: { width: tokens.spacing.touch, height: tokens.spacing.touch, alignItems: "center", justifyContent: "center" },
 });
-
-/** Change `reloadToken` : la liste repart d une lecture neuve (la clé est posée ici : le gabarit de l écran remplace celle de l appelant). */
-export function PageMentions({
-  reloadToken = 0,
-  ...props
-}: Parameters<typeof PageMentionsList>[0] & { reloadToken?: number }) {
-  return <PageMentionsList key={reloadToken} {...props} />;
-}

@@ -5529,3 +5529,9 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Tour 4 (lot R8g, relecture Codex de la nuit et mineurs d'Opus, 12/11/2026)
+- **Relire une page ne démonte plus ses listes** (appli) : le jeton ne sert plus de clé React. `PublicationsTab` (prop facultative `reloadToken`) et `PageMentions` relisent par `reload()` : les éléments déjà lus restent affichés pendant la lecture et après un échec (réseau coupé), une relecture réussie remplace la liste ; plus de remontage à chaque retour (la position et le chargement ne sont plus perdus). Recette : réseau coupé, retour depuis une publication, les vignettes restent.
+- **Delta de « Mentions · N »** : il repart de zéro à chaque **réponse servie** (l'objet de la fiche relue), non à chaque changement de valeur (appli et site). Recettes : masquer, le serveur redit le même nombre, relecture : le nombre servi s'affiche.
+- **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur présents avant la fin de gratuité, absents pour un autre lecteur après, maintenus pour le propriétaire).
+- **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors décision, à noter : une publication d'un pro qui cite une structure ou un événement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` après la fin de gratuité.

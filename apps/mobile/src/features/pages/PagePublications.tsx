@@ -28,7 +28,7 @@ export function PagePublications({
   /** Le nombre de publications servi avec la page (la ligne « N publications » du filtre « Tout »). */
   total: number | null;
   session: boolean;
-  /** Change à chaque relecture de la page (geste, retour) : la liste repart d une lecture neuve. */
+  /** Change à chaque relecture de la page (geste, retour) : la liste se relit sans être démontée. */
   reloadToken?: number;
 }) {
   if (!session) return <PublicPublications key={reloadToken} authorKey={authorKey} name={name} />;
@@ -49,7 +49,8 @@ export function PagePublications({
   ) : undefined;
   return (
     <PublicationsTab
-      key={`${authorKey}:${filter}:${reloadToken}`}
+      key={`${authorKey}:${filter}`}
+      reloadToken={reloadToken}
       authorKey={authorKey}
       pseudo={name}
       mine={false}

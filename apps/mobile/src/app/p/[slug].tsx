@@ -65,8 +65,8 @@ export default function ProPage() {
   const [mentionsDelta, setMentionsDelta] = useState(0);
   const mentionsBase = p ? pageMentionsCount(p) : undefined;
   // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque nombre neuf.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nombre servi neuf remet le delta à zéro
-  useEffect(() => setMentionsDelta(0), [mentionsBase, slug]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [p, slug]);
   const [reloadToken, bumpReload] = useReloadToken();
   const viewed = useRef<string | null>(null);
 

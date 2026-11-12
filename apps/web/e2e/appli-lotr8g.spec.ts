@@ -412,3 +412,50 @@ test("tour 3 : sans session toutes les photos ; retour sur la page relit les pub
     await ctx.close();
   }
 });
+
+test("tour 4 : réseau coupé, retour sur la page : la liste reste ; un nombre servi identique après masquage remet le delta à zéro", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const sarah = await login("sarah@orasso.local");
+  const rl = await served(sarah, "structures", "roues-libres-66");
+  // 1. Page lue, réseau coupé, on ouvre une publication puis on revient : les éléments déjà lus restent affichés.
+  const kenji = await open(browser);
+  await signIn(kenji.page, "kenji@orasso.local");
+  await go(kenji.page, "/o/roues-libres-66");
+  await expect(kenji.page.getByTestId("publication-tile").first()).toBeVisible({ timeout: 30_000 });
+  const before = await kenji.page.getByTestId("publication-tile").count();
+  await kenji.page.getByTestId("publication-tile-open").first().click();
+  await expect(kenji.page).toHaveURL(/publication/, { timeout: 20_000 });
+  await kenji.ctx.setOffline(true);
+  await kenji.page.goBack();
+  await kenji.page.waitForTimeout(3000);
+  await expect(kenji.page.getByTestId("publication-tile")).toHaveCount(before);
+  await kenji.ctx.setOffline(false);
+  await kenji.ctx.close();
+
+  // 2. Masquer, puis le serveur redit le même nombre (la mention est remise ailleurs) : la relecture écrase la correction locale.
+  type List = { items: { post: { id: string }; hidden: boolean }[] };
+  const all = (await apiCall<List>(sarah, "GET", `/authors/s:${rl.id}/mentions?hidden=1`)).data;
+  const visible = all.items.filter((i) => !i.hidden).length;
+  const index = all.items.findIndex((i) => !i.hidden);
+  const target = all.items[index]?.post.id ?? "";
+  const { ctx, page } = await open(browser);
+  try {
+    await signIn(page, "sarah@orasso.local");
+    await go(page, "/o/roues-libres-66?onglet=mentions");
+    await expect(page.getByTestId("mention-row")).toHaveCount(all.items.length, { timeout: 30_000 });
+    await page.getByTestId("mention-row").nth(index).getByTestId("mention-more").click();
+    await page.getByTestId("mention-hide").click();
+    await expect(page.getByTestId("page-tab-mentions")).toHaveAccessibleName(`Mentions · ${visible - 1}`);
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+    await page.getByTestId("follow").click();
+    await expect(page.getByTestId("page-tab-mentions")).toHaveAccessibleName(`Mentions · ${visible}`, {
+      timeout: 20_000,
+    });
+    await page.getByTestId("follow").click();
+  } finally {
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+    await ctx.close();
+  }
+});

@@ -297,9 +297,18 @@ describe("liste d'un auteur : une page", () => {
   it("fiche de base d'un pro (après la fin de gratuité) : ni publications, ni mentions, ni compteurs pour un autre lecteur ; le propriétaire garde les siennes", async () => {
     const viewer = await signUp("Lecteur_L");
     const po = await signUp("ProOwner_L");
-    const pro = await createPro(po.id);
+    const pro = await createPro(po.id, { verifiedAt: new Date(0) });
     const a = await mkPost({ authorId: po.id, persona: "pro", proId: pro.id });
+    // Une vraie citation de la fiche par un tiers (le contrôle des mentions ne passe plus à vide).
+    const fan = await signUp("Fan_PB");
+    const cite = await mkPost({ authorId: fan.id, caption: `Merci @${pro.slug}`, commercialPartnerId: pro.id });
     const key = `p:${pro.id}`;
+    expect(
+      (await call(viewer, "GET", `/authors/${key}/mentions`)).json.items.map(
+        (i: { post: { id: string } }) => i.post.id,
+      ),
+    ).toEqual([cite.id]);
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.mentions).toEqual({ count: 1 });
     // Avant : tout se lit, les compteurs disent la même chose.
     expect(ids(await call(viewer, "GET", `/authors/${key}/feed-posts`))).toEqual([a.id]);
     expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.publications).toEqual({ count: 1 });
@@ -313,6 +322,10 @@ describe("liste d'un auteur : une page", () => {
     // Le propriétaire garde la main sur les siennes.
     expect(ids(await call(po, "GET", `/authors/${key}/feed-posts`))).toEqual([a.id]);
     expect((await call(po, "GET", `/pros/by-slug/${pro.slug}`)).json.publications).toEqual({ count: 1 });
+    expect(
+      (await call(po, "GET", `/authors/${key}/mentions`)).json.items.map((i: { post: { id: string } }) => i.post.id),
+    ).toEqual([cite.id]);
+    expect((await call(po, "GET", `/pros/by-slug/${pro.slug}`)).json.mentions).toEqual({ count: 1 });
   });
 
   it("la publication d'une page se lit même quand le compte de qui a publié est privé ; banni : elle disparaît", async () => {

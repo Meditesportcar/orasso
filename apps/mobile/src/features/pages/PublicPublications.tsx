@@ -88,7 +88,10 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
                 key={photo.url}
                 source={mediaSource(photo.url)}
                 placeholder={`linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`}
-                style={{ width: "100%", aspectRatio: photo.width / Math.max(1, photo.height) }}
+                style={{
+                  width: "100%",
+                  aspectRatio: photo.width > 0 && photo.height > 0 ? photo.width / photo.height : 4 / 5,
+                }}
               />
             ))}
             <View style={styles.body}>

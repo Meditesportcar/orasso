@@ -75,9 +75,9 @@ export default function StructurePage() {
   const [mentionsDelta, setMentionsDelta] = useState(0);
   // Tirer pour recharger et revenir sur l'écran relisent aussi les publications et les mentions.
   const mentionsBase = s ? pageMentionsCount(s) : undefined;
-  // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque nombre neuf.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nombre servi neuf remet le delta à zéro
-  useEffect(() => setMentionsDelta(0), [mentionsBase, slug]);
+  // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque réponse servie neuve (même valeur comprise).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [s, slug]);
   const [reloadToken, bumpReload] = useReloadToken();
 
   // `?onglet=` s'applique à chaque navigation ; une fois lu, on le retire.

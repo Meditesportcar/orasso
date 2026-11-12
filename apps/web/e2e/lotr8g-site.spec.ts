@@ -385,3 +385,32 @@ test("tour 3 : une panne à la deuxième page des mentions se reprend par « Ré
     await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
   }
 });
+
+test("tour 4 : un nombre servi identique après masquage remet le delta à zéro", async ({ page: p }) => {
+  test.setTimeout(180_000);
+  await setTheme(p, "beton");
+  await p.setViewportSize({ width: 390, height: 900 });
+  await loginInBrowser(p, "sarah@orasso.local", undefined, "/o/roues-libres-66");
+  const sarah = await login("sarah@orasso.local");
+  const rl = await page(sarah, "structures", "roues-libres-66");
+  type List = { items: { post: { id: string }; hidden: boolean }[] };
+  const all = (await apiCall<List>(sarah, "GET", `/authors/s:${rl.id}/mentions?hidden=1`)).data;
+  const visible = all.items.filter((i) => !i.hidden).length;
+  const index = all.items.findIndex((i) => !i.hidden);
+  const target = all.items[index]?.post.id ?? "";
+  try {
+    await p.goto("/o/roues-libres-66?onglet=mentions");
+    await expect(p.getByTestId("mention-row")).toHaveCount(all.items.length, { timeout: 30_000 });
+    const row = p.getByTestId("mention-row").nth(index);
+    await row.getByTestId("mention-more").click();
+    await row.getByTestId("mention-hide").click();
+    await expect(p.getByTestId("page-tab-mentions")).toContainText(`· ${visible - 1}`, { timeout: 20_000 });
+    // Le serveur redit le même nombre qu'au départ (la mention est remise ailleurs) : la relecture l'emporte.
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+    await p.getByTestId("follow-button").click();
+    await expect(p.getByTestId("page-tab-mentions")).toContainText(`· ${visible}`, { timeout: 20_000 });
+    await p.getByTestId("follow-button").click();
+  } finally {
+    await apiCall(sarah, "DELETE", `/mentions/s:${rl.id}/${target}/hidden`);
+  }
+});
