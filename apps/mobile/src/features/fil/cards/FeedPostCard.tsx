@@ -5,6 +5,7 @@ import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { FeedPostView } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
+import { OfferLine } from "@/features/publications/OfferLine";
 import { Avatar } from "@/ui/Avatar";
 import { CoAuthorSignature, collaborationLine, InviteStatusLine, TwoAvatars } from "../CoAuthorHead";
 import { FeedPhotos } from "../FeedPhotos";
@@ -61,6 +62,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       {post.attach ? <AttachLine attach={post.attach} /> : null}
       {post.coAuthorInvite ? <InviteStatusLine invite={post.coAuthorInvite} /> : null}
       <FeedPhotos post={post} />
+      {post.offer ? <OfferLine offer={post.offer} /> : null}
       {post.caption ? <FoldedCaption text={post.caption} style={styles.text} testID="feed-post-caption" /> : null}
       {post.vehicle || (post.event && !post.attach) ? (
         <View style={styles.pills}>

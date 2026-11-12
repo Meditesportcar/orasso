@@ -1,7 +1,8 @@
-// Casquette Pro, publier : mes publications avec « Modifier » et « Supprimer » (lot 35c). La modification garde la date
+// Casquette Pro, publier : « Anciennes offres » (les « offres et actualités » d'avant R9c, restées à leur place) avec « Modifier » et
+// « Supprimer » (lot 35c) ; rien quand la fiche n'en a pas. La modification garde la date
 // de la publication, donc son mois : le compteur ne bouge pas. La suppression passe par une feuille de confirmation.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { proAppLabels as L, type ProOwner, type ProPostView } from "@orasso/shared";
+import { proAppLabels as L, proOffersLabels as O, type ProOwner, type ProPostView } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -11,7 +12,6 @@ import { formatDayHour } from "@/lib/format";
 import { useRun } from "@/lib/useRun";
 import { AppSheet } from "@/ui/AppSheet";
 import { Feedback } from "@/ui/Feedback";
-import { Muted } from "@/ui/Muted";
 import { Overlay } from "@/ui/Overlay";
 import { SectionTitle } from "@/ui/Screens";
 
@@ -61,52 +61,49 @@ export function Posts({ pro, reload }: { pro: ProOwner; reload: () => Promise<un
     if (ok) setRemoving(null);
   }
 
+  if (posts.length === 0) return null;
   return (
     <>
-      <SectionTitle>{L.postsTitle}</SectionTitle>
-      {posts.length === 0 ? (
-        <Muted variant="body">{L.postsEmpty}</Muted>
-      ) : (
-        posts.map((post) => (
-          <Plate key={post.id} style={styles.post} testID="pro-post">
-            <Text variant="bodyStrong" color={t.color.plateInk}>
-              {post.title}
-            </Text>
-            <Text variant="body" color={t.color.plateInk}>
-              {post.body}
-            </Text>
-            <Text variant="meta" color={t.color.plateMuted}>
-              {formatDayHour(post.createdAt)}
-            </Text>
-            <View style={styles.actions}>
-              <Button
-                variant="plate"
-                icon="chat"
-                disabled={busy !== null}
-                onPress={() => startEdit(post)}
-                fullWidth
-                testID="pro-post-edit"
-              >
-                {L.postEdit}
-              </Button>
-              <Button
-                variant="plate"
-                tone="dashed"
-                icon="close"
-                disabled={busy !== null}
-                onPress={() => {
-                  clear();
-                  setRemoving(post);
-                }}
-                fullWidth
-                testID="pro-post-delete"
-              >
-                {L.postDelete}
-              </Button>
-            </View>
-          </Plate>
-        ))
-      )}
+      <SectionTitle>{O.oldTitle}</SectionTitle>
+      {posts.map((post) => (
+        <Plate key={post.id} style={styles.post} testID="pro-post">
+          <Text variant="bodyStrong" color={t.color.plateInk}>
+            {post.title}
+          </Text>
+          <Text variant="body" color={t.color.plateInk}>
+            {post.body}
+          </Text>
+          <Text variant="meta" color={t.color.plateMuted}>
+            {formatDayHour(post.createdAt)}
+          </Text>
+          <View style={styles.actions}>
+            <Button
+              variant="plate"
+              icon="chat"
+              disabled={busy !== null}
+              onPress={() => startEdit(post)}
+              fullWidth
+              testID="pro-post-edit"
+            >
+              {L.postEdit}
+            </Button>
+            <Button
+              variant="plate"
+              tone="dashed"
+              icon="close"
+              disabled={busy !== null}
+              onPress={() => {
+                clear();
+                setRemoving(post);
+              }}
+              fullWidth
+              testID="pro-post-delete"
+            >
+              {L.postDelete}
+            </Button>
+          </View>
+        </Plate>
+      ))}
       <Feedback
         error={editing || removing ? null : error}
         notice={editing || removing ? null : notice}

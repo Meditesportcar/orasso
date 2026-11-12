@@ -1,15 +1,19 @@
-// Casquette Pro, Publier : une offre ou une actualité pour mes abonnés, avec le compteur du mois (limite mensuelle).
+// Casquette Pro, Publier : le compteur du mois (limite mensuelle), « Publier une offre » et « Publier » (qui ouvrent l'écran « Publier »
+// réglé sur la fiche), les offres en cours puis « Anciennes offres » (les « offres et actualités » d'avant, modifiables et
+// supprimables). Lot R9c : le formulaire de texte (titre + texte) a disparu, une offre est une publication avec l'étiquette « Offre ».
 // Lot M7 : page masquée du groupe ouverte depuis Ma fiche, c'est un parcours : mode B (en-tête de fiche, ✕ revient à Ma
 // fiche), sans barre d'onglets.
-import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { countFr, pluralFr } from "@orasso/shared";
-import { useState } from "react";
-import { StyleSheet } from "react-native";
+import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { authorKeyOf, countFr, proOffersLabels as O, pluralFr } from "@orasso/shared";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef } from "react";
+import { StyleSheet, View } from "react-native";
 
+import { OfferRows, useOffers } from "@/features/pages/PageOffers";
 import { Posts } from "@/features/pro/Posts";
 import { api } from "@/lib/api";
-import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
+import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
@@ -19,31 +23,37 @@ const { space2, space3 } = tokens.spacing;
 
 export default function ProPublier() {
   const { t } = useTheme();
+  const router = useRouter();
   // Lot M7, tour 2 : le ✕ revient à Ma fiche (le retour des onglets Pro mènerait au Scanner).
   const close = useCloseTo("/(pro)/fiche");
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const offers = useOffers(pro ? authorKeyOf("pro", pro.id) : null);
 
-  async function publish() {
-    if (!pro) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api.createProPost(pro.id, { title: title.trim(), body: body.trim() });
-      setTitle("");
-      setBody("");
-      setMessage({ text: "Publié : tes abonnés la voient sur ta fiche.", error: false });
-      await myPro.reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), error: true });
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Au retour de « Publier » (une offre vient d'être publiée) : le compteur et les offres se relisent.
+  const first = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (first.current) {
+        first.current = false;
+        return;
+      }
+      void myPro.reload();
+      void offers.reload();
+    }, [myPro.reload, offers.reload]),
+  );
+
+  // Pourquoi les boutons sont inertes (jamais un bouton principal grisé sans sa ligne) : fiche non publiée, limite atteinte.
+  const blocked = !pro
+    ? null
+    : !pro.published
+      ? "Publie d'abord ta fiche (onglet Fiche) pour pouvoir écrire à tes abonnés."
+      : pro.postsRemaining === 0
+        ? "Limite du mois atteinte. Le compteur repart au 1er du mois prochain."
+        : null;
+  const open = (offer: boolean) =>
+    pro &&
+    router.push({ pathname: "/fil/publier", params: { fiche: pro.id, ...(offer ? { etiquette: "offre" } : {}) } });
 
   return (
     <FlowScreen
@@ -55,60 +65,49 @@ export default function ProPublier() {
         myPro.loading ? null : (
           <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
         )
-      ) : !pro.published ? (
-        <>
-          <Notice>Publie d'abord ta fiche (onglet Fiche) pour pouvoir écrire à tes abonnés.</Notice>
-          <Posts pro={pro} reload={myPro.reload} />
-        </>
       ) : (
         <>
-          <Plate style={styles.block}>
-            <Text variant="label" color={t.color.plateMuted}>
-              Publications ce mois-ci
-            </Text>
-            <Text variant="posterL" color={t.color.plateInk} testID="pro-posts-counter">
-              {pro.postsUsed} / {pro.postsLimit}
-            </Text>
-            <Text variant="caption" color={t.color.plateMuted}>
-              {`${countFr(pro.followersCount, "abonné")} ${pluralFr(pro.followersCount, "voit", "voient")} tes publications.`}
-            </Text>
-          </Plate>
-          {pro.postsRemaining === 0 ? (
-            <Notice>Limite du mois atteinte. Le compteur repart au 1er du mois prochain.</Notice>
-          ) : (
-            <>
-              <SectionTitle>Nouvelle publication</SectionTitle>
-              <TextField label="Titre" value={title} onChangeText={setTitle} maxLength={80} />
-              <TextField
-                label="Texte"
-                value={body}
-                onChangeText={setBody}
-                multiline
-                maxLength={1000}
-                style={{ minHeight: 96 }}
-              />
-              {message ? (
-                <Text
-                  variant="caption"
-                  color={message.error ? t.color.winText : t.color.ink}
-                  accessibilityRole={message.error ? "alert" : undefined}
-                >
-                  {message.text}
-                </Text>
-              ) : null}
-              <Button
-                variant="primary"
-                icon="chat"
-                loading={busy}
-                disabled={title.trim().length < 2 || body.trim().length < 2}
-                onPress={() => void publish()}
-                fullWidth
-              >
-                Publier
-              </Button>
-            </>
-          )}
+          {pro.published ? (
+            <Plate style={styles.block}>
+              <Text variant="label" color={t.color.plateMuted}>
+                Publications ce mois-ci
+              </Text>
+              <Text variant="posterL" color={t.color.plateInk} testID="pro-posts-counter">
+                {pro.postsUsed} / {pro.postsLimit}
+              </Text>
+              <Text variant="caption" color={t.color.plateMuted}>
+                {`${countFr(pro.followersCount, "abonné")} ${pluralFr(pro.followersCount, "voit", "voient")} tes publications.`}
+              </Text>
+            </Plate>
+          ) : null}
+          {blocked ? <Notice>{blocked}</Notice> : null}
+          <View style={styles.buttons}>
+            <SmButton
+              kind="p"
+              big
+              wide
+              icon="ticket"
+              disabled={blocked !== null}
+              onPress={() => open(true)}
+              testID="pro-publish-offer"
+            >
+              {O.publishOffer}
+            </SmButton>
+            <SmButton
+              kind="s"
+              big
+              wide
+              icon="gallery"
+              disabled={blocked !== null}
+              onPress={() => open(false)}
+              testID="pro-publish"
+            >
+              Publier
+            </SmButton>
+          </View>
           <Muted variant="caption">Les publications sont visibles par tes abonnés sur ta fiche.</Muted>
+          <SectionTitle>{O.currentTitle}</SectionTitle>
+          <OfferRows list={offers} />
           <Posts pro={pro} reload={myPro.reload} />
         </>
       )}
@@ -118,4 +117,5 @@ export default function ProPublier() {
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
+  buttons: { gap: space2 },
 });

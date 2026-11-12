@@ -8,6 +8,7 @@
 
 import { tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type AuthorPostsFilter,
   authorKeyOf,
   type EventCard,
   explicitPageTab,
@@ -71,7 +72,7 @@ export default function StructurePage() {
   // Un double toucher sur « Message » n'ouvre qu'une conversation.
   const contacting = useRef(false);
   const [picked, setPicked] = useState<PageTab | null>(null);
-  const [filter, setFilter] = useState<"all" | "event" | "no_event">("all");
+  const [filter, setFilter] = useState<AuthorPostsFilter>("all");
   const [mentionsDelta, setMentionsDelta] = useState(0);
   // Tirer pour recharger et revenir sur l'écran relisent aussi les publications et les mentions.
   const mentionsBase = s ? pageMentionsCount(s) : undefined;

@@ -18,10 +18,13 @@ export function ProPresentation({
   pro: p,
   onOpenPhoto,
   onTrack,
+  session = false,
 }: {
   pro: ProPublic;
   onOpenPhoto: (index: number) => void;
   onTrack: (kind: "call" | "route") => void;
+  /** Avec une session, les anciennes offres sont dans l'onglet « Offres » (R9c). */
+  session?: boolean;
 }) {
   const { t } = useTheme();
   const router = useRouter();
@@ -174,7 +177,8 @@ export function ProPresentation({
         </>
       ) : null}
 
-      {p.posts && p.posts.length > 0 ? (
+      {/* R9c : avec une session, les anciennes « offres et actualités » sont dans l'onglet « Offres » (déplacées, pas dupliquées). */}
+      {!session && p.posts && p.posts.length > 0 ? (
         <>
           <SectionTitle>Offres et actualités</SectionTitle>
           {p.posts.map((post) => (

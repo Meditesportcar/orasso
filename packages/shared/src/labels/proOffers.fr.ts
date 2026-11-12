@@ -38,7 +38,16 @@ export const proOffersLabels = {
   openOffer: "Ouvrir l'offre",
   /** Les « offres et actualités » d'avant (`pro_posts`), restées à leur place. */
   oldTitle: "Anciennes offres",
-  oldLocked: "Les anciennes offres sont réservées aux abonnés de ce pro.",
+  /** Pour qui ne suit pas le pro : le message d'aujourd'hui (« réservées aux abonnés »). */
+  oldLocked: (n: number) =>
+    `${n} publication${n > 1 ? "s" : ""} réservée${n > 1 ? "s" : ""} aux abonnés : suis ce pro pour les lire.`,
+  oldEmpty: "Aucune publication pour l'instant.",
+  loading: "Chargement des offres…",
+  loadError: "Les offres ne se chargent pas pour le moment.",
+  more: "Voir plus",
+  oldDate: "Publiée le",
+  /** Les offres en cours de l'espace du pro. */
+  currentTitle: "Offres en cours",
   /** Refus de l'API (un message par cause). */
   errors: {
     offer_requires_pro: "Seule une fiche pro peut publier une offre.",
