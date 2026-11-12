@@ -2,12 +2,12 @@
 // commentaire), un abonné accepté, un membre connecté, l'auteur de la publication, un responsable de page avec et sans second
 // facteur, et un visiteur sans session (401). Ce qu'on ne voit pas répond 404, sans rien révéler.
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { addMember, call, createStructure, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
-import { feedPostComments, feedPosts, profiles } from "../../../db/schema";
+import { feedPostComments, feedPosts, profiles, userFollows } from "../../../db/schema";
 import {
   COMMENT_VIEW_KEYS,
   comment,
@@ -346,5 +346,43 @@ describe("liste blanche de champs, par regard", () => {
     expect(JSON.stringify(fil.json)).not.toContain("Entre abonnés");
     expect(await lastTexts(friend, id)).toEqual(["Entre abonnés"]);
     expect(await db.select({ n: feedPostComments.id }).from(feedPostComments)).toHaveLength(1);
+  });
+});
+
+describe("le compteur du parent n'est rendu que si le parent se lit encore", () => {
+  it("rejeu d'un envoi, ou suppression d'une réponse, après que le compte privé m'a retiré de ses abonnés : pas de `parent`", async () => {
+    const priv = await person("Marc_66", { visibility: "private" });
+    const friend = await person("Lea_11");
+    const kenji = await person("Kenji_66");
+    await follow(friend, priv);
+    const id = await dbPost(kenji);
+    const parent = await comment(priv, id, "Un commentaire privé");
+    const clientId = randomUUID();
+    const first = await comment(friend, id, "Ma réponse", { parentId: parent.json.id, clientId });
+    expect(first.status).toBe(201);
+    expect(first.json.parent).toMatchObject({ id: parent.json.id, repliesCount: 1 });
+    // Sans retrait : le rejeu rend toujours le parent.
+    expect((await comment(friend, id, "Ma réponse", { parentId: parent.json.id, clientId })).json.parent).toBeDefined();
+    // Le compte privé me retire de ses abonnés.
+    await db.delete(userFollows).where(and(eq(userFollows.followerId, friend.id), eq(userFollows.followedId, priv.id)));
+    const again = await comment(friend, id, "Ma réponse", { parentId: parent.json.id, clientId });
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(first.json.id);
+    expect(again.json.parent).toBeUndefined();
+    expect((await listReplies(friend, parent.json.id)).status).toBe(404);
+  });
+  it("supprimer une réponse rend 200 avec le compteur de son parent (lu après la suppression) ; un commentaire de premier niveau, 204", async () => {
+    const lea = await person("Lea_11");
+    const nina = await person("Nina_34");
+    const kenji = await person("Kenji_66");
+    const id = await dbPost(kenji);
+    const parent = await comment(lea, id, "Parent");
+    const r1 = await comment(nina, id, "R1", { parentId: parent.json.id });
+    await comment(nina, id, "R2", { parentId: parent.json.id });
+    const del = await call(nina, "DELETE", `/feed-comments/${r1.json.id}`);
+    expect(del.status).toBe(200);
+    expect(del.json.parent).toMatchObject({ id: parent.json.id, repliesCount: 1 });
+    expect(del.json.parent.countedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+    expect((await call(lea, "DELETE", `/feed-comments/${parent.json.id}`)).status).toBe(204);
   });
 });

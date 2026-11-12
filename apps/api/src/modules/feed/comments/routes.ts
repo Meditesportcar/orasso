@@ -41,8 +41,9 @@ export const feedCommentRoutes = new Hono<AppEnv>()
     return c.json(await feedCommentsService.replies(v, uuidParam(c, "id"), query(c, feedCommentsQuery).cursor));
   })
   .delete("/feed-comments/:id", async (c) => {
-    await feedCommentsService.remove(await requireUser(c), uuidParam(c, "id"));
-    return c.body(null, 204);
+    const done = await feedCommentsService.remove(await requireUser(c), uuidParam(c, "id"));
+    // 204 comme avant ; une réponse supprimée rend 200 avec le compteur de son parent (champ ajouté).
+    return done.parent ? c.json(done) : c.body(null, 204);
   })
   .put("/feed-comments/:id/reaction", async (c) =>
     c.json(await feedCommentsService.react(await requireUser(c), uuidParam(c, "id"), true)),

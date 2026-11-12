@@ -64,8 +64,18 @@ export type FeedCommentView = FeedCommentPreview & {
   reactionsCount: number;
   reactedByMe: boolean;
   repliesCount: number;
+  /**
+   * L'instant (horloge de la base, `AAAA-MM-JJTHH:MM:SS.µµµµµµZ`, comparable comme du texte) où `repliesCount` a été lu : le plus récent fait foi,
+   * l'écran ne calcule jamais le compteur lui-même.
+   */
+  countedAt: string;
   mine: boolean;
   canDelete: boolean;
+};
+
+/** Ce que rend l'envoi d'un commentaire : la vue, et pour une réponse le compteur de son commentaire de premier niveau, lu après l'enregistrement. */
+export type FeedCommentCreated = FeedCommentView & {
+  parent?: { id: string; repliesCount: number; countedAt: string };
 };
 
 export type FeedCommentPage = { items: FeedCommentView[]; nextCursor: string | null };
