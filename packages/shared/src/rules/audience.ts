@@ -95,6 +95,14 @@ export function shareRefusal(viewer: AudienceViewer, story: AudienceStory, rel: 
   return null;
 }
 
+/**
+ * Peut-on répondre à une story de cette casquette ? Une personne et une structure : oui (messagerie) ; une fiche pro, un
+ * prestataire, un média : non (pas de messagerie de page, et jamais le compte du titulaire). L'API et les deux visionneuses
+ * s'appuient sur cette règle (lot R9a).
+ */
+export const storyReplyable = (persona: StoryPersona): boolean =>
+  persona !== "pro" && persona !== "provider" && persona !== "media";
+
 /** Une story vit 24 h. */
 export const STORY_TTL_MS = 24 * 3_600_000;
 export const STORY_CAPTION_MAX = 200;

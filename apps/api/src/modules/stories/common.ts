@@ -6,28 +6,33 @@ import {
   type AudienceStory,
   type AudienceViewer,
   isStoryLive,
-  type StoryTagKind,
+  type StoryAuthorKind,
   type StoryTagView,
   storyAuthorKeyOf,
 } from "@orasso/shared";
-import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../../db/client";
 import {
   crewMembers,
   crews,
+  mediaProfiles,
+  pageFollows,
   proFollows,
   profiles,
   proProfiles,
+  providerProfiles,
   stories,
   structureFollows,
   structures,
   userFollows,
 } from "../../db/schema";
+import type { Actor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
+import { followSets } from "../social/pageFollows";
 
 export type StoryRecord = typeof stories.$inferSelect;
 
@@ -37,6 +42,17 @@ const originStory = alias(stories, "origin_story");
 const originAuthor = alias(profiles, "origin_author");
 const originStructure = alias(structures, "origin_structure");
 const originPro = alias(proProfiles, "origin_pro");
+const originProvider = alias(providerProfiles, "origin_provider");
+const originMedia = alias(mediaProfiles, "origin_media");
+
+/**
+ * La photo d'un prestataire qui le représente (sa première, comme `personasOf`) : un prestataire n'a pas de logo. Sous-requête
+ * corrélée, pour rester dans la même lecture que la story.
+ */
+const providerFirstPhoto = (providerId: unknown) =>
+  sql<
+    string | null
+  >`(select pp.storage_key from provider_photos pp where pp.provider_id = ${providerId} order by pp.position, pp.created_at limit 1)`;
 
 export type StoryOrigin = {
   id: string | null;
@@ -61,6 +77,15 @@ export type StoryOrigin = {
   proSlug: string | null;
   proLogoKey: string | null;
   proDeletedAt: Date | null;
+  /** Lot R9a : la page d'un prestataire ou d'un média (jamais le compte qui la tient). */
+  providerId: string | null;
+  providerName: string | null;
+  providerLogoKey: string | null;
+  providerDeletedAt: Date | null;
+  mediaId: string | null;
+  mediaName: string | null;
+  mediaLogoKey: string | null;
+  mediaDeletedAt: Date | null;
 };
 
 export type StoryRow = {
@@ -82,6 +107,9 @@ export type StoryRow = {
     verification: string | null;
   };
   pro: { id: string | null; name: string | null; slug: string | null; logoKey: string | null; deletedAt: Date | null };
+  /** Lot R9a : la page du prestataire (nom, première photo) et du média (nom, logo) ; tous `null` hors de ces casquettes. */
+  provider: { id: string | null; name: string | null; logoKey: string | null; deletedAt: Date | null };
+  media: { id: string | null; name: string | null; logoKey: string | null; deletedAt: Date | null };
   crewName: string | null;
   /** Les champs de l'originale quand la story est une copie (tous `null` sinon). */
   origin: StoryOrigin;
@@ -118,6 +146,18 @@ export function selectStories(where: SQL | undefined, ex: Executor = db): Promis
         logoKey: proProfiles.logoKey,
         deletedAt: proProfiles.deletedAt,
       },
+      provider: {
+        id: providerProfiles.id,
+        name: providerProfiles.name,
+        logoKey: providerFirstPhoto(providerProfiles.id),
+        deletedAt: providerProfiles.deletedAt,
+      },
+      media: {
+        id: mediaProfiles.id,
+        name: mediaProfiles.name,
+        logoKey: mediaProfiles.logoKey,
+        deletedAt: mediaProfiles.deletedAt,
+      },
       crewName: crews.name,
       origin: {
         id: originStory.id,
@@ -142,17 +182,29 @@ export function selectStories(where: SQL | undefined, ex: Executor = db): Promis
         proSlug: originPro.slug,
         proLogoKey: originPro.logoKey,
         proDeletedAt: originPro.deletedAt,
+        providerId: originProvider.id,
+        providerName: originProvider.name,
+        providerLogoKey: providerFirstPhoto(originProvider.id),
+        providerDeletedAt: originProvider.deletedAt,
+        mediaId: originMedia.id,
+        mediaName: originMedia.name,
+        mediaLogoKey: originMedia.logoKey,
+        mediaDeletedAt: originMedia.deletedAt,
       },
     })
     .from(stories)
     .innerJoin(profiles, eq(profiles.userId, stories.authorId))
     .leftJoin(structures, eq(structures.id, stories.structureId))
     .leftJoin(proProfiles, eq(proProfiles.id, stories.proId))
+    .leftJoin(providerProfiles, eq(providerProfiles.id, stories.providerId))
+    .leftJoin(mediaProfiles, eq(mediaProfiles.id, stories.mediaId))
     .leftJoin(crews, eq(crews.id, stories.crewId))
     .leftJoin(originStory, eq(originStory.id, stories.sharedFromStoryId))
     .leftJoin(originAuthor, eq(originAuthor.userId, originStory.authorId))
     .leftJoin(originStructure, eq(originStructure.id, originStory.structureId))
     .leftJoin(originPro, eq(originPro.id, originStory.proId))
+    .leftJoin(originProvider, eq(originProvider.id, originStory.providerId))
+    .leftJoin(originMedia, eq(originMedia.id, originStory.mediaId))
     .where(where) as unknown as Promise<StoryRow[]>;
   return query.then((rows) => {
     const at = now();
@@ -179,15 +231,24 @@ export const notMaskedCopy = (at: Date): SQL =>
         when 'organizer' then exists (select 1 from structures st where st.id = o.structure_id
           and st.deleted_at is null and st.verification <> 'suspended')
         when 'pro' then exists (select 1 from pro_profiles pp where pp.id = o.pro_id and pp.deleted_at is null)
+        when 'provider' then exists (select 1 from provider_profiles pv where pv.id = o.provider_id and pv.deleted_at is null)
+        when 'media' then exists (select 1 from media_profiles mp where mp.id = o.media_id and mp.deleted_at is null)
         else op.visibility = 'public' end))`;
 
 /** Compte ni supprimé, ni banni, ni suspendu. */
 export const accountActive = (p: Pick<StoryRow["author"], "deletedAt" | "bannedAt" | "suspendedUntil">, at: Date) =>
   !p.deletedAt && !p.bannedAt && !(p.suspendedUntil && p.suspendedUntil > at);
 
-/** Auteur affiché : une structure (casquette organisateur), un pro (casquette pro) ou la personne. */
-export function authorKeyOf(row: StoryRow): { kind: StoryTagKind; id: string; key: string } | null {
-  const { story } = row;
+/**
+ * Auteur affiché : une structure (casquette organisateur), un pro (casquette pro), un prestataire (`v:`), un média (`m:`)
+ * ou la personne. Une story de casquette sans page n'a pas de clé (elle n'est pas servie) : jamais la clé du compte.
+ */
+export function authorKeyOf(row: StoryRow): { kind: StoryAuthorKind; id: string; key: string } | null {
+  return storyKeyOfRecord(row.story);
+}
+
+/** La même clé, depuis la ligne de la story seule. */
+export function storyKeyOfRecord(story: StoryRecord): { kind: StoryAuthorKind; id: string; key: string } | null {
   if (story.persona === "organizer") {
     return story.structureId
       ? { kind: "structure", id: story.structureId, key: storyAuthorKeyOf("structure", story.structureId) }
@@ -195,6 +256,14 @@ export function authorKeyOf(row: StoryRow): { kind: StoryTagKind; id: string; ke
   }
   if (story.persona === "pro") {
     return story.proId ? { kind: "pro", id: story.proId, key: storyAuthorKeyOf("pro", story.proId) } : null;
+  }
+  if (story.persona === "provider") {
+    return story.providerId
+      ? { kind: "provider", id: story.providerId, key: storyAuthorKeyOf("provider", story.providerId) }
+      : null;
+  }
+  if (story.persona === "media") {
+    return story.mediaId ? { kind: "media", id: story.mediaId, key: storyAuthorKeyOf("media", story.mediaId) } : null;
   }
   return { kind: "user", id: story.authorId, key: storyAuthorKeyOf("user", story.authorId) };
 }
@@ -213,6 +282,8 @@ export function originAvailable(row: StoryRow, at: Date): boolean {
     return Boolean(o.structureId && !o.structureDeletedAt && o.structureVerification !== "suspended");
   }
   if (o.persona === "pro") return Boolean(o.proId && !o.proDeletedAt);
+  if (o.persona === "provider") return Boolean(o.providerId && !o.providerDeletedAt);
+  if (o.persona === "media") return Boolean(o.mediaId && !o.mediaDeletedAt);
   return o.authorVisibility === "public";
 }
 
@@ -225,6 +296,8 @@ export function authorActive(row: StoryRow, at: Date): boolean {
     return Boolean(row.structure.id && !row.structure.deletedAt && row.structure.verification !== "suspended");
   }
   if (story.persona === "pro") return Boolean(row.pro.id && !row.pro.deletedAt);
+  if (story.persona === "provider") return Boolean(row.provider.id && !row.provider.deletedAt);
+  if (story.persona === "media") return Boolean(row.media.id && !row.media.deletedAt);
   return true;
 }
 
@@ -234,8 +307,9 @@ export function audienceStoryOf(row: StoryRow, at: Date): AudienceStory {
     authorId: story.authorId,
     audience: story.audience,
     crewId: story.crewId,
-    // Une structure et un pro sont publics par nature ; seul un compte a un réglage public / privé.
-    authorVisibility: story.persona === "organizer" || story.persona === "pro" ? "public" : row.author.visibility,
+    // Une page (structure, pro, prestataire, média) est publique par nature ; seul un compte a un réglage public / privé
+    // (lot R9a, D38 : la story d'une page ne dépend jamais de la confidentialité du compte de son titulaire).
+    authorVisibility: story.persona === "fan" ? row.author.visibility : "public",
     authorActive: authorActive(row, at),
   };
 }
@@ -249,6 +323,9 @@ export type ViewerSets = {
   users: Set<string>;
   structures: Set<string>;
   pros: Set<string>;
+  /** Lot R9a : les prestataires et les médias suivis (`page_follows`). */
+  providers: Set<string>;
+  medias: Set<string>;
   crews: Map<string, string>;
   /** Les stories (parmi celles lues) où je suis identifié : moi, une structure ou un pro que je gère (lot R7h). */
   tagged?: Set<string>;
@@ -276,40 +353,39 @@ export async function taggedStoryIds(
   return new Set((res as unknown as { rows: { story_id: string }[] }).rows.map((r) => r.story_id));
 }
 
-/** Tous les liens du regard (barre : il faut découvrir les auteurs). */
+/**
+ * Tous les liens du regard (barre : il faut découvrir les auteurs). Les abonnements viennent de `followSets` (lot R9a) : les
+ * trois tables d'origine et mes lignes `page_follows` (prestataires et médias).
+ */
 export async function loadViewerSets(userId: string, ex: Executor = db): Promise<ViewerSets> {
-  const [u, s, p, c] = await Promise.all([
-    ex
-      .select({ id: userFollows.followedId })
-      .from(userFollows)
-      .where(and(eq(userFollows.followerId, userId), eq(userFollows.status, "accepted"))),
-    ex.select({ id: structureFollows.structureId }).from(structureFollows).where(eq(structureFollows.userId, userId)),
-    ex.select({ id: proFollows.proId }).from(proFollows).where(eq(proFollows.userId, userId)),
+  const [follows, c] = await Promise.all([
+    followSets({ kind: "user", id: userId, key: storyAuthorKeyOf("user", userId) }, now(), ex),
     ex
       .select({ id: crewMembers.crewId, name: crews.name })
       .from(crewMembers)
       .innerJoin(crews, eq(crews.id, crewMembers.crewId))
       .where(and(eq(crewMembers.userId, userId), eq(crewMembers.status, "active"), sql`${crews.deletedAt} is null`)),
   ]);
-  return {
-    users: new Set(u.map((r) => r.id)),
-    structures: new Set(s.map((r) => r.id)),
-    pros: new Set(p.map((r) => r.id)),
-    crews: new Map(c.map((r) => [r.id, r.name])),
-  };
+  return { ...follows, crews: new Map(c.map((r) => [r.id, r.name])) };
+}
+
+/**
+ * Les liens d'une page qui lit « en tant que » elle (lot R9a) : ce que la page suit, jamais un crew. Ses abonnements sont
+ * filtrés à la lecture (cible en règle, compte public).
+ */
+export async function loadActorSets(actor: Actor, at: Date, ex: Executor = db): Promise<ViewerSets> {
+  return { ...(await followSets(actor, at, ex)), crews: new Map() };
 }
 
 /** Les liens du regard limités aux auteurs et crews de ces stories (lecture d'une ou de quelques stories). */
 export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Executor = db): Promise<ViewerSets> {
-  const users = [
-    ...new Set(
-      rows.filter((r) => r.story.persona !== "organizer" && r.story.persona !== "pro").map((r) => r.story.authorId),
-    ),
-  ];
+  const users = [...new Set(rows.filter((r) => r.story.persona === "fan").map((r) => r.story.authorId))];
   const structureIds = [...new Set(rows.flatMap((r) => (r.story.structureId ? [r.story.structureId] : [])))];
   const proIds = [...new Set(rows.flatMap((r) => (r.story.proId ? [r.story.proId] : [])))];
+  const providerIds = [...new Set(rows.flatMap((r) => (r.story.providerId ? [r.story.providerId] : [])))];
+  const mediaIds = [...new Set(rows.flatMap((r) => (r.story.mediaId ? [r.story.mediaId] : [])))];
   const crewIds = [...new Set(rows.flatMap((r) => (r.story.crewId ? [r.story.crewId] : [])))];
-  const [u, s, p, c, tagged] = await Promise.all([
+  const [u, s, p, pages, c, tagged] = await Promise.all([
     users.length
       ? ex
           .select({ id: userFollows.followedId })
@@ -333,6 +409,21 @@ export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Exe
           .select({ id: proFollows.proId })
           .from(proFollows)
           .where(and(eq(proFollows.userId, userId), inArray(proFollows.proId, proIds)))
+      : [],
+    providerIds.length || mediaIds.length
+      ? ex
+          .select({ kind: pageFollows.targetKind, id: pageFollows.targetId })
+          .from(pageFollows)
+          .where(
+            and(
+              eq(pageFollows.followerKind, "user"),
+              eq(pageFollows.followerId, userId),
+              or(
+                and(eq(pageFollows.targetKind, "provider"), inArray(pageFollows.targetId, providerIds)),
+                and(eq(pageFollows.targetKind, "media"), inArray(pageFollows.targetId, mediaIds)),
+              ),
+            ),
+          )
       : [],
     crewIds.length
       ? ex
@@ -358,6 +449,8 @@ export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Exe
     users: new Set(u.map((r) => r.id)),
     structures: new Set(s.map((r) => r.id)),
     pros: new Set(p.map((r) => r.id)),
+    providers: new Set(pages.filter((r) => r.kind === "provider").map((r) => r.id)),
+    medias: new Set(pages.filter((r) => r.kind === "media").map((r) => r.id)),
     crews: new Map(c.map((r) => [r.id, r.name])),
     tagged,
   };
@@ -371,7 +464,11 @@ export function relationOf(sets: ViewerSets, row: StoryRow): AudienceRelation {
       ? sets.structures.has(story.structureId)
       : story.persona === "pro" && story.proId
         ? sets.pros.has(story.proId)
-        : sets.users.has(story.authorId);
+        : story.persona === "provider" && story.providerId
+          ? sets.providers.has(story.providerId)
+          : story.persona === "media" && story.mediaId
+            ? sets.medias.has(story.mediaId)
+            : story.persona === "fan" && sets.users.has(story.authorId);
   return {
     followAccepted,
     crewMemberActive: (crewId) => sets.crews.has(crewId),
@@ -388,6 +485,9 @@ export function authorDisplay(row: StoryRow, urlOf: (key: string | null) => stri
   const { story } = row;
   if (story.persona === "organizer") return { name: row.structure.name ?? "", avatarUrl: urlOf(row.structure.logoKey) };
   if (story.persona === "pro") return { name: row.pro.name ?? "", avatarUrl: urlOf(row.pro.logoKey) };
+  // Lot R9a : une page de prestataire ou de média se montre sous son nom, jamais sous le pseudo de son titulaire.
+  if (story.persona === "provider") return { name: row.provider.name ?? "", avatarUrl: urlOf(row.provider.logoKey) };
+  if (story.persona === "media") return { name: row.media.name ?? "", avatarUrl: urlOf(row.media.logoKey) };
   return { name: row.author.pseudo, avatarUrl: urlOf(row.author.avatarKey) };
 }
 
@@ -410,6 +510,23 @@ export function creditOf(row: StoryRow, urlOf: (key: string | null) => string | 
   if (o.persona === "pro") {
     return o.proId
       ? { kind: "pro", id: o.proId, name: o.proName ?? "", slug: o.proSlug, avatarUrl: urlOf(o.proLogoKey) }
+      : null;
+  }
+  // Lot R9a : le crédit d'une page est la page (nom et image), sans lien : jamais le compte qui la tient.
+  if (o.persona === "provider") {
+    return o.providerId
+      ? {
+          kind: "provider",
+          id: o.providerId,
+          name: o.providerName ?? "",
+          slug: null,
+          avatarUrl: urlOf(o.providerLogoKey),
+        }
+      : null;
+  }
+  if (o.persona === "media") {
+    return o.mediaId
+      ? { kind: "media", id: o.mediaId, name: o.mediaName ?? "", slug: null, avatarUrl: urlOf(o.mediaLogoKey) }
       : null;
   }
   return o.authorId
