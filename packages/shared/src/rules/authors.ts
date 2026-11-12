@@ -57,3 +57,19 @@ export function parseAuthorKey(raw: unknown): AuthorKey | null {
 export function parseMentionTargetKey(raw: unknown): MentionTargetKey | null {
   return parse(raw);
 }
+
+const PERSONA_AUTHOR_KIND: Record<string, AuthorKind> = {
+  organizer: "structure",
+  pro: "pro",
+  provider: "provider",
+  media: "media",
+};
+
+/**
+ * La clé d'auteur d'une casquette de `GET /me` (`PersonaEntry { kind, id }`, `id` = l'identifiant de la page) : c'est la
+ * valeur de l'en-tête `X-Orasso-Actor` (lot R9a). `fan` et `visitor` n'ont pas de page : `null` (l'en-tête est omis).
+ */
+export function authorKeyOfPersona(persona: { kind: string; id: string }): string | null {
+  const kind = PERSONA_AUTHOR_KIND[persona.kind];
+  return kind ? authorKeyOf(kind, persona.id) : null;
+}

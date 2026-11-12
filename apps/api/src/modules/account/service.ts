@@ -82,6 +82,7 @@ import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { followsService } from "../social/follows";
+import { anonymizePageFollowsForDeletedAccount, dropPageFollowsOfPrivateAccount } from "../social/pageFollows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeStoriesForDeletedAccount } from "../stories/anonymize";
@@ -295,7 +296,11 @@ export const accountService = {
         await followsService.acceptAllPending(tx, v.user.id);
       }
       // Lot R7h : un compte qui passe en privé ne laisse plus reprendre ses stories (les copies faites tombent).
-      if (rest.visibility === "private") await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+      if (rest.visibility === "private") {
+        await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+        // Lot R9a (T6) : les pages qui le suivaient ne le suivent plus, dans la même transaction.
+        await dropPageFollowsOfPrivateAccount(tx, v.user.id);
+      }
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!row) throw notFound();
       return row;
@@ -477,6 +482,7 @@ export const accountService = {
       await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
       await anonymizeSocialForDeletedAccount(tx, userId);
+      await anonymizePageFollowsForDeletedAccount(tx, userId);
       // Lot R6c : invitations à un événement (envoyées, reçues), invitations coupées, notifications qui le citent.
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
       // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.

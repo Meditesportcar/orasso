@@ -22,6 +22,7 @@ export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./notifications";
+export * from "./pageFollows";
 export * from "./partnerships";
 export * from "./passport";
 export * from "./points";

@@ -4,13 +4,19 @@
 // une story. Lot R7h : `live` (organisateur « En cours ») = la structure a un événement publié qui tourne (du début à la fin)
 // et une story vivante ; une structure dont j'ai une place à un événement en cours est dans ma barre sans que je la suive.
 // Lot R8s : l'ordre est décidé ici (non vues d'abord, puis rang 2 / 3 / 4, puis la plus récente) ; le rang n'est pas servi.
+// Lot R9a : les prestataires et les médias suivis (`v:`, `m:`) entrent dans la barre ; lue « en tant que » une page
+// (`X-Orasso-Actor`), la barre est celle de la page : `mine` = ses stories, `authors` = les pages et les comptes publics
+// qu'elle suit (jamais un crew, jamais une place à un événement, jamais un compte privé), mutes de la personne appliqués.
+// Invariant : tout ce qu'une barre lue en casquette contient est visible de n'importe quel membre connecté.
 import {
+  type AudienceRelation,
+  type AudienceViewer,
   type BarRank,
   STORY_LIVE_MAX,
   type StoriesSummary,
+  type StoryAuthorKind,
   type StoryBar,
   type StoryBarEntry,
-  type StoryTagKind,
   storyAuthorKeyOf,
   storyBarOrder,
   storyDenial,
@@ -20,6 +26,7 @@ import { type AnyColumn, and, eq, or, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { stories, storyMutes, storyViews } from "../../db/schema";
+import { type Actor, isPageActor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -28,6 +35,7 @@ import {
   authorDisplay,
   authorKeyOf,
   liveStory,
+  loadActorSets,
   loadViewerSets,
   notMaskedCopy,
   relationOf,
@@ -36,6 +44,12 @@ import {
   setsFor,
   viewerOf,
 } from "./common";
+
+/** Un membre connecté quelconque, qui n'est l'auteur d'aucune story : `storyDenial` laisse toujours passer l'auteur (lot R9a). */
+const MEMBER: AudienceViewer = { id: "\u0000membre", active: true };
+
+/** Le regard d'un membre connecté quelconque : aucun lien avec l'auteur (barre lue en casquette, lot R9a). */
+const NO_RELATION: AudienceRelation = { followAccepted: false, crewMemberActive: () => false, tagged: false };
 
 /** Stories gardées par auteur (après le filtre de visibilité) ; le plafond de publication est le même. */
 const PER_AUTHOR_MAX = STORY_LIVE_MAX;
@@ -62,8 +76,8 @@ async function seenSet(userId: string, at: Date): Promise<Set<string>> {
 const anyOf = (column: SQL | AnyColumn, ids: Iterable<string>, type: "text" | "uuid") =>
   sql`${column} = any(${sql.param([...ids])}::${sql.raw(type)}[])`;
 
-/** Stories signées d'une personne (ni casquette organisateur, ni casquette pro). */
-const personal = sql`${stories.persona} not in ('organizer','pro')`;
+/** Stories signées d'une personne (casquette passionné) : celles d'une page ont leur propre clé (lot R9a). */
+const personal = sql`${stories.persona} = 'fan'`;
 
 /** Les structures qui ont un événement publié en cours (du début à la fin) : l'anneau « EN COURS ». */
 export async function liveStructureIds(at: Date): Promise<Set<string>> {
@@ -104,22 +118,28 @@ export async function structuresWithUpcomingPlace(userId: string, at: Date): Pro
 }
 
 /** Pour une page publique (structure, pro) : zéro sans session (aucune story n'est servie sans session). */
-export async function storiesSummaryFor(v: Viewer | null, kind: StoryTagKind, id: string): Promise<StoriesSummary> {
+export async function storiesSummaryFor(v: Viewer | null, kind: StoryAuthorKind, id: string): Promise<StoriesSummary> {
   if (!v) return { count: 0, hasUnseen: false, ring: null };
   return storiesBar.summary(v, kind, id);
 }
 
 export const storiesBar = {
-  async get(v: Viewer): Promise<StoryBar> {
+  /**
+   * `GET /stories/bar`. `actor` : la page au nom de laquelle on lit (absent ou moi : la barre de la personne). Une page n'a
+   * ni crew ni place à un événement : seulement ce qu'elle suit, et seulement du contenu public.
+   */
+  async get(v: Viewer, actor?: Actor): Promise<StoryBar> {
     const at = now();
     const me = v.user.id;
-    const sets = await loadViewerSets(me);
+    const asPage = actor && isPageActor(actor) ? actor : null;
+    const sets = asPage ? await loadActorSets(asPage, at) : await loadViewerSets(me);
     // Lot R7h : l'organisateur d'un événement où j'ai ma place apparaît « EN COURS » même si je ne le suis pas.
     // Lot R8s : de même la structure d'un événement à venir où je suis retenu ou porteur d'un billet valable (rang 3).
+    // Lot R9a : une page n'a pas de place : ces deux ensembles sont vides en casquette.
     const [liveStructures, placeStructures, upcomingStructures] = await Promise.all([
       liveStructureIds(at),
-      structuresWithPlace(me, at),
-      structuresWithUpcomingPlace(me, at),
+      asPage ? new Set<string>() : structuresWithPlace(me, at),
+      asPage ? new Set<string>() : structuresWithUpcomingPlace(me, at),
     ]);
     const poolStructures = new Set([...sets.structures, ...placeStructures, ...upcomingStructures]);
     // Rang dans la barre : 2 événement en cours où j'ai ma place, 3 événement à venir où j'ai ma place, 4 le reste.
@@ -130,6 +150,8 @@ export const storiesBar = {
     };
     const mutedRows = await db.select().from(storyMutes).where(eq(storyMutes.userId, me));
     const muted = new Set(mutedRows.map((m) => storyAuthorKeyOf(m.authorKind, m.authorId)));
+    // Une page n'hérite jamais du masquage de son titulaire (le démasquer ferait deviner qui la tient) : la migration a copié
+    // une fois les masquages existants sur les pages.
 
     const ors: (SQL | undefined)[] = [];
     if (sets.users.size) ors.push(and(personal, anyOf(stories.authorId, sets.users, "text")));
@@ -137,12 +159,21 @@ export const storiesBar = {
     if (poolStructures.size)
       ors.push(and(eq(stories.persona, "organizer"), anyOf(stories.structureId, poolStructures, "uuid")));
     if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), anyOf(stories.proId, sets.pros, "uuid")));
+    if (sets.providers.size)
+      ors.push(and(eq(stories.persona, "provider"), anyOf(stories.providerId, sets.providers, "uuid")));
+    if (sets.medias.size) ors.push(and(eq(stories.persona, "media"), anyOf(stories.mediaId, sets.medias, "uuid")));
     // Tour 5 : les copies masquées (originale indisponible) sont exclues dans le SQL, avant toute sélection ; aucune limite
     // de lignes par auteur n'est supposée ici : le plafond de publication ne compte que les copies non masquées, et à la
     // levée d'une suspension un auteur peut avoir plus de 50 stories vivantes. `hasUnseen` se lit donc sur toutes les
     // stories visibles ; seuls l'anneau et l'affichage se limitent aux `PER_AUTHOR_MAX` plus récentes (plus bas).
     const pool = ors.length
-      ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, notMaskedCopy(at), or(...ors)) as SQL)
+      ? (and(
+          liveStory(at),
+          // Moi : jamais mes propres stories. Une page : seulement les siennes sont écartées (plus bas, par la clé).
+          asPage ? undefined : sql`${stories.authorId} <> ${me}`,
+          notMaskedCopy(at),
+          or(...ors),
+        ) as SQL)
       : null;
     const candidates = pool
       ? (await selectStories(pool)).sort((a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime())
@@ -152,6 +183,13 @@ export const storiesBar = {
     const visible = candidates.filter((r) => {
       const key = authorKeyOf(r);
       if (!key || muted.has(key.key)) return false;
+      if (asPage) {
+        // Lue en casquette, la barre ne contient que du contenu visible de n'importe quel membre connecté : on juge chaque
+        // story avec un regard sans aucun lien (ni abonnement accepté, ni crew, ni identification). Un abonnement de page
+        // n'est pas un abonnement accepté : jamais un crew, jamais les abonnés d'un compte privé, jamais un compte privé.
+        if (key.key === asPage.key) return false;
+        return storyDenial(MEMBER, audienceStoryOf(r, at), NO_RELATION) === null;
+      }
       return storyDenial(viewer, audienceStoryOf(r, at), relationOf(sets, r)) === null;
     });
     const seen = await seenSet(me, at);
@@ -192,7 +230,17 @@ export const storiesBar = {
 
     // « Ta story » ne compte que mes stories personnelles : celles que `by-author u:<moi>` sert. Celles au nom d'une
     // structure ou d'un pro ont leur propre clé (`s:`, `p:`) ; les compter ici ouvrirait une visionneuse vide.
-    const mineRows = await selectStories(and(liveStory(at), eq(stories.authorId, me), personal));
+    // Lot R9a : lue en casquette, `mine` = les stories vivantes de la page (sa propre clé).
+    const mineWhere = !asPage
+      ? and(eq(stories.authorId, me), personal)
+      : asPage.kind === "structure"
+        ? and(eq(stories.persona, "organizer"), eq(stories.structureId, asPage.id))
+        : asPage.kind === "pro"
+          ? and(eq(stories.persona, "pro"), eq(stories.proId, asPage.id))
+          : asPage.kind === "provider"
+            ? and(eq(stories.persona, "provider"), eq(stories.providerId, asPage.id))
+            : and(eq(stories.persona, "media"), eq(stories.mediaId, asPage.id));
+    const mineRows = await selectStories(and(liveStory(at), mineWhere, asPage ? notMaskedCopy(at) : undefined));
     const mine = mineRows.length
       ? {
           count: mineRows.length,
@@ -205,14 +253,18 @@ export const storiesBar = {
   },
 
   /** Résumé pour un profil, une structure ou un pro, selon le regard : zéro si rien n'est visible (sans rien révéler). */
-  async summary(v: Viewer, kind: StoryTagKind, id: string): Promise<StoriesSummary> {
+  async summary(v: Viewer, kind: StoryAuthorKind, id: string): Promise<StoriesSummary> {
     const at = now();
     const where =
       kind === "user"
         ? and(personal, eq(stories.authorId, id))
         : kind === "structure"
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, id))
-          : and(eq(stories.persona, "pro"), eq(stories.proId, id));
+          : kind === "pro"
+            ? and(eq(stories.persona, "pro"), eq(stories.proId, id))
+            : kind === "provider"
+              ? and(eq(stories.persona, "provider"), eq(stories.providerId, id))
+              : and(eq(stories.persona, "media"), eq(stories.mediaId, id));
     // Invariant : une story de crew ne se montre « ni sur le profil » ; l'anneau de crew vit dans la barre du Fil.
     const rows = await selectStories(and(liveStory(at), where, sql`${stories.audience} <> 'crew'`));
     if (!rows.length) return { count: 0, hasUnseen: false, ring: null };
