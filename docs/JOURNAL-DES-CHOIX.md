@@ -6051,3 +6051,9 @@ Quatorze points mineurs de la livraison 2 (P08, P13, P21, P25, P28, P29, P31, P3
 - **Dates** repliées par défaut (ligne « Du … au … · dates de l'offre » + « modifier »), comme la maquette.
 - **Site, espace du pro** : les offres en cours sont lues dans le navigateur, avec « Voir plus » au-delà de 20.
 - **Étiquette dans l'en-tête de la carte** (décision du coordinateur) : `headTag` ajouté à `CardShell` (appli) et `Shell` (site), absent pour les autres cartes ; la ligne d'offre sous la photo ne garde que les dates et le titre.
+
+### Lot R9c, tour 3 (12/11/2026)
+
+- **`UnderTabs` (appli)** : le recentrage n'a lieu que quand `value` change (ou à l'ouverture) et seulement si l'onglet choisi n'est pas entier dans la rangée, calculé sur la largeur de la rangée (`onLayout` du défilement) et la position de défilement ; un nombre qui arrive (« Garage · N ») ne fait plus sauter la rangée.
+- **`feedAgo`** : espace insécable avant l'unité (« il y a 20 h », « 3 min », « 2 j »), donc appli et site ; tests mis à jour.
+- **Jetons** : `space1 + 2` remplacé par `space2` (8 au lieu de 6) dans `OfferLine` et `PageOffers`.

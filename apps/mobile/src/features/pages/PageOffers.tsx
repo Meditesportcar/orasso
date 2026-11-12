@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   thumbImage: { width: THUMB_W, height: THUMB_H },
   text: { flex: 1, minWidth: 0, gap: space1 },
   tagRow: { flexDirection: "row" },
-  dates: { flexDirection: "row", alignItems: "center", gap: space1 + 2 },
+  dates: { flexDirection: "row", alignItems: "center", gap: tokens.spacing.space2 },
   datesText: { flexShrink: 1 },
   old: { gap: space2 },
   oldRow: { gap: space1, padding: space3, borderRadius: tokens.radius.radiusMd },

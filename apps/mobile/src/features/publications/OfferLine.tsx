@@ -42,6 +42,6 @@ export function OfferLine({ offer }: { offer: OfferView }) {
 const styles = StyleSheet.create({
   wrap: { gap: space1 },
   row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
-  dates: { flexDirection: "row", alignItems: "center", gap: space1 + 2, flexShrink: 1 },
+  dates: { flexDirection: "row", alignItems: "center", gap: space2, flexShrink: 1 },
   datesText: { flexShrink: 1 },
 });

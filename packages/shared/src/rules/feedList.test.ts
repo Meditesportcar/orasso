@@ -195,10 +195,10 @@ describe("ligne de temps d'une carte", () => {
   const now = new Date("2026-11-09T12:00:00Z");
   it("de l'instant à la semaine", () => {
     expect(feedAgo("2026-11-09T11:59:40Z", now)).toBe("à l'instant");
-    expect(feedAgo("2026-11-09T11:35:00Z", now)).toBe("il y a 25 min");
-    expect(feedAgo("2026-11-09T09:00:00Z", now)).toBe("il y a 3 h");
+    expect(feedAgo("2026-11-09T11:35:00Z", now)).toBe("il y a 25 min");
+    expect(feedAgo("2026-11-09T09:00:00Z", now)).toBe("il y a 3 h");
     expect(feedAgo("2026-11-08T10:00:00Z", now)).toBe("hier");
-    expect(feedAgo("2026-11-05T10:00:00Z", now)).toBe("il y a 4 j");
+    expect(feedAgo("2026-11-05T10:00:00Z", now)).toBe("il y a 4 j");
     expect(feedAgo("2026-10-02T10:00:00Z", now)).toBe("2 oct.");
   });
 });
