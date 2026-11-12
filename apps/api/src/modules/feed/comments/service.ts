@@ -306,7 +306,15 @@ export const feedCommentsService = {
       return found.c.parentId;
     });
     // Une réponse supprimée : le compteur de son parent, lu **après** la suppression (même lecture que le POST) ; l'écran ne décrémente rien.
-    const parent = parentId ? await readableParentCount(v, parentId) : undefined;
+    // La suppression est faite : une panne de lecture du compteur ne la transforme pas en 500 (l'écran réessaierait et
+    // recevrait « Déjà retiré »). On journalise et on répond sans `parent` : le client sait relire.
+    let parent: Awaited<ReturnType<typeof readableParentCount>>;
+    try {
+      parent = parentId ? await readableParentCount(v, parentId) : undefined;
+    } catch (error) {
+      console.error("Compteur du parent illisible après la suppression d'une réponse :", error);
+      parent = undefined;
+    }
     return parent ? { parent } : {};
   },
 

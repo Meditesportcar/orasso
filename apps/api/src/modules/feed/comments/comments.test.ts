@@ -9,6 +9,7 @@ import {
   createEvent,
   createStructure,
   createVehicle,
+  quietHours,
   resetDb,
   seedReference,
   signUp,
@@ -50,6 +51,8 @@ const tick = () => clock.advance(1000);
 
 beforeEach(async () => {
   await resetDb();
+  // Les heures calmes (22 h à 8 h) différeraient les notifications lues ici : le test ne dépend pas de l'heure réelle (petit lot API, P25).
+  quietHours(false);
   clock = useClock(new Date(Date.now() + 10 * 60_000));
   ref = await seedReference();
 });
