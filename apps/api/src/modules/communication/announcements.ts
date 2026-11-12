@@ -316,11 +316,9 @@ export const announcementsService = {
     // remonte et rien n'est écrit.
     // Interblocage possible avec la reprise ou son retour arrière (40P01) : une seule reprise, comme `setPinned` de `pin.ts`.
     // La limite d'écriture est comptée **une fois**, avant le rejeu éventuel (son compteur en mémoire ne s'annule pas).
-    const [reposted] = await db
-      .select({ id: feedPosts.id })
-      .from(feedPosts)
-      .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
-    if (reposted) rateLimit("feedWrite", v.user.id);
+    // Comptée à la détection de la reprise **dans** la transaction (elle peut être créée après une lecture préalable), une seule fois
+    // par requête : le drapeau est gardé entre les tentatives.
+    let counted = false;
     const run = () =>
       withTx(async (tx) => {
         const [taken] = await tx
@@ -328,6 +326,10 @@ export const announcementsService = {
           .from(feedPosts)
           .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
         if (taken) {
+          if (!counted) {
+            rateLimit("feedWrite", v.user.id);
+            counted = true;
+          }
           await pinInTx(tx, v, e.id, taken.id, pinned);
         }
         const [updated] = await tx

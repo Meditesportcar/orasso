@@ -89,12 +89,16 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   // Changement de session dans une autre fenêtre (déconnexion de A, connexion de B) : la génération change, les pages lues par A sont
   // vidées, la page se relit. Une pagination en vol est jetée à son arrivée (jamais les mentions masquées de A chez B).
   const revalidator = useRevalidator();
+  // Le compte du chargeur **courant** (mis à jour à chaque nouvelle donnée) : A → B → A dans une page restée montée compare toujours
+  // à la dernière donnée, jamais à celle du premier rendu.
+  const currentUser = useRef(loaderData.userId);
+  currentUser.current = loaderData.userId;
   // biome-ignore lint/correctness/useExhaustiveDependencies: l'abonnement ne dépend que du chargeur
   useEffect(
     () =>
       listenSession((announced) => {
         // Le même compte qui s'annonce (hydratation, autre onglet du même compte) ne change rien.
-        if (announced === loaderData.userId) return;
+        if (announced === currentUser.current) return;
         generation.current += 1;
         setBusy(null);
         setStale(true);

@@ -5674,3 +5674,7 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 - **Delta de Â« Mentions Â· N Â»** : il repart de zÃ©ro Ã  chaque **rÃ©ponse servie** (l'objet de la fiche relue), non Ã  chaque changement de valeur (appli et site). Recettes : masquer, le serveur redit le mÃªme nombre, relecture : le nombre servi s'affiche.
 - **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur prÃ©sents avant la fin de gratuitÃ©, absents pour un autre lecteur aprÃ¨s, maintenus pour le propriÃ©taire).
 - **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors dÃ©cision, Ã  noter : une publication d'un pro qui cite une structure ou un Ã©vÃ©nement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` aprÃ¨s la fin de gratuitÃ©.
+
+### Tour 7 (lot R8d, 12/11/2026)
+- **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (référence mise à jour à chaque donnée) : A ? B ? A dans une page restée montée n'ignore plus la dernière annonce. Pas de test A ? B ? A (il faut deux comptes dans une même fenêtre annoncés par le canal) ; recette du site non rejouée ce tour.
+- **Épingle de la façade** : l'écriture est comptée à la détection de la reprise dans la transaction, une fois par requête (drapeau gardé entre les tentatives) ; le test précharge 59 écritures et lève le 40P01 après le corps.

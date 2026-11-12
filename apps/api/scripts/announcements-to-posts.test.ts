@@ -788,17 +788,24 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
 });
 
 describe("tour 6 : la limite d'écriture est comptée une fois malgré un rejeu", () => {
-  it("59 écritures comptées, un 40P01 simulé : l'épingle passe (la 60e)", async () => {
+  it("59 écritures préchargées, un 40P01 simulé : l'épingle passe (la 60e)", async () => {
     const e = await mkEvent();
     const a = await mkAnnouncement(e.id, { body: "Limite" });
     await announcementsToPosts();
-    for (let i = 0; i < 58; i++) rateLimit("feedWrite", owner.id);
+    for (let i = 0; i < 59; i++) rateLimit("feedWrite", owner.id);
     const real = db.transaction.bind(db);
     let failed = false;
     const spy = vi.spyOn(db, "transaction").mockImplementation(((fn: never, cfg: never) => {
       if (!failed) {
         failed = true;
-        return Promise.reject(Object.assign(new Error("deadlock"), { code: "40P01" }));
+        // Le corps tourne (et compte l'écriture), puis le 40P01 arrive : la transaction est annulée et rejouée.
+        return real(
+          (async (tx: never) => {
+            await (fn as (t: never) => Promise<unknown>)(tx);
+            throw Object.assign(new Error("deadlock"), { code: "40P01" });
+          }) as never,
+          cfg,
+        );
       }
       return real(fn, cfg);
     }) as never);
