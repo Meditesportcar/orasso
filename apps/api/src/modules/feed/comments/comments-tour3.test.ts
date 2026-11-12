@@ -130,7 +130,7 @@ describe("groupe recomposé à la livraison différée", () => {
     const second = await comment(paul, id, "Seconde réponse", { parentId: top.json.id });
     const [group] = await notifs(lea.id, "feed_comment_reply");
     expect(group?.data).toMatchObject({ commentId: second.json.id });
-    expect((await call(paul, "DELETE", `/feed-comments/${second.json.id}`)).status).toBe(204);
+    expect((await call(paul, "DELETE", `/feed-comments/${second.json.id}`)).status).toBe(200);
     expect(await notifs(lea.id, "feed_comment_reply")).toHaveLength(1);
     clock.set(new Date("2026-06-16T08:30:00Z"));
     await notificationsService.deliverDue();

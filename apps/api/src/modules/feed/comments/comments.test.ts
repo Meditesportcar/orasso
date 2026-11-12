@@ -299,7 +299,7 @@ describe("suppression et compteurs", () => {
     await comment(kenji, id, "Réponse 2", { parentId: top.json.id });
     expect((await post(id)).commentsCount).toBe(4);
     // Supprimer une réponse : le parent baisse d'une réponse.
-    expect((await call(nina, "DELETE", `/feed-comments/${r1.json.id}`)).status).toBe(204);
+    expect((await call(nina, "DELETE", `/feed-comments/${r1.json.id}`)).status).toBe(200);
     expect((await row(top.json.id)).repliesCount).toBe(1);
     expect((await post(id)).commentsCount).toBe(3);
     expect((await call(lea, "DELETE", `/feed-comments/${top.json.id}`)).status).toBe(204);
@@ -327,7 +327,7 @@ describe("suppression et compteurs", () => {
     expect((await row(target)).repliesCount).toBe(10);
     expect((await post(id)).commentsCount).toBe(20);
     const removed = await Promise.all(people.map((p, i) => call(p, "DELETE", `/feed-comments/${replies[i]?.json.id}`)));
-    expect(removed.every((r) => r.status === 204)).toBe(true);
+    expect(removed.every((r) => r.status === 200)).toBe(true);
     expect((await row(target)).repliesCount).toBe(0);
     expect((await post(id)).commentsCount).toBe(10);
   });
@@ -745,5 +745,32 @@ describe("compte supprimé", () => {
     expect((await comment(lea, id, "Après")).status).toBe(404);
     expect((await call(lea, "PUT", `/feed-comments/${c.json.id}/reaction`)).status).toBe(404);
     expect((await listReplies(lea, c.json.id)).status).toBe(404);
+  });
+});
+
+describe("le compteur de réponses porte sa version (countedAt)", () => {
+  it("chaque commentaire rendu a un countedAt à largeur fixe ; la réponse d'un envoi rend le compteur de son parent, lu après l'enregistrement", async () => {
+    const kenji = await person("Kenji_66");
+    const lea = await person("Lea_11");
+    const nina = await person("Nina_34");
+    const id = await dbPost(kenji);
+    const parent = await comment(lea, id, "Le parent");
+    expect(parent.json.countedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+    // Un commentaire de premier niveau n'a pas de `parent`.
+    expect(parent.json.parent).toBeUndefined();
+    const reply = await comment(nina, id, "La réponse", { parentId: parent.json.id });
+    expect(reply.status).toBe(201);
+    expect(reply.json.parent).toMatchObject({ id: parent.json.id, repliesCount: 1 });
+    expect(reply.json.parent.countedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+    // Une lecture ultérieure rend une version plus récente (ou égale) du même compteur.
+    const seen = await listComments(kenji, id);
+    expect(seen.items[0]?.repliesCount).toBe(1);
+    expect((seen.items[0]?.countedAt ?? "") >= reply.json.parent.countedAt).toBe(true);
+    // Rejeu du même envoi : le même commentaire, et le compteur du parent n'a pas bougé.
+    const clientId = randomUUID();
+    const first = await comment(nina, id, "Seconde", { parentId: parent.json.id, clientId });
+    const again = await comment(nina, id, "Seconde", { parentId: parent.json.id, clientId });
+    expect(again.json.id).toBe(first.json.id);
+    expect(again.json.parent.repliesCount).toBe(2);
   });
 });

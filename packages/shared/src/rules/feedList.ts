@@ -59,7 +59,14 @@ export const withoutPlacement = (items: readonly FeedCard[], placementId: string
 /** Ajoute des cartes sans doublon (l'identifiant d'une carte est stable d'une page à l'autre). */
 export function appendCards(current: readonly FeedCard[], next: readonly FeedCard[]): FeedCard[] {
   const seen = new Set(current.map((c) => c.id));
-  return [...current, ...next.filter((c) => !seen.has(c.id))];
+  const out = [...current];
+  // Aussi à l'intérieur de la page reçue (filet : un rognage a pu faire servir deux fois la même carte dans une réponse).
+  for (const c of next) {
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    out.push(c);
+  }
+  return out;
 }
 
 /**
@@ -78,7 +85,7 @@ export function applyFeedPage(
     return {
       state: {
         filter: state.filter,
-        items: [...page.items],
+        items: appendCards([], page.items),
         nextCursor: page.nextCursor,
         hot: page.hot ? [...page.hot] : [],
         ...(page.ref ? { ref: page.ref } : {}),
