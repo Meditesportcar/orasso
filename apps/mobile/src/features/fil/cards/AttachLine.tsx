@@ -4,10 +4,9 @@
 // le titre ne se tronque jamais. Sans rôle (passionné après la fin, présence non validée) : le titre seul.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { attachDateLabel, attachPhrase, type FeedAttachView, feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 
 /** Le texte de la ligne : « pour le Rassemblement du Lydia · lun. 9 nov. ». */
 export function attachLineText(attach: FeedAttachView): string {
@@ -18,7 +17,7 @@ export function attachLineText(attach: FeedAttachView): string {
 
 export function AttachLine({ attach }: { attach: FeedAttachView }) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const text = attachLineText(attach);
   return (
     <View style={styles.row}>
@@ -48,7 +47,7 @@ export function AttachLine({ attach }: { attach: FeedAttachView }) {
 
 /** « Voir la fiche » : le bouton secondaire de la ligne d'actions d'une publication d'organisateur. */
 export function AttachSeeButton({ attach }: { attach: FeedAttachView }) {
-  const router = useRouter();
+  const router = useCardRouter();
   if (attach.role !== "organizer") return null;
   return (
     <SmButton

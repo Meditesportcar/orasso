@@ -23,20 +23,28 @@ let store: Store | null = null;
 /** La file de l'onglet pour ce compte (une autre personne sur le même onglet ne reprend jamais celle-ci). */
 function queueFor(userId: string): Store["queue"] {
   if (store?.userId === userId) return store.queue;
-  store = {
-    userId,
-    queue: createSeenQueue({
-      now: () => Date.now(),
-      send: async (batch) => {
-        // Un autre compte est arrivé dans l'onglet pendant l'attente : rien ne part avec sa session.
-        if (store?.userId !== userId) return "retry";
-        const res = await apiFetch("/me/fil/seen", { method: "POST", json: { cards: batch }, keepalive: true });
-        if (res.ok) return "ok";
-        return res.status === 400 ? "drop" : "retry";
-      },
-    }),
-  };
-  return store.queue;
+  const queue: Store["queue"] = createSeenQueue({
+    now: () => Date.now(),
+    send: async (batch) => {
+      // Cette file n'est plus celle du module (déconnexion, autre compte) : rien ne part avec la session d'un autre.
+      if (store?.queue !== queue) return "retry";
+      const res = await apiFetch("/me/fil/seen", { method: "POST", json: { cards: batch }, keepalive: true });
+      if (res.ok) return "ok";
+      return res.status === 400 ? "drop" : "retry";
+    },
+  });
+  store = { userId, queue };
+  return queue;
+}
+
+/** Envoie la file de ce compte (rien si ce n'est plus la file de l'onglet). */
+export function flushSeenActions(userId: string): Promise<boolean> {
+  return store?.userId === userId ? store.queue.flush() : Promise.resolve(true);
+}
+
+/** Déconnexion : la file du compte part avec lui (aucun lot suivant ne part avec la session du compte d'après). */
+export function resetSeen(): void {
+  store = null;
 }
 
 /** Retient une carte ouverte (`open`) ou partagée (`share`). */

@@ -3,7 +3,7 @@
 // de réponse** (réseau coupé) affiche la photo gardée ; une réponse du serveur (401, 403, 404, 410 : accès retiré, publication
 // supprimée, photo modérée) efface la photo gardée et passe à `CrewPhotoImage`, qui dit pourquoi. Un chemin à part : la règle
 // des photos de crew (mémoire seulement, R5c1) ne change pas. Une seule requête en ligne.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, type ImageStyle, type StyleProp, View } from "react-native";
 
 import { apiUrl } from "@/api";
@@ -11,7 +11,7 @@ import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { getSessionToken } from "@/lib/http";
 import { accountGuard } from "@/lib/kv";
 import { deletePhoto, readPhoto, savePhoto } from "@/lib/offlineCopy";
-import { isWantedPhoto, photoResponseAction } from "./copyPhotos";
+import { forgetIfRefused, isWantedPhoto, photoResponseAction } from "./copyPhotos";
 
 function asDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -33,6 +33,8 @@ export function FilPhotoImage({
 }) {
   const [shown, setShown] = useState<string | null>(null);
   const [fallback, setFallback] = useState(false);
+  // Le compte de la requête en cours : le repli le réutilise pour effacer la photo gardée sur un refus.
+  const accountRef = useRef(accountGuard());
   useEffect(() => {
     let cancelled = false;
     setShown(null);
@@ -40,6 +42,7 @@ export function FilPhotoImage({
     const token = getSessionToken();
     // Le compte est capturé avant la requête : une réponse tardive d'un autre compte n'écrit rien sous celui d'après.
     const account = accountGuard();
+    accountRef.current = account;
     void (async () => {
       let res: Response;
       try {
@@ -75,7 +78,16 @@ export function FilPhotoImage({
     };
   }, [url]);
   if (fallback)
-    return <CrewPhotoImage url={url} style={style} resizeMode="cover" accessibilityLabel={accessibilityLabel} />;
+    return (
+      <CrewPhotoImage
+        url={url}
+        style={style}
+        resizeMode="cover"
+        accessibilityLabel={accessibilityLabel}
+        // Le repli relit la photo : un refus qu'il reçoit (404 après un 500…) efface aussi la photo gardée.
+        onFailed={(status) => void forgetIfRefused(url, status, accountRef.current)}
+      />
+    );
   if (!shown) return <View style={style} accessibilityLabel={accessibilityLabel} />;
   return <Image source={{ uri: shown }} style={style} resizeMode="cover" accessibilityLabel={accessibilityLabel} />;
 }

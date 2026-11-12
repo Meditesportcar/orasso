@@ -2,18 +2,17 @@
 // floutées par l'API), « Le plateau » ouvre la page du plateau de l'événement.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedScreenLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { Image, StyleSheet, View } from "react-native";
-
 import { mediaSource } from "@/lib/media";
 import { SmButton } from "@/ui/Kit";
+import { useCardRouter } from "../openFromCard";
 import { CardShell } from "./CardShell";
 import { OrgLogo, reasonLine } from "./parts";
 import type { CardProps } from "./types";
 
 export function LineupCard({ card, onMenu, faded }: CardProps<"lineup">) {
   const { t } = useTheme();
-  const router = useRouter();
+  const router = useCardRouter();
   const { event, count, photoUrls } = card.payload;
   const photos = photoUrls.slice(0, 4);
   return (

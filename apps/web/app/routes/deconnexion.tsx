@@ -2,6 +2,7 @@ import { DEPT_COOKIE } from "@orasso/design-system/web";
 import { purgeUncertain, SIGN_OUT_FAILED_PARAM } from "@orasso/shared";
 import { redirect } from "react-router";
 import { purgePublished } from "../components/fil/mine";
+import { resetSeen } from "../components/fil/seenTracker";
 import { purgeViewChoices } from "../components/publications/viewChoice";
 import { api, safeReturn, withCookies } from "../lib/api.server";
 import { clearExplorerCookie } from "../lib/explorerChoice.server";
@@ -35,6 +36,7 @@ export function loader() {
 // avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
 export async function clientAction({ serverAction }: Route.ClientActionArgs) {
   purgePublished();
+  resetSeen();
   try {
     purgeUncertain(window.sessionStorage);
   } catch {
