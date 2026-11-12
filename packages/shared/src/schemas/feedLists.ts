@@ -8,8 +8,8 @@ import type { FeedAttachView, FeedPostPhoto, FeedPostView } from "./feed";
 
 const cursor = z.string().max(300).optional();
 
-/** `GET /authors/:key/feed-posts?cursor=&filter=` : toutes, rattachées à un événement, ou sans événement. */
-export const authorPostsFilters = ["all", "event", "no_event"] as const;
+/** `GET /authors/:key/feed-posts?cursor=&filter=` : toutes, rattachées à un événement, sans événement, ou (fiche pro, R9c) les offres non terminées. */
+export const authorPostsFilters = ["all", "event", "no_event", "offer"] as const;
 export type AuthorPostsFilter = (typeof authorPostsFilters)[number];
 export const authorPostsQuery = z.object({ cursor, filter: z.enum(authorPostsFilters).default("all") });
 

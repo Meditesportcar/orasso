@@ -24,6 +24,7 @@ import {
   type EventsForbidden,
   type EventsLoad,
   emptyEventsLoad,
+  emptyOfferForm,
   eventsOf,
   eventsStale,
   FEED_ASPECT_RATIOS,
@@ -36,6 +37,9 @@ import {
   importantImmediate,
   feedScreenLabels as L,
   noCommercialDraft,
+  proOffersLabels as OF,
+  type OfferForm,
+  offerDatesPhrase,
   type PublishChoice,
   partnershipLabels,
   publicationErrors,
@@ -43,6 +47,7 @@ import {
   publishIssueR8,
   publishSays,
   publishStartChoice,
+  publishStartOffer,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -95,6 +100,7 @@ import {
   setFrames,
   withDetection,
 } from "./model";
+import { OfferBlock } from "./OfferBlock";
 import { AuthorChoice, EventChoice, ImportantBox, Note, PosterVisual, Says } from "./PublishChoices";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -130,7 +136,13 @@ export function PublishScreen({ start }: { start?: PublishStart } = {}) {
 }
 
 /** Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis (`?structure=&evenement=`). */
-export type PublishStart = { structure?: string; evenement?: string; auteur?: string };
+export type PublishStart = {
+  structure?: string;
+  evenement?: string;
+  auteur?: string;
+  fiche?: string;
+  etiquette?: string;
+};
 
 function PublishForm({ start }: { start?: PublishStart }) {
   const { t } = useTheme();
@@ -149,7 +161,19 @@ function PublishForm({ start }: { start?: PublishStart }) {
     () => publishAuthors(me?.personas ?? [], me?.profile.pseudo ?? "", me?.profile.avatarUrl ?? null),
     [me?.personas, me?.profile.pseudo, me?.profile.avatarUrl],
   );
-  const [choice, setChoice] = useState<PublishChoice>(() => publishStartChoice(start ?? {}, authors));
+  // Lot R9c : `?fiche=<identifiant>&etiquette=offre` ouvre l'écran réglé sur la fiche pro, avec l'étiquette « Offre ».
+  // biome-ignore lint/correctness/useExhaustiveDependencies: valeurs de départ lues une seule fois
+  const startOffer = useMemo(
+    () => publishStartOffer({ fiche: start?.fiche, etiquette: start?.etiquette }, authors),
+    [],
+  );
+  const [choice, setChoice] = useState<PublishChoice>(() =>
+    startOffer
+      ? { ...publishStartChoice({}, authors), authorKey: startOffer.authorKey }
+      : publishStartChoice(start ?? {}, authors),
+  );
+  // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
+  const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
   const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
   const fan = vehicleAllowed(author);
   const account = me?.user.id ?? "";
@@ -183,6 +207,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
   const [invitedName, setInvitedName] = useState<string | null>(null);
+  const [doneOffer, setDoneOffer] = useState<string | null>(null);
   const [clientId, setClientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
   const keys = useRef<Record<string, string>>({});
@@ -411,6 +436,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const frozen = busy || uncertain !== null;
   const locked = frozen || working;
   const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
+  const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
       photos,
@@ -420,6 +446,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       event,
       important,
       forbidden: eventBlock ? loaded.forbidden : null,
+      offer: offerOn ? offer : null,
     }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   async function publish() {
@@ -465,6 +492,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
           vehicleId: choice.vehicleId,
           placeLabel: choice.placeLabel,
           important,
+          offer: offerOn ? offer : null,
           ...(fan ? commercialField(commercialLine) : {}),
         }),
         // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
@@ -478,6 +506,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
       setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
       markFeedDirty(post);
+      // La confirmation d'une offre : « Publié : <fiche> · offre du 10 au 30 nov. » (maquette R9.2b).
+      setDoneOffer(post.offer ? OF.published(author.name, offerDatesPhrase(post.offer)) : null);
       // Les JPEG temporaires sont ceux de ce formulaire : s'il n'existe plus, ce sont peut-être ceux du suivant.
       if (mounted.current) discardTempPhotos();
       setInvitedName(post.coAuthorInvite ? post.coAuthorInvite.name : null);
@@ -598,6 +628,11 @@ function PublishForm({ start }: { start?: PublishStart }) {
           <Text variant="body" color={c.inkMuted}>
             {found ? T.uncertainFound : L.publishedText}
           </Text>
+          {doneOffer ? (
+            <Text variant="bodyStrong" color={c.ink} testID="fil-publish-done-offer">
+              {doneOffer}
+            </Text>
+          ) : null}
           {invitedName ? (
             <Text variant="body" color={c.inkMuted} testID="fil-publish-invited">
               {CO.sent(invitedName)}
@@ -889,6 +924,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
         testID="fil-publish-caption"
       />
       <Muted variant="caption">{fan ? L.captionHint : T.captionHintPage}</Muted>
+      {author.persona === "pro" ? <OfferBlock value={offer} onChange={setOffer} disabled={frozen} /> : null}
 
       <Note lead={T.oneGesture.lead} testID="fil-publish-gesture">
         {T.oneGesture.rest}
@@ -958,7 +994,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
       {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
-      <Says says={publishSays(author, event, important.on)} />
+      <Says says={publishSays(author, event, important.on, offerOn)} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {loaded.forbidden && eventBlock ? (
         <Notice tone="error" testID="fil-publish-forbidden">

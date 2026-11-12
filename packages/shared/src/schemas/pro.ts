@@ -192,6 +192,11 @@ export type ProPublic = ProCard & {
   /** Organisateurs dont le pro est partenaire (liens acceptés par l'organisateur). */
   partners: ProPartner[];
   postsCount: number;
+  /**
+   * Lot R9c : les offres non terminées de la fiche (étiquette « Offre » des publications). **Absent sans session** (T4 : la fiche
+   * d'un pro ne montre aucune publication à un visiteur), `0` si la fiche de base masque ses publications.
+   */
+  offers?: { current: number /** Au propriétaire seul : ce qu'il reste de la limite du mois. */; remaining?: number };
   /** Publications : visibles par les abonnés (et par le pro) seulement ; `null` pour les autres. */
   posts: ProPostView[] | null;
   isFollowing: boolean | null;

@@ -16,7 +16,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis.
   const url = new URL(request.url);
   return {
-    start: { structure: url.searchParams.get("structure"), evenement: url.searchParams.get("evenement") },
+    start: {
+      structure: url.searchParams.get("structure"),
+      evenement: url.searchParams.get("evenement"),
+      // Lot R9c : « Publier une offre » pose la fiche pro et l'étiquette « Offre ».
+      fiche: url.searchParams.get("fiche"),
+      etiquette: url.searchParams.get("etiquette"),
+    },
     userId: me.user.id,
     pseudo: me.profile.pseudo,
     avatarUrl: me.profile.avatarUrl,

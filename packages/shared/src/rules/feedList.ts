@@ -472,17 +472,17 @@ export function feedCropPlan(
   return { originX, originY, width: cropW, height: cropH, outWidth, outHeight };
 }
 
-/** « à l'instant », « il y a 5 min », « il y a 3 h », « hier », « il y a 4 j », puis « 2 sept. » : la petite ligne d'une carte. */
+/** (espace insécable avant l'unité : « il y a 20 h » ne se coupe jamais entre le nombre et l'unité.) « à l'instant », « il y a 5 min », « il y a 3 h », « hier », « il y a 4 j », puis « 2 sept. » : la petite ligne d'une carte. */
 export function feedAgo(at: string | Date, now: Date): string {
   const ms = now.getTime() - new Date(at).getTime();
   if (ms < 60_000) return "à l'instant";
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60) return `il y a ${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
+  if (hours < 24) return `il y a ${hours} h`;
   const days = Math.floor(hours / 24);
   if (days === 1) return "hier";
-  if (days < 7) return `il y a ${days} j`;
+  if (days < 7) return `il y a ${days} j`;
   return new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" });
 }
 

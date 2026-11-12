@@ -180,6 +180,7 @@ export function publicToFeedPost(p: PublicPostView): FeedPostView {
     commentsCount: 0,
     commentsOff: true,
     lastComments: [],
+    offer: null,
   };
 }
 

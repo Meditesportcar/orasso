@@ -23,6 +23,7 @@ import {
   type ProStats,
   type ProTrackKind,
   type ProUpdate,
+  parisDayOf,
   parseRegistryNumber,
   postsRemaining,
   proSubscription,
@@ -55,6 +56,7 @@ import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
+import { postOkSql } from "../feed/lists";
 import { profilesRepo } from "../profiles/repo";
 import { isFollowingAs } from "../social/pageFollows";
 import { locate } from "../structures/service";
@@ -134,7 +136,7 @@ async function publishBlock(p: ProRow): Promise<string | null> {
 
 async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promise<ProPublic> {
   const isOwner = viewer?.user.id === p.ownerUserId;
-  const [followers, photos, discounts, partnerRows, postCount, following] = await Promise.all([
+  const [followers, photos, discounts, partnerRows, postCount, following, offerCount] = await Promise.all([
     followersCounts([p.id]),
     db.query.proPhotos.findMany({ where: eq(proPhotos.proId, p.id), orderBy: [asc(proPhotos.position)] }),
     discountsOf(p.id),
@@ -159,6 +161,16 @@ async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promis
       ? db.query.proFollows.findFirst({
           where: and(eq(proFollows.proId, p.id), eq(proFollows.userId, viewer.user.id)),
         })
+      : Promise.resolve(undefined),
+    // Lot R9c : les offres non terminées (jour de fin compris, jour civil de Paris), pour une session seulement (T4).
+    // Avec les mêmes conditions de lecture que la liste (`postOkSql`) : un compteur ne dit jamais plus que la liste.
+    viewer
+      ? db
+          .execute<{ n: number }>(
+            sql`select count(*)::int as n from feed_posts p join profiles a on a.user_id = p.author_id
+              where p.pro_id = ${p.id} and p.tag = 'offer' and p.offer_ends_on >= ${parisDayOf(now())}::date and ${postOkSql(now())}`,
+          )
+          .then((r) => r.rows)
       : Promise.resolve(undefined),
   ]);
   const partners: ProPartner[] = partnerRows.map(({ s }) => ({
@@ -196,6 +208,16 @@ async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promis
     discounts: shownDiscounts,
     partners,
     postsCount: vis.hidden.posts && !isOwner ? 0 : (postCount[0]?.n ?? 0),
+    // Lot R9c : absent sans session ; nul si la fiche de base masque ses publications à qui n'est pas le propriétaire.
+    ...(offerCount
+      ? {
+          offers: {
+            current: vis.hidden.posts && !isOwner ? 0 : (offerCount[0]?.n ?? 0),
+            // Au propriétaire seul : ce qu'il reste de la limite du mois (le bouton « Publier une offre » dit pourquoi il est inerte).
+            ...(isOwner ? { remaining: postsRemaining(await postsUsedThisMonth(p.id)) } : {}),
+          },
+        }
+      : {}),
     posts,
     // Lot R9a : `isFollowing` se lit pour l'acteur ; `canSeePosts` (plus haut) reste l'abonnement de la personne.
     isFollowing: !viewer

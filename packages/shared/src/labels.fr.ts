@@ -60,6 +60,7 @@ export * from "./labels/presence.fr";
 export * from "./labels/pro-presta.fr";
 export * from "./labels/profile-r5.fr";
 export * from "./labels/profile-tabs.fr";
+export * from "./labels/proOffers.fr";
 export * from "./labels/publications.fr";
 export * from "./labels/share.fr";
 export * from "./labels/shop.fr";

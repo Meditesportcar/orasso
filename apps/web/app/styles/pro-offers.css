@@ -1,0 +1,190 @@
+/* Les offres du pro (lot R9c) : l'étiquette « Offre » d'une publication, l'onglet « Offres » de la fiche, le bloc « Étiquette » de
+   « Publier » et l'espace du pro. Jetons seulement : aucune valeur en dur. */
+.po-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-body-strong-weight);
+  text-transform: uppercase;
+}
+.po-tag--ended {
+  background: transparent;
+  color: var(--ink);
+  border: calc(var(--space-1) / 2) solid var(--ink);
+}
+.po-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--ink-muted);
+  font-size: var(--type-caption-size);
+}
+.po-dates span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.po-line {
+  display: grid;
+  gap: var(--space-1);
+}
+.po-line__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.po-line__title {
+  margin: 0;
+  color: var(--ink);
+  font-weight: var(--type-body-strong-weight);
+  overflow-wrap: anywhere;
+}
+
+/* Onglet « Offres » de la fiche. */
+.po-page {
+  display: grid;
+  gap: var(--space-3);
+}
+.po-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.po-head b {
+  min-width: 0;
+}
+.po-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.po-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.po-row__thumb {
+  display: block;
+  width: calc(var(--space-12) + var(--space-2));
+  height: calc(var(--space-12) + var(--space-6));
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+.po-row__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.po-row__thumb:focus-visible,
+.po-row__title:focus-visible {
+  outline: calc(var(--space-1) / 2) solid var(--accent-text);
+  outline-offset: calc(var(--space-1) / 2);
+}
+.po-row__text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.po-row__title {
+  color: var(--ink);
+  font-weight: var(--type-body-strong-weight);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.po-row__caption {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: var(--type-caption-size);
+}
+.po-old {
+  display: grid;
+  gap: var(--space-2);
+}
+.po-old__row {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.po-old__row p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Bloc « Étiquette » de « Publier » : la date en deux champs, la ligne des dates. */
+.po-form {
+  display: grid;
+  gap: var(--space-2);
+}
+.po-form__dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: calc(var(--space-1) / 2) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: var(--type-caption-size);
+}
+.po-form__dates b {
+  color: var(--ink);
+}
+.po-form__edit {
+  margin-left: auto;
+  min-height: var(--touch);
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: var(--type-body-strong-weight);
+  cursor: pointer;
+}
+.po-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 4), 1fr));
+  gap: var(--space-2);
+}
+
+/* Espace du pro : les deux boutons et les offres en cours. */
+.po-space {
+  display: grid;
+  gap: var(--space-2);
+}
+.po-space__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* En-tête d'une carte du Fil : l'étiquette « Offre » à droite du nom, avant le « ⋯ ». */
+.po-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

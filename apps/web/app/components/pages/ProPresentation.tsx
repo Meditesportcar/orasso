@@ -13,9 +13,12 @@ export function ProPresentation({
   pro,
   origin,
   onTrack,
+  session = false,
 }: {
   pro: ProPublic;
   origin: string;
+  /** Avec une session, les anciennes offres sont dans l'onglet « Offres » (R9c) : déplacées, pas dupliquées. */
+  session?: boolean;
   /** Un compteur de la fiche (appel, itinéraire) : silencieux, jamais bloquant. */
   onTrack: (kind: "call" | "route") => void;
 }) {
@@ -173,30 +176,32 @@ export function ProPresentation({
         </section>
       )}
 
-      <section className="s-stack" aria-labelledby="pro-posts" data-testid="pro-posts">
-        <h2 id="pro-posts" className="s-h2">
-          Offres et actualités
-        </h2>
-        {pro.posts === null ? (
-          <p className="s-notice">
-            {pro.postsCount > 0
-              ? `${pro.postsCount} publication${pro.postsCount > 1 ? "s" : ""} réservée${pro.postsCount > 1 ? "s" : ""} aux abonnés : suis ce pro pour les lire.`
-              : "Suis ce pro pour recevoir ses offres et ses actualités."}
-          </p>
-        ) : pro.posts.length === 0 ? (
-          <p className="s-notice">Aucune publication pour l'instant.</p>
-        ) : (
-          <ul className="s-reviews">
-            {pro.posts.map((post) => (
-              <li key={post.id} className="s-card" data-testid="pro-post">
-                <strong>{post.title}</strong>
-                <p className="s-prewrap">{post.body}</p>
-                <span className="o-t-caption s-muted">{formatDateTime(post.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {session ? null : (
+        <section className="s-stack" aria-labelledby="pro-posts" data-testid="pro-posts">
+          <h2 id="pro-posts" className="s-h2">
+            Offres et actualités
+          </h2>
+          {pro.posts === null ? (
+            <p className="s-notice">
+              {pro.postsCount > 0
+                ? `${pro.postsCount} publication${pro.postsCount > 1 ? "s" : ""} réservée${pro.postsCount > 1 ? "s" : ""} aux abonnés : suis ce pro pour les lire.`
+                : "Suis ce pro pour recevoir ses offres et ses actualités."}
+            </p>
+          ) : pro.posts.length === 0 ? (
+            <p className="s-notice">Aucune publication pour l'instant.</p>
+          ) : (
+            <ul className="s-reviews">
+              {pro.posts.map((post) => (
+                <li key={post.id} className="s-card" data-testid="pro-post">
+                  <strong>{post.title}</strong>
+                  <p className="s-prewrap">{post.body}</p>
+                  <span className="o-t-caption s-muted">{formatDateTime(post.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <Plate as="section" aria-labelledby="pro-share">
         <h2 id="pro-share" className="s-h2">
