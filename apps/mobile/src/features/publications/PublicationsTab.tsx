@@ -14,7 +14,7 @@ import {
   viewMode,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { cacheGetJson, cacheSetJson } from "@/lib/kv";
@@ -68,6 +68,8 @@ type TabProps = {
   filter?: AuthorPostsFilter;
   /** Lot R8g : une phrase d'état vide propre à une page (le titre reste « Pas encore de publication »). */
   emptyText?: string;
+  /** Lot R8g : change quand la page est relue (geste, retour) : la liste se relit **sans être démontée** (en cas d échec elle garde ses éléments). */
+  reloadToken?: number;
 };
 
 /**
@@ -94,10 +96,18 @@ function PublicationsBody({
   follow,
   filter,
   emptyText,
+  reloadToken,
 }: TabProps) {
   const { t } = useTheme();
   const router = useRouter();
   const list = usePublications(authorKey, filter, !restrictedHint, mine);
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un jeton neuf relit la liste
+  useEffect(() => {
+    if (reloadToken === undefined || seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void list.reload();
+  }, [reloadToken]);
   const [mode, setMode] = useViewMode();
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(false);

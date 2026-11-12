@@ -5,6 +5,7 @@
 import { Button } from "@orasso/design-system/web";
 import {
   appendUnique,
+  aspectOfPhotos,
   feedPublishLabels as FP,
   importantReasonLabels,
   publicationsLabels as PL,
@@ -14,8 +15,10 @@ import {
 } from "@orasso/shared";
 import { useState } from "react";
 
+import "../../styles/fil.css";
 import "../../styles/pages.css";
 import { apiFetch } from "../../lib/api.client";
+import { FeedPhotos } from "../fil/Cards";
 
 export function PublicPublications({
   authorKey,
@@ -61,11 +64,16 @@ export function PublicPublications({
     <div className="pg-public" data-testid="public-publications">
       {items.map((post) => {
         const meta = tileMeta(post, now);
-        const photo = post.photos[0];
         return (
           <article key={post.id} className="pg-public__card" data-testid="public-publication">
-            {photo ? (
-              <img src={photo.url} alt="" width={photo.width} height={photo.height} loading="lazy" decoding="async" />
+            {post.photos.length > 0 ? (
+              <FeedPhotos
+                post={{
+                  photos: post.photos,
+                  aspect: aspectOfPhotos(post.photos),
+                  author: { pseudo: post.author.name } as never,
+                }}
+              />
             ) : null}
             <div className="pg-public__body">
               {post.important ? (
