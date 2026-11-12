@@ -36,6 +36,8 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   // Numéro de la dernière demande partie (`give` ou `refresh`) : une réponse n'est appliquée que si aucune demande plus récente est partie
   // depuis (deux relocalisations successives, une relecture revenue après un nouveau geste : la plus récente reste).
   let requestSeq = 0;
+  // Nombre de `give` en vol : une relecture ne part pas pendant un geste (elle relirait l'ancienne position et la ferait perdre).
+  let givesInFlight = 0;
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -91,6 +93,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       if (!ticket || !this.valid(ticket)) return false;
       const { owner, gen } = ticket;
       const seq = ++requestSeq;
+      givesInFlight += 1;
       try {
         const at = await deps.weatherAt(coarse);
         if (deps.scope() !== owner || gen !== generation || seq !== requestSeq) return false;
@@ -98,6 +101,8 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
         return true;
       } catch {
         return false;
+      } finally {
+        givesInFlight -= 1;
       }
     },
     /** Relit la météo de la position gardée : au plus toutes les `POSITION_REFRESH_MS`, sauf `force` (geste manuel). */
@@ -106,11 +111,22 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       const { coarse, owner, fetchedAt } = state;
       if (!coarse || owner === null || owner !== deps.scope()) return;
       if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return;
+      // Un geste est en vol : sa réponse donnera la position la plus récente, la relecture de l'ancienne ne part pas.
+      if (givesInFlight > 0) return;
       const gen = generation;
-      const seq = ++requestSeq;
+      // La relecture ne prend pas de numéro : elle n'annule jamais un geste. Elle n'est appliquée que si aucun `give` n'est parti depuis
+      // (numéro inchangé) et si la position gardée est toujours celle qu'elle a relue.
+      const seq = requestSeq;
       try {
         const at = await deps.weatherAt(coarse);
-        if (deps.scope() !== owner || gen !== generation || state.owner !== owner || seq !== requestSeq) return;
+        if (
+          deps.scope() !== owner ||
+          gen !== generation ||
+          state.owner !== owner ||
+          seq !== requestSeq ||
+          state.coarse !== coarse
+        )
+          return;
         set({ at, fetchedAt: deps.now() });
       } catch {
         // Hors ligne ou limite atteinte : la dernière météo connue reste affichée.

@@ -180,4 +180,54 @@ describe("position en mémoire de « Ma météo »", () => {
     await refresh;
     expect(t.store.view().at?.label).toBe("B");
   });
+
+  it("tour 6 : un give(B) en vol, puis un refresh : le refresh ne part pas, B reste avec sa météo", async () => {
+    const t = setup();
+    const first = t.store.give({ lat: 42.5, lng: 3.0 });
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    const refresh = t.store.refresh(true);
+    // Aucune relecture de l'ancienne position n'est partie pendant le geste.
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 6 : relecture lente, puis give(B) : dans les deux ordres de réponse, B reste", async () => {
+    for (const refreshFirst of [true, false]) {
+      const t = setup();
+      const first = t.store.give({ lat: 42.5, lng: 3.0 });
+      t.pending[0]?.resolve(at("A"));
+      await first;
+      t.advance(POSITION_REFRESH_MS + 1);
+      const refresh = t.store.refresh(true);
+      const give = t.store.give({ lat: 42.7, lng: 2.9 });
+      if (refreshFirst) {
+        t.pending[1]?.resolve(at("A, relue"));
+        t.pending[2]?.resolve(at("B"));
+      } else {
+        t.pending[2]?.resolve(at("B"));
+        t.pending[1]?.resolve(at("A, relue"));
+      }
+      await Promise.all([refresh, give]);
+      expect(t.store.view().at?.label).toBe("B");
+    }
+  });
+
+  it("tour 6 : une relecture sans geste concurrent s'applique toujours", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh();
+    t.pending[1]?.resolve(at("A, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("A, relue");
+  });
 });
