@@ -1,0 +1,255 @@
+/* Lot R8q : « Pratique » du site (maquette R8.12 : `.r8pq`, `.r8prow`, `.r8secrow`, `.r8map`, `.r8pin2`, `.r8psel`, `.r8pbar`). Jetons seulement. */
+.pq {
+  min-width: 0;
+}
+.pq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.pq-rows {
+  display: grid;
+  gap: var(--space-2);
+}
+.pq-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--plate-muted);
+}
+.pq-page .pq-hint {
+  color: var(--ink-muted);
+}
+.pq-hint svg {
+  flex: none;
+  margin-top: 2px;
+}
+.pq-gps {
+  display: flex;
+}
+.pq-credits {
+  display: grid;
+  gap: 2px;
+}
+
+/* « Près de moi | Près de ma sortie » : segments en bloc, l'actif à l'encre (la police plafonnée par `.o-t-body-strong`). */
+.pq-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+.pq-seg__btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.05;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.pq-seg__btn[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+.pq-seg__btn:focus-visible,
+.pq-vt__btn:focus-visible,
+.pq-go__btn:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* Une ligne : l'icône de la sorte, le titre (il passe à la ligne, il ne se coupe jamais), « Y aller ». */
+.pq-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+}
+.pq-row.is-on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pq-row__pic {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.pq-row__text {
+  display: grid;
+  min-width: 0;
+}
+.pq-row__text b,
+.pq-row__text small {
+  overflow-wrap: anywhere;
+}
+.pq-row__text small {
+  color: var(--ink-muted);
+}
+
+/* « Y aller » : un bouton qui déplie Maps et Waze (la même paire que la fiche d'un événement). */
+.pq-go {
+  position: relative;
+}
+.pq-go > summary {
+  list-style: none;
+}
+.pq-go > summary::-webkit-details-marker {
+  display: none;
+}
+.pq-go__btn {
+  min-height: 40px;
+  cursor: pointer;
+}
+.pq-go__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 5;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-poster);
+}
+
+/* La carte (`.r8map`, 360 px) : le lieu touché dans une carte `.r8psel` en bas, « Y aller » en bouton principal. */
+.pq-page {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+.pq-mapwrap {
+  position: relative;
+}
+.pq-map {
+  height: 360px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--map-land);
+}
+.pq-selected {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+}
+.pq-selected .pq-row {
+  box-shadow: var(--shadow-poster);
+}
+.pq-pin {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 0 0 2px var(--ink);
+  cursor: pointer;
+}
+.pq-pin[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-card);
+}
+.pq-me {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 5px var(--accent-soft);
+}
+.pq-event {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--ground);
+}
+
+/* La bascule « Liste | Carte » collée en bas (`.r8pbar`), de la même famille que celle de l'Explorer. */
+.pq-bar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 12;
+  display: flex;
+  justify-content: center;
+}
+.pq-vt {
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bar);
+  box-shadow: var(--shadow-poster);
+}
+.pq-vt__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--bar-muted);
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.pq-vt__btn[aria-selected="true"] {
+  background: var(--bar-ink);
+  color: var(--bar);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pq-go__menu {
+    animation: pq-fade 120ms ease-out;
+  }
+}
+@keyframes pq-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 900px) {
+  .pq-page {
+    max-width: 720px;
+    margin-inline: auto;
+    width: 100%;
+  }
+}

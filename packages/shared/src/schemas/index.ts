@@ -26,6 +26,7 @@ export * from "./moderation";
 export * from "./pageFollows";
 export * from "./partnerships";
 export * from "./passport";
+export * from "./practical";
 export * from "./presence";
 export * from "./pro";
 export * from "./profile";

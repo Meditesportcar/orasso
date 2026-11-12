@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WeatherAt } from "../weather";
 
-import { createPositionStore, POSITION_REFRESH_MS } from "./positionStore";
+import {
+  createPositionStore,
+  POSITION_INFLIGHT_STALE_MS,
+  POSITION_REFRESH_MS,
+  POSITION_REQUEST_TIMEOUT_MS,
+} from "./positionStore";
 
 const at = (label: string): WeatherAt => ({ label, weather: null });
 const here = { lat: 42.7, lng: 2.9 };
@@ -150,5 +155,220 @@ describe("position en mémoire de « Ma météo »", () => {
     t.pending[1]?.reject(new Error("hors ligne"));
     await r;
     expect(t.store.view().at?.label).toBe("Canet");
+  });
+
+  it("tour 5 : deux relocalisations A puis B, la réponse de A arrive après celle de B : B reste", async () => {
+    const t = setup();
+    const a = t.store.give({ lat: 42.5, lng: 3.0 });
+    const b = t.store.give({ lat: 42.7, lng: 2.9 });
+    // B répond d'abord, A (plus lente) ensuite.
+    t.pending[1]?.resolve(at("B"));
+    expect(await b).toBe(true);
+    t.pending[0]?.resolve(at("A"));
+    expect(await a).toBe(false);
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 5 : une relecture partie avant un nouveau geste et revenue après ne réécrit pas la nouvelle position", async () => {
+    const t = setup();
+    const first = t.store.give({ lat: 42.5, lng: 3.0 });
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.pending[2]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    // La relecture de l'ancienne case revient en retard : elle n'écrase pas la météo de B.
+    t.pending[1]?.resolve(at("A, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+  });
+
+  it("tour 6 : un give(B) en vol, puis un refresh : le refresh ne part pas, B reste avec sa météo", async () => {
+    const t = setup();
+    const first = t.store.give({ lat: 42.5, lng: 3.0 });
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    const refresh = t.store.refresh(true);
+    // Aucune relecture de l'ancienne position n'est partie pendant le geste.
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 6 : relecture lente, puis give(B) : dans les deux ordres de réponse, B reste", async () => {
+    for (const refreshFirst of [true, false]) {
+      const t = setup();
+      const first = t.store.give({ lat: 42.5, lng: 3.0 });
+      t.pending[0]?.resolve(at("A"));
+      await first;
+      t.advance(POSITION_REFRESH_MS + 1);
+      const refresh = t.store.refresh(true);
+      const give = t.store.give({ lat: 42.7, lng: 2.9 });
+      if (refreshFirst) {
+        t.pending[1]?.resolve(at("A, relue"));
+        t.pending[2]?.resolve(at("B"));
+      } else {
+        t.pending[2]?.resolve(at("B"));
+        t.pending[1]?.resolve(at("A, relue"));
+      }
+      await Promise.all([refresh, give]);
+      expect(t.store.view().at?.label).toBe("B");
+    }
+  });
+
+  it("tour 6 : une relecture sans geste concurrent s'applique toujours", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh();
+    t.pending[1]?.resolve(at("A, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 7 : deux relectures concurrentes : la seconde ne part pas, la première s'applique", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const one = t.store.refresh(true);
+    const two = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("A, relue"));
+    await Promise.all([one, two]);
+    expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 7 : une ancienne demande suspendue, l'oubli, une nouvelle position réussie : la relecture suivante part et s'applique", async () => {
+    const t = setup();
+    // La demande d'avant ne répondra jamais.
+    void t.store.give({ lat: 42.5, lng: 3.0 });
+    t.store.forget();
+    const b = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.pending[1]?.resolve(at("B"));
+    expect(await b).toBe(true);
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("B, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B, relue");
+  });
+
+  it("tour 7 : un autre compte : la demande suspendue du premier ne bloque pas la relecture du second", async () => {
+    const t = setup();
+    const a = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await a;
+    void t.store.give({ lat: 42.6, lng: 2.8 });
+    t.setScope("B");
+    t.store.invalidate();
+    t.store.forget();
+    const b = t.store.give(here);
+    t.pending[2]?.resolve(at("B"));
+    await b;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(4);
+    t.pending[3]?.resolve(at("B, relue"));
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B, relue");
+  });
+
+  it("tour 7 : une relecture suspendue depuis plus de 30 s ne bloque plus : la relecture suivante part", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    // Une relecture ne répond jamais.
+    const stuck = t.store.refresh(true);
+    const skipped = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const later = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("A, relue"));
+    await Promise.all([later, skipped]);
+    expect(t.store.view().at?.label).toBe("A, relue");
+    void stuck;
+  });
+
+  it("tour 8 : un give(B) en vol depuis plus de 30 s : un refresh ne part pas, B répond et reste avec sa météo", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 8 : un refresh suspendu depuis plus de 30 s : un nouveau refresh part et s'applique ; l'ancien, revenu ensuite, est jeté", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    const stuck = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const again = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("A, relue"));
+    await again;
+    expect(t.store.view().at?.label).toBe("A, relue");
+    t.pending[1]?.resolve(at("A, très ancienne"));
+    await stuck;
+    expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 9 : un give dont la requête dépasse le délai : échec, inflight libéré, la relecture suivante part ; la réponse tardive est ignorée", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup();
+      const first = t.store.give(here);
+      t.pending[0]?.resolve(at("A"));
+      await vi.advanceTimersByTimeAsync(0);
+      await first;
+      const give = t.store.give({ lat: 42.7, lng: 2.9 });
+      // Un refresh ne passe pas devant un give actif.
+      t.advance(1);
+      const blocked = t.store.refresh(true);
+      expect(t.calls()).toBe(2);
+      await blocked;
+      // La requête ne répond jamais : abandonnée au bout du délai.
+      await vi.advanceTimersByTimeAsync(POSITION_REQUEST_TIMEOUT_MS + 1);
+      expect(await give).toBe(false);
+      // L'état reste sur A ; une nouvelle relecture peut partir.
+      expect(t.store.view().at?.label).toBe("A");
+      const refresh = t.store.refresh(true);
+      expect(t.calls()).toBe(3);
+      t.pending[2]?.resolve(at("A, relue"));
+      await vi.advanceTimersByTimeAsync(0);
+      await refresh;
+      expect(t.store.view().at?.label).toBe("A, relue");
+      // La réponse tardive du geste abandonné ne fait rien.
+      t.pending[1]?.resolve(at("B, très tard"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(t.store.view().at?.label).toBe("A, relue");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

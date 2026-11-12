@@ -35,6 +35,7 @@ import { AppState, Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/features/home/HomeWidgets";
 import { Stamp } from "@/features/passport/Stamp";
+import { PracticalBlock } from "@/features/practical/PracticalBlock";
 import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
 import { arrivalPhrase, liveApplications } from "@/features/sorties/model";
 import { MyWeatherBlock } from "@/features/weather/MyWeatherBlock";
@@ -447,6 +448,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       </>
     ) : null,
     weather: data?.myWeather ? <MyWeatherBlock myWeather={data.myWeather} /> : null,
+    practical: <PracticalBlock />,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
     favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
     pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,

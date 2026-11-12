@@ -3,7 +3,7 @@
 // stockage du navigateur) : recharger la page l'oublie. Tour 2 : liée au compte de la session (annonce de session déjà en
 // place, `sessionChannel`) et vidée dès que la session change ou disparaît (expiration, déconnexion, autre compte, dans
 // n'importe quelle fenêtre) ; une réponse lancée sous l'ancienne session est jetée (règles dans `positionStore` partagé).
-import { coarsePosition, createPositionStore, type WeatherAt } from "@orasso/shared";
+import { coarsePosition, createPositionStore, type LatLng, type PositionTicket, type WeatherAt } from "@orasso/shared";
 import { useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
@@ -34,11 +34,11 @@ if (typeof window !== "undefined") {
 /** La position visible pour la session courante (tests, et lecture sans React). */
 export const peekWeatherPosition = () => store.view();
 
-const EMPTY = { at: null, busy: false } as const;
+const EMPTY = { at: null, busy: false, coarse: null } as const;
 let last = store.view();
 const snapshot = () => {
   const next = store.view();
-  if (next.at !== last.at || next.busy !== last.busy) last = next;
+  if (next.at !== last.at || next.busy !== last.busy || next.coarse !== last.coarse) last = next;
   return last;
 };
 
@@ -81,3 +81,7 @@ export const refreshMyPosition = (force = false) => store.refresh(force);
 
 /** Oublie la position (une ville choisie la remplace). */
 export const forgetMyPosition = () => store.forget();
+
+/** Lot R8q : « Pratique » donne à la météo la case qu'il vient de lire (ticket pris au geste), sans seconde lecture de l'appareil. */
+export const beginMyPosition = () => store.begin();
+export const giveMyPositionCell = (coarse: LatLng, ticket: PositionTicket | null) => store.give(coarse, ticket);
