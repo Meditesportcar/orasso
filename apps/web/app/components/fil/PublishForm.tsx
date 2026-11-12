@@ -77,6 +77,7 @@ import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
+import { mustDropChosenEvent } from "./eventDrop";
 import { rememberPublished } from "./mine";
 import { convertAll, holdLock } from "./prepare";
 
@@ -268,11 +269,15 @@ export function PublishForm({
     eventBlock && (loaded.account !== userId || loaded.key !== author.key || loaded.items === null) && !loaded.failed;
   const event = events.find((e) => e.id === choice.eventId) ?? null;
   // Un événement choisi qui n'est plus dans la liste relue (plus rattachable) : retiré, le reste du brouillon reste.
+  // Jamais pendant un envoi figé en attente de vérification : « Réessayer » renvoie le corps gardé, la saisie affichée
+  // doit rester celle de ce corps (petit lot site, P14a).
   useEffect(() => {
-    if (choice.eventId && loaded.items && loaded.account === userId && loaded.key === author.key) {
-      if (!loaded.items.some((e) => e.id === choice.eventId)) setChoice((c) => chooseEvent(c, null));
+    const fresh = loaded.account === userId && loaded.key === author.key;
+    const readableIds = fresh && loaded.items ? loaded.items.map((e) => e.id) : null;
+    if (mustDropChosenEvent({ uncertain: uncertain !== null, chosenEventId: choice.eventId, readableIds })) {
+      setChoice((c) => chooseEvent(c, null));
     }
-  }, [loaded, choice.eventId, userId, author.key]);
+  }, [loaded, choice.eventId, userId, author.key, uncertain]);
   const showImportant = importantAvailable(author, event);
   // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
   // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.

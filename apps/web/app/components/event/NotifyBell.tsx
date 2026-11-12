@@ -19,20 +19,20 @@ class NoPlaceError extends Error {}
  * « Nouveautés de l'événement », enregistré au changement. Place perdue entre-temps (403 `no_place`) : le message, puis
  * la cloche disparaît à la fermeture de la fenêtre. Sans session ou sans place : rien.
  */
-export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string }) {
+export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId: string | null; stamp?: string }) {
   const [hasPlace, setHasPlace] = useState(false);
   const [news, setNews] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const writer = useRef<SerialWriter<boolean> | null>(null);
-  const accountAlive = useSessionGuard();
+  const guard = useSessionGuard(userId);
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
   // Un écrivain neuf à chaque lecture de la place : envois sérialisés, dernier choix gardé, réponses périmées ignorées.
   const startWriter = (initial: boolean) => {
     writer.current = createSerialWriter<boolean>({
       initial,
-      alive: accountAlive,
+      alive: guard.alive,
       write: async (value) => {
         const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
         if (saved.ok) return saved.data.news;
@@ -48,6 +48,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         } else setMessage(e instanceof Error && e.message ? e.message : L.ficheSaveFailed);
       },
     });
+    guard.watch(writer.current);
   };
 
   // `stamp` : l'état des candidatures de la fiche (la place est relue quand il change).
@@ -83,7 +84,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         className="en-bell"
         aria-label={L.bellLabel}
         onClick={() => {
-          setMessage(null);
+          // Un échec tardif arrivé fenêtre fermée reste à lire : le message s'efface à la fermeture, pas à l'ouverture.
           dialog.current?.showModal();
         }}
         data-testid="notify-bell"
@@ -95,6 +96,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         className="en-dialog"
         aria-labelledby="notify-bell-title"
         onClose={() => {
+          setMessage(null);
           if (gone) setHasPlace(false);
         }}
         data-testid="notify-sheet"

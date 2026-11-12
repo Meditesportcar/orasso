@@ -5,6 +5,7 @@ import { type AuthorPostsFilter, type AuthorPostsPage, applyNextPage, type FeedP
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { createRetryTracker } from "../../lib/retryTracker";
 import { onPostChanged, onPostRemoved } from "./signal";
 
 export type PublicationsState = {
@@ -39,13 +40,18 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
   const [state, setState] = useState<PublicationsState>(EMPTY);
   const seq = useRef(0);
   const cursorRef = useRef<string | null>(null);
+  const retryOf = useRef(createRetryTracker());
 
   const reload = useCallback(async () => {
     const mine = ++seq.current;
     setState((s) => ({ ...s, loading: !s.loaded, error: null }));
     const res = await apiFetch<AuthorPostsPage>(pathOf(authorKey, null, filter));
     if (mine !== seq.current) return;
-    if (!res.ok) return setState((s) => ({ ...s, loading: false, loadingMore: false, error: res.error.message }));
+    if (!res.ok) {
+      retryOf.current.failed("reload");
+      return setState((s) => ({ ...s, loading: false, loadingMore: false, error: res.error.message }));
+    }
+    retryOf.current.succeeded();
     cursorRef.current = res.data.nextCursor;
     setState({
       items: res.data.items,
@@ -82,8 +88,11 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     setState((s) => (s.loadingMore ? s : { ...s, loadingMore: true, error: null }));
     const res = await apiFetch<AuthorPostsPage>(pathOf(authorKey, cursor, filter));
     if (mine !== seq.current) return;
-    if (!res.ok) return setState((s) => ({ ...s, loadingMore: false, error: res.error.message }));
-    cursorRef.current = res.data.nextCursor;
+    if (!res.ok) {
+      retryOf.current.failed("more");
+      return setState((s) => ({ ...s, loadingMore: false, error: res.error.message }));
+    }
+    retryOf.current.succeeded();
     // L'accès a disparu entre deux pages : la restriction vaut pour toute la liste (`applyNextPage`).
     cursorRef.current = res.data.restricted ? null : res.data.nextCursor;
     setState((s) => ({ ...s, ...applyNextPage(s, res.data), loadingMore: false, error: null }));
@@ -98,5 +107,8 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     [],
   );
 
-  return { ...state, reload, more };
+  /** « Réessayer » : relit après l'échec d'une relecture, relance la page suivante après l'échec d'une page. */
+  const retry = useCallback(() => (retryOf.current.target() === "reload" ? reload() : more()), [reload, more]);
+
+  return { ...state, reload, more, retry };
 }

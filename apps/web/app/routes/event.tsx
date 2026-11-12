@@ -622,7 +622,12 @@ function EventPage({
                 {place ? ` · ${place}` : ""}
               </div>
               {connected && (
-                <NotifyBell key={event.id} eventId={event.id} stamp={mine.map((a) => a.status).join(",")} />
+                <NotifyBell
+                  key={event.id}
+                  eventId={event.id}
+                  userId={userId}
+                  stamp={mine.map((a) => a.status).join(",")}
+                />
               )}
             </div>
             <div className="ev__poster-frame" data-testid="event-poster">

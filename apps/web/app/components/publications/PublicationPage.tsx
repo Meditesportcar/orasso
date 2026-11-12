@@ -12,7 +12,7 @@ import { FicheBar } from "../FicheBar";
 import { cardFor } from "../fil/Cards";
 import { postLive } from "../fil/commentsLive";
 import { PostMenu } from "./PostMenu";
-import { onPostChanged } from "./signal";
+import { afterPostChanged } from "./signal";
 
 export function PublicationPage({ post, back }: { post: FeedPostWithManage | null; back: string }) {
   const [menu, setMenu] = useState(false);
@@ -27,13 +27,8 @@ export function PublicationPage({ post, back }: { post: FeedPostWithManage | nul
   }, [postId]);
   // Collaboration (R8o) : un co-auteur retiré ou une invitation annulée depuis le menu relit la page.
   // Après le temps de lire la confirmation du menu (la page seule se recharge, la confirmation disparaîtrait).
-  useEffect(
-    () =>
-      onPostChanged((id) => {
-        if (id === postId) setTimeout(() => window.location.reload(), 2000);
-      }),
-    [postId],
-  );
+  // Le minuteur est annulé au démontage et avant d'en poser un nouveau (petit lot site, P41).
+  useEffect(() => afterPostChanged(postId, () => window.location.reload(), 2000), [postId]);
   return (
     <div className="pub-page" data-testid="publication-page">
       <FicheBar title={L.pageTitle} back={back} closeLabel={L.back} />

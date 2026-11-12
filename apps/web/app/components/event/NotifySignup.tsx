@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
+import { createSessionGuard, type SessionGuard } from "../../lib/sessionGuard";
 import "../../styles/event-notify.css";
 
 // Lot R8n2 (maquette R8.11) : les pièces des notifications d'un événement sur le site, partagées par la fin de la
@@ -20,22 +21,18 @@ import "../../styles/event-notify.css";
 // l'organisateur. Mêmes mots que l'appli (`eventNotifyLabels`).
 
 /**
- * Garde de compte : faux dès qu'un compte est annoncé (connexion, déconnexion, autre fenêtre) : une écriture différée ne
- * part jamais avec la session d'un autre compte (`createSerialWriter`, option `alive`).
+ * Garde de compte : faux dès qu'un autre compte que celui de la page est annoncé (connexion, déconnexion, autre fenêtre) :
+ * une écriture différée ne part jamais avec la session d'un autre compte (`createSerialWriter`, option `alive`). Le compte
+ * de référence est le `userId` de la page ; l'écoute dure jusqu'à la fin des écritures en cours (`guard.watch`).
  */
-export function useSessionGuard(): () => boolean {
-  const changed = useRef(false);
-  // La fenêtre annonce d'abord son propre compte (hydratation) : la première annonce fixe le compte, une autre le change.
-  const known = useRef<string | null | undefined>(undefined);
-  useEffect(
-    () =>
-      listenSession((userId) => {
-        if (known.current === undefined) known.current = userId;
-        else if (known.current !== userId) changed.current = true;
-      }),
-    [],
-  );
-  return useCallback(() => !changed.current, []);
+export function useSessionGuard(userId: string | null): SessionGuard {
+  const ref = useRef<{ userId: string | null; guard: SessionGuard } | null>(null);
+  if (!ref.current || ref.current.userId !== userId) {
+    ref.current = { userId, guard: createSessionGuard(userId, listenSession) };
+  }
+  const guard = ref.current.guard;
+  useEffect(() => guard.attach(), [guard]);
+  return guard;
 }
 
 /** Le bloc « Essentiel » : cadenas, « toujours actif », les six lignes. */
@@ -206,14 +203,22 @@ export function RecipientsBanner({ count, timing }: { count: number | null; timi
  * fin de l'écriture avant de continuer. Une lecture impossible n'est jamais présentée comme « activé » : erreur et
  * « Réessayer ».
  */
-export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () => void }) {
+export function NotifySignup({
+  eventId,
+  userId,
+  onDone,
+}: {
+  eventId: string;
+  userId: string | null;
+  onDone: () => void;
+}) {
   const [news, setNews] = useState(true);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const writer = useRef<SerialWriter<boolean> | null>(null);
   const alive = useRef(true);
-  const accountAlive = useSessionGuard();
+  const guard = useSessionGuard(userId);
   // Un échec d'écriture pas encore « vu » à l'appui : le premier appui le montre, le suivant ferme.
   const unseenFailure = useRef(false);
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
@@ -232,7 +237,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       if (!res.ok) return setStatus("error");
       writer.current = createSerialWriter<boolean>({
         initial: res.data.news,
-        alive: accountAlive,
+        alive: guard.alive,
         write: async (value) => {
           const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
           if (!saved.ok) throw new Error(saved.error.message);
@@ -250,10 +255,11 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
           setMessage(L.saveFailed);
         },
       });
+      guard.watch(writer.current);
       setNews(res.data.news);
       setStatus("ready");
     });
-  }, [url, accountAlive]);
+  }, [url, guard]);
   useEffect(load, [load]);
 
   async function noted() {
