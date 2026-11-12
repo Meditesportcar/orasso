@@ -491,15 +491,13 @@ describe("7. les CHECK de la base", () => {
   it("fiche pro : titre de 1 ou 81 caractères, fin absente, début après la fin : refusés", async () => {
     const { owner, pro } = await world();
     const attempt = (values: Record<string, unknown>) =>
-      db
-        .insert(feedPosts)
-        .values({
-          authorId: owner.id,
-          persona: "pro",
-          proId: pro.id,
-          tag: "offer",
-          ...values,
-        } as typeof feedPosts.$inferInsert);
+      db.insert(feedPosts).values({
+        authorId: owner.id,
+        persona: "pro",
+        proId: pro.id,
+        tag: "offer",
+        ...values,
+      } as typeof feedPosts.$inferInsert);
     await expect(attempt({ title: "A", offerEndsOn: "2026-12-01" })).rejects.toThrow();
     await expect(attempt({ title: "x".repeat(81), offerEndsOn: "2026-12-01" })).rejects.toThrow();
     await expect(attempt({ title: "Titre", offerEndsOn: null })).rejects.toThrow();
