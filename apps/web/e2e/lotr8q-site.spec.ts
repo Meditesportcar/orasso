@@ -173,11 +173,11 @@ test("près de ma sortie : le sélecteur, la ligne « Autour de … », « Voir 
 
 test("rien à moins de 30 km : une ville sans lieu proche", async ({ browser }) => {
   const cookie = cookies[NO_OUTING] ?? null;
-  await apiCall(cookie, "PUT", "/me/weather/places", { places: [{ label: "Toulouse", lat: 43.6, lng: 1.44 }] });
+  await apiCall(cookie, "PUT", "/me/weather/places", { places: [{ label: "Lille", lat: 50.63, lng: 3.06 }] });
   const { ctx, page } = await openHome(browser);
   const b = page.getByTestId("widget-practical");
   await expect(b.getByTestId("practical-empty")).toContainText("Rien à moins de 30 km.", { timeout: 30_000 });
-  await expect(b.getByTestId("practical-hint")).toContainText("Autour de Toulouse, ta ville.");
+  await expect(b.getByTestId("practical-hint")).toContainText("Autour de Lille, ta ville.");
   await shot(page, "site-rien-390");
   await apiCall(cookie, "PUT", "/me/weather/places", { places: [] });
   await ctx.close();
