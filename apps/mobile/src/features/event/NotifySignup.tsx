@@ -9,6 +9,7 @@ import { StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
+import { accountGuard } from "@/lib/kv";
 import { Muted } from "@/ui/Muted";
 import { EssentialBlock, SwitchRow } from "./NotifyPrefsSheet";
 
@@ -38,10 +39,16 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       .eventNotificationPrefs(eventId)
       .then((prefs) => {
         if (!alive.current) return;
+        const guard = accountGuard();
         writer.current = createSerialWriter<boolean>({
           initial: prefs.news,
+          alive: guard.current,
           write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
-          onSettled: (value) => alive.current && setNews(value),
+          onSettled: (value) => {
+            // La dernière intention est enregistrée : un ancien échec n'a plus rien à montrer.
+            unseenFailure.current = false;
+            if (alive.current) setNews(value);
+          },
           onError: (confirmed) => {
             unseenFailure.current = true;
             if (!alive.current) return;

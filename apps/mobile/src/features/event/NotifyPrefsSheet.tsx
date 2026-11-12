@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 
@@ -143,13 +144,17 @@ export function NotifyPrefsSheet({
   eventId,
   visible,
   initialNews,
+  startMessage = null,
   onClose,
   onLost,
 }: {
   eventId: string;
   visible: boolean;
   initialNews: boolean;
-  onClose: () => void;
+  /** Rend la promesse de fin des écritures (`false` : la dernière a échoué). */
+  onClose: (idle: Promise<boolean>) => void;
+  /** Message d'une écriture qui a échoué après la fermeture. */
+  startMessage?: string | null;
   onLost: () => void;
 }) {
   const { t } = useTheme();
@@ -162,9 +167,12 @@ export function NotifyPrefsSheet({
   useEffect(() => {
     if (!visible) return;
     setNews(initialNews);
-    setMessage(null);
+    setMessage(startMessage);
+    // Le compte de l'ouverture : un autre compte ensuite n'hérite jamais d'un envoi différé.
+    const guard = accountGuard();
     writer.current = createSerialWriter<boolean>({
       initial: initialNews,
+      alive: guard.current,
       write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
       onSettled: setNews,
       onError: (confirmed, e) => {
@@ -175,11 +183,11 @@ export function NotifyPrefsSheet({
         } else setMessage(errorMessage(e) || L.ficheSaveFailed);
       },
     });
-  }, [visible, initialNews, eventId]);
+  }, [visible, initialNews, eventId, startMessage]);
 
   // À la fermeture : on attend la fin des écritures avant que la cloche relise le réglage.
   const closeWhenIdle = () => {
-    void (writer.current?.whenIdle() ?? Promise.resolve(true)).then(onClose);
+    onClose(writer.current?.whenIdle() ?? Promise.resolve(true));
   };
 
   const change = (next: boolean) => {

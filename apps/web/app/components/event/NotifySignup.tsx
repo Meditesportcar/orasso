@@ -12,11 +12,28 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
 import "../../styles/event-notify.css";
 
 // Lot R8n2 (maquette R8.11) : les pièces des notifications d'un événement sur le site, partagées par la fin de la
 // candidature (« Ce que tu recevras pour cet événement »), la cloche de la fiche, les Réglages et la confirmation de
 // l'organisateur. Mêmes mots que l'appli (`eventNotifyLabels`).
+
+/**
+ * Garde de compte : faux dès qu'un compte est annoncé (connexion, déconnexion, autre fenêtre) : une écriture différée ne
+ * part jamais avec la session d'un autre compte (`createSerialWriter`, option `alive`).
+ */
+export function useSessionGuard(): () => boolean {
+  const changed = useRef(false);
+  useEffect(
+    () =>
+      listenSession(() => {
+        changed.current = true;
+      }),
+    [],
+  );
+  return useCallback(() => !changed.current, []);
+}
 
 /** Le bloc « Essentiel » : cadenas, « toujours actif », les six lignes. */
 export function EssentialBlock() {
@@ -193,6 +210,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
   const [busy, setBusy] = useState(false);
   const writer = useRef<SerialWriter<boolean> | null>(null);
   const alive = useRef(true);
+  const accountAlive = useSessionGuard();
   // Un échec d'écriture pas encore « vu » à l'appui : le premier appui le montre, le suivant ferme.
   const unseenFailure = useRef(false);
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
@@ -211,12 +229,17 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       if (!res.ok) return setStatus("error");
       writer.current = createSerialWriter<boolean>({
         initial: res.data.news,
+        alive: accountAlive,
         write: async (value) => {
           const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
           if (!saved.ok) throw new Error(saved.error.message);
           return saved.data.news;
         },
-        onSettled: (value) => alive.current && setNews(value),
+        onSettled: (value) => {
+          // La dernière intention est enregistrée : un ancien échec n'a plus rien à montrer.
+          unseenFailure.current = false;
+          if (alive.current) setNews(value);
+        },
         onError: (confirmed) => {
           unseenFailure.current = true;
           if (!alive.current) return;
@@ -227,7 +250,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
       setNews(res.data.news);
       setStatus("ready");
     });
-  }, [url]);
+  }, [url, accountAlive]);
   useEffect(load, [load]);
 
   async function noted() {

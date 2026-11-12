@@ -102,3 +102,72 @@ describe("createSerialWriter", () => {
     expect(n).toBe(0);
   });
 });
+
+describe("createSerialWriter : compte et réponses perdues (tour 5)", () => {
+  it("changement de compte pendant le premier envoi : aucun second envoi, rien d'affiché", async () => {
+    let account = "A";
+    const sent: boolean[] = [];
+    const settled: boolean[] = [];
+    const call = deferred<boolean>();
+    const w = createSerialWriter<boolean>({
+      initial: true,
+      alive: () => account === "A",
+      write: (v) => {
+        sent.push(v);
+        return call.promise;
+      },
+      onSettled: (v) => settled.push(v),
+      onError: () => settled.push(false),
+    });
+    w.set(false);
+    w.set(true);
+    await tick();
+    account = "B"; // A se déconnecte, B se connecte avant la première réponse
+    call.resolve(false);
+    expect(await w.whenIdle()).toBe(true);
+    expect(sent).toEqual([false]);
+    expect(settled).toEqual([]);
+  });
+
+  it("réponse perdue puis choix plus récent égal à l'ancienne valeur : il est quand même envoyé", async () => {
+    const sent: boolean[] = [];
+    const calls: ReturnType<typeof deferred<boolean>>[] = [];
+    const settled: boolean[] = [];
+    const w = createSerialWriter<boolean>({
+      initial: true,
+      write: (v) => {
+        sent.push(v);
+        const d = deferred<boolean>();
+        calls.push(d);
+        return d.promise;
+      },
+      onSettled: (v) => settled.push(v),
+      onError: () => settled.push(false),
+    });
+    w.set(false); // le serveur l'enregistre, la réponse se perd
+    w.set(true); // choix plus récent : égale la valeur confirmée d'avant
+    await tick();
+    calls[0]?.reject(new Error("réponse perdue"));
+    await tick();
+    expect(sent).toEqual([false, true]);
+    calls[1]?.resolve(true);
+    expect(await w.whenIdle()).toBe(true);
+    expect(settled).toEqual([true]);
+    expect(w.confirmed()).toBe(true);
+  });
+
+  it("échec sans choix plus récent : l'erreur, comme avant", async () => {
+    const errors: boolean[] = [];
+    const w = createSerialWriter<boolean>({
+      initial: true,
+      write: async () => {
+        throw new Error("réseau");
+      },
+      onSettled: () => undefined,
+      onError: (confirmed) => errors.push(confirmed),
+    });
+    w.set(false);
+    expect(await w.whenIdle()).toBe(false);
+    expect(errors).toEqual([true]);
+  });
+});

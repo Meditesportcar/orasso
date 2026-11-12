@@ -362,7 +362,11 @@ export function EventWizard({
     return () => clearInterval(timer);
   }, [notifyShown]);
   const notifyClock = now();
-  const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+  const notifyWhen = notifyTiming({
+    now: notifyClock,
+    startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)),
+    endsAt: notifyFieldsOfDraft(d).endsAt ?? saved?.endsAt ?? null,
+  });
   const formatsOn = useEventFormats();
   const formats = useMemo<EventFormat[]>(
     () => (formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format]),

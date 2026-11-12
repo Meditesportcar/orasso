@@ -210,7 +210,11 @@ export function EventWizard(props: Props) {
     return () => clearInterval(timer);
   }, [notifyShown]);
   const notifyClock = clockNow();
-  const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+  const notifyWhen = notifyTiming({
+    now: notifyClock,
+    startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)),
+    endsAt: notifyFieldsOfDraft(d).endsAt ?? saved?.endsAt ?? null,
+  });
 
   // Lot 36 : copie d'un événement (duplication) encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";

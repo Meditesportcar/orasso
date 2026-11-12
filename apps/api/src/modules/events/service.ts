@@ -41,7 +41,7 @@ import {
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
@@ -420,7 +420,7 @@ export const eventsService = {
       })
       .from(notifications)
       .where(and(eq(notifications.eventId, id), eq(notifications.type, "event_updated")))
-      .orderBy(desc(notifications.createdAt), desc(notifications.id))
+      .orderBy(sql`${notifications.createdAt} desc nulls last`, desc(notifications.id))
       .limit(1);
     return {
       lastNotify: lastNotify

@@ -17,25 +17,42 @@ export function createSerialWriter<T>(options: {
   onSettled: (value: T) => void;
   /** Un envoi a échoué : la dernière valeur confirmée, à rendre à l'interrupteur, et l'erreur. */
   onError: (confirmed: T, error: unknown) => void;
+  /**
+   * Garde vérifiée avant chaque envoi (comme `createFlameGate`) : fausse (autre compte, déconnexion), la file s'arrête sans
+   * rien envoyer ni afficher. Sans elle, un envoi différé partirait avec la session du moment.
+   */
+  alive?: () => boolean;
 }): SerialWriter<T> {
   let confirmed = options.initial;
   let desired = options.initial;
   let running: Promise<boolean> | null = null;
   let failed = false;
 
+  // Après un échec, la valeur du serveur est inconnue (la réponse a pu se perdre) : un choix plus récent est envoyé même
+  // s'il égale la dernière valeur confirmée.
+  let unknown = false;
+
   async function loop(): Promise<boolean> {
-    while (desired !== confirmed) {
+    while (unknown || desired !== confirmed) {
+      if (options.alive && !options.alive()) return true;
       const sent = desired;
       try {
         // Seule la réponse du dernier envoi compte : les envois ne se chevauchent jamais.
         confirmed = await options.write(sent);
+        unknown = false;
       } catch (error) {
+        if (desired !== sent) {
+          unknown = true;
+          continue;
+        }
+        unknown = false;
         desired = confirmed;
         failed = true;
         options.onError(confirmed, error);
         return false;
       }
     }
+    if (options.alive && !options.alive()) return true;
     options.onSettled(confirmed);
     return true;
   }

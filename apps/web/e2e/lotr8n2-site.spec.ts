@@ -280,6 +280,11 @@ test("site : lecture impossible, puis « C'est noté » pendant un envoi qui éc
   await expect(news).toBeChecked();
   expect((await prefsOf(a.cookie, event.id)).data.news).toBe(true);
   await page.unroute(prefsUrl);
+  // Tour 5 : un ancien échec ne neutralise pas « C'est noté » après une réussite (le premier appui ferme).
+  await news.uncheck();
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
+  await news.check();
+  await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(true);
   // Deux bascules rapprochées : le dernier choix est celui qui est enregistré.
   await news.uncheck();
   await news.check();

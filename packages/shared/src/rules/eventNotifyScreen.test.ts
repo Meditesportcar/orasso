@@ -1,8 +1,8 @@
 // Lot R8n2 : règles d'écran des notifications d'un événement (maquette R8.11). `now` toujours passé.
 import { describe, expect, it } from "vitest";
-
 import { initialEventDraft } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
+import { essentialQuietOverride } from "./eventNotifications";
 import {
   type NotifyFields,
   notifyChanged,
@@ -220,5 +220,19 @@ describe("le message d'après enregistrement suit l'échéance de l'API", () => 
     expect(notifyTimingOfSave("a", { createdAt: "a", deferred: true })).toBeNull();
     expect(notifyTimingOfSave("a", null)).toBeNull();
     expect(notifyTimingOfSave(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("événement terminé : même verdict que l'API (tour 5)", () => {
+  it("terminé la veille, modifié à 23 h : à 8 h (jamais « tout de suite »)", () => {
+    const now = paris("23:00");
+    const startsAt = paris("18:00", "2026-11-09");
+    const endsAt = paris("23:00", "2026-11-09");
+    expect(notifyTiming({ now, startsAt, endsAt })).toBe("at_8");
+    expect(essentialQuietOverride("event_updated", { endsAt, now })).toBeUndefined();
+    // En cours (fin à venir) : tout de suite, comme avant.
+    expect(notifyTiming({ now, startsAt, endsAt: paris("23:30") })).toBe("now");
+    // Sans fin connue : l'ancien comportement (début seul).
+    expect(notifyTiming({ now, startsAt })).toBe("now");
   });
 });

@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import "../../styles/event-notify.css";
-import { EssentialBlock, NotifySwitch } from "./NotifySignup";
+import { EssentialBlock, NotifySwitch, useSessionGuard } from "./NotifySignup";
 
 class NoPlaceError extends Error {}
 
@@ -26,11 +26,13 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
   const [gone, setGone] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const writer = useRef<SerialWriter<boolean> | null>(null);
+  const accountAlive = useSessionGuard();
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
   // Un écrivain neuf à chaque lecture de la place : envois sérialisés, dernier choix gardé, réponses périmées ignorées.
   const startWriter = (initial: boolean) => {
     writer.current = createSerialWriter<boolean>({
       initial,
+      alive: accountAlive,
       write: async (value) => {
         const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
         if (saved.ok) return saved.data.news;
