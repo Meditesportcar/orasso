@@ -52,12 +52,15 @@ async function shot(page: Page, name: string) {
 
 const selected = (page: Page) => page.getByTestId("profil-tabs").getByRole("tab", { selected: true });
 
-test("mon profil : le Garage s'ouvre par défaut, Sorties montre ma saison et le passeport", async ({ browser }) => {
+test("mon profil : Publications s'ouvre par défaut (R8b2), Garage, puis Sorties montre ma saison et le passeport", async ({ browser }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
   await go(page, "/profil");
   await expect(page.getByTestId("profil-head")).toBeVisible({ timeout: 30_000 });
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/);
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/);
   // Le bouton principal de l'onglet : « Ajouter un véhicule » ; les trois nombres, « Profil public », la roue dentée.
   await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
@@ -98,15 +101,17 @@ test("les anciennes adresses : /garage et /mon-passeport mènent au Profil, sur 
   await ctx.close();
 });
 
-test("visiteur : le Passeport vit dans Profil › Sorties, sans onglet Garage (lot R8b1 : le profil s'ouvre sur Sorties)", async ({
+test("visiteur : le Passeport vit dans Profil › Sorties, sans onglet Garage (lot R8b2 : le profil s'ouvre sur Publications)", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "paul.photo@orasso.local");
   await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName("Publications", { timeout: 30_000 });
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await page.getByTestId("profil-tab-sorties").click();
+  await expect(selected(page)).toHaveAccessibleName("Sorties");
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
@@ -338,6 +343,9 @@ test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, 
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/, { timeout: 30_000 });
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await page.getByTestId("garage-add").click();
   await runVehicleWizard(page);
@@ -365,6 +373,9 @@ test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, l
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
+  // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+  await expect(selected(page)).toHaveAccessibleName(/^Publications/, { timeout: 30_000 });
+  await page.getByTestId("profil-tab-garage").click();
   await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   // Depuis la carte du Garage (la fiche s'empile sur la barre), pas à froid.
   await page.getByTestId("garage-card").first().click();

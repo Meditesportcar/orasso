@@ -26,12 +26,15 @@ test("les anciennes adresses répondent 302 vers le Profil, la recherche gardée
   });
 });
 
-test("Mon compte : Garage par défaut, onglet Sorties, aucune plaque lisible dans les pages", async ({ page }) => {
+test("Mon compte : Publications par défaut (R8b2), onglets Garage et Sorties, aucune plaque lisible dans les pages", async ({ page }) => {
   await setTheme(page, "beton");
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/app/moi");
+    // Lot R8b2 : le profil s'ouvre sur « Publications » ; le Garage est un clic plus loin.
+    await expect(page.getByTestId("profil-tab-publications")).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("profil-tab-garage").click();
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("link", { name: "Ajouter un véhicule" }).first()).toBeVisible();
     for (const id of ["profil-count-abonnes", "profil-count-abonnements", "profil-count-sorties"]) {

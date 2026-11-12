@@ -28,10 +28,19 @@ const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 test.use({ actionTimeout: 30_000 });
 
 async function audit(page: Page) {
+  // La bio du haut du profil tient sur une ligne par construction (R8b1) ; son « plus » est posé après la mesure du navigateur :
+  // l'audit attend que chaque bio coupée ait le sien (sinon il lit la page une image trop tôt).
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-testid="profil-bio"], [data-testid="profile-bio"]')].every(
+      (p) =>
+        p.scrollWidth <= p.clientWidth + 1 ||
+        document.querySelector(`[data-testid="${p.getAttribute("data-testid")}-toggle"]`),
+    ),
+  );
   const a = await auditPage(page);
   expect(a.greens).toEqual([]);
   expect(a.horizontalScroll).toBe(false);
-  expect(a.truncated).toEqual([]);
+  expect(a.truncated, JSON.stringify(a.truncated)).toEqual([]);
   expect(a.brokenWords, JSON.stringify(a.brokenWords)).toEqual([]);
   expect(a.primaryButtons).toBeLessThanOrEqual(1);
 }
