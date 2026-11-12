@@ -86,7 +86,10 @@ for (const { theme, width, scale } of COMBOS) {
       const { ctx, page } = await openApp(browser, OWNER.email, theme, width, scale);
       await visit(page, "/fil/publier");
       await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
-      await page.getByTestId(/fil-publish-as-pro:/).first().click();
+      await page
+        .getByTestId(/fil-publish-as-pro:/)
+        .first()
+        .click();
       await shot(page, `publier-fiche-pro-${tag}`, 2600);
       await visit(page, `/p/${OWNER.slug}`);
       await shot(page, `fiche-proprietaire-presentation-${tag}`);
@@ -185,7 +188,8 @@ for (const width of [390, 1280]) {
       const { ctx, page } = await make(OWNER.email);
       await slug(page, `/p/${OWNER.slug}`, "site-fiche-covering-proprietaire");
       await slug(page, `/p/${OWNER.slug}?onglet=publications`, "site-fiche-covering-proprietaire-publications");
-      if (PHASE === "apres") await slug(page, `/p/${OWNER.slug}?onglet=offres`, "site-fiche-covering-proprietaire-offres");
+      if (PHASE === "apres")
+        await slug(page, `/p/${OWNER.slug}?onglet=offres`, "site-fiche-covering-proprietaire-offres");
       await page.goto("/app/fil/publier");
       await page.waitForLoadState("networkidle");
       const as = page.getByTestId(/fil-publish-as-pro:/).first();
@@ -198,3 +202,75 @@ for (const width of [390, 1280]) {
     }
   });
 }
+
+/** Tour 2 : « Publier » avec l'étiquette « Offre » choisie (titre, dates, étiquette dans « Ce que verront les autres »), un refus, la carte, la publication seule, l'offre terminée. */
+async function coveringPosts(): Promise<{ proId: string; current: string; ended: string }> {
+  const { login } = await import("./helpers");
+  const cookie = await login(OWNER.email);
+  const pro = await apiCall<{ id: string }>(cookie, "GET", `/pros/by-slug/${OWNER.slug}`);
+  const list = await apiCall<{ items: { id: string; offer: { state: string } | null }[] }>(
+    cookie,
+    "GET",
+    `/authors/p:${pro.data.id}/feed-posts`,
+  );
+  const of = (state: string) => list.data.items.find((p) => p.offer?.state === state)?.id ?? "";
+  return { proId: pro.data.id, current: of("current"), ended: of("ended") };
+}
+
+for (const { theme, width, scale } of COMBOS) {
+  const tag = `${theme}-${width}-x${String(scale).replace(".", "")}`;
+  test(`appli offre ${tag}`, async ({ browser }) => {
+    test.skip(!APP || PHASE !== "apres", "Appli, après");
+    test.setTimeout(300_000);
+    const ids = await coveringPosts();
+    const { ctx, page } = await openApp(browser, OWNER.email, theme, width, scale);
+    await visit(page, `/fil/publier?fiche=${ids.proId}&etiquette=offre`);
+    await expect(page.getByTestId("fil-publish-offer")).toBeVisible({ timeout: 30_000 });
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("fil-publish-add").click();
+    await (await chooser).setFiles([photo("car-golf-gti.jpg")]);
+    await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+    await page.getByTestId("fil-publish-photo").first().click();
+    await page.getByTestId("fil-publish-none").click();
+    await page.getByTestId("fil-publish-none-yes").click();
+    await shot(page, `publier-offre-refus-sans-titre-${tag}`, 3000);
+    await page.getByTestId("fil-publish-offer-title").fill("Polish complet avant l'hiver");
+    await page.getByTestId("fil-publish-offer-edit").click();
+    await page
+      .getByTestId("fil-publish-offer-start")
+      .fill(new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));
+    await page
+      .getByTestId("fil-publish-offer-end")
+      .fill(new Date(Date.now() + 20 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));
+    await shot(page, `publier-offre-complete-${tag}`, 3000);
+    await visit(page, `/publication/${ids.current}`);
+    await shot(page, `publication-offre-en-cours-${tag}`, 1400);
+    await visit(page, `/publication/${ids.ended}`);
+    await shot(page, `publication-offre-terminee-${tag}`, 1400);
+    await visit(page, `/p/${OWNER.slug}?onglet=offres`);
+    await shot(page, `fiche-onglets-offres-${tag}`, 1000);
+    await ctx.close();
+  });
+}
+
+test("site offre", async ({ browser }) => {
+  test.skip(PHASE !== "apres", "Après");
+  test.setTimeout(300_000);
+  const ids = await coveringPosts();
+  for (const width of [390, 1280]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+    const page = await ctx.newPage();
+    await loginInBrowser(page, OWNER.email, SEED_PASSWORD, "/app/accueil");
+    for (const [name, path] of [
+      ["publication-offre-en-cours", `/app/publication/${ids.current}`],
+      ["publication-offre-terminee", `/app/publication/${ids.ended}`],
+      ["fiche-onglets-offres", `/p/${OWNER.slug}?onglet=offres`],
+      ["publier-offre", `/app/fil/publier?fiche=${ids.proId}&etiquette=offre`],
+    ] as const) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await shot(page, `site-${name}-${width}`, width > 700 ? 1500 : 2400);
+    }
+    await ctx.close();
+  }
+});

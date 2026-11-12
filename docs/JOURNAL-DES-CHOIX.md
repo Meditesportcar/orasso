@@ -6039,3 +6039,15 @@ Quatorze points mineurs de la livraison 2 (P08, P13, P21, P25, P28, P29, P31, P3
 ### Petit lot API, tour 5 (12/11/2026)
 - **Reprise limitée à la transaction** : `accountService.anonymize` ne reprend plus que `anonymizeTx` (la transaction, qui rend les clés de fichiers, l'ancienne adresse, le pseudo et les traces d'e-mail). Les effets d'après la validation (effacement des fichiers, confirmation à l'ancienne adresse, anonymisation de la trace `emailOutbox`, retrait des copies du journal) s'exécutent une seule fois, après la boucle ; leurs erreurs remontent comme avant le lot. Un compte déjà supprimé entre-temps ne déclenche aucun effet.
 - **Tests** (`coauthors-tour4.test.ts`) : 40P01 et 40001 au premier essai avec `confirm: true` (un audit, un envoi, trace anonymisée), trois interblocages de suite (erreur remontée, aucun envoi, compte intact), interblocage à l'envoi de la confirmation (non repris, un seul essai d'envoi, suppression validée une fois).
+
+### Lot R9c, tour 2 (12/11/2026)
+
+- **Migration** : après la fusion de `vague-r8` (0087 pris), la migration des offres est régénérée en `0088_pro-offers` (`db:generate`, aucun SQL à la main).
+- **Visibilité (T16)** : les textes de l'espace du pro (appli et site) ne parlent plus de « tes abonnés » : « Tes publications et tes offres sont visibles de tous les membres, sur ta fiche et dans le Fil. » ; la ligne du compteur dit « N abonnés suivent ta fiche » ; les messages « Publie d'abord ta fiche… » disent « pour pouvoir publier » (`labels/proOffers.fr.ts`).
+- **Onglets** : la rangée défile déjà ; l'onglet choisi est maintenant ramené dans la vue (appli et site, `UnderTabs` des deux côtés, sans autre changement). Pas de fondu de bord (il aurait demandé un dégradé natif). À 384 px police ×1,3 le dernier onglet reste atteignable en défilant.
+- **`offers.current`** applique `postOkSql` comme la liste. Le propriétaire reçoit aussi `offers.remaining` (reste de la limite du mois) pour désactiver « Publier une offre » avec sa raison (fiche non publiée, limite atteinte).
+- **Dernière ancienne offre supprimée** : la notice de confirmation reste affichée (`Posts.tsx`).
+- **Jetons** : vignette 56 x 72 (jetons `space12` + `space2` et `space12` + `space6`, la maquette dit 56 x 70) ; plus de taille de police ni de 2px en dur.
+- **Dates** repliées par défaut (ligne « Du … au … · dates de l'offre » + « modifier »), comme la maquette.
+- **Site, espace du pro** : les offres en cours sont lues dans le navigateur, avec « Voir plus » au-delà de 20.
+- **Étiquette dans l'en-tête de la carte** (décision du coordinateur) : `headTag` ajouté à `CardShell` (appli) et `Shell` (site), absent pour les autres cartes ; la ligne d'offre sous la photo ne garde que les dates et le titre.
