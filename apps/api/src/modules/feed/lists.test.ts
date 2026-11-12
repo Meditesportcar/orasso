@@ -1,7 +1,7 @@
 // Listes par auteur, journal d'un événement, épingle, compteurs des fiches (R8a2) : par regard, strictement les siennes,
 // compte privé, curseurs, concurrence, aucune requête par publication.
 import { randomBytes, randomUUID } from "node:crypto";
-import { fromWallTime } from "@orasso/shared";
+import { fromWallTime, PRO_FREE_UNTIL } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -292,6 +292,40 @@ describe("liste d'un auteur : une page", () => {
       .where(eq(structures.id, w.structure.id));
     expect((await call(viewer, "GET", `/authors/s:${w.structure.id}/feed-posts`)).status).toBe(404);
     expect((await call(viewer, "GET", `/authors/s:${randomUUID()}/feed-posts`)).status).toBe(404);
+  });
+
+  it("fiche de base d'un pro (après la fin de gratuité) : ni publications, ni mentions, ni compteurs pour un autre lecteur ; le propriétaire garde les siennes", async () => {
+    const viewer = await signUp("Lecteur_L");
+    const po = await signUp("ProOwner_L");
+    const pro = await createPro(po.id, { verifiedAt: new Date(0) });
+    const a = await mkPost({ authorId: po.id, persona: "pro", proId: pro.id });
+    // Une vraie citation de la fiche par un tiers (le contrôle des mentions ne passe plus à vide).
+    const fan = await signUp("Fan_PB");
+    const cite = await mkPost({ authorId: fan.id, caption: `Merci @${pro.slug}`, commercialPartnerId: pro.id });
+    const key = `p:${pro.id}`;
+    expect(
+      (await call(viewer, "GET", `/authors/${key}/mentions`)).json.items.map(
+        (i: { post: { id: string } }) => i.post.id,
+      ),
+    ).toEqual([cite.id]);
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.mentions).toEqual({ count: 1 });
+    // Avant : tout se lit, les compteurs disent la même chose.
+    expect(ids(await call(viewer, "GET", `/authors/${key}/feed-posts`))).toEqual([a.id]);
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.publications).toEqual({ count: 1 });
+    clock.set(new Date(PRO_FREE_UNTIL.getTime() + 24 * HOUR));
+    const after = await call(viewer, "GET", `/authors/${key}/feed-posts`);
+    expect(after.status).toBe(200);
+    expect(after.json).toEqual({ items: [], nextCursor: null, restricted: false });
+    expect((await call(viewer, "GET", `/authors/${key}/mentions`)).json.items).toEqual([]);
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.publications).toEqual({ count: 0 });
+    expect((await call(viewer, "GET", `/pros/by-slug/${pro.slug}`)).json.mentions).toEqual({ count: 0 });
+    // Le propriétaire garde la main sur les siennes.
+    expect(ids(await call(po, "GET", `/authors/${key}/feed-posts`))).toEqual([a.id]);
+    expect((await call(po, "GET", `/pros/by-slug/${pro.slug}`)).json.publications).toEqual({ count: 1 });
+    expect(
+      (await call(po, "GET", `/authors/${key}/mentions`)).json.items.map((i: { post: { id: string } }) => i.post.id),
+    ).toEqual([cite.id]);
+    expect((await call(po, "GET", `/pros/by-slug/${pro.slug}`)).json.mentions).toEqual({ count: 1 });
   });
 
   it("la publication d'une page se lit même quand le compte de qui a publié est privé ; banni : elle disparaît", async () => {

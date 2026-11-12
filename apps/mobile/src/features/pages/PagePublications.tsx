@@ -16,6 +16,7 @@ export function PagePublications({
   onFilter,
   total,
   session,
+  reloadToken = 0,
 }: {
   /** `s:<structure>` ou `p:<fiche pro>`. */
   authorKey: string;
@@ -27,8 +28,10 @@ export function PagePublications({
   /** Le nombre de publications servi avec la page (la ligne « N publications » du filtre « Tout »). */
   total: number | null;
   session: boolean;
+  /** Change à chaque relecture de la page (geste, retour) : la liste se relit sans être démontée. */
+  reloadToken?: number;
 }) {
-  if (!session) return <PublicPublications authorKey={authorKey} name={name} />;
+  if (!session) return <PublicPublications key={reloadToken} authorKey={authorKey} name={name} />;
   const header = withFilter ? (
     <ChipRow>
       {pageFilters.map((f) => (
@@ -47,6 +50,7 @@ export function PagePublications({
   return (
     <PublicationsTab
       key={`${authorKey}:${filter}`}
+      reloadToken={reloadToken}
       authorKey={authorKey}
       pseudo={name}
       mine={false}

@@ -18,8 +18,10 @@ import {
   pendingStart,
   postWithCommentAdded,
   postWithCommentRemoved,
+  repliesMark,
   type SheetState,
   sheetAddComment,
+  sheetApplyParentCount,
   sheetFind,
   sheetMark,
   sheetRemoveComment,
@@ -113,7 +115,7 @@ export function useComments(
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
-      const since = [...(postLive.sheetOf(id).replies[parentId]?.recent ?? [])];
+      const since = repliesMark(postLive.sheetOf(id), parentId);
       try {
         const page = await api.feedCommentReplies(parentId, from);
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
@@ -189,7 +191,7 @@ export function useComments(
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
-          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId);
+          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId, created.parent);
           counted = r.counted;
           return r.state;
         }, t);
@@ -268,8 +270,12 @@ export function useComments(
       const t = postLive.ticket(id);
       setActionError(null);
       try {
-        await api.removeFeedComment(comment.id);
-        if (postLive.alive(t)) dropRemoved(comment.id, t);
+        const done = await api.removeFeedComment(comment.id);
+        if (postLive.alive(t)) {
+          dropRemoved(comment.id, t);
+          // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
+          update((s) => sheetApplyParentCount(s, done?.parent), t);
+        }
       } catch (e) {
         if (!postLive.alive(t)) return;
         // Déjà retiré (404 d'un commentaire) : seule la ligne part de l'écran ; la publication se revalide.
@@ -279,7 +285,12 @@ export function useComments(
         } else if (mounted.current) setActionError(errorMessage(e));
       }
     },
-    [id, dropRemoved, loadTop],
+    [
+      id,
+      dropRemoved,
+      loadTop, // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
+      update,
+    ],
   );
 
   const fire = useCallback(

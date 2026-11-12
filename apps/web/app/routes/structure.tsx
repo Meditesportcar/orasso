@@ -30,7 +30,7 @@ import {
   structureKindLabels,
   type WithPageExtras,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, redirect } from "react-router";
 
 import { PageHead } from "../components/pages/PageHead";
@@ -162,6 +162,9 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
     staffSent,
   } = loaderData;
   const [mentionsDelta, setMentionsDelta] = useState(0);
+  // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [structure]);
   const staffError = (actionData as { staffError?: string } | undefined)?.staffError;
   const messageError = (actionData as { messageError?: string | null } | undefined)?.messageError;
   const path = `/o/${structure.slug}`;
