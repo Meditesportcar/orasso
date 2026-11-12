@@ -11,7 +11,7 @@ import {
   type PageCounts,
   publicationPath,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -75,17 +75,23 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   const [busy, setBusy] = useState<EventMentionsSection | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: repart du chargeur à chaque nouvelle donnée
   useEffect(() => {
+    generation.current += 1;
+    setBusy(null);
     setMore({ on_site: [], fans: [] });
     setCursors(firstCursors);
   }, [loaderData]);
   const onSite = [...loaderData.onSite, ...more.on_site];
   const fans = [...loaderData.fans, ...more.fans];
+  // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
+  const generation = useRef(0);
   async function readMore(section: EventMentionsSection) {
     const cursor = cursors[section];
     if (!cursor || busy) return;
+    const mine = generation.current;
     setBusy(section);
     const q = new URLSearchParams({ section, cursor, ...(withHidden ? { hidden: "1" } : {}) }).toString();
     const res = await apiFetch<MentionsPage>(`/events/${event.id}/mentions?${q}`);
+    if (mine !== generation.current) return;
     setBusy(null);
     if (!res.ok) return;
     setMore((m) => ({ ...m, [section]: [...m[section], ...res.data.items] }));
@@ -170,7 +176,7 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
           </div>
         ) : null}
 
-        {places.length > 0 ? (
+        {places.length > 0 || cursors.on_site ? (
           <section className="evm__section" data-testid="mentions-on-site">
             <div className="evm__head">
               <Icon name="truck" size={16} />
@@ -211,7 +217,7 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
           </section>
         ) : null}
 
-        {people.length > 0 ? (
+        {people.length > 0 || cursors.fans ? (
           <section className="evm__section" data-testid="mentions-fans">
             <div className="evm__head">
               <Icon name="profile" size={16} />
@@ -259,7 +265,9 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
           </section>
         ) : null}
 
-        {places.length === 0 && people.length === 0 ? <p className="s-muted">{L.mentionsEmpty}</p> : null}
+        {places.length === 0 && people.length === 0 && !cursors.on_site && !cursors.fans ? (
+          <p className="s-muted">{L.mentionsEmpty}</p>
+        ) : null}
       </div>
 
       <PostMenu

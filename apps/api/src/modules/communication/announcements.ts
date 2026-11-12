@@ -344,13 +344,6 @@ export const announcementsService = {
   async remove(v: Viewer, eventId: string, id: string) {
     const { e } = await requireEventSpeaker(v, eventId);
     const { imageKey, postKeys } = await withTx(async (tx) => {
-      // Même ordre de verrous que le retrait d'une publication (publication, puis annonce) : pas d'interblocage entre
-      // le retrait de la reprise dans l'appli et celui de l'annonce par l'ancien APK.
-      const [taken] = await tx
-        .select({ id: feedPosts.id })
-        .from(feedPosts)
-        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)))
-        .for("update");
       const [current] = await tx
         .select({ imageKey: eventAnnouncements.imageKey })
         .from(eventAnnouncements)
@@ -363,6 +356,32 @@ export const announcementsService = {
         )
         .for("update");
       if (!current) throw notFound("Entrée introuvable");
+      // L'annonce est verrouillée **la première** (comme la reprise) : la reprise en cours de validation est vue, la publication
+      // reprise est cherchée **sous ce verrou** (jamais avant : elle pouvait ne pas exister encore). Le verrou de la publication est
+      // pris sans attendre (`skip locked`, quelques essais) : un retrait de la publication par son auteur, qui tient la ligne et
+      // attend l'annonce, ne forme jamais un interblocage — on lui rend la main (409) si elle ne se libère pas.
+      let taken: { id: string } | undefined;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const [exists] = await tx
+          .select({ id: feedPosts.id })
+          .from(feedPosts)
+          .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+        if (!exists) break;
+        [taken] = await tx
+          .select({ id: feedPosts.id })
+          .from(feedPosts)
+          .where(and(eq(feedPosts.id, exists.id), isNull(feedPosts.deletedAt)))
+          .for("update", { skipLocked: true });
+        if (taken) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!taken) {
+        const [still] = await tx
+          .select({ id: feedPosts.id })
+          .from(feedPosts)
+          .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+        if (still) throw conflict("conflict", "Cette annonce est en cours de retrait : réessaie.");
+      }
       await tx
         .update(eventAnnouncements)
         .set({ deletedAt: now(), imageKey: null, imageWidth: null, imageHeight: null })

@@ -275,13 +275,13 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
         return pin;
       });
       if (pinnedHere === "gone") {
-        if (photoKey) await storage.remove(photoKey).catch(() => undefined);
+        if (photoKey) await removeOrRetry(photoKey);
         stats.deletedDuring += 1;
         continue;
       }
       if (pinnedHere === null) {
         // Reprise par un autre passage entre-temps : rien de plus, le fichier copié ne sert à rien.
-        if (photoKey) await storage.remove(photoKey).catch(() => undefined);
+        if (photoKey) await removeOrRetry(photoKey);
         stats.alreadyMigrated += 1;
         continue;
       }
@@ -289,7 +289,7 @@ export async function announcementsToPosts(opts: { dryRun?: boolean } = {}): Pro
       else stats.withPoster += 1;
       if (pinnedHere) stats.pinned += 1;
     } catch (error) {
-      if (photoKey) await storage.remove(photoKey).catch(() => undefined);
+      if (photoKey) await removeOrRetry(photoKey);
       stats.failed += 1;
       console.error(`[orasso] annonce ${row.id} : reprise impossible, elle reste une annonce.`, error);
     }
@@ -338,12 +338,26 @@ export async function revertAnnouncementsToPosts(opts: { dryRun?: boolean } = {}
   const keys: string[] = [];
   let detached = 0;
   await db.transaction(async (tx) => {
-    const locked = await tx.execute<{ id: string; reported: boolean }>(
-      sql`select p.id, exists (select 1 from reports r where r.target_type = 'feed_post' and r.target_id = p.id::text) as reported
-        from feed_posts p where p.legacy_announcement_id is not null order by p.id for update`,
+    // D'abord les verrous, **puis** les signalements dans une seconde requête : un signalement validé pendant l'attente du
+    // verrou est vu (un seul instantané aurait classé la publication « sans signalement » et détruit ses preuves).
+    const locked = await tx.execute<{ id: string }>(
+      sql`select p.id from feed_posts p where p.legacy_announcement_id is not null order by p.id for update`,
     );
-    const keep = locked.rows.filter((r) => r.reported).map((r) => r.id);
-    const drop = locked.rows.filter((r) => !r.reported).map((r) => r.id);
+    const ids = locked.rows.map((r) => r.id);
+    const reportedRows = ids.length
+      ? await tx.execute<{ id: string }>(
+          sql`select p.id from feed_posts p where p.id in (${sql.join(
+            ids.map((i) => sql`${i}::uuid`),
+            sql`, `,
+          )}) and (
+            exists (select 1 from reports r where r.target_type = 'feed_post' and r.target_id = p.id::text)
+            or exists (select 1 from reports r join feed_post_comments c on r.target_type = 'feed_comment' and r.target_id = c.id::text
+              where c.post_id = p.id))`,
+        )
+      : { rows: [] as { id: string }[] };
+    const reported = new Set(reportedRows.rows.map((r) => r.id));
+    const keep = ids.filter((i) => reported.has(i));
+    const drop = ids.filter((i) => !reported.has(i));
     if (keep.length) {
       const list = sql.join(
         keep.map((i) => sql`${i}::uuid`),

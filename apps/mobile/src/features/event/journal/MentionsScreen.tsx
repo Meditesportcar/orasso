@@ -109,18 +109,22 @@ export function MentionsScreen() {
   async function more(section: Section) {
     const cursor = cursors[section];
     if (!cursor || !eventId || loadingMore) return;
+    // Une réponse qui arrive après un changement de compte ou de fiche (ou un nouveau chargement) est jetée : jamais les mentions
+    // masquées d'un responsable dans l'écran d'un autre compte.
+    const ticket = gate.follow();
     setLoadingMore(section);
     try {
       const page = await readPage(eventId, section, withHidden.current, cursor);
+      if (!ticket.current()) return;
       setItems((s) => ({
         ...s,
         [section]: [...s[section], ...page.items.filter((n) => !s[section].some((o) => o.post.id === n.post.id))],
       }));
       setCursors((s) => ({ ...s, [section]: page.nextCursor }));
     } catch {
-      setRead("error");
+      if (ticket.current()) setRead("error");
     } finally {
-      setLoadingMore(null);
+      if (ticket.current()) setLoadingMore(null);
     }
   }
   const moreButton = (section: Section) =>
@@ -206,7 +210,7 @@ export function MentionsScreen() {
             </ChipRow>
           ) : null}
 
-          {onSite.length > 0 ? (
+          {onSite.length > 0 || cursors.on_site ? (
             <View style={styles.section} testID="mentions-on-site">
               <View style={styles.sectionHead}>
                 <Icon name="truck" size={16} color={c.inkMuted} />
@@ -266,7 +270,7 @@ export function MentionsScreen() {
             </View>
           ) : null}
 
-          {fans.length > 0 ? (
+          {fans.length > 0 || cursors.fans ? (
             <View style={styles.section} testID="mentions-fans">
               <View style={styles.sectionHead}>
                 <Icon name="profile" size={16} color={c.inkMuted} />
@@ -312,7 +316,9 @@ export function MentionsScreen() {
             </View>
           ) : null}
 
-          {onSite.length === 0 && fans.length === 0 ? <Muted variant="body">{L.mentionsEmpty}</Muted> : null}
+          {onSite.length === 0 && fans.length === 0 && !cursors.on_site && !cursors.fans ? (
+            <Muted variant="body">{L.mentionsEmpty}</Muted>
+          ) : null}
         </View>
       ) : null}
 

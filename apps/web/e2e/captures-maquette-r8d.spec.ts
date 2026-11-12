@@ -33,7 +33,13 @@ test("maquette e-fiche", async ({ browser }) => {
     for (const [i, theme] of ["beton", "sable"].entries()) {
       const clip = rects[i];
       if (!clip) continue;
-      await page.screenshot({ path: `${DIR}/maquette-${name}-${theme}.png`, clip, fullPage: true, animations: "disabled", timeout: 300_000 });
+      await page.screenshot({
+        path: `${DIR}/maquette-${name}-${theme}.png`,
+        clip,
+        fullPage: true,
+        animations: "disabled",
+        timeout: 300_000,
+      });
     }
   }
   await ctx.close();

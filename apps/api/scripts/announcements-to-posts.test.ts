@@ -716,6 +716,77 @@ describe("tour 3 : reprise et retrait sous contrainte", () => {
   });
 });
 
+describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () => {
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("un retrait de l'annonce pendant que la reprise valide : la publication reprise est retirée aussi", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Course reprise et retrait" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    // Le script : annonce verrouillée, publication créée, validation retenue.
+    const script = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from event_announcements where id = ${a.row.id} for update`);
+      await tx.insert(feedPosts).values({
+        authorId: owner.id,
+        persona: "organizer",
+        structureId: structure.id,
+        eventId: e.id,
+        eventRole: "organizer",
+        caption: "Reprise en cours",
+        legacyAnnouncementId: a.row.id,
+      });
+      await gate;
+    });
+    await pause(300);
+    const removal = call(owner, "DELETE", `/events/${e.id}/announcements/${a.row.id}`);
+    await pause(600);
+    release();
+    await script;
+    expect((await removal).status).toBe(204);
+    const post = await postOf(a.row.id);
+    expect(post?.deletedAt).not.toBeNull();
+    expect(await bodies(null, e.slug)).not.toContain("Course reprise et retrait");
+  });
+
+  it("--revert : un signalement validé pendant l'attente du verrou protège la publication et ses photos", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { image: { w: 1080, h: 1350 }, body: "Signalée en cours de retour arrière" });
+    await announcementsToPosts();
+    const post = (await postOf(a.row.id))!;
+    const photoKey = (await photosOf(post.id))[0]!.storageKey;
+    const reporter = await signUp("Signale4_R8d");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from feed_posts where id = ${post.id} for update`);
+      await gate;
+      await tx.execute(
+        sql`insert into reports (reporter_id, target_type, target_id, reason) values (${reporter.id}, 'feed_post', ${post.id}, 'other')`,
+      );
+    });
+    await pause(300);
+    const reverting = revertAnnouncementsToPosts();
+    await pause(600);
+    release();
+    await holder;
+    const stats = await reverting;
+    expect(stats.detached).toBe(1);
+    const reports = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from reports where target_id = ${post.id}`,
+    );
+    expect(Number(reports.rows[0]?.n)).toBe(1);
+    const [kept] = await db.select().from(feedPosts).where(eq(feedPosts.id, post.id));
+    expect(kept?.caption).toBe("Signalée en cours de retour arrière");
+    expect(await photosOf(post.id)).toHaveLength(1);
+    expect(await storage.get(photoKey)).not.toBeNull();
+  });
+});
+
 describe("annonces réservées aux inscrits (T3)", () => {
   it("restent lisibles d'un inscrit retenu et de l'équipe, invisibles d'un visiteur et d'un passionné sans candidature, avant comme après la reprise", async () => {
     const e = await mkEvent();
