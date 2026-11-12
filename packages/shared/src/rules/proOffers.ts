@@ -150,6 +150,14 @@ export function offerBody(form: OfferForm): { title: string; startsOn?: string; 
   };
 }
 
+/** L'offre d'un corps de requête gardé (envoi incertain repris après un rechargement) : affichée comme avant l'envoi. */
+export function offerFromBody(raw: unknown): OfferForm {
+  const o = raw as { title?: unknown; startsOn?: unknown; endsOn?: unknown } | null | undefined;
+  if (!o || typeof o !== "object") return emptyOfferForm;
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
+  return { on: true, title: text(o.title), startsOn: text(o.startsOn), endsOn: text(o.endsOn) };
+}
+
 /**
  * Les valeurs de départ de « Publier » lues dans l'adresse (`?fiche=<identifiant>&etiquette=offre`, comme celles de R8d) : la fiche
  * pro d'abord comme auteur (si elle figure dans les casquettes), l'étiquette « Offre » choisie si demandée. Une adresse mal formée
@@ -166,3 +174,19 @@ export function publishStartOffer(
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Ce que la liste des offres affiche : l'attente d'une première lecture, **la panne avant le vide** (une relecture échouée après une
+ * lecture vide ne dit jamais « Pas d'offre en cours. » : message et « Réessayer »), le vide, ou les lignes (une panne de la page
+ * suivante garde les lignes et s'écrit dessous).
+ */
+export function offersView(s: {
+  loading: boolean;
+  loaded: boolean;
+  error: boolean;
+  count: number;
+}): "waiting" | "error" | "empty" | "list" {
+  if (s.loading && !s.loaded) return "waiting";
+  if (s.error && s.count === 0) return "error";
+  return s.count === 0 ? "empty" : "list";
+}

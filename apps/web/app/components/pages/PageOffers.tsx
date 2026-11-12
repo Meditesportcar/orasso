@@ -8,6 +8,7 @@ import {
   type AuthorPostsPage,
   type FeedPostView,
   offerDatesLabel,
+  offersView,
   PRO_POSTS_PER_MONTH,
   type ProPublic,
   publicationPath,
@@ -111,13 +112,14 @@ export function OfferList({ items }: { items: readonly FeedPostView[] }) {
 
 /** Les offres en cours (lignes, vide, panne, « Voir plus »), sans en-tête. */
 export function OfferRows({ list }: { list: ReturnType<typeof useOffers> }) {
-  if (list.loading && !list.loaded)
+  const view = offersView({ ...list, count: list.items.length });
+  if (view === "waiting")
     return (
       <div className="pub-state pub-state--wait" role="status">
         <OLoader size={64} label={T.loading} />
       </div>
     );
-  if (list.error && !list.loaded)
+  if (view === "error")
     return (
       <div className="pub-state" role="alert" data-testid="load-error">
         <p className="o-t-body">{T.loadError}</p>
@@ -126,7 +128,7 @@ export function OfferRows({ list }: { list: ReturnType<typeof useOffers> }) {
         </Button>
       </div>
     );
-  if (list.items.length === 0)
+  if (view === "empty")
     return (
       <p className="s-notice" data-testid="offers-empty">
         {T.empty}

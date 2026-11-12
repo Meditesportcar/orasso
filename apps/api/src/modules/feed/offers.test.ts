@@ -2,7 +2,7 @@
 // (jours civils de Paris, le dernier est compris), limite du mois (une offre compte pour une publication), rejeu, liste
 // `filter=offer`, compteur `offers.current`, compatibilité de l'APK en ligne (`pro_posts` inchangés), CHECK de la base.
 import { randomUUID } from "node:crypto";
-import { fromWallTime, PRO_POSTS_PER_MONTH } from "@orasso/shared";
+import { fromWallTime, PRO_PAID_FROM, PRO_POSTS_PER_MONTH } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -521,5 +521,27 @@ describe("7. les CHECK de la base", () => {
     await expect(
       attempt({ title: "Titre", offerStartsOn: "2026-12-01", offerEndsOn: "2026-12-01" }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("8. fiche passée en fiche de base : les offres ne se lisent plus (sauf du propriétaire)", () => {
+  it("lecture directe 404, photo refusée, absente du Fil ; le propriétaire la voit", async () => {
+    const { owner, publishOffer } = await world();
+    const viewer = await signUp("Base_R9c");
+    const res = await publishOffer({ offer: offer({ endsOn: "2027-12-31" }) });
+    expect(res.status).toBe(201);
+    const id = res.json.id as string;
+    const photoUrl = (res.json.photos[0].url as string).replace("/api", "");
+    expect((await call(viewer, "GET", `/feed-posts/${id}`)).status).toBe(200);
+    expect((await call(viewer, "GET", photoUrl)).status).toBe(200);
+    clock.set(new Date(PRO_PAID_FROM.getTime() + 24 * 3_600_000));
+    expect((await call(viewer, "GET", `/feed-posts/${id}`)).status).toBe(404);
+    expect((await call(viewer, "GET", photoUrl)).status).toBe(404);
+    for (const filter of ["for_you", "nearby", "following"]) {
+      const fil = await call(viewer, "GET", `/fil?filter=${filter}`);
+      expect(JSON.stringify(fil.json), filter).not.toContain(id);
+    }
+    expect((await call(owner, "GET", `/feed-posts/${id}`)).status).toBe(200);
+    expect((await call(owner, "GET", photoUrl)).status).toBe(200);
   });
 });

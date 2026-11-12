@@ -724,3 +724,18 @@ describe("l'étiquette « Offre » (R9c)", () => {
     expect(publishSays(byKey("me"), null, false, true).tag).toBeNull();
   });
 });
+
+describe("draftFromBody : l'offre du corps gardé (R9c)", () => {
+  it("la reprise restaure l'offre (titre, dates) pour la casquette pro, et rien sans offre", () => {
+    const body = {
+      persona: "pro",
+      proId: "p1",
+      offer: { title: "Polish", startsOn: "2026-11-10", endsOn: "2026-11-30" },
+      photos: [],
+    };
+    const d = draftFromBody(body, authors);
+    expect(d.choice.authorKey).toBe("pro:p1");
+    expect(d.offer).toEqual({ on: true, title: "Polish", startsOn: "2026-11-10", endsOn: "2026-11-30" });
+    expect(draftFromBody({ persona: "fan", photos: [] }, authors).offer.on).toBe(false);
+  });
+});

@@ -122,3 +122,52 @@ test("une structure ne voit pas « Étiquette » ; « Anciennes offres » selon 
   await anon.goto("/p/atelier-covering-66");
   await expect(anon.getByText("Polish complet avant l'hiver")).toHaveCount(0);
 });
+
+test("envoi incertain d'une offre : rechargement, l'offre est affichée et figée, « Réessayer » la renvoie", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const s = unique();
+  const proPseudo = `ProU9c_${s}`;
+  const proCookie = await signUpApi(proPseudo);
+  const pro = await createPublishedPro(proCookie, `Garage U9c ${s}`);
+  await loginInBrowser(
+    page,
+    `${proPseudo.toLowerCase()}@e2e.orasso.test`,
+    undefined,
+    `/app/fil/publier?fiche=${pro.id}&etiquette=offre`,
+  );
+  await page.waitForLoadState("networkidle");
+  await page
+    .getByTestId("fil-publish-file")
+    .setInputFiles([{ name: "o.png", mimeType: "image/png", buffer: samplePhoto([40, 90, 140]) }]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+  await page.getByTestId("fil-publish-none").click();
+  await page.getByTestId("fil-publish-none-yes").click();
+  await page.getByTestId("fil-publish-offer-title").fill("Offre gardée U9c");
+  await page.getByTestId("fil-publish-offer-edit").click();
+  await page.getByTestId("fil-publish-offer-end").fill(day(12));
+  await page.route("**/api/me/feed-posts", (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  // L'offre est restaurée, affichée et figée comme le reste.
+  await expect(page.getByTestId("fil-publish-offer-title")).toHaveValue("Offre gardée U9c");
+  await expect(page.getByTestId("fil-publish-offer-title")).toBeDisabled();
+  await expect(page.getByTestId("fil-publish-offer-dates")).toContainText("Jusqu'au");
+  await expect(page.getByTestId("fil-publish-says-tag")).toContainText("Offre");
+  let resent: { offer?: { title?: string; endsOn?: string } } | null = null;
+  await page.route("**/api/me/feed-posts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    resent = JSON.parse(route.request().postData() ?? "{}");
+    return route.abort("failed");
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect.poll(() => resent?.offer?.title ?? null).toBe("Offre gardée U9c");
+  expect(resent?.offer?.endsOn).toBe(day(12));
+});

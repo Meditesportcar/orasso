@@ -7,6 +7,7 @@ import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native"
 import {
   type FeedPostView,
   offerDatesLabel,
+  offersView,
   PRO_POSTS_PER_MONTH,
   type ProPublic,
   publicationPath,
@@ -143,9 +144,10 @@ export function OfferRow({ post }: { post: FeedPostView }) {
 
 /** Les offres en cours (lignes, vide, panne, « Voir plus »), sans en-tête : l'onglet de la fiche et l'espace du pro les posent. */
 export function OfferRows({ list }: { list: ReturnType<typeof useOffers> }) {
-  if (list.loading && !list.loaded) return <Waiting blocks={[96, 96]} label={T.loading} />;
-  if (list.error && !list.loaded) return <LoadError message={T.loadError} onRetry={() => void list.reload()} />;
-  if (list.items.length === 0)
+  const view = offersView({ ...list, count: list.items.length });
+  if (view === "waiting") return <Waiting blocks={[96, 96]} label={T.loading} />;
+  if (view === "error") return <LoadError message={T.loadError} onRetry={() => void list.retry()} />;
+  if (view === "empty")
     return (
       <Muted variant="body" testID="offers-empty">
         {T.empty}

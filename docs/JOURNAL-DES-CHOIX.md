@@ -6080,3 +6080,9 @@ Quatorze points mineurs de la livraison 2 (P08, P13, P21, P25, P28, P29, P31, P3
 - **`UnderTabs` (appli)** : le recentrage n'a lieu que quand `value` change (ou à l'ouverture) et seulement si l'onglet choisi n'est pas entier dans la rangée, calculé sur la largeur de la rangée (`onLayout` du défilement) et la position de défilement ; un nombre qui arrive (« Garage · N ») ne fait plus sauter la rangée.
 - **`feedAgo`** : espace insécable avant l'unité (« il y a 20 h », « 3 min », « 2 j »), donc appli et site ; tests mis à jour.
 - **Jetons** : `space1 + 2` remplacé par `space2` (8 au lieu de 6) dans `OfferLine` et `PageOffers`.
+
+### Lot R9c, tour 4 (12/11/2026)
+
+- **Fiche passée en fiche de base** : les offres (et toute publication d'une fiche pro) ne se lisent plus de qui n'en est pas le propriétaire, partout : lecture directe (`requireVisiblePost`, donc aussi les photos), `loadPostViews` (donc le Fil et toutes les listes). Règle commune `maskedProIds` (`access.ts`), même critère que `proPostsHidden`. Aucune requête tant que la gratuité dure. Test : 404 en lecture directe et en photo, absente des trois filtres du Fil, le propriétaire la voit.
+- **Envoi incertain** : `draftFromBody` rend aussi l'offre du corps gardé (`offerFromBody`) ; le site la restaure, l'affiche et la fige avec le reste. L'appli garde son brouillon en mémoire, pas de reprise après rechargement, donc rien à restaurer. Recette : panne, rechargement, offre affichée et figée, « Réessayer » la renvoie.
+- **Panne après lecture vide** : règle `offersView` (partagée, testée) : la panne passe avant le vide, avec « Réessayer » (appli et site).

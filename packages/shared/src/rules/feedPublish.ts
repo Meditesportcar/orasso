@@ -22,7 +22,7 @@ import { ESSENTIAL_URGENT_WITHIN_MS } from "./eventNotifications";
 import { FEED_CAPTION_MAX, FEED_POST_PHOTOS_MAX, type FeedAspect } from "./feed";
 import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, type ImportantReason, importantWindow } from "./feedAttach";
 import { type DraftFeedPhoto, firstUndecidedPhoto } from "./feedList";
-import { type OfferForm, offerBody, offerIssue } from "./proOffers";
+import { type OfferForm, offerBody, offerFromBody, offerIssue } from "./proOffers";
 import { deliverAfter } from "./quietHours";
 
 // --- Au nom de qui ---------------------------------------------------------------------------------------------------
@@ -543,6 +543,8 @@ export function draftFromBody(
   caption: string;
   aspect: FeedAspect | null;
   photoCount: number;
+  /** L'étiquette « Offre » du corps gardé (R9c) : titre et jours, `on` faux sans offre. */
+  offer: OfferForm;
 } {
   const persona = typeof body.persona === "string" ? body.persona : "fan";
   const author =
@@ -566,5 +568,6 @@ export function draftFromBody(
     caption: typeof body.caption === "string" ? body.caption : "",
     aspect: typeof body.aspect === "string" && aspects.includes(body.aspect) ? (body.aspect as FeedAspect) : null,
     photoCount: Array.isArray(body.photos) ? body.photos.length : 0,
+    offer: offerFromBody(body.offer),
   };
 }

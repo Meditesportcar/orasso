@@ -6,9 +6,11 @@ import {
   offerDatesLabel,
   offerDatesPhrase,
   offerEditorLabel,
+  offerFromBody,
   offerIsLive,
   offerIssue,
   offerState,
+  offersView,
   publishStartOffer,
 } from "./proOffers";
 import { fromWallTime } from "./time";
@@ -134,5 +136,29 @@ describe("le corps et les valeurs de départ", () => {
       publishStartOffer({ fiche: "11111111-1111-1111-1111-111111111111", etiquette: "offre" }, authors),
     ).toBeNull();
     expect(publishStartOffer({ etiquette: "offre" }, authors)).toBeNull();
+  });
+});
+
+describe("offerFromBody : l'offre d'un envoi incertain repris", () => {
+  it("restaure le titre et les jours ; sans offre, rien", () => {
+    expect(offerFromBody({ title: "Polish", startsOn: "2026-11-10", endsOn: "2026-11-30" })).toEqual({
+      on: true,
+      title: "Polish",
+      startsOn: "2026-11-10",
+      endsOn: "2026-11-30",
+    });
+    expect(offerFromBody({ title: "Polish", endsOn: "2026-11-30" }).startsOn).toBe("");
+    expect(offerFromBody(undefined)).toEqual(emptyOfferForm);
+    expect(offerFromBody(null).on).toBe(false);
+  });
+});
+
+describe("offersView : la panne avant le vide", () => {
+  it("lecture vide puis relecture échouée : panne, jamais « Pas d'offre »", () => {
+    expect(offersView({ loading: true, loaded: false, error: false, count: 0 })).toBe("waiting");
+    expect(offersView({ loading: false, loaded: true, error: false, count: 0 })).toBe("empty");
+    expect(offersView({ loading: false, loaded: true, error: true, count: 0 })).toBe("error");
+    expect(offersView({ loading: false, loaded: false, error: true, count: 0 })).toBe("error");
+    expect(offersView({ loading: false, loaded: true, error: true, count: 2 })).toBe("list");
   });
 });

@@ -255,6 +255,7 @@ export function PublishForm({
     const draft = draftFromBody(saved, authors);
     setChoice(draft.choice);
     setCaption(draft.caption);
+    setOffer(draft.offer);
     if (draft.aspect) setAspect(draft.aspect);
     setKeptPhotos(draft.photoCount);
     setError(T.noNetwork);
