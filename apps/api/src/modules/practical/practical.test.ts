@@ -494,3 +494,31 @@ describe("POST /practical : tous les départements qui coupent la zone (suite R8
     for (const c of stub.calls) expect(c.department).toMatch(/^[0-9][0-9AB]$/);
   });
 });
+
+describe("POST /practical : beaucoup de départements et une source lente (suite R8q, tour 2)", () => {
+  it("la réponse annonce « en cours » tant que les chargements durent, puis devient complète", async () => {
+    const stub = practicalSources(
+      {
+        wash: { "75": [{ name: "Lavage de Paris", lat: 48.86, lon: 2.34 }] },
+        fuel: { "93": [{ adresse: "Avenue de la République", ville: "Bobigny", cp: "93000", lat: 48.9, lon: 2.44 }] },
+      },
+      { delayMs: 120 },
+    );
+    const u = await viewerOf(await fan("Fan_Huit"));
+    const target = { near: "position" as const, cell: { lat: 48.9, lng: 2.4, key: "48.9,2.4" } };
+    const first = await practicalService.get(u, target, 40);
+    // Au moins huit départements à lire, l'Overpass en série est lent : rien d'achevé dans le budget.
+    expect(first.partial).toBe(true);
+    // Les chargements continuent en arrière-plan ; une relecture plus tard ne dit « complet » qu'une fois tout chargé.
+    let last = first;
+    for (let i = 0; i < 20 && last.partial; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      last = await practicalService.get(u, target, 40);
+    }
+    expect(last.partial).toBe(false);
+    expect(new Set(stub.calls.filter((c) => c.source === "wash").map((c) => c.department)).size).toBeGreaterThanOrEqual(
+      8,
+    );
+    expect(last.places.length).toBeGreaterThan(0);
+  });
+});

@@ -10,6 +10,7 @@ import {
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  practicalPendingDelay,
   practicalReadAllowed,
   practicalRetryDelay,
   shouldRetryPractical,
@@ -23,7 +24,6 @@ import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
-  PARTIAL_RETRY_MS,
   refreshPracticalPosition,
   useFollowWeatherPosition,
   usePracticalPosition,
@@ -70,7 +70,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   /** Le compte pour qui `state` a été lu : une autre session l'efface. */
   const shownFor = useRef<string | null>(null);
   const fetchedAt = useRef(0);
-  const retried = useRef(false);
+  const retried = useRef(0);
   // Une seule chaîne d'attente d'identité et une seule chaîne de relances, annulées au démontage (tour 3).
   const waitTimer = useRef(createSingleTimer()).current;
   const retryTimer = useRef(createSingleTimer()).current;
@@ -105,9 +105,13 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       fetchedAt.current = Date.now();
       attempts.current = 0;
       setState({ data, loading: false, offline: false });
-      if (data.partial && !retried.current) {
-        retried.current = true;
-        retryTimer.schedule(() => void load(), PARTIAL_RETRY_MS);
+      // Des chargements sont en cours côté API : relectures espacées (3, 6, 12, 24 s), puis arrêt.
+      const pending = data.partial ? practicalPendingDelay(retried.current) : null;
+      if (pending !== null) {
+        retried.current += 1;
+        retryTimer.schedule(() => {
+          if (alive.current) void load();
+        }, pending);
       }
     } catch (error) {
       if (!alive.current || !guard.valid(ticket)) return;
@@ -128,7 +132,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `load` change avec ses entrées ; une lecture par changement.
   useEffect(() => {
-    retried.current = false;
+    retried.current = 0;
     fetchedAt.current = 0;
     attempts.current = 0;
     lastStart.current = 0;
@@ -192,11 +196,19 @@ export function usePracticalSources(eventId?: string): PracticalSources {
   const outing = useRead("outing", true, eventId);
   // Position donnée avec des lieux partiels : une seule relecture, après le délai.
   const partial = at?.data.partial === true;
+  const partialAttempts = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle réponse (`at`) programme la relecture suivante du calendrier.
   useEffect(() => {
-    if (!partial) return undefined;
-    const timer = setTimeout(() => void refreshPracticalPosition(true), PARTIAL_RETRY_MS);
+    if (!partial) {
+      partialAttempts.current = 0;
+      return undefined;
+    }
+    const delay = practicalPendingDelay(partialAttempts.current);
+    if (delay === null) return undefined;
+    partialAttempts.current += 1;
+    const timer = setTimeout(() => void refreshPracticalPosition(true), delay);
     return () => clearTimeout(timer);
-  }, [partial]);
+  }, [partial, at]);
   return {
     me: at
       ? { data: at.data, loading: false, offline: false, exact: at.exact, onPosition: true }

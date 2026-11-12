@@ -77,3 +77,9 @@ export function createFollowTracker(now: () => number = Date.now, echoMs = 10_00
 export function weatherFollowKey(coarse: { lat: number; lng: number } | null): string | null {
   return coarse ? `${coarse.lat.toFixed(1)},${coarse.lng.toFixed(1)}` : null;
 }
+
+/** Relectures tant que la réponse annonce des chargements en cours : 3 s, 6 s, 12 s, 24 s, puis arrêt (`null`). */
+export const PRACTICAL_PENDING_DELAYS_MS = [3_000, 6_000, 12_000, 24_000] as const;
+export function practicalPendingDelay(attempt: number): number | null {
+  return PRACTICAL_PENDING_DELAYS_MS[Math.max(0, Math.floor(attempt))] ?? null;
+}

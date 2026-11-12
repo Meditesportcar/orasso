@@ -319,3 +319,26 @@ test("suite : une première panne puis le retour en ligne : le bloc reparaît sa
   await expect(second.page.getByTestId("practical-list")).toBeVisible({ timeout: 20_000 });
   await second.ctx.close();
 });
+
+test("suite, tour 2 : panne, onglet masqué, réseau rétabli, retour sur l'onglet : la lecture est relancée", async ({
+  browser,
+}) => {
+  const { ctx, page } = await openHome(browser, { offline: true });
+  await expect(page.getByTestId("widget-practical").getByTestId("practical-fuel")).toHaveCount(0);
+  // L'onglet est masqué : le retour en ligne ne relance rien.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await ctx.unroute(/\/api\/practical/);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("widget-practical").getByTestId("practical-fuel")).toHaveCount(0);
+  // Retour sur l'onglet : la lecture repart.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.getByTestId("widget-practical").getByTestId("practical-fuel")).toBeVisible({ timeout: 20_000 });
+  await ctx.close();
+});

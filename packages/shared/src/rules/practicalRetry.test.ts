@@ -4,6 +4,7 @@ import {
   createFollowTracker,
   createSingleTimer,
   PRACTICAL_MIN_GAP_MS,
+  practicalPendingDelay,
   practicalReadAllowed,
   practicalRetryDelay,
   shouldRetryPractical,
@@ -82,5 +83,11 @@ describe("relances de Pratique (R8q, tour 3)", () => {
     expect(tracker.shouldFollow(weatherFollowKey({ lat: 42.5, lng: 3.0 }))).toBe(false);
     expect(tracker.shouldFollow(b)).toBe(true);
     expect(weatherFollowKey(null)).toBeNull();
+  });
+});
+
+describe("relectures tant que des chargements sont en cours (suite R8q, tour 2)", () => {
+  it("3 s, 6 s, 12 s, 24 s, puis arrêt", () => {
+    expect([0, 1, 2, 3, 4, 10].map(practicalPendingDelay)).toEqual([3_000, 6_000, 12_000, 24_000, null, null]);
   });
 });

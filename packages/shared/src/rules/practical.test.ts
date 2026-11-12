@@ -8,6 +8,7 @@ import {
   formatKm,
   nearestDepartments,
   nearestOfEach,
+  PRACTICAL_DEPARTMENTS_MAX,
   PRACTICAL_MAX,
   PRACTICAL_RADIUS_KM,
   type PracticalPlace,
@@ -169,5 +170,35 @@ describe("départements autour d'un point et tri exact (suite R8q)", () => {
     expect(sorted.map((p) => p.id)).toEqual(["b", "a"]);
     expect(sorted[0]?.distanceKm).toBe(sorted[1]?.distanceKm);
     expect(String(sorted[0]?.distanceKm).split(".")[1]?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("préfiltre conservateur et plafond des départements (suite R8q, tour 2)", () => {
+  it("le contre-exemple de Codex : près de (49,5 ; 5,5), Longuyon (54) est lu", () => {
+    const around = departmentsAround({ lat: 49.5, lng: 5.5 });
+    expect(around).toContain("54");
+    for (const code of ["08", "55", "57"]) expect(around, code).toContain(code);
+  });
+
+  it("Paris et la limite 66/11 restent lus", () => {
+    const paris = departmentsAround({ lat: 48.85, lng: 2.35 });
+    for (const code of ["75", "92", "93", "94"]) expect(paris, code).toContain(code);
+    const border = departmentsAround({ lat: 42.85, lng: 2.85 });
+    expect(border).toContain("66");
+    expect(border).toContain("11");
+  });
+
+  it("plafond de 10 départements, les plus proches par leur centre d'abord", () => {
+    const paris = departmentsAround({ lat: 48.85, lng: 2.35 });
+    expect(paris.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+    // Les deux plus proches du point sont toujours dans la liste plafonnée.
+    for (const code of nearestDepartments({ lat: 48.85, lng: 2.35 }, 2)) expect(paris).toContain(code);
+    for (const point of [
+      { lat: 49.5, lng: 5.5 },
+      { lat: 47.2, lng: 2.4 },
+      { lat: 43.6, lng: 1.44 },
+    ]) {
+      expect(departmentsAround(point).length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+    }
   });
 });

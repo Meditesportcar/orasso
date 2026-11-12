@@ -14,6 +14,11 @@ export const PRACTICAL_MAX = 200;
 /** Les départements dont on lit les lieux : les deux dont le centre est le plus proche de l'origine. */
 export const PRACTICAL_DEPARTMENTS = 2;
 
+/** Demi-longueur des départements allongés (km) : préfiltre de `departmentsAround`. */
+export const PRACTICAL_DEPARTMENT_HALF_SIZE_KM = 65;
+/** Plafond du nombre de départements lus pour une demande. */
+export const PRACTICAL_DEPARTMENTS_MAX = 10;
+
 /** Un lieu servi par `POST /practical` : ni prix, ni heure de mise à jour, ni distance. */
 export type PracticalPlace = {
   id: string;
@@ -84,6 +89,11 @@ export function departmentsAround(
   minimum = PRACTICAL_DEPARTMENTS,
 ): string[] {
   const found = new Set<string>(nearestDepartments(point, minimum));
+  // Préfiltre conservateur (un département peut déborder loin de son centre) : tout département dont le centre est à moins de
+  // rayon + 65 km (demi-longueur des départements allongés : le centre de la Meurthe-et-Moselle est à 88 km de Longuyon, qui est à 10 km) est lu, même si l'échantillon du cercle ne l'a pas touché.
+  for (const [code, centre] of Object.entries(departmentCentroids)) {
+    if (distanceKm(point, centre) <= radiusKm + PRACTICAL_DEPARTMENT_HALF_SIZE_KM) found.add(code);
+  }
   const reach = radiusKm + marginKm;
   const kmPerDegLat = 111.2;
   const kmPerDegLng = kmPerDegLat * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180));
@@ -105,7 +115,9 @@ export function departmentsAround(
       note(at(radius * Math.cos(angle), radius * Math.sin(angle)));
     }
   }
-  return [...found].sort();
+  // Plafond : les `PRACTICAL_DEPARTMENTS_MAX` dont le centre est le plus proche (chaque département froid coûte un appel à Overpass).
+  const byCentre = (code: string) => distanceKm(point, departmentCentroids[code] as LatLng);
+  return [...found].sort((a, b) => byCentre(a) - byCentre(b) || a.localeCompare(b)).slice(0, PRACTICAL_DEPARTMENTS_MAX);
 }
 
 /** Les lieux à `radiusKm` de l'origine au plus, les `max` plus proches (sans doublon d'identifiant). */

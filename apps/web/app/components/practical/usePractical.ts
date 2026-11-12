@@ -5,10 +5,10 @@
 import {
   createSessionGuard,
   createSingleTimer,
-  PRACTICAL_PARTIAL_RETRY_MS,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  practicalPendingDelay,
   practicalRetryDelay,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -63,27 +63,38 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   const reload = useRef<() => void>(() => undefined);
   const retry = useCallback(() => reload.current(), []);
   const failed = useRef(false);
-  const retried = useRef(false);
+  const retried = useRef(0);
+  // Le composant est monté : plus aucune lecture ni relance après son démontage (tour 2 de la suite).
+  const alive = useRef(true);
+  // Une seule lecture à la fois (reprises, « Réessayer », minuteries).
+  const reading = useRef(false);
   // Une seule relance de lieux partiels, annulée au démontage (tour 3).
   const partialTimer = useRef(createSingleTimer()).current;
   const retryTimer = useRef(createSingleTimer()).current;
   const attempts = useRef(0);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
       partialTimer.cancel();
       retryTimer.cancel();
-    },
-    [partialTimer, retryTimer],
-  );
+    };
+  }, [partialTimer, retryTimer]);
 
   // Sans identité connue, rien ne part (la lecture attend l'annonce de la session, `who` change alors et relance l'effet).
   const load = useCallback(async () => {
-    if (!enabled || !who) return;
+    if (!enabled || !who || !alive.current || reading.current) return;
     const ticket = guard.begin();
     if (!ticket) return;
-    const res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near } });
-    // Une réponse devenue étrangère (autre compte, autre génération de session) est jetée.
-    if (!guard.valid(ticket)) return;
+    reading.current = true;
+    let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
+    try {
+      res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near } });
+    } finally {
+      reading.current = false;
+    }
+    // Une réponse devenue étrangère (autre compte, autre génération de session) ou arrivée après le démontage est jetée.
+    if (!alive.current || !guard.valid(ticket)) return;
     if (!res.ok) {
       failed.current = true;
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
@@ -91,7 +102,8 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       if (res.status === 0) {
         retryTimer.schedule(
           () => {
-            if (typeof document === "undefined" || document.visibilityState === "visible") void load();
+            if (alive.current && (typeof document === "undefined" || document.visibilityState === "visible"))
+              void load();
           },
           practicalRetryDelay(attempts.current++),
         );
@@ -102,15 +114,19 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     failed.current = false;
     memory.set(`${ticket.who}|${near}`, res.data);
     setState({ data: res.data, loading: false, offline: false });
-    if (res.data.partial && !retried.current) {
-      retried.current = true;
-      partialTimer.schedule(() => void load(), PRACTICAL_PARTIAL_RETRY_MS);
+    // Des chargements sont en cours côté API : relectures espacées (3, 6, 12, 24 s), puis arrêt ; jamais après le démontage.
+    const pending = res.data.partial ? practicalPendingDelay(retried.current) : null;
+    if (pending !== null) {
+      retried.current += 1;
+      partialTimer.schedule(() => {
+        if (alive.current) void load();
+      }, pending);
     }
   }, [enabled, near, who, partialTimer, retryTimer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {
-    retried.current = false;
+    retried.current = 0;
     attempts.current = 0;
     retryTimer.cancel();
     if (!enabled) {
@@ -131,9 +147,13 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       reload.current();
     };
-    const onlineHandler = () => resume();
-    window.addEventListener("online", onlineHandler);
-    return () => window.removeEventListener("online", onlineHandler);
+    // Retour en ligne et page redevenue visible (une relance tombée dans un onglet masqué n'est pas perdue).
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
   }, [load]);
   return { ...state, retry };
 }
@@ -150,11 +170,19 @@ export function usePracticalSources(): PracticalSources {
   const city = useRead("city", at === null);
   const outing = useRead("outing", true);
   const partial = at?.data.partial === true;
+  const partialAttempts = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle réponse (`at`) programme la relecture suivante du calendrier.
   useEffect(() => {
-    if (!partial) return undefined;
-    const timer = setTimeout(() => void refreshPracticalPosition(true), PRACTICAL_PARTIAL_RETRY_MS);
+    if (!partial) {
+      partialAttempts.current = 0;
+      return undefined;
+    }
+    const delay = practicalPendingDelay(partialAttempts.current);
+    if (delay === null) return undefined;
+    partialAttempts.current += 1;
+    const timer = setTimeout(() => void refreshPracticalPosition(true), delay);
     return () => clearTimeout(timer);
-  }, [partial]);
+  }, [partial, at]);
   return {
     me: at
       ? { data: at.data, loading: false, offline: false, retry: city.retry, exact: at.exact, onPosition: true }
