@@ -7,12 +7,14 @@
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   acceptEvents,
+  actorKeyOfPublishAuthor,
   attachableQuery,
   attachLeadOf,
   coauthorLabels as CO,
   type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
+  casquettesLabels,
   chooseAuthor,
   chooseEvent,
   coAuthorInputOf,
@@ -128,7 +130,7 @@ export function PublishScreen({ start }: { start?: PublishStart } = {}) {
 }
 
 /** Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis (`?structure=&evenement=`). */
-export type PublishStart = { structure?: string; evenement?: string };
+export type PublishStart = { structure?: string; evenement?: string; auteur?: string };
 
 function PublishForm({ start }: { start?: PublishStart }) {
   const { t } = useTheme();
@@ -622,7 +624,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   return (
     <FlowScreen
       title={L.publishTitle}
-      facts={L.publishSubtitle}
+      facts={author.destination === "me" ? L.publishSubtitle : casquettesLabels.publishAs(author.name)}
       onClose={close}
       footer={
         <View style={styles.footer}>
@@ -669,6 +671,23 @@ function PublishForm({ start }: { start?: PublishStart }) {
       }
     >
       <View style={styles.block} testID="fil-publish">
+        {/* Lot R9n (T18) : un seul geste pour publier ; « Story » ouvre l'écran de story au nom de la même casquette. */}
+        <Seg
+          value="post"
+          onChange={(kind) => {
+            if (kind === "story") {
+              router.replace(
+                `/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never,
+              );
+            }
+          }}
+          disabled={busy || checking || working}
+          options={[
+            { value: "post", label: casquettesLabels.publishKindPost, icon: "gallery" },
+            { value: "story", label: casquettesLabels.publishKindStory, icon: "camera" },
+          ]}
+          testID="fil-publish-kind"
+        />
         <Label text={L.publishPhotos} hint={L.publishPhotosCount(photos.length, FEED_POST_PHOTOS_MAX)} />
         {posterVisual && event ? <PosterVisual event={event} /> : null}
         <View style={styles.grid}>

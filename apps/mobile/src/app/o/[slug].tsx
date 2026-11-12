@@ -40,6 +40,7 @@ import { SetList, SetRow } from "@/features/profil/parts";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
+import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -55,7 +56,10 @@ export default function StructurePage() {
   const { slug, onglet } = useLocalSearchParams<{ slug: string; onglet?: string }>();
   const { status, me } = useSession();
   const session = status === "in";
-  const structure = useApi(() => api.structureBySlug(slug), [slug, status], { enabled: status !== "loading" });
+  const actor = useActor();
+  const structure = useApi(() => api.structureBySlug(slug, actor), [slug, status, actor], {
+    enabled: status !== "loading",
+  });
   const s = structure.data as WithPageExtras<StructurePublic> | null;
   // Les listes de l'onglet « Événements » ; `null` tant qu'elles ne sont pas lues (une panne n'est jamais « aucun »).
   const upcoming = useApi(() => api.exploreEvents({ structureId: s?.id, sort: "date", limit: 50 }), [s?.id], {
@@ -111,8 +115,8 @@ export default function StructurePage() {
     setBusy(true);
     setNote(null);
     try {
-      if (s.isFollowing) await api.unfollowStructure(s.id);
-      else await api.followStructure(s.id);
+      if (s.isFollowing) await api.unfollowStructure(s.id, actor);
+      else await api.followStructure(s.id, actor);
       await structure.reload();
     } catch (e) {
       setNote({ tone: "error", text: errorMessage(e) });

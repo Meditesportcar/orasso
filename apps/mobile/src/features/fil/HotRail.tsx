@@ -15,10 +15,13 @@ const TILE_H = Math.round((TILE_W * 5) / 4);
 export function HotRail({
   cards,
   scope,
+  scopeLabel,
   onOpen,
 }: {
   cards: readonly FeedCard<"feed_post">[];
   scope: "nearby" | "following";
+  /** Lot R9n : le périmètre en casquette (« chez ceux que <casquette> suit · 7 jours »). */
+  scopeLabel?: string;
   onOpen: (card: FeedCard<"feed_post">) => void;
 }) {
   const { t } = useTheme();
@@ -32,7 +35,7 @@ export function HotRail({
           {L.hotTitle}
         </Text>
         <Text variant="caption" color={c.inkMuted} style={styles.scope}>
-          {L.hotScope[scope]}
+          {scopeLabel ?? L.hotScope[scope]}
         </Text>
       </View>
       <ScrollView

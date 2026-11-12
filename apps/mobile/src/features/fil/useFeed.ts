@@ -12,6 +12,7 @@
 // - (R8c2) « Nouvelles publications » : `GET /fil/fresh` toutes les 60 s, Fil au premier plan et appli active.
 import {
   applyFeedPage,
+  authorKeyOfPersona,
   emptyFeedList,
   type FeedCard,
   type FeedErrorSource,
@@ -37,7 +38,9 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage, NETWORK_MESSAGE } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
+import { usePersona } from "@/lib/persona";
 import { createRequestGate } from "@/lib/requestGate";
+import { useActor } from "@/lib/useActor";
 import { dropFromCopies, resetWantedPhotos, setWantedPhotos } from "./copyPhotos";
 import { forgetMyPublished, myPublishedCards, takeFeedDirty } from "./feedSignal";
 
@@ -72,6 +75,16 @@ export function useFeed() {
   const [fresh, setFresh] = useState(0);
   /** Change à chaque liste remplacée (première page, actualisation) : repart le suivi des cartes vues. */
   const [round, setRound] = useState(0);
+  // Lot R9n : en casquette, le Fil est lu « en tant que » la page (en-tête `X-Orasso-Actor`) et sa copie hors ligne est à part
+  // (T20). Changer de casquette = Fil neuf : les lectures en cours sont jetées (`gate.invalidate`, règle `requestGate`).
+  const actor = useActor();
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
+  const { entries } = usePersona();
+  const actorsKey = entries
+    .flatMap((e) => (e.assisted ? [] : [authorKeyOfPersona({ kind: e.kind, id: e.id })]))
+    .filter((k): k is string => k !== null)
+    .join("|");
   const gate = useRef(createRequestGate(cacheScope)).current;
   const filterRef = useRef(filter);
   filterRef.current = filter;
@@ -92,7 +105,7 @@ export function useFeed() {
   const appActive = useAppActive();
 
   const account = cacheScope();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `account` relance la lecture du filtre mémorisé après un changement de compte.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `account`, `actor` et `actorsKey` relancent la lecture du filtre mémorisé.
   useEffect(() => {
     gate.invalidate();
     setList(null);
@@ -104,15 +117,19 @@ export function useFeed() {
     setMine([]);
     setReady(false);
     // Les photos de la copie : ce que chaque copie garde est relu une fois par compte, puis les photos périmées ou orphelines partent.
-    resetWantedPhotos();
+    const known: (string | null)[] = [null, ...(actorsKey ? actorsKey.split("|") : [])];
+    resetWantedPhotos(known);
     void (async () => {
-      for (const f of feedFilters) {
-        const saved = await readCopy<unknown>(feedCopyKey(f));
-        setWantedPhotos(
-          f,
-          (saved ? parseFeedCopy(saved.value, f) : null) ?? [],
-          f === feedFilters[feedFilters.length - 1],
-        );
+      for (const who of known) {
+        for (const f of feedFilters) {
+          const saved = await readCopy<unknown>(feedCopyKey(f, who));
+          setWantedPhotos(
+            f,
+            (saved ? parseFeedCopy(saved.value, f) : null) ?? [],
+            who === known[known.length - 1] && f === feedFilters[feedFilters.length - 1],
+            who,
+          );
+        }
       }
     })();
     let cancelled = false;
@@ -124,11 +141,11 @@ export function useFeed() {
     return () => {
       cancelled = true;
     };
-  }, [account, gate]);
+  }, [account, actor, actorsKey, gate]);
 
   /** La copie gardée de ce filtre, si elle existe : vrai quand elle est affichée. */
   const showCopy = useCallback(async (f: FeedFilter, current: () => boolean): Promise<boolean> => {
-    const saved = await readCopy<unknown>(feedCopyKey(f));
+    const saved = await readCopy<unknown>(feedCopyKey(f, actorRef.current));
     if (!current()) return true;
     const items = saved ? parseFeedCopy(saved.value, f) : null;
     if (!saved || !items?.length) return false;
@@ -156,7 +173,7 @@ export function useFeed() {
           }
           return;
         }
-        const page = await api.feed(f, null);
+        const page = await api.feed(f, null, actorRef.current);
         if (!ticket.current()) return;
         const applied = applyFeedPage(emptyFeedList(f), page, null);
         if (!applied) return;
@@ -169,8 +186,8 @@ export function useFeed() {
         setRound((n) => n + 1);
         // La première page reçue est gardée pour le prochain passage sans réseau (jamais mes cartes épinglées).
         const copyCards = feedCopyCards(applied.state.items);
-        setWantedPhotos(f, copyCards);
-        void saveCopy(feedCopyKey(f), { filter: f, items: copyCards });
+        setWantedPhotos(f, copyCards, true, actorRef.current);
+        void saveCopy(feedCopyKey(f, actorRef.current), { filter: f, items: copyCards });
       } catch (e) {
         if (!ticket.current()) return;
         // Pas de réponse (hors ligne, API arrêtée) : la copie, même ancienne, plutôt qu'une erreur plein écran.
@@ -193,7 +210,7 @@ export function useFeed() {
     const ticket = gate.follow();
     setLoadingMore(true);
     try {
-      const page = await api.feed(current.filter, sent);
+      const page = await api.feed(current.filter, sent, actorRef.current);
       if (!ticket.current()) return;
       const latest = listRef.current;
       // Le curseur a changé entre-temps (une relecture, un autre filtre) : cette page ne vaut plus.
@@ -233,7 +250,7 @@ export function useFeed() {
     setError(null);
     setErrorSource(null);
     void reload(filter);
-  }, [ready, filter, account, reload]);
+  }, [ready, filter, account, actor, reload]);
 
   const setFilter = useCallback((next: FeedFilter) => {
     if (next === filterRef.current) return;
@@ -279,7 +296,7 @@ export function useFeed() {
     if (!ref || !online || !focused || !appActive || copy) return;
     let stopped = false;
     const timer = setInterval(() => {
-      void api.feedFresh(filterRef.current, ref).then(
+      void api.feedFresh(filterRef.current, ref, actorRef.current).then(
         (r) => {
           if (!stopped && listRef.current?.ref === ref) setFresh(r.count);
         },

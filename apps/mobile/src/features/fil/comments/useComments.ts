@@ -38,6 +38,7 @@ import { confirmRemove } from "@/features/crews/feed/confirm";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
+import { useActor } from "@/lib/useActor";
 import { postLive } from "./live";
 import { replyParentOf } from "./replyParent";
 
@@ -84,6 +85,10 @@ export function useComments(
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const mounted = useRef(true);
+  // Lot R9n (T7) : lire et commenter au nom de la casquette active (en-tête de la liste blanche).
+  const actor = useActor();
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -144,7 +149,7 @@ export function useComments(
       // La marque se prend au départ de **chaque** lecture, pagination comprise.
       const since = sheetMark(postLive.sheetOf(id));
       try {
-        const page = await api.feedComments(id, from);
+        const page = await api.feedComments(id, from, actorRef.current);
         if (!postLive.fresh(t)) return;
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
@@ -188,7 +193,11 @@ export function useComments(
       const p = postLive.sheetOf(id).pending.find((x) => x.clientId === clientId);
       if (!p) return;
       try {
-        const created = await api.createFeedComment(id, { text: p.text.trim(), parentId: p.parentId, clientId });
+        const created = await api.createFeedComment(
+          id,
+          { text: p.text.trim(), parentId: p.parentId, clientId },
+          actorRef.current,
+        );
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {

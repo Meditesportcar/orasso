@@ -8,6 +8,7 @@
 // téléphone, part avec sa progression réelle puis sa vignette. Casquette active : l'écran publie au nom de la structure ou de la fiche.
 import { Icon, SendProgress, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import {
+  casquettesLabels,
   commercialField,
   commercialIssue,
   eventsWithPlace,
@@ -29,7 +30,6 @@ import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, BackHandler, Platform, StyleSheet, View } from "react-native";
-
 import { api } from "@/lib/api";
 import { isUploadCancelled, isUploadTimeout } from "@/lib/api/storiesVideo";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -40,8 +40,9 @@ import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
 import { type PickedVideo, pickGalleryVideo, prepareStoryVideo, VideoRefused, type VideoStage } from "@/lib/storyVideo";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
+import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
-import { SmButton } from "@/ui/Kit";
+import { Seg, SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
@@ -118,14 +119,23 @@ function confirmLeave(): Promise<boolean> {
   );
 }
 
-export function PublishStoryScreen() {
+export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
   const { me } = useSession();
   const { persona, active } = usePersona();
   const visibility = me?.profile.visibility ?? "public";
-  const author = useMemo(() => authorOf(persona, active.label), [persona, active.label]);
+  const actor = useActor();
+  // Lot R9n : `?auteur=me` = une story personnelle, même depuis une casquette (« Moi · Damien_66 ») ; absent ou clé de la casquette
+  // active : la casquette active, comme avant ; toute autre clé est ignorée (l'API revérifie les droits de toute façon).
+  const asMe = auteur === "me";
+  const author = useMemo(
+    () => (asMe ? ({ persona: "fan" } as StoryAuthor) : authorOf(persona, active.label)),
+    [asMe, persona, active.label],
+  );
+  // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran de publication au nom de la même casquette.
+  const kindKey = asMe || !actor ? "me" : actor;
 
   const [step, setStep] = useState<StoryStep>("media");
   const [draft, setDraft] = useState<StoryDraft | null>(null);
@@ -665,6 +675,19 @@ export function PublishStoryScreen() {
         ) : undefined
       }
     >
+      {step === "media" ? (
+        <Seg
+          value="story"
+          onChange={(kind) => {
+            if (kind === "post") router.replace(`/fil/publier?auteur=${encodeURIComponent(kindKey)}` as never);
+          }}
+          options={[
+            { value: "post", label: casquettesLabels.publishKindPost, icon: "gallery" },
+            { value: "story", label: casquettesLabels.publishKindStory, icon: "camera" },
+          ]}
+          testID="story-publish-kind"
+        />
+      ) : null}
       {step === "media" ? (
         <Pick
           camera={access}

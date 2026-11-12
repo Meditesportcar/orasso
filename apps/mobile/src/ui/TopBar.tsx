@@ -15,11 +15,12 @@
 // de la zone qui glisse (`TabScreen`, `TabStage`), sous ses feuilles (règle du socle C1 : une feuille couvre les deux
 // bandes). Hors d'un groupe d'onglets, pas de bande : l'écran est en mode B (en-tête de fiche, `FicheHeader`).
 import { AppBar, type AppBarProps } from "@orasso/design-system/native";
-import { topBarCounts } from "@orasso/shared";
+import { casquettesLabels, topBarCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { openCasquettes } from "@/features/casquettes/sheetStore";
 import { api } from "@/lib/api";
 import { mutationCount } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
@@ -53,8 +54,13 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { me } = useSession();
   const { persona, base, active, choose, backToBase } = usePersona();
-  // Organisateur (artefact) et Administration (hors artefact, sans onglet Profil : la pastille est son seul retour).
-  const showPersona = persona.kind === "organizer" || persona.kind === "admin";
+  // Lot R9n (maquette `appbar2`) : la pastille de la casquette pour les quatre casquettes de page (logo seul, elle ouvre « Mes
+  // casquettes ») et pour l'Administration (hors artefact, sans onglet Profil : la pastille est son seul retour).
+  const isPageKind =
+    persona.kind === "organizer" || persona.kind === "pro" || persona.kind === "provider" || persona.kind === "media";
+  // Le survol en assistance garde l'ancien geste (retour par la bannière) : jamais « Mes casquettes » au nom d'une structure survolée.
+  const isPage = isPageKind && !active.assisted;
+  const showPersona = isPageKind || persona.kind === "admin";
   // Organisateur : la Boîte de la structure (messages de participants, discussions du staff, demandes non traités).
   const structureId = persona.kind === "organizer" ? persona.structureId : null;
   const orgInbox = useApi(() => api.orgInboxSummary(structureId ?? ""), [structureId], {
@@ -105,11 +111,13 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
         ? {
             logoUrl: active.logoUrl,
             label: active.label,
-            role: personaKindLabels[persona.kind],
-            hint: "Ouvre Mon profil",
+            // Les casquettes de page : le logo seul (le nom est dans la feuille) ; l'Administration garde son libellé.
+            ...(isPage
+              ? { hint: casquettesLabels.chipHint }
+              : { role: personaKindLabels[persona.kind], hint: "Ouvre Mon profil" }),
           }
         : undefined,
-      onPersona: () => choose(base, tabHref(base.kind, "profil") ?? undefined),
+      onPersona: isPage ? openCasquettes : () => choose(base, tabHref(base.kind, "profil") ?? undefined),
       onLogo: () => router.navigate(homeOf(persona) as never),
       onLogoLongPress: persona.kind === base.kind ? undefined : backToBase,
       logoHint: `Appui long : revenir au profil ${baseLabel.toLowerCase()}`,
@@ -127,6 +135,7 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     }),
     [
       showPersona,
+      isPage,
       active.logoUrl,
       active.label,
       persona,

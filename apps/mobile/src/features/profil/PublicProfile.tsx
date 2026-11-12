@@ -60,6 +60,7 @@ import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
+import { useActor } from "@/lib/useActor";
 import { AppSheet } from "@/ui/AppSheet";
 import { CrewDot, TagWin } from "@/ui/Kit";
 import { AngledTag } from "@/ui/KitTz";
@@ -229,6 +230,9 @@ export function PublicProfile({
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
+  // Lot R9n : le profil en direct est lu au nom de la casquette (`u/[pseudo]`), donc on y suit au même nom.
+  const actor = useActor();
+  const liveActor = mode === "live" ? actor : null;
   const [w, setW] = useState(0);
   // Lot R8b1 : la feuille « Plus » (signaler) et l'erreur de l'icône « Message ».
   const [moreOpen, setMoreOpen] = useState(false);
@@ -300,6 +304,7 @@ export function PublicProfile({
         followsMe={p.follow.followsMe}
         canFollow={p.follow.canFollow}
         visibility={p.visibility}
+        actor={liveActor}
         onChanged={() => onChanged?.()}
       />
     );
@@ -512,7 +517,7 @@ export function PublicProfile({
                 ? {
                     asked: p.follow.mine === "pending",
                     onAsk: async () => {
-                      await api.follow(p.pseudo);
+                      await api.follow(p.pseudo, liveActor);
                       onChanged?.();
                     },
                   }
