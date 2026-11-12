@@ -504,6 +504,30 @@ describe("terrain : alertes et main courante", () => {
 });
 
 describe("inscription express", () => {
+  it("panne entre l'invitation et l'e-mail (R8p, tour 6) : le rejeu répare, un seul e-mail part, jamais deux", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e02";
+    const body = { email: "Panne@Exemple.fr", clientId };
+    const path = `/events/${eventId}/express-invites`;
+    const mailsTo = async () =>
+      (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+        (m) => m.to === "panne@exemple.fr",
+      );
+    const send = vi.spyOn(mail, "send").mockRejectedValueOnce(new Error("panne avant la boîte d'envoi"));
+    const lost = await call(julie, "POST", path, body);
+    expect(lost.status).toBe(500);
+    send.mockRestore();
+    // L'invitation existe, sans aucune trace d'e-mail.
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "panne@exemple.fr"))).toHaveLength(1);
+    expect(await mailsTo()).toHaveLength(0);
+    // Rejeux, dont trois en même temps : le message part une seule fois.
+    const again = await Promise.all([1, 2, 3].map(() => call(julie, "POST", path, body)));
+    expect(again.map((r) => r.status)).toEqual([201, 201, 201]);
+    expect(new Set(again.map((r) => r.json.id)).size).toBe(1);
+    expect(await mailsTo()).toHaveLength(1);
+    // Un rejeu de plus ne renvoie rien.
+    await call(julie, "POST", path, body);
+    expect(await mailsTo()).toHaveLength(1);
+  });
   it("idempotence (R8p, tour 5) : réponse perdue après création, même clientId → une seule invitation et un seul e-mail", async () => {
     const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e01";
     const first = await call(julie, "POST", `/events/${eventId}/express-invites`, {

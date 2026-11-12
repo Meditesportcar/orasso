@@ -539,6 +539,28 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
     expect(store.getItem("autre-cle")).toBe("garde");
     expect(() => purgeUncertain(null)).not.toThrow();
   });
+  it("transition : l'ancienne clé unique passe sous la clé de son compte, et la purge l'efface aussi", () => {
+    const store = memory();
+    store.setItem(
+      "orasso:fil:publish-uncertain",
+      JSON.stringify({ account: "A", body: { clientId: "vieux", caption: "x" } }),
+    );
+    // Un autre compte ne la touche pas ; le bon la retrouve et la migre.
+    expect(loadUncertain(store, "B")).toBeNull();
+    expect(store.getItem("orasso:fil:publish-uncertain")).not.toBeNull();
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "vieux", caption: "x" });
+    expect(store.getItem("orasso:fil:publish-uncertain")).toBeNull();
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "vieux" });
+    // Une ancienne clé jamais relue disparaît à la déconnexion.
+    store.setItem("orasso:fil:publish-uncertain", JSON.stringify({ account: "C", body: { clientId: "c" } }));
+    purgeUncertain(store);
+    expect(store.getItem("orasso:fil:publish-uncertain")).toBeNull();
+    expect(loadUncertain(store, "A")).toBeNull();
+    // Un contenu illisible est écarté.
+    store.setItem("orasso:fil:publish-uncertain", "{abîmé");
+    expect(loadUncertain(store, "A")).toBeNull();
+    expect(store.getItem("orasso:fil:publish-uncertain")).toBeNull();
+  });
   it("un contenu abîmé n'est pas un corps incertain", () => {
     const store = memory();
     store.setItem("orasso:fil:publish-uncertain:A", "{pas du json");
