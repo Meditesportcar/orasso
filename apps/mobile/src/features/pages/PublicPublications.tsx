@@ -12,7 +12,7 @@ import {
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { retryCall } from "@/features/publications/retryCall";
 import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
@@ -24,47 +24,74 @@ import { Waiting } from "@/ui/Waiting";
 
 const { space2, space3 } = tokens.spacing;
 
-export function PublicPublications({ authorKey, name }: { authorKey: string; name: string }) {
+export function PublicPublications({
+  authorKey,
+  name,
+  reloadToken = 0,
+}: {
+  authorKey: string;
+  name: string;
+  /** Change à chaque relecture de la page (geste, retour) : la liste se relit sans être démontée, ses éléments restent affichés. */
+  reloadToken?: number;
+}) {
   const { t } = useTheme();
   const [items, setItems] = useState<PublicPostView[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [more, setMore] = useState(false);
+  /** La dernière lecture (relecture ou page suivante) a échoué alors que des éléments sont déjà affichés : dit sous la liste. */
+  const [failed, setFailed] = useState<"reload" | "more" | null>(null);
   const cursor = useRef<string | null>(null);
   const seq = useRef(0);
+  /** Une lecture a déjà abouti pour cette page : une relecture ne remplace pas la liste par l'attente, ni par l'erreur. */
+  const hasRead = useRef(false);
 
   const load = useCallback(
     async (first: boolean) => {
       const mine = ++seq.current;
-      if (first) setState("loading");
-      else setMore(true);
+      setFailed(null);
+      if (first) {
+        if (!hasRead.current) setState("loading");
+      } else setMore(true);
       try {
         const page = await api.publicAuthorPosts(authorKey, first ? null : cursor.current);
         if (mine !== seq.current) return;
         cursor.current = page.nextCursor;
         setNext(page.nextCursor);
         setItems((list) => (first ? page.items : appendUnique(list, page.items)));
+        hasRead.current = true;
         setState("ready");
       } catch (e) {
         if (mine !== seq.current) return;
-        setState(first || items.length === 0 ? "error" : "ready");
+        setState(hasRead.current ? "ready" : "error");
+        if (hasRead.current) setFailed(first ? "reload" : "more");
         void errorMessage(e);
       } finally {
         if (mine === seq.current) setMore(false);
       }
     },
-    [authorKey, items.length],
+    [authorKey],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: seule une autre page relance la première lecture
   useEffect(() => {
     cursor.current = null;
+    hasRead.current = false;
     setItems([]);
     void load(true);
     return () => {
       seq.current++;
     };
   }, [authorKey]);
+
+  // Un nouveau jeton (page relue) : la liste se relit, les éléments déjà lus restent affichés pendant la lecture et après un échec.
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nouveau jeton relance la lecture
+  useEffect(() => {
+    if (seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void load(true);
+  }, [reloadToken]);
 
   if (state === "loading") return <Waiting blocks={[260, 260]} label={PL.loading} testID="publications-loading" />;
   if (state === "error") return <LoadError message={PL.error} onRetry={() => void load(true)} />;
@@ -112,7 +139,8 @@ export function PublicPublications({ authorKey, name }: { authorKey: string; nam
           </Card>
         );
       })}
-      {next ? (
+      {failed ? <LoadError message={PL.error} onRetry={() => void load(retryCall(failed) === "reload")} /> : null}
+      {next && !failed ? (
         <SmButton kind="s" wide icon="down" disabled={more} onPress={() => void load(false)} testID="publications-more">
           {PL.more}
         </SmButton>

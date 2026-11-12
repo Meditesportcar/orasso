@@ -167,7 +167,7 @@ describe("cache des sources externes", () => {
     expect(await fuelNear("66")).toEqual([]);
   });
 
-  it("un seul appel tant que le cache est valable, puis un nouvel appel à l'expiration (carburant 1 h, lavage 7 j)", async () => {
+  it("un seul appel tant que le cache est valable, puis un nouvel appel à l'expiration (carburant 24 h, lavage 7 j)", async () => {
     const fetched = sources();
     expect((await fuelNear("66")).length).toBeGreaterThan(0);
     expect((await washNear("66")).length).toBeGreaterThan(0);
@@ -175,7 +175,12 @@ describe("cache des sources externes", () => {
     await fuelNear("66");
     await washNear("66");
     expect(fetched).toHaveBeenCalledTimes(2);
+    // Lot R8q : le cache des stations dure 24 h (« Pratique » n'affiche aucun prix).
     clock.advance(HOUR + 1000);
+    await fuelNear("66");
+    await washNear("66");
+    expect(fetched).toHaveBeenCalledTimes(2);
+    clock.advance(24 * HOUR);
     await fuelNear("66");
     await washNear("66");
     expect(fetched).toHaveBeenCalledTimes(3); // carburant seulement
@@ -199,7 +204,7 @@ describe("cache des sources externes", () => {
     await fuelNear("66");
     expect(fetched).toHaveBeenCalledTimes(2);
 
-    // Cache existant puis panne : l'ancien cache sert (moins d'un jour), puis plus rien.
+    // Cache existant puis panne : l'ancien cache sert (moins d'une semaine), puis plus rien.
     setExternalFetch(null);
     sources();
     clock.advance(11 * 60_000);
@@ -207,7 +212,7 @@ describe("cache des sources externes", () => {
     sources({ fuel: () => new Response("panne", { status: 503 }) });
     clock.advance(HOUR + 1000);
     expect((await fuelNear("66")).length).toBeGreaterThan(0);
-    clock.advance(25 * HOUR);
+    clock.advance(7 * DAY + HOUR);
     sources({ fuel: () => new Response("panne", { status: 503 }) });
     expect(await fuelNear("66")).toEqual([]);
   });
@@ -271,6 +276,7 @@ describe("GET /me/home : agrégation", () => {
             "memories",
             "nearby",
             "weather",
+            "practical",
             "agenda",
             "favorite_garage",
             "pending",
@@ -507,8 +513,8 @@ describe("widgets réglables", () => {
       "memories",
       "nearby",
     ]);
-    expect(put.json.order.slice(9, 11)).toEqual(["fuel", "weather"]);
-    expect(put.json.order).toHaveLength(15);
+    expect(put.json.order.slice(9, 12)).toEqual(["fuel", "weather", "practical"]);
+    expect(put.json.order).toHaveLength(16);
     expect(put.json.hidden).toEqual(["wash"]);
     const home = await req(u, "GET", "/me/home", undefined, mode);
     expect(home.json.widgets).toEqual(put.json);
@@ -569,7 +575,7 @@ describe("widgets réglables", () => {
       .update(profiles)
       .set({ homeWidgets: [{ id: "meteo", visible: false }] })
       .where(eq(profiles.userId, u.id));
-    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(15);
+    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(16);
   });
 
   it("compte suspendu : lecture seule, écriture refusée", async () => {
@@ -1059,7 +1065,7 @@ describe("corrections de la relecture", () => {
       .where(eq(profiles.userId, u.id));
     const r = await req(u, "GET", "/me/settings");
     expect(r.json.homeWidgets.order[0]).toBe("next_access");
-    expect(r.json.homeWidgets.order).toHaveLength(15);
+    expect(r.json.homeWidgets.order).toHaveLength(16);
     resetRateLimits();
     let last = 204;
     for (let i = 0; i < 61; i++)

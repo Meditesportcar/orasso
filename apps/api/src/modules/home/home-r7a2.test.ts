@@ -789,6 +789,7 @@ describe("réglage des blocs", () => {
       "spot_meetup",
       "memories",
       "weather",
+      "practical",
       "pending",
       "nearby",
       "agenda",
@@ -807,7 +808,7 @@ describe("réglage des blocs", () => {
     });
     expect(put.status).toBe(200);
     expect(put.json.order.slice(0, 5)).toEqual(["next_access", "event_weather", "live", "my_outings", "weather"]);
-    expect(put.json.order).toHaveLength(15);
+    expect(put.json.order).toHaveLength(16);
     expect(put.json.hidden).toEqual(["friends_news", "spot_meetup"]);
     expect((await home(u)).json.widgets).toEqual(put.json);
     // Le réglage est par compte : un autre compte garde le sien.

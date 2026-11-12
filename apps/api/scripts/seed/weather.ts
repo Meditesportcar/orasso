@@ -10,6 +10,7 @@ import {
   isBadWeather,
   type StoredForecast,
   type WeatherCode,
+  weatherCell,
 } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { db } from "../../src/db/client";
@@ -85,5 +86,57 @@ export async function seedWeather() {
   }
   console.log(
     `Météo : prévisions factices ${added ? "ajoutées" : "déjà présentes"} (Nocturne de Canet mauvaise, Expo Rivesaltes, Salon Argelès et Rassemblement du Lydia bonnes).`,
+  );
+}
+
+/**
+ * Lot R8m : « Ma météo ». Damien a un lieu choisi (« Argelès-sur-Mer ») ; les autres comptes n'ont rien (la préfecture de leur
+ * département s'affiche) ; Pilote_026 n'a aucun département (l'invitation « Choisis ta ville »). Les cases de Perpignan et d'Argelès
+ * ont une prévision factice (le premier passage de la tâche ou de la route la remplace). Idempotent.
+ */
+export async function seedMyWeather() {
+  const damien = await db.query.user.findFirst({ where: eq(t.user.email, "damien@orasso.local") });
+  if (damien) {
+    await db
+      .insert(t.profileWeatherPlaces)
+      .values({ userId: damien.id, slot: 0, label: "Argelès-sur-Mer", lat: 42.55, lng: 3.03, updatedAt: now })
+      .onConflictDoNothing();
+  }
+  const noDepartment = await db.query.profiles.findFirst({ where: eq(t.profiles.pseudo, "Pilote_026") });
+  if (noDepartment) {
+    await db.update(t.profiles).set({ departments: [] }).where(eq(t.profiles.userId, noDepartment.userId));
+  }
+  const start = Math.floor(now.getTime() / HOUR) * HOUR - HOUR;
+  const days: DailyForecast[] = [0, 1, 2].map((offset) => ({
+    date: new Date(now.getTime() + offset * 24 * HOUR).toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }),
+    tempMin: 9,
+    tempMax: 15,
+    precipitationProbability: 5,
+    precipitationMm: 0,
+    windMaxKmh: 22,
+    code: "clear",
+  }));
+  const hours: HourlyForecast[] = Array.from({ length: 48 }, (_, i) => ({
+    time: new Date(start + i * HOUR).toISOString(),
+    temp: 14 - Math.min(5, Math.floor(i / 4)),
+    precipitationProbability: 5,
+    precipitationMm: 0,
+    windKmh: 18,
+    code: "clear",
+    feelsLike: 12 - Math.min(5, Math.floor(i / 4)),
+    gustKmh: 30,
+    windDirection: 315,
+  }));
+  let added = 0;
+  for (const cell of [weatherCell({ lat: 42.7, lng: 2.9 }).key, weatherCell({ lat: 42.55, lng: 3.03 }).key]) {
+    const inserted = await db
+      .insert(t.weatherPlacesCache)
+      .values({ cell, provider: "open-meteo", fetchedAt: now, forecast: { days, hours } })
+      .onConflictDoNothing()
+      .returning({ cell: t.weatherPlacesCache.cell });
+    added += inserted.length;
+  }
+  console.log(
+    `Ma météo : lieu de Damien, compte sans département et ${added} case(s) factice(s) (${added ? "ajoutées" : "déjà présentes"}).`,
   );
 }
