@@ -386,10 +386,8 @@ describe("POST /practical : quotas des sources", () => {
     const stub = practicalSources(data);
     const users = await Promise.all([fan("Fan_S1"), fan("Fan_S2"), fan("Fan_S3")]);
     await Promise.all(users.map((u) => here(u)));
-    // Regroupés par clé (un seul appel à la fois) ; la fenêtre de lecture du cache de `cachedSource` (hors lot) laisse parfois passer un
-    // second chargement quand une demande lit le cache juste avant la fin du premier : jamais plus de deux.
-    expect(stub.count("wash", "66")).toBeLessThanOrEqual(2);
-    expect(stub.count("fuel", "66")).toBeLessThanOrEqual(2);
+    expect(stub.count("wash", "66")).toBe(1);
+    expect(stub.count("fuel", "66")).toBe(1);
   });
 
   it("limite de débit par compte : 429 au-delà", async () => {
