@@ -138,7 +138,8 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await loaded(page);
   await page.getByTestId("fil-filters-following").click();
   await loaded(page);
-  const post = page.getByTestId("feed-card-feed_post").first();
+  // R8c2 : « Abonnements » contient mes propres publications (R8c1) : le menu « Moins de ce genre » est celui d'une carte d'un autre.
+  const post = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
   await expect(post).toBeVisible({ timeout: 30_000 });
   // Pourquoi je vois ça.
   await post.getByTestId("feed-card-more").click();
@@ -148,7 +149,7 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await page.waitForTimeout(900);
   await shot(page, "menu-trois-lignes");
   await page.getByTestId("feed-menu-why").click();
-  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
+  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso|sortie/);
   await shot(page, "pourquoi-je-vois-ca");
   await page.getByTestId("feed-why-ok").click();
   await expect(page.getByTestId("feed-why-text")).toHaveCount(0);

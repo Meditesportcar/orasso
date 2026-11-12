@@ -1,5 +1,5 @@
 import { DEPT_COOKIE } from "@orasso/design-system/web";
-import { SIGN_OUT_FAILED_PARAM } from "@orasso/shared";
+import { purgeUncertain, SIGN_OUT_FAILED_PARAM } from "@orasso/shared";
 import { redirect } from "react-router";
 import { purgePublished } from "../components/fil/mine";
 import { purgeViewChoices } from "../components/publications/viewChoice";
@@ -35,6 +35,11 @@ export function loader() {
 // avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
 export async function clientAction({ serverAction }: Route.ClientActionArgs) {
   purgePublished();
+  try {
+    purgeUncertain(window.sessionStorage);
+  } catch {
+    // Stockage de l'onglet indisponible : rien à effacer.
+  }
   purgeViewChoices();
   let result: Awaited<ReturnType<typeof serverAction>>;
   try {

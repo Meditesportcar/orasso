@@ -9,6 +9,9 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { Avatar } from "@/ui/Avatar";
 import { FeedPhotos } from "../FeedPhotos";
+import { useFilOffline } from "../offlineContext";
+import { noteSeen } from "../seenTracker";
+import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CardShell } from "./CardShell";
 import { CommercialBadge } from "./CommercialBadge";
 import { LastComments } from "./LastComments";
@@ -21,6 +24,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const c = t.color;
   const router = useRouter();
   const post: FeedPostView = card.payload.post;
+  const offline = useFilOffline();
   return (
     <CardShell
       card={card}
@@ -32,11 +36,23 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
       testID="feed-card-feed_post"
-      actions={<PostActions post={post} />}
+      actions={
+        <>
+          <PostActions
+            post={post}
+            offline={offline}
+            onShared={() => noteSeen(card.id, "share")}
+            onOpened={() => noteSeen(card.id, "open")}
+          />
+          {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
+        </>
+      }
     >
+      {/* Lot R8c2 : l'événement rattaché est la deuxième ligne de la carte, sous l'auteur ; toute la ligne ouvre la fiche. */}
+      {post.attach ? <AttachLine attach={post.attach} /> : null}
       <FeedPhotos post={post} />
       {post.caption ? <FoldedCaption text={post.caption} style={styles.text} testID="feed-post-caption" /> : null}
-      {post.vehicle || post.event ? (
+      {post.vehicle || (post.event && !post.attach) ? (
         <View style={styles.pills}>
           {post.vehicle ? (
             <View style={[styles.pill, { backgroundColor: c.ground }]} testID="feed-post-vehicle">
@@ -46,7 +62,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
               </Text>
             </View>
           ) : null}
-          {post.event ? (
+          {post.event && !post.attach ? (
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={post.event.title}
