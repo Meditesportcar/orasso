@@ -363,7 +363,8 @@ export type LiveCounters = {
   tickets: { sold: number; used: number };
 };
 
-export const expressInviteSchema = z.object({ email: z.email().max(200) });
+/** `clientId` facultatif : identifiant d'idempotence (une réponse perdue puis rejouée rend la première invitation, sans second e-mail). */
+export const expressInviteSchema = z.object({ email: z.email().max(200), clientId: z.uuid().nullish() });
 
 /** Formulaire de l'inscription express (écran au lot 13). */
 export const expressSignupSchema = z

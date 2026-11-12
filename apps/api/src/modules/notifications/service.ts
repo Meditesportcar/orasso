@@ -21,7 +21,7 @@ import {
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { eventNotificationPrefs, type NotificationData, notifications, profiles, user } from "../../db/schema";
+import { events, type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -41,6 +41,8 @@ export type NotifyInput = {
   eventId?: string | null;
   /** Début de l'événement concerné : le jour J lève les heures calmes. */
   eventStartsAt?: Date | null;
+  /** Fin de l'événement concerné (sinon lue par `eventId`) : l'exception « moins de 12 h » ne vaut pas pour un événement fini. */
+  eventEndsAt?: Date | null;
   /** Lien dans l'e-mail (chemin du site, ex. `/e/nocturne-de-canet-2026`). */
   link?: { label: string; path: string };
   /** E-mail rédigé par l'appelant (sécurité du compte) à la place du gabarit titre + texte. */
@@ -133,6 +135,28 @@ async function journalVerdicts(userId: string, rows: readonly NotificationRow[])
   return verdicts;
 }
 
+/**
+ * Exception des heures calmes : celle de l'appelant, sinon celle du type (R7), sinon celle de l'Essentiel urgent (R8n1),
+ * qui ne vaut que pour un événement à venir ou en cours (`endsAt`, lue par `eventId` si l'appelant ne la donne pas).
+ */
+async function quietOverride(
+  ex: Executor,
+  type: NotificationType,
+  input: { urgent?: QuietOverride; eventId?: string | null; eventEndsAt?: Date | null },
+  at: Date,
+): Promise<QuietOverride | undefined> {
+  if (input.urgent) return input.urgent;
+  const r7 = r7QuietOverride(type);
+  if (r7) return r7;
+  if (!essentialQuietOverride(type)) return undefined;
+  let endsAt = input.eventEndsAt ?? null;
+  if (!endsAt && input.eventId) {
+    const [row] = await ex.select({ endsAt: events.endsAt }).from(events).where(eq(events.id, input.eventId));
+    endsAt = row?.endsAt ?? null;
+  }
+  return essentialQuietOverride(type, { endsAt, now: at });
+}
+
 export const notificationsService = {
   /**
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
@@ -147,12 +171,7 @@ export const notificationsService = {
     const due =
       immediate || input.silent || !env.NOTIFY_QUIET_HOURS
         ? at
-        : deliverAfter(
-            at,
-            input.eventStartsAt ?? null,
-            undefined,
-            input.urgent ?? r7QuietOverride(type) ?? essentialQuietOverride(type),
-          );
+        : deliverAfter(at, input.eventStartsAt ?? null, undefined, await quietOverride(ex, type, input, at));
     const grouped = input.groupKey && !input.silent ? input.groupKey : null;
     // Le verrou du regroupement ne vaut que dans une transaction : appelée sur la base, `notify` ouvre la sienne.
     if (grouped && ex === db) {
@@ -287,12 +306,7 @@ export const notificationsService = {
       deliverAfter:
         immediate || !env.NOTIFY_QUIET_HOURS
           ? at
-          : deliverAfter(
-              at,
-              input.eventStartsAt ?? null,
-              undefined,
-              input.urgent ?? r7QuietOverride(type) ?? essentialQuietOverride(type),
-            ),
+          : deliverAfter(at, input.eventStartsAt ?? null, undefined, await quietOverride(ex, type, input, at)),
     };
     const unique = [...new Set(userIds)];
     for (let i = 0; i < unique.length; i += 1000) {
@@ -525,30 +539,10 @@ async function wantsNotification(n: NotificationRow, profile: typeof profiles.$i
   const prefs = profile?.notificationPrefs;
   const mutedTypes = profile?.mutedTypes;
   const base = { prefs, mutedTypes, type: n.type, hasEventId: Boolean(n.eventId) };
-  // Le résumé préparé ne part pas si la personne a coupé « Nouveautés de mes sorties » depuis (ou toutes ses sorties).
-  if (n.type === "event_news_digest" && !(await digestStillWanted(n, prefs))) return false;
   if (shouldDeliver(prefs, mutedTypes, n.type)) return true;
   const needsPlace = essentialNeedsPlace(n.type, Boolean(n.eventId));
   const placed = needsPlace && n.eventId ? await hasPlace(db, n.eventId, n.userId) : false;
   return deliversNotification({ ...base, hasPlace: placed });
-}
-
-async function digestStillWanted(n: NotificationRow, prefs: { eventNews?: boolean } | null | undefined) {
-  if (prefs?.eventNews === false) return false;
-  const ids = (n.data as { eventIds?: unknown }).eventIds;
-  if (!Array.isArray(ids) || !ids.length) return true;
-  // Tous les événements du résumé coupés (réglage par événement) depuis sa préparation : rien à annoncer.
-  const rows = await db
-    .select({ eventId: eventNotificationPrefs.eventId })
-    .from(eventNotificationPrefs)
-    .where(
-      and(
-        eq(eventNotificationPrefs.userId, n.userId),
-        eq(eventNotificationPrefs.news, false),
-        inArray(eventNotificationPrefs.eventId, ids as string[]),
-      ),
-    );
-  return rows.length < ids.length;
 }
 
 async function deliverOne(n: NotificationRow) {

@@ -50,5 +50,5 @@ export const publicationsLabels = {
   menuCommentsOff: "Couper les commentaires",
   menuCommentsOn: "Rétablir les commentaires",
   /** La copie gardée de mon onglet, sans réseau : la phrase de l'Accueil hors ligne (lot R8c2) vient de `lib/offlineCopy`. */
-  offlineList: "Dernières publications gardées sur cet appareil.",
+  offlineList: "Hors ligne : voici ce que ton téléphone a gardé.",
 } as const;

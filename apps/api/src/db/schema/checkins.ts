@@ -1,6 +1,7 @@
 // Jour J : lectures de QR, entrées, inscriptions express (ARCHITECTURE.md § 1.6, § 2.5, § 4).
 import { checkinMethods, localScanDecisions, scanServerResults } from "@orasso/shared";
-import { type AnyPgColumn, index, pgEnum, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { type AnyPgColumn, index, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { accessPasses } from "./access";
 import { applications } from "./applications";
@@ -92,7 +93,12 @@ export const expressInvites = pgTable(
     usedAt: tstz("used_at"),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
+    /** Idempotence (R8p, tour 5) : même auteur + même identifiant = la même invitation. */
+    clientId: uuid("client_id"),
     ...timestamps,
   },
-  (t) => [index("express_invites_event_idx").on(t.eventId)],
+  (t) => [
+    index("express_invites_event_idx").on(t.eventId),
+    uniqueIndex("express_invites_client_key").on(t.createdBy, t.clientId).where(sql`${t.clientId} is not null`),
+  ],
 );

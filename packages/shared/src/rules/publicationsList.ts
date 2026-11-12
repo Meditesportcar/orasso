@@ -155,3 +155,15 @@ function cardReasonOf(post: FeedPostView): string {
   if (post.mine) return page ? L.cardReasonMinePage : L.cardReasonMine;
   return page ? L.cardReasonOtherPage : L.cardReasonOther;
 }
+
+/**
+ * La suite d'une liste (`page` = la page suivante) : si l'accès a disparu entre deux pages (`restricted`), la restriction vaut pour
+ * toute la liste : rien des pages déjà lues ne reste, ni curseur ; sinon la page s'ajoute sans doublon.
+ */
+export function applyNextPage<T extends { id: string }>(
+  list: { items: readonly T[]; nextCursor: string | null; restricted: boolean },
+  page: { items: readonly T[]; nextCursor: string | null; restricted: boolean },
+): { items: T[]; nextCursor: string | null; restricted: boolean } {
+  if (page.restricted) return { items: [], nextCursor: null, restricted: true };
+  return { items: appendUnique(list.items, page.items), nextCursor: page.nextCursor, restricted: list.restricted };
+}
