@@ -8,7 +8,7 @@ import type { HomeMemoryBlock } from "./schemas/memories";
 import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
 import type { SpotMeetupView } from "./schemas/spotMeetup";
-import type { MyWeather, OutingWeather } from "./weather";
+import type { MyWeather, MyWeatherPlaces, OutingWeather } from "./weather";
 
 /**
  * Widgets de l'accueil dans l'ordre par défaut ; « Prochaine sortie » (`next_access`) reste toujours en tête. Lot R7d1 :
@@ -374,6 +374,11 @@ export type HomeData = {
   pendingStatuses: MyApplication[];
   nearby: { radiusKm: number | null; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
+  /**
+   * Lot R8m : « Ma météo », les lieux de la personne (deux au plus : ses villes choisies, sinon la préfecture de son département),
+   * lus du cache seulement. `null` quand le bloc est masqué (alors il n'est pas calculé). `weather` garde sa forme (APK en ligne).
+   */
+  myWeather: MyWeatherPlaces | null;
   /**
    * Lot R8r : le stock du département est vide mais un rafraîchissement est en cours (premier chargement) : l'Accueil dit
    * « Météo en cours de chargement » et relit une fois, quelques secondes plus tard. Faux dès que `weather` est présent.

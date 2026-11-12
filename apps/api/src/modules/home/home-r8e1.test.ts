@@ -1,7 +1,7 @@
 // Lot R8e1 : la météo de l'événement est une ligne de sa carte dans « Prochaine sortie » (`outingsWeather`, clé = identifiant
 // de l'événement) ; le bloc « Météo » ne dit plus que le département ; « Météo de l'événement » (`event_weather`) commande la
 // ligne et, masqué, n'est pas calculé. `GET /me/weather` garde sa réponse (lue par l'APK en ligne).
-import { eventDates, type HomeData } from "@orasso/shared";
+import { departmentPrefectures, eventDates, type HomeData, weatherCell } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,10 +18,18 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { applications, events, eventWeather, profiles, tickets, weatherDepartments } from "../../db/schema";
+import {
+  applications,
+  events,
+  eventWeather,
+  profiles,
+  tickets,
+  weatherDepartments,
+  weatherPlacesCache,
+} from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { setWeatherFetch } from "../../lib/weather";
-import { weatherService } from "../weather/service";
+import { resetPlaceCellState, weatherService } from "../weather/service";
 
 afterAll(async () => {
   await pool.end();
@@ -41,6 +49,31 @@ beforeEach(async () => {
   ref = await seedReference();
   // `resetDb` ne vide pas le cache des départements (il est partagé).
   await db.delete(weatherDepartments);
+  await db.delete(weatherPlacesCache);
+  resetPlaceCellState();
+});
+
+/** Lot R8m : une prévision de case exploitable (aujourd'hui et l'heure en cours), comme celle que garde `weather.refresh`. */
+const usablePlaceForecast = () => ({
+  days: [
+    {
+      date: "2026-11-10",
+      tempMin: 8,
+      tempMax: 16,
+      precipitationProbability: 5,
+      precipitationMm: 0,
+      windMaxKmh: 20,
+      code: "clear" as const,
+    },
+  ],
+  hours: [-1, 0, 1, 2, 3, 4, 5, 6].map((i) => ({
+    time: new Date(Math.floor(NOW.getTime() / HOUR) * HOUR + i * HOUR).toISOString(),
+    temp: 12,
+    precipitationProbability: 5,
+    precipitationMm: 0,
+    windKmh: 20,
+    code: "clear" as const,
+  })),
 });
 
 const at = (days: number, hours = 0) => new Date(NOW.getTime() + days * DAY + hours * HOUR);
@@ -478,7 +511,8 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
     expect(a.json.weather).toBeNull();
     expect(b.json.weather).toBeNull();
     await vi.waitFor(() => expect(calls).toHaveBeenCalled());
-    expect(calls).toHaveBeenCalledTimes(1);
+    // Lot R8m : « Ma météo » réchauffe aussi la case de la préfecture (un second point, regroupé lui aussi) : deux appels, pas quatre.
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
     release();
     await vi.waitFor(async () => expect(await db.query.weatherDepartments.findFirst()).toBeTruthy());
     expect((await home(u)).json.weather).toMatchObject({ kind: "place", department: "11", summary: { code: "clear" } });
@@ -513,6 +547,13 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
   it("lot R8r : écriture du stock en échec après une réponse du fournisseur → retenue de 10 minutes, pas de rappel à chaque Accueil", async () => {
     const { u } = await world();
     await moveTo(u, "48");
+    // Lot R8m : la case de la préfecture (« Ma météo ») est fraîche, sinon l'Accueil l'interrogerait aussi.
+    await db.insert(weatherPlacesCache).values({
+      cell: weatherCell(departmentPrefectures["48"] as { lat: number; lng: number }).key,
+      provider: "open-meteo",
+      fetchedAt: new Date(NOW.getTime() - HOUR),
+      forecast: usablePlaceForecast(),
+    });
     const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
     setWeatherFetch(calls as unknown as typeof fetch);
     const realInsert = db.insert.bind(db) as (table: unknown) => unknown;
@@ -588,6 +629,14 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
     const { u } = await world();
     await moveTo(u, "34");
     await db.insert(weatherDepartments).values(departmentRow("2026-11-10", new Date(NOW.getTime() - HOUR), "34"));
+    // Lot R8m : la case de la préfecture (« Ma météo ») est fraîche aussi, sinon l'Accueil la rafraîchirait.
+    const prefecture = weatherCell(departmentPrefectures["34"] as { lat: number; lng: number });
+    await db.insert(weatherPlacesCache).values({
+      cell: prefecture.key,
+      provider: "open-meteo",
+      fetchedAt: new Date(NOW.getTime() - HOUR),
+      forecast: usablePlaceForecast(),
+    });
     const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
     setWeatherFetch(calls as unknown as typeof fetch);
     expect((await home(u)).json.weather).toMatchObject({ summary: { code: "cloudy" } });
