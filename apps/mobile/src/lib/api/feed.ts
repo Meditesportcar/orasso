@@ -23,6 +23,7 @@ export type FeedPostBody = {
   eventId: string | null;
   /** Vague R8 (lot R8p) : la casquette, jamais un rôle (l'API le déduit des droits). */
   persona?: StoryPersona;
+  expectedUserId?: string;
   structureId?: string;
   proId?: string;
   placeLabel?: string;

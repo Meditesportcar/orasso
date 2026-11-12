@@ -490,6 +490,7 @@ export function PublishForm({
         caption,
         aspect,
         clientId,
+        expectedUserId: userId,
         author,
         eventId: event ? event.id : null,
         vehicleId: choice.vehicleId,
@@ -506,7 +507,11 @@ export function PublishForm({
       setProgress(null);
       return setError(stopMessage(second));
     }
-    const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
+    const res = await apiFetch("/me/feed-posts", {
+      method: "POST",
+      // Le compte attendu part avec **chaque** envoi, reprises comprises (un ancien corps incertain n'en porte peut-être pas).
+      json: { ...body, expectedUserId: userId },
+    });
     if (res.ok) {
       // Succès : l'écran de confirmation prend la place du formulaire tout de suite (jamais un formulaire modifiable avec
       // l'identifiant déjà publié, même si le contrôle du compte qui suit tarde).
@@ -532,6 +537,9 @@ export function PublishForm({
     if (!res.ok && (res.status === 429 || res.status === 401)) {
       return setError(res.status === 429 ? L.tooManyRequests : res.error.message);
     }
+    // 409 `account_changed` : la session n'est plus celle du formulaire. Rien ne prouve que la première tentative (sous le bon
+    // compte) n'a pas abouti : l'incertitude est gardée, l'envoi reste au compte d'origine, repris quand il revient.
+    if (!res.ok && res.error.code === "account_changed") return setError(T.accountChanged);
     // Une réponse du serveur (succès ou refus) règle l'envoi : l'incertitude se lève ici, après qu'on a la réponse.
     setUncertain(null);
     if (res.status === 429) return setError(L.tooManyRequests);

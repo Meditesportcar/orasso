@@ -5187,6 +5187,17 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **À noter (non corrigé)** : sur le site, un changement de session dans un autre onglet entre le contrôle du compte et le POST reste possible sur une fenêtre de quelques millisecondes ; l'API répondrait alors au nom du compte d'aujourd'hui.
 - Base de recette : le PC s'est éteint en pleine récupération ; la base du worktree a été recréée (`.data/pg` supprimé, migrations rejouées), sans conséquence (données de démonstration).
 
+### Tour 8 (R8p, 12/11/2026) : relecture finale de Codex
+- **Compte attendu à l'envoi** : `POST /me/feed-posts` accepte `expectedUserId` ; si la session est devenue celle d'un autre compte, l'API répond 409 `account_changed` **avant** toute lecture ou écriture (rien n'est créé, rien ne se range sous le mauvais compte). Le site et l'appli l'envoient avec le corps (il fait partie du corps incertain rejoué). Test API : mauvais compte → 409 et rien d'écrit, bon compte → 201.
+- **Invitation express, reprise durable** : une ligne d'e-mail « en attente » ne vaut plus succès. Le rejeu attend 5 s qu'une livraison en route se termine ; sinon il répond 503 `mail_pending` (non définitif : la file du téléphone garde la demande et réessaie). Seuil de reprise ramené de 10 à 2 minutes (une livraison saine finit en moins de 10 s) : passé ce délai, l'e-mail repart et la réponse est 201. Test : arrêt entre `enqueue` validé et `deliver`, rejeu immédiat → 503, aucun second message ; ligne vieillie → 201 et un seul e-mail parti.
+- **Migration de l'ancienne clé** : l'ancienne clé n'est effacée qu'une fois la copie réussie (ou si son contenu est illisible) ; si le stockage refuse l'écriture (quota), elle reste et son corps est rendu en secours. Test avec `QuotaExceededError`.
+
+### Tour 9 (R8p, 12/11/2026) : relecture Codex du tour 8
+- **Compte attendu sur chaque envoi** : `expectedUserId` (le compte du formulaire) est ajouté à **chaque** POST, reprises d'un ancien corps incertain comprises (site et appli) ; l'API refuse (409) un autre compte. Recette site : un ancien corps sans compte attendu, repris, part avec `expectedUserId`.
+- **409 `account_changed` garde l'incertitude** (site et appli) : il ne prouve pas qu'une première tentative sous le bon compte n'a pas abouti ; l'envoi reste incertain et figé, au compte d'origine. Recette site.
+- **Ancienne clé effacée avec la nouvelle** : `clearUncertain` efface aussi l'ancienne clé quand elle est à ce compte (jamais celle d'un autre) : après un stockage plein, confirmation ou abandon, un rechargement ne ressuscite plus rien. Test.
+- **503 `mail_pending` tout de suite** : plus d'attente de 5 s ni de sondage ; la file du téléphone, qui envoie une demande après l'autre, n'est plus retardée (six invitations « en route » répondent en moins de 3 s au total). Les rejeux simultanés d'une même invitation : un seul répond 201 (celui qui envoie), les autres 503 tant que la livraison dure, puis 201.
+
 ## Lot R8k1 : API des commentaires d'une publication du Fil (migration 0078 `feed-comments`, D40, 11/11/2026)
 
 
@@ -5718,8 +5729,8 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Hors ligne sans carte** : le Fil passe hors ligne même si la copie filtrée est vide (liste vide, ou faite de rendez-vous au spot et de « Sponsorisé » seulement).
 
 ### Tour 8 (R8c1, relecture Codex du tour 6, 12/11/2026)
-- **Empreinte des flammes ind�pendante de la zone** : elle est calcul�e sur les publications des deux zones de la fen�tre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compt�, donc plus de \eset\ (co�t : une lecture de plus de la source des publications par page de la phase 1).
-- **Pas de doublon dans une page** : les cartes d�j� servies par la page sont �cart�es de la zone A par date et de la zone B (la page est compl�t�e par les suivantes) ; \ppendCards\ d�doublonne aussi � l'int�rieur de la page re�ue (filet, site et appli). Un doublon entre deux pages reste possible apr�s un rognage et est retir� par l'�cran.
+- **Empreinte des flammes ind�pendante de la zone** : elle est calcul�e sur les publications des deux zones de la fen�tre (la zone B est lue aussi) : un rognage qui fait passer une carte vue de B en A ne change plus l'ensemble compt�, donc plus de \eset\ (co�t : une lecture de plus de la source des publications par page de la phase 1).
+- **Pas de doublon dans une page** : les cartes d�j� servies par la page sont �cart�es de la zone A par date et de la zone B (la page est compl�t�e par les suivantes) ; \ppendCards\ d�doublonne aussi � l'int�rieur de la page re�ue (filet, site et appli). Un doublon entre deux pages reste possible apr�s un rognage et est retir� par l'�cran.
 
 ### Tour 5 (R8n1, 12/11/2026) : relecture Codex du tour 4
 - **La liste des événements du résumé ne part plus dans le push** : elle est rangée sous `data._events` (clé interne, retirée par `stripInternal` du push et de `/me/notifications`) ; la garde de livraison la lit et la réécrit sous la même clé en recomposant. Test : 20 événements aux titres de 120 caractères et aux slugs de 80, message transmis à `push.send` sous 4 096 octets, sans `events`, `_events` ni `_postIds`, ni dans la liste du Journal. Aucune compatibilité avec l'ancienne clé (le résumé n'a jamais été en ligne).

@@ -52,6 +52,33 @@ async function pagePost() {
   return { owner, sent };
 }
 
+describe("POST /me/feed-posts : compte attendu (tour 8)", () => {
+  it("un autre compte attendu : 409 account_changed, rien n'est écrit ; le bon compte : 201", async () => {
+    const owner = await signUp("Orga_T8", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    const startsAt = new Date(Date.now() + 20 * 24 * HOUR);
+    const event = await createEvent(structure.id, {
+      title: "Rassemblement du Lydia",
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + 4 * HOUR),
+      posterKey: "events/poster-t8.webp",
+    });
+    const body = {
+      persona: "organizer",
+      structureId: structure.id,
+      eventId: event.id,
+      caption: "Le plan est en ligne",
+      clientId: "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0b08",
+    };
+    const wrong = await call(owner, "POST", "/me/feed-posts", { ...body, expectedUserId: "un-autre-compte" });
+    expect(wrong.status).toBe(409);
+    expect(wrong.json.error.code).toBe("account_changed");
+    expect((await call(owner, "GET", `/me/feed-posts/by-client/${body.clientId}`)).status).toBe(404);
+    const ok = await call(owner, "POST", "/me/feed-posts", { ...body, expectedUserId: owner.id });
+    expect(ok.status).toBe(201);
+  });
+});
+
 describe("GET /me/feed-posts/by-client/:clientId", () => {
   it("l'auteur retrouve sa publication de structure (toutes casquettes), en `private, no-store`", async () => {
     const { owner, sent } = await pagePost();

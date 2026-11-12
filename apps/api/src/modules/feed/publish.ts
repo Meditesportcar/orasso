@@ -106,6 +106,10 @@ export const feedPostsService = {
     // Un UUID s'écrit en minuscules avant toute comparaison (le même partenaire, de casses différentes, n'est pas un conflit).
     const input = raw.commercialPartnerId ? { ...raw, commercialPartnerId: raw.commercialPartnerId.toLowerCase() } : raw;
     const userId = v.user.id;
+    // Le compte attendu par le formulaire : avant toute lecture ou écriture (une session changée dans un autre onglet).
+    if (input.expectedUserId && input.expectedUserId !== userId) {
+      throw new AppError(409, "account_changed", publicationErrors.account_changed);
+    }
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {
       const [again] = await db

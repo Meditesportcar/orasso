@@ -443,6 +443,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
           caption,
           aspect,
           clientId,
+          expectedUserId: account,
           author,
           eventId: event ? event.id : null,
           vehicleId: choice.vehicleId,
@@ -455,7 +456,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       };
       if (!guard.current()) return;
       sending = body;
-      const post = await api.createFeedPost(body);
+      const post = await api.createFeedPost({ ...body, expectedUserId: account });
       // La réponse d'un autre compte (déconnexion, reconnexion pendant l'envoi) n'écrit rien chez celui d'aujourd'hui.
       if (!guard.current()) return;
       setUncertain(null);
@@ -470,7 +471,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
       // Un refus définitif prouve que rien n'a été créé : on sort de l'état incertain (429 et 401 ne prouvent rien : le contrôle
       // de rejeu de l'API vient après ; le corps incertain est gardé).
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.status !== 429 && e.status !== 401) {
-        setUncertain(null);
+        // 409 `account_changed` : l'incertitude reste (une première tentative sous le bon compte a pu aboutir).
+        if (e.code !== "account_changed") setUncertain(null);
       }
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.status === 401) setError(errorMessage(e));
