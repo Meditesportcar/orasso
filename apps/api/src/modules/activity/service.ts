@@ -21,7 +21,7 @@ import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
 import { inboxService } from "../messaging/inbox";
 import { citedPeopleRemain, citedViews } from "../notifications/grouped";
-import { applyJournalVerdict, journalGuardedTypes, journalVerdicts } from "../notifications/service";
+import { applyJournalVerdict, journalGuardedTypes, journalVerdicts, scrubCommentId } from "../notifications/service";
 
 type NotificationRow = typeof notifications.$inferSelect;
 
@@ -74,7 +74,7 @@ async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<Activ
         count: view ? (shown.count ?? view.count) : typeof storedCount === "number" ? storedCount : 1,
         actors: shown.actors ?? [],
         people: shown.people,
-        data: sanitize(n.data),
+        data: scrubCommentId(sanitize(n.data), shown.commentId),
         eventId: n.eventId,
       },
     ];

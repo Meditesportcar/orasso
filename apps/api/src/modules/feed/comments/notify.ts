@@ -17,7 +17,8 @@ import { type Executor, type Tx, withTx } from "../../../lib/tx";
 import { fillTemplate } from "../../notifications/grouped";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
 import { postWithAuthor, unavailable } from "../access";
-import { commentReaders, stillReadable } from "./readers";
+import { commentReaders, readableBatch, stillReadable } from "./readers";
+import { anyOf } from "./sqlany";
 import { commentRow } from "./view";
 
 type Actor = { userId: string; pseudo: string; avatarUrl: string | null };
@@ -239,17 +240,24 @@ async function findReadable(ex: Executor, userId: string, scope: SQL, actorIds: 
   const rows = await ex
     .select({ id: c.id, authorId: c.authorId, text: c.text, createdAt: c.createdAt })
     .from(c)
-    .where(and(scope, isNull(c.deletedAt), inArray(c.authorId, actorIds), ne(c.authorId, userId)))
+    .where(and(scope, isNull(c.deletedAt), anyOf(c.authorId, actorIds, "text"), ne(c.authorId, userId)))
     .orderBy(desc(c.createdAt), desc(c.id))
     .limit(400);
+  // 15 récents au plus par personne, puis une seule vérification de lisibilité en lot (l'état des pages lu une fois).
   const tried = new Map<string, number>();
+  const candidates = rows.filter((cand) => {
+    const k = tried.get(cand.authorId) ?? 0;
+    tried.set(cand.authorId, k + 1);
+    return k < 15;
+  });
+  const { readable: ok } = await readableBatch(
+    ex,
+    userId,
+    candidates.map((x) => x.id),
+  );
   const readable: Readable[] = [];
-  for (const cand of rows) {
-    if (readable.some((r) => r.authorId === cand.authorId)) continue;
-    const count = tried.get(cand.authorId) ?? 0;
-    if (count >= 15) continue;
-    tried.set(cand.authorId, count + 1);
-    if (await stillReadable(ex, userId, cand.id)) readable.push(cand);
+  for (const cand of candidates) {
+    if (ok.has(cand.id) && !readable.some((r) => r.authorId === cand.authorId)) readable.push(cand);
   }
   return readable;
 }

@@ -2,14 +2,16 @@
 // revérification. Un destinataire est prévenu seulement s'il est en règle, **voit la publication** (`canSeeFeedPost`) et
 // **lit le commentaire** (`canSeeComment`, son premier niveau compris) : le texte et le pseudo de qui commente ne partent
 // jamais vers quelqu'un qui n'y a plus accès (compte passé privé, abonné retiré).
-import { canSeeComment, canSeeFeedPost } from "@orasso/shared";
+import { canSeeComment, canSeeFeedPost, type FeedPostFacts } from "@orasso/shared";
 import { and, eq, inArray } from "drizzle-orm";
 
-import { feedPostComments, profiles, userFollows } from "../../../db/schema";
+import { feedPostComments, feedPosts, profiles, userFollows } from "../../../db/schema";
 import { now } from "../../../lib/deps";
+import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
 import { postWithAuthor, profileOkSql, unavailable } from "../access";
-import { postFactsOf } from "./pagefacts";
+import { factsMapOf, postFactsOf } from "./pagefacts";
+import { anyOf } from "./sqlany";
 import { commentRow } from "./view";
 
 type PostRow = NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>;
@@ -63,7 +65,7 @@ export async function commentReaders(
         canSeeFeedPost({ userId }, facts, { followAccepted: ofPostAuthor.has(userId) }) &&
         (!root ||
           canSeeComment(
-            { userId, managesPost: userId === post.post.authorId },
+            { userId, managesPost: post.post.persona === "fan" && userId === post.post.authorId },
             {
               authorId: root.authorId,
               authorVisibility: root.visibility,
@@ -73,7 +75,7 @@ export async function commentReaders(
             { followAccepted: ofRoot.has(userId) },
           )) &&
         canSeeComment(
-          { userId, managesPost: userId === post.post.authorId },
+          { userId, managesPost: post.post.persona === "fan" && userId === post.post.authorId },
           {
             authorId: commenter.userId,
             authorVisibility: commenter.visibility,
@@ -125,4 +127,118 @@ export async function stillReadable(ex: Executor, userId: string, commentId: str
       ),
     );
   return canSeeFeedPost({ userId }, await postFactsOf(ex, post, at), { followAccepted: Boolean(self) });
+}
+
+/** Lesquels de ces commentaires `userId` lit-il encore ? (Verdicts identiques à `stillReadable`.) */
+export async function readableBatch(
+  ex: Executor,
+  userId: string,
+  commentIds: string[],
+): Promise<{
+  readable: Set<string>;
+  authorOf: Map<string, string>;
+  pseudoOf: Map<string, string>;
+  avatarOf: Map<string, string | null>;
+}> {
+  const readable = new Set<string>();
+  const authorOf = new Map<string, string>();
+  const pseudoOf = new Map<string, string>();
+  const avatarOf = new Map<string, string | null>();
+  const ids = [...new Set(commentIds)];
+  if (!ids.length) return { readable, authorOf, pseudoOf, avatarOf };
+  const at = now();
+  const rows = await ex
+    .select({ c: feedPostComments, p: profiles })
+    .from(feedPostComments)
+    .innerJoin(profiles, eq(profiles.userId, feedPostComments.authorId))
+    .where(anyOf(feedPostComments.id, ids, "uuid"));
+  for (const r of rows) {
+    authorOf.set(r.c.id, r.c.authorId);
+    pseudoOf.set(r.c.authorId, r.p.pseudo);
+    avatarOf.set(r.p.pseudo, storage.url(r.p.avatarKey));
+  }
+  const rootIds = [...new Set(rows.flatMap((r) => (r.c.parentId ? [r.c.parentId] : [])))];
+  const roots = rootIds.length
+    ? await ex
+        .select({ c: feedPostComments, p: profiles })
+        .from(feedPostComments)
+        .innerJoin(profiles, eq(profiles.userId, feedPostComments.authorId))
+        .where(anyOf(feedPostComments.id, rootIds, "uuid"))
+    : [];
+  const rootById = new Map(roots.map((r) => [r.c.id, r]));
+  const postIds = [...new Set(rows.map((r) => r.c.postId))];
+  const posts = postIds.length
+    ? await ex
+        .select({ post: feedPosts, author: profiles })
+        .from(feedPosts)
+        .innerJoin(profiles, eq(profiles.userId, feedPosts.authorId))
+        .where(anyOf(feedPosts.id, postIds, "uuid"))
+    : [];
+  const postById = new Map(posts.map((p) => [p.post.id, p]));
+  const [me] = await ex
+    .select({ id: profiles.userId })
+    .from(profiles)
+    .where(and(eq(profiles.userId, userId), profileOkSql("profiles", at)));
+  const people = [
+    ...new Set([
+      ...rows.map((r) => r.c.authorId),
+      ...roots.map((r) => r.c.authorId),
+      ...posts.map((p) => p.post.authorId),
+    ]),
+  ];
+  const followed = people.length
+    ? new Set(
+        (
+          await ex
+            .select({ id: userFollows.followedId })
+            .from(userFollows)
+            .where(
+              and(
+                eq(userFollows.followerId, userId),
+                eq(userFollows.status, "accepted"),
+                anyOf(userFollows.followedId, people, "text"),
+              ),
+            )
+        ).map((r) => r.id),
+      )
+    : new Set<string>();
+  const facts = await factsMapOf(ex, posts, at);
+  for (const r of rows) {
+    if (r.c.deletedAt || unavailable(r.p, at)) continue;
+    const root = r.c.parentId ? rootById.get(r.c.parentId) : null;
+    if (r.c.parentId && (!root || root.c.deletedAt)) continue;
+    const post = postById.get(r.c.postId);
+    if (!post) continue;
+    const seesPost = canSeeFeedPost({ userId }, facts.get(r.c.postId) as FeedPostFacts, {
+      followAccepted: followed.has(post.post.authorId),
+    });
+    if (userId === r.c.authorId) {
+      if (seesPost) readable.add(r.c.id);
+      continue;
+    }
+    if (!me || !seesPost) continue;
+    const viewer = { userId, managesPost: post.post.persona === "fan" && userId === post.post.authorId };
+    if (
+      root &&
+      !canSeeComment(
+        viewer,
+        {
+          authorId: root.c.authorId,
+          authorVisibility: root.p.visibility,
+          authorUnavailable: unavailable(root.p, at),
+          deleted: false,
+        },
+        { followAccepted: followed.has(root.c.authorId) },
+      )
+    ) {
+      continue;
+    }
+    const sees = canSeeComment(
+      viewer,
+      { authorId: r.c.authorId, authorVisibility: r.p.visibility, authorUnavailable: false, deleted: false },
+      { followAccepted: followed.has(r.c.authorId) },
+    );
+    if (sees) readable.add(r.c.id);
+  }
+  return { readable, authorOf, pseudoOf, avatarOf };
 }

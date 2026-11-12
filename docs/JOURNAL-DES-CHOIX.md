@@ -5521,3 +5521,11 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **`share`** : `PostActions` reçoit `onShared` (facultatif) ; le Fil note `share` à l'ouverture du partage (la feuille n'a pas de retour de réussite : c'est l'intention de partager, pas son aboutissement). `open` : `isRealTap` (moins de 10 px) testé.
 - **« Pas de réseau »** : `PostActions` reçoit `offline` (facultatif, porté par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent « Pas de réseau » avant toute mutation (recette).
 - **`attachPhrase`** : l'élision l'emporte aussi pour un nom féminin (« pour l'Exposition », « à l'Expo »).
+
+### Tour 10 (R8k1, 12/11/2026)
+- **Aucun privilège de gestion d une page dans les gardes sans session** (`readers.ts`, lecture en lot) : `managesPost` vaut `persona = fan` et auteur ; un co-organisateur retiré de la structure, ou un responsable sans second facteur, ne reçoit plus pseudo ni extrait des commentaires de comptes privés (notification, Activité, pastille). Conséquence assumée : un responsable actuel de la page n a plus l extrait d un commentaire privé dans ses notifications ; il le lit en ouvrant la publication (second facteur compris).
+- **Paramètres SQL** : `anyOf` (`= any($1::type[])`, un seul paramètre tableau) dans la lecture en lot et la recherche de remplacement ; plus de limite à 65 535 valeurs.
+- **Suggestions de discussion** : une réponse ne compte que si son commentaire de premier niveau se lit aussi.
+- **Identifiant servi** : `data.commentId` d une ligne dont le commentaire cité ne se lit plus est remplacé par un commentaire lisible de la ligne (Journal et Activité).
+- **Coût** : la recherche de remplacement de la garde de livraison vérifie la lisibilité en un lot (`readableBatch`, déplacé dans `readers.ts`), l état des pages lu une fois. Test : une page suspendue ne notifie personne.
+- Note : le crash du PC (03:26) avait corrompu la base locale de développement ; elle a été recréée (données de test seulement).

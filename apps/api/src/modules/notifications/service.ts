@@ -123,6 +123,8 @@ export type JournalVerdict = {
   /** Avatar de chaque personne lisible (par pseudo), pour nommer celles qui étaient au-delà des trois premières. */
   avatars?: Record<string, string | null>;
   commentReadable?: boolean;
+  /** Un commentaire lisible de la ligne, servi à la place de celui qui ne se lit plus. */
+  readableCommentId?: string;
 };
 export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
 const journalGuards = new Map<string, JournalGuard>();
@@ -162,6 +164,8 @@ export function applyJournalVerdict(
   actors: CitedView["actors"] | undefined;
   count: number | undefined;
   people?: string[];
+  /** `undefined` : inchangé ; `null` : à retirer ; sinon : l'identifiant lisible qui remplace `data.commentId`. */
+  commentId?: string | null;
 } | null {
   if (verdict && !verdict.shown) return null;
   if (view === null) return null;
@@ -201,7 +205,18 @@ export function applyJournalVerdict(
         : view.count
       : undefined,
     people,
+    commentId: verdict?.commentReadable === false ? (verdict.readableCommentId ?? null) : undefined,
   };
+}
+
+/** `data` servie : l'identifiant du commentaire qui ne se lit plus n'en sort pas (remplacé par un lisible, ou retiré). */
+export function scrubCommentId(
+  data: Record<string, unknown>,
+  commentId: string | null | undefined,
+): Record<string, unknown> {
+  if (commentId === undefined) return data;
+  const { commentId: _gone, ...rest } = data;
+  return commentId ? { ...rest, commentId } : rest;
 }
 
 /**
@@ -517,7 +532,9 @@ export const notificationsService = {
         family: n.family,
         title: shown.title,
         body: shown.body,
-        data: view ? { ...stripInternal(n.data), actors: shown.actors, count: shown.count } : stripInternal(n.data),
+        data: view
+          ? { ...scrubCommentId(stripInternal(n.data), shown.commentId), actors: shown.actors, count: shown.count }
+          : scrubCommentId(stripInternal(n.data), shown.commentId),
         eventId: n.eventId,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,

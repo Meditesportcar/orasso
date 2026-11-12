@@ -7,8 +7,7 @@ import { call, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { feedPostComments, notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
-import { readableBatch } from "./batch";
-import { stillReadable } from "./readers";
+import { readableBatch, stillReadable } from "./readers";
 import { comment, dbPost, person } from "./testkit";
 
 afterAll(async () => {

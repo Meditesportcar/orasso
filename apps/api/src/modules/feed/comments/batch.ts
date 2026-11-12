@@ -13,129 +13,18 @@ import type { Executor } from "../../../lib/tx";
 import { registerJournalGuard } from "../../notifications/service";
 import { profileOkSql, unavailable } from "../access";
 import { COMMENT_TYPES, groupScopeKeys } from "./notify";
-import { factsMapOf } from "./pagefacts";
+import { readableBatch } from "./readers";
+import { anyOf } from "./sqlany";
 
 type Row = typeof notifications.$inferSelect;
-
-/** Lesquels de ces commentaires `userId` lit-il encore ? (Verdicts identiques à `stillReadable`.) */
-export async function readableBatch(
-  ex: Executor,
-  userId: string,
-  commentIds: string[],
-): Promise<{
-  readable: Set<string>;
-  authorOf: Map<string, string>;
-  pseudoOf: Map<string, string>;
-  avatarOf: Map<string, string | null>;
-}> {
-  const readable = new Set<string>();
-  const authorOf = new Map<string, string>();
-  const pseudoOf = new Map<string, string>();
-  const avatarOf = new Map<string, string | null>();
-  const ids = [...new Set(commentIds)];
-  if (!ids.length) return { readable, authorOf, pseudoOf, avatarOf };
-  const at = now();
-  const rows = await ex
-    .select({ c: feedPostComments, p: profiles })
-    .from(feedPostComments)
-    .innerJoin(profiles, eq(profiles.userId, feedPostComments.authorId))
-    .where(inArray(feedPostComments.id, ids));
-  for (const r of rows) {
-    authorOf.set(r.c.id, r.c.authorId);
-    pseudoOf.set(r.c.authorId, r.p.pseudo);
-    avatarOf.set(r.p.pseudo, storage.url(r.p.avatarKey));
-  }
-  const rootIds = [...new Set(rows.flatMap((r) => (r.c.parentId ? [r.c.parentId] : [])))];
-  const roots = rootIds.length
-    ? await ex
-        .select({ c: feedPostComments, p: profiles })
-        .from(feedPostComments)
-        .innerJoin(profiles, eq(profiles.userId, feedPostComments.authorId))
-        .where(inArray(feedPostComments.id, rootIds))
-    : [];
-  const rootById = new Map(roots.map((r) => [r.c.id, r]));
-  const postIds = [...new Set(rows.map((r) => r.c.postId))];
-  const posts = postIds.length
-    ? await ex
-        .select({ post: feedPosts, author: profiles })
-        .from(feedPosts)
-        .innerJoin(profiles, eq(profiles.userId, feedPosts.authorId))
-        .where(inArray(feedPosts.id, postIds))
-    : [];
-  const postById = new Map(posts.map((p) => [p.post.id, p]));
-  const [me] = await ex
-    .select({ id: profiles.userId })
-    .from(profiles)
-    .where(and(eq(profiles.userId, userId), profileOkSql("profiles", at)));
-  const people = [
-    ...new Set([
-      ...rows.map((r) => r.c.authorId),
-      ...roots.map((r) => r.c.authorId),
-      ...posts.map((p) => p.post.authorId),
-    ]),
-  ];
-  const followed = people.length
-    ? new Set(
-        (
-          await ex
-            .select({ id: userFollows.followedId })
-            .from(userFollows)
-            .where(
-              and(
-                eq(userFollows.followerId, userId),
-                eq(userFollows.status, "accepted"),
-                inArray(userFollows.followedId, people),
-              ),
-            )
-        ).map((r) => r.id),
-      )
-    : new Set<string>();
-  const facts = await factsMapOf(ex, posts, at);
-  for (const r of rows) {
-    if (r.c.deletedAt || unavailable(r.p, at)) continue;
-    const root = r.c.parentId ? rootById.get(r.c.parentId) : null;
-    if (r.c.parentId && (!root || root.c.deletedAt)) continue;
-    const post = postById.get(r.c.postId);
-    if (!post) continue;
-    const seesPost = canSeeFeedPost({ userId }, facts.get(r.c.postId) as FeedPostFacts, {
-      followAccepted: followed.has(post.post.authorId),
-    });
-    if (userId === r.c.authorId) {
-      if (seesPost) readable.add(r.c.id);
-      continue;
-    }
-    if (!me || !seesPost) continue;
-    const viewer = { userId, managesPost: userId === post.post.authorId };
-    if (
-      root &&
-      !canSeeComment(
-        viewer,
-        {
-          authorId: root.c.authorId,
-          authorVisibility: root.p.visibility,
-          authorUnavailable: unavailable(root.p, at),
-          deleted: false,
-        },
-        { followAccepted: followed.has(root.c.authorId) },
-      )
-    ) {
-      continue;
-    }
-    const sees = canSeeComment(
-      viewer,
-      { authorId: r.c.authorId, authorVisibility: r.p.visibility, authorUnavailable: false, deleted: false },
-      { followAccepted: followed.has(r.c.authorId) },
-    );
-    if (sees) readable.add(r.c.id);
-  }
-  return { readable, authorOf, pseudoOf, avatarOf };
-}
 
 type Verdict = {
   shown: boolean;
   actors?: string[];
   avatars?: Record<string, string | null>;
   commentReadable?: boolean;
+  /** Un commentaire lisible de la ligne, pour remplacer l'identifiant du commentaire cité quand il ne se lit plus. */
+  readableCommentId?: string;
 };
 type Cand = { id: string; authorId: string; postId: string; replyToId: string | null };
 
@@ -170,11 +59,11 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
         ),
       })
       .from(c)
-      .where(and(inScope, isNull(c.deletedAt), inArray(c.authorId, actorUnion), ne(c.authorId, userId)))
+      .where(and(inScope, isNull(c.deletedAt), anyOf(c.authorId, actorUnion, "text"), ne(c.authorId, userId)))
       .as("ranked");
   for (const [scopeCol, inScope] of [
-    [c.postId, posts.length ? inArray(c.postId, posts) : undefined],
-    [c.replyToId, targets.length ? inArray(c.replyToId, targets) : undefined],
+    [c.postId, posts.length ? anyOf(c.postId, posts, "uuid") : undefined],
+    [c.replyToId, targets.length ? anyOf(c.replyToId, targets, "uuid") : undefined],
   ] as const) {
     if (!actorUnion.length || !inScope) continue;
     const sub = ranked(scopeCol, inScope);
@@ -223,6 +112,7 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
     out.set(n.id, {
       shown: authors.size > 0,
       commentReadable: readable.has(id),
+      readableCommentId: readable.has(id) ? id : cands.find((x) => readable.has(x.id))?.id,
       actors: [...authors].flatMap((a) => pseudoOf.get(a) ?? []),
       avatars: Object.fromEntries(
         [...authors].flatMap((a) =>

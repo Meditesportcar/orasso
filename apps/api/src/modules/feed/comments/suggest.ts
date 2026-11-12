@@ -11,7 +11,7 @@ import { now } from "../../../lib/deps";
 import { escapeLike } from "../../../lib/pagination";
 import type { Viewer } from "../../../lib/session";
 import { storage } from "../../../lib/storage";
-import { profileOkSql, requireVisiblePost } from "../access";
+import { authorVisibleSql, profileOkSql, requireVisiblePost } from "../access";
 import { postFactsOf } from "./pagefacts";
 import { commentVisibleSql, managesPost } from "./view";
 
@@ -29,6 +29,7 @@ export async function mentionSuggestions(v: Viewer, postId: string, q: string): 
   const live = and(profileOkSql("profiles", at), sql`${profiles.userId} <> ${viewerId}`, nameFilter);
   const pick = { userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey };
 
+  const rootVisible = manages ? profileOkSql("rp", at) : authorVisibleSql("rp", sql`rc.author_id`, viewerId, at);
   // Ceux qui ont déjà commenté cette publication et dont je peux lire les commentaires, les plus récents d'abord.
   const thread: Candidate[] = await db
     .select(pick)
@@ -39,6 +40,9 @@ export async function mentionSuggestions(v: Viewer, postId: string, q: string): 
         eq(feedPostComments.postId, row.post.id),
         isNull(feedPostComments.deletedAt),
         commentVisibleSql(viewerId, manages, at),
+        // Une réponse ne compte que si son commentaire de premier niveau se lit aussi (ni supprimé, ni d'un compte privé non suivi).
+        sql`(${feedPostComments.parentId} is null or exists (select 1 from feed_post_comments rc join profiles rp on rp.user_id = rc.author_id
+          where rc.id = ${feedPostComments.parentId} and rc.deleted_at is null and ${rootVisible}))`,
         live,
       ),
     )
