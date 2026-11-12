@@ -5601,3 +5601,8 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Lot R8m : Tour 5 (relecture Codex du tour 4, 12/11/2026)
+
+- **Plafond avec demandes simultanées** : `cellForecast(cell, force, reserve)` prend la place du plafond horaire au moment exact où l'appel part (contrôle et ajout sans attente entre eux) ; refusée, `cellForAt` applique le repli (case proche en stock, sinon le stock, sinon rien). Test : 299 places prises, dix cases distinctes en même temps, un seul appel au fournisseur, neuf replis.
+- **Fusion de `vague-r8`** : migration renumérotée `0083_weather-places` (les 0077 à 0082 sont ceux de la vague).

@@ -780,6 +780,27 @@ describe("tour 4 : le plafond ne compte que les vrais appels", () => {
   });
 });
 
+describe("tour 5 : le plafond tient avec des demandes simultanées", () => {
+  it("299 places prises, dix cases distinctes en même temps : un seul appel au fournisseur, les neuf autres reçoivent le repli", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    // Une case fraîche proche (repli) : 43.0 ; 3.0.
+    await weatherService.cellForAt({ lat: 43.0, lng: 3.0, key: "43.0,3.0" });
+    const before = f.mock.calls.length;
+    resetPlaceCellState();
+    fillPositionBudget(299);
+    const cells = Array.from({ length: 10 }, (_, i) => ({
+      lat: 43.1 + i / 100,
+      lng: 3.1,
+      key: `${(43.1 + i / 100).toFixed(1)},3.1-${i}`,
+    }));
+    const rows = await Promise.all(cells.map((c) => weatherService.cellForAt(c)));
+    expect(f.mock.calls.length - before).toBe(1);
+    // Les neuf autres reçoivent le repli (la case proche en stock).
+    expect(rows.filter((r) => r?.cell === "43.0,3.0")).toHaveLength(9);
+  });
+});
+
 describe("export des données personnelles et état « en cours de chargement »", () => {
   it("l'export contient les villes choisies, jamais une position", async () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);
