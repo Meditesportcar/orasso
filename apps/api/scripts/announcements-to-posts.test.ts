@@ -18,7 +18,7 @@ import {
   structureFollows,
   structureMembers,
 } from "../src/db/schema";
-import { resetRateLimits } from "../src/lib/rateLimit";
+import { rateLimit, resetRateLimits } from "../src/lib/rateLimit";
 import { storage } from "../src/lib/storage";
 import { withTx } from "../src/lib/tx";
 import { materializeMentions } from "../src/modules/feed/mentions";
@@ -784,6 +784,28 @@ describe("tour 4 : verrous de la reprise, du retrait et du retour arrière", () 
     expect(kept?.caption).toBe("Signalée en cours de retour arrière");
     expect(await photosOf(post.id)).toHaveLength(1);
     expect(await storage.get(photoKey)).not.toBeNull();
+  });
+});
+
+describe("tour 6 : la limite d'écriture est comptée une fois malgré un rejeu", () => {
+  it("59 écritures comptées, un 40P01 simulé : l'épingle passe (la 60e)", async () => {
+    const e = await mkEvent();
+    const a = await mkAnnouncement(e.id, { body: "Limite" });
+    await announcementsToPosts();
+    for (let i = 0; i < 58; i++) rateLimit("feedWrite", owner.id);
+    const real = db.transaction.bind(db);
+    let failed = false;
+    const spy = vi.spyOn(db, "transaction").mockImplementation(((fn: never, cfg: never) => {
+      if (!failed) {
+        failed = true;
+        return Promise.reject(Object.assign(new Error("deadlock"), { code: "40P01" }));
+      }
+      return real(fn, cfg);
+    }) as never);
+    const res = await call(owner, "PATCH", `/events/${e.id}/announcements/${a.row.id}`, { pinned: true });
+    spy.mockRestore();
+    expect(failed).toBe(true);
+    expect(res.status).toBe(200);
   });
 });
 

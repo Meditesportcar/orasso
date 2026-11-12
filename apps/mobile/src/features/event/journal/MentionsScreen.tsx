@@ -64,6 +64,9 @@ export function MentionsScreen() {
   const [cursors, setCursors] = useState<Record<Section, string | null>>({ on_site: null, fans: null });
   const [loadingMore, setLoadingMore] = useState<Section | null>(null);
   const withHidden = useRef(false);
+  // Une relecture est en cours : « Voir plus » attend qu'elle ait installé ses listes et ses curseurs (jamais une page des anciens
+  // curseurs ajoutée aux nouvelles listes).
+  const reading = useRef(false);
   const [read, setRead] = useState<"loading" | "ok" | "error" | "signin">("loading");
   const [menu, setMenu] = useState<MentionItem | null>(null);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -77,6 +80,7 @@ export function MentionsScreen() {
       return;
     }
     const ticket = gate.start();
+    reading.current = true;
     // Une pagination en vol est désormais jetée (ticket périmé) : son `finally` ne remettra plus le drapeau, c'est ici.
     setLoadingMore(null);
     try {
@@ -97,9 +101,13 @@ export function MentionsScreen() {
       if (!ticket.current()) return;
       setItems({ on_site: on_site.items, fans: fans.items });
       setCursors({ on_site: on_site.nextCursor, fans: fans.nextCursor });
+      reading.current = false;
       setRead("ok");
     } catch {
-      if (ticket.current()) setRead("error");
+      if (ticket.current()) {
+        reading.current = false;
+        setRead("error");
+      }
     }
   }, [eventId, manager, status, gate]);
   useEffect(() => {
@@ -110,7 +118,7 @@ export function MentionsScreen() {
 
   async function more(section: Section) {
     const cursor = cursors[section];
-    if (!cursor || !eventId || loadingMore) return;
+    if (!cursor || !eventId || loadingMore || reading.current) return;
     // Une réponse qui arrive après un changement de compte ou de fiche (ou un nouveau chargement) est jetée : jamais les mentions
     // masquées d'un responsable dans l'écran d'un autre compte.
     const ticket = gate.follow();

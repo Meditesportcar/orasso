@@ -5644,3 +5644,8 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 - **Appli, mentions** : load() remet loadingMore à nul au démarrage (le inally d'une pagination périmée ne le fait plus) : « Voir plus » ne reste plus bloqué.
 - **Épingle de la façade** : une reprise sur 40P01, comme setPinned de pin.ts.
 - **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une réponse retardée, et l'appli n'a pas de test d'écran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
+
+### Tour 6 (lot R8d, 12/11/2026)
+- **Site, mentions** : un état « session changée » remplace listes, filtre, menus et « Voir plus » par le chargement jusqu'à la fin de la revalidation (levé par le chargeur ou par la fin de la revalidation). Le même compte qui s'annonce (hydratation, autre onglet) ne change rien (comparaison avec userId du chargeur) : sans cela la page se vidait un instant à l'hydratation (vu en recette). Pas de test automatique (aucun modèle de test d'écran du site pour ce canal) ; recette du site 7/7.
+- **Appli, mentions** : « Voir plus » est refusé tant que load() n'a pas installé ses listes et ses curseurs (drapeau eading), le déblocage après une pagination jetée est gardé.
+- **Épingle de la façade** : la limite eedWrite est comptée une fois, avant le rejeu sur 40P01 ; test (58 écritures, 40P01 simulé, l'épingle passe).

@@ -52,6 +52,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     event: { id: event.id, slug: event.slug, title: event.title, endsAt: event.endsAt },
     manager,
+    userId: me.user.id,
     onSite: onSite.page.items,
     fans: fans.page.items,
     cursors: { on_site: onSite.page.nextCursor, fans: fans.page.nextCursor },
@@ -74,10 +75,14 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   const [more, setMore] = useState<{ on_site: MentionItem[]; fans: MentionItem[] }>({ on_site: [], fans: [] });
   const [cursors, setCursors] = useState(firstCursors);
   const [busy, setBusy] = useState<EventMentionsSection | null>(null);
+  // Session changée dans une autre fenêtre : jusqu'au prochain chargeur, rien de ce qui a été lu avec les droits de l'ancien compte
+  // (listes, masquées, menus, « Voir plus ») n'est affiché.
+  const [stale, setStale] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: repart du chargeur à chaque nouvelle donnée
   useEffect(() => {
     generation.current += 1;
     setBusy(null);
+    setStale(false);
     setMore({ on_site: [], fans: [] });
     setCursors(firstCursors);
   }, [loaderData]);
@@ -87,14 +92,26 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: l'abonnement ne dépend que du chargeur
   useEffect(
     () =>
-      listenSession(() => {
+      listenSession((announced) => {
+        // Le même compte qui s'annonce (hydratation, autre onglet du même compte) ne change rien.
+        if (announced === loaderData.userId) return;
         generation.current += 1;
         setBusy(null);
+        setStale(true);
         setMore({ on_site: [], fans: [] });
         revalidator.revalidate();
       }),
     [],
   );
+  // La revalidation terminée lève l'état « session changée » même si le chargeur rend les mêmes données (référence inchangée).
+  const sawLoading = useRef(false);
+  useEffect(() => {
+    if (revalidator.state === "loading") sawLoading.current = true;
+    else if (sawLoading.current) {
+      sawLoading.current = false;
+      setStale(false);
+    }
+  }, [revalidator.state]);
   const onSite = [...loaderData.onSite, ...more.on_site];
   const fans = [...loaderData.fans, ...more.fans];
   // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
@@ -126,6 +143,16 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
     ) : null;
   const [filter, setFilter] = useState<"visible" | "hidden">("visible");
   const [menu, setMenu] = useState<MentionItem | null>(null);
+  if (stale) {
+    return (
+      <>
+        <FicheBar title={L.mentionsTitle(0)} facts={event.title} back={`/e/${event.slug}`} closeLabel={L.backToEvent} />
+        <p className="s-muted" data-testid="mentions-reloading">
+          {L.mentionsLoading}
+        </p>
+      </>
+    );
+  }
   const total = count ?? onSite.filter((i) => !i.hidden).length + fans.filter((i) => !i.hidden).length;
   const shown = (items: MentionItem[]) =>
     items.filter((i) => (manager ? (filter === "hidden" ? i.hidden : !i.hidden) : true));

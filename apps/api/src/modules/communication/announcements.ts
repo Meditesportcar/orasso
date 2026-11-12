@@ -315,6 +315,12 @@ export const announcementsService = {
     // l'événement (`pinInTx`) : jamais une épingle sur l'ancien APK sans la fiche. Une erreur (limite d'écritures, droits)
     // remonte et rien n'est écrit.
     // Interblocage possible avec la reprise ou son retour arrière (40P01) : une seule reprise, comme `setPinned` de `pin.ts`.
+    // La limite d'écriture est comptée **une fois**, avant le rejeu éventuel (son compteur en mémoire ne s'annule pas).
+    const [reposted] = await db
+      .select({ id: feedPosts.id })
+      .from(feedPosts)
+      .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+    if (reposted) rateLimit("feedWrite", v.user.id);
     const run = () =>
       withTx(async (tx) => {
         const [taken] = await tx
@@ -322,7 +328,6 @@ export const announcementsService = {
           .from(feedPosts)
           .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
         if (taken) {
-          rateLimit("feedWrite", v.user.id);
           await pinInTx(tx, v, e.id, taken.id, pinned);
         }
         const [updated] = await tx
