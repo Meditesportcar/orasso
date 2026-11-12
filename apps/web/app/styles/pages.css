@@ -73,13 +73,6 @@
   background: var(--surface);
   box-shadow: var(--shadow-card);
 }
-.pg-public__card img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 5;
-  object-fit: cover;
-}
 .pg-public__body {
   display: grid;
   gap: var(--space-2);

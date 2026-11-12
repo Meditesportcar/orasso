@@ -68,6 +68,7 @@ export const texts = (items: FeedCommentView[]) => items.map((i) => i.text);
 export const COMMENT_VIEW_KEYS = [
   "author",
   "canDelete",
+  "countedAt",
   "createdAt",
   "id",
   "mentions",

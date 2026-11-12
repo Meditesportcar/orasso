@@ -184,6 +184,7 @@ export function PageMentions({
   pageName,
   manage,
   onHiddenChange,
+  reloadToken,
 }: {
   /** La clé de la page : `s:<structure>` ou `p:<fiche pro>` (aussi la cible de « Masquer »). */
   pageKey: string;
@@ -192,8 +193,17 @@ export function PageMentions({
   manage: boolean;
   /** Une mention masquée (`-1`) ou remise (`+1`) : le nombre de l'onglet suit. */
   onHiddenChange?: (delta: number) => void;
+  /** Change quand la page est relue (geste, retour) : la liste se relit sans être démontée (en cas d échec elle garde ses éléments). */
+  reloadToken?: number;
 }) {
   const list = useMentions(pageKey, manage);
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un jeton neuf relit la liste
+  useEffect(() => {
+    if (reloadToken === undefined || seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void list.reload();
+  }, [reloadToken]);
   const [menu, setMenu] = useState<MentionItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

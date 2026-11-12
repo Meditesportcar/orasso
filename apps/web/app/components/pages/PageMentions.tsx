@@ -250,15 +250,15 @@ export function PageMentions({
           {L.mentionsError}
         </p>
       ) : null}
-      {list.next && !list.error ? (
+      {list.next ? (
         <Button
           variant="secondary"
           icon="down"
           disabled={list.loading}
           onClick={() => void list.more()}
-          data-testid="mentions-more"
+          data-testid={list.error ? "mentions-retry" : "mentions-more"}
         >
-          {L.mentionsMore}
+          {list.error ? L.mentionsRetry : L.mentionsMore}
         </Button>
       ) : null}
     </div>

@@ -188,4 +188,19 @@ describe("« Tu es à jour », rail et file des cartes vues (R8c1)", () => {
     const c = publishedCard({ id: "p1", createdAt: "2026-11-11T10:00:00Z" } as never);
     expect(c.seen).toBe(false);
   });
+
+  it("appendCards et applyFeedPage dédoublonnent aussi à l'intérieur de la page reçue", () => {
+    const page = applyFeedPage(
+      emptyFeedList("for_you"),
+      { items: [card("a"), card("b"), card("a")], nextCursor: "c", filter: "for_you" },
+      null,
+    );
+    expect(page?.state.items.map((c) => c.id)).toEqual(["a", "b"]);
+    const next = applyFeedPage(
+      page?.state as NonNullable<typeof page>["state"],
+      { items: [card("b"), card("c"), card("c")], nextCursor: null, filter: "for_you" },
+      "c",
+    );
+    expect(next?.state.items.map((c) => c.id)).toEqual(["a", "b", "c"]);
+  });
 });

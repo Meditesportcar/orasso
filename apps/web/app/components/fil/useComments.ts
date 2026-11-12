@@ -5,6 +5,7 @@
 import {
   type CommentDraft,
   createFlameGate,
+  type FeedCommentCreated,
   type FeedCommentPage,
   type FeedCommentReaction,
   type FeedCommentView,
@@ -13,14 +14,17 @@ import {
   type LiveTicket,
   type MentionDraft,
   type MentionSuggestion,
+  type ParentCount,
   pendingDrop,
   pendingFail,
   pendingRetry,
   pendingStart,
   postWithCommentAdded,
   postWithCommentRemoved,
+  repliesMark,
   type SheetState,
   sheetAddComment,
+  sheetApplyParentCount,
   sheetFind,
   sheetMark,
   sheetRemoveComment,
@@ -127,7 +131,7 @@ export function useComments(
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
-      const since = [...(postLive.sheetOf(id).replies[parentId]?.recent ?? [])];
+      const since = repliesMark(postLive.sheetOf(id), parentId);
       try {
         const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`);
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
@@ -199,14 +203,14 @@ export function useComments(
       const p = postLive.sheetOf(id).pending.find((x) => x.clientId === clientId);
       if (!p) return;
       try {
-        const created = await call<FeedCommentView>(`/feed-posts/${id}/comments`, {
+        const created = await call<FeedCommentCreated>(`/feed-posts/${id}/comments`, {
           method: "POST",
           json: { text: p.text.trim(), parentId: p.parentId, clientId },
         });
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
-          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId);
+          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId, created.parent);
           counted = r.counted;
           return r.state;
         }, t);
@@ -284,8 +288,12 @@ export function useComments(
       const t = postLive.ticket(id);
       setActionError(null);
       try {
-        await call<null>(`/feed-comments/${comment.id}`, { method: "DELETE" });
-        if (postLive.alive(t)) dropRemoved(comment.id, t);
+        const done = await call<{ parent?: ParentCount } | null>(`/feed-comments/${comment.id}`, { method: "DELETE" });
+        if (postLive.alive(t)) {
+          dropRemoved(comment.id, t);
+          // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
+          update((s) => sheetApplyParentCount(s, done?.parent), t);
+        }
       } catch (e) {
         if (!postLive.alive(t)) return;
         // Déjà retiré (404 d'un commentaire) : seule la ligne part de l'écran ; la publication se revalide.
@@ -295,7 +303,12 @@ export function useComments(
         } else if (mounted.current) setActionError(message(e));
       }
     },
-    [id, dropRemoved, loadTop],
+    [
+      id,
+      dropRemoved,
+      loadTop, // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
+      update,
+    ],
   );
 
   const fire = useCallback(
