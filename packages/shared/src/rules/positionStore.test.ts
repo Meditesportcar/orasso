@@ -281,19 +281,55 @@ describe("position en mémoire de « Ma météo »", () => {
     expect(t.store.view().at?.label).toBe("B, relue");
   });
 
-  it("tour 7 : une demande suspendue depuis plus de 30 s ne bloque plus : la relecture part", async () => {
+  it("tour 7 : une relecture suspendue depuis plus de 30 s ne bloque plus : la relecture suivante part", async () => {
     const t = setup();
     const first = t.store.give(here);
     t.pending[0]?.resolve(at("A"));
     await first;
-    // Le geste B ne répond jamais.
-    void t.store.give({ lat: 42.7, lng: 2.9 });
-    const refresh = t.store.refresh(true);
+    // Une relecture ne répond jamais.
+    const stuck = t.store.refresh(true);
+    const skipped = t.store.refresh(true);
     expect(t.calls()).toBe(2);
     t.advance(POSITION_INFLIGHT_STALE_MS + 1);
     const later = t.store.refresh(true);
     expect(t.calls()).toBe(3);
     t.pending[2]?.resolve(at("A, relue"));
-    await Promise.all([refresh, later]);
+    await Promise.all([later, skipped]);
+    expect(t.store.view().at?.label).toBe("A, relue");
+    void stuck;
+  });
+
+  it("tour 8 : un give(B) en vol depuis plus de 30 s : un refresh ne part pas, B répond et reste avec sa météo", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    const give = t.store.give({ lat: 42.7, lng: 2.9 });
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const refresh = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.pending[1]?.resolve(at("B"));
+    expect(await give).toBe(true);
+    await refresh;
+    expect(t.store.view().at?.label).toBe("B");
+    expect(t.store.view().coarse).toEqual({ lat: 42.7, lng: 2.9 });
+  });
+
+  it("tour 8 : un refresh suspendu depuis plus de 30 s : un nouveau refresh part et s'applique ; l'ancien, revenu ensuite, est jeté", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    const stuck = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    t.advance(POSITION_INFLIGHT_STALE_MS + 1);
+    const again = t.store.refresh(true);
+    expect(t.calls()).toBe(3);
+    t.pending[2]?.resolve(at("A, relue"));
+    await again;
+    expect(t.store.view().at?.label).toBe("A, relue");
+    t.pending[1]?.resolve(at("A, très ancienne"));
+    await stuck;
+    expect(t.store.view().at?.label).toBe("A, relue");
   });
 });

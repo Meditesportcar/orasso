@@ -39,8 +39,9 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   // depuis (deux relocalisations successives, une relecture revenue après un nouveau geste : la plus récente reste).
   let requestSeq = 0;
   // La dernière demande partie, tant qu'elle n'a pas répondu : une relecture ne part pas pendant qu'une demande est en vol (sauf si elle
-  // est suspendue depuis plus de `POSITION_INFLIGHT_STALE_MS`). Effacée à l'oubli et à l'invalidation (changement de compte).
-  let inflight: { seq: number; at: number } | null = null;
+  // est suspendue depuis plus de `POSITION_INFLIGHT_STALE_MS`, et seulement si c'est elle-même une relecture : une relecture ne part jamais
+  // pendant un geste, quel que soit son âge). Effacée à l'oubli et à l'invalidation (changement de compte).
+  let inflight: { seq: number; at: number; kind: "give" | "refresh" } | null = null;
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -98,7 +99,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       if (!ticket || !this.valid(ticket)) return false;
       const { owner, gen } = ticket;
       const seq = ++requestSeq;
-      inflight = { seq, at: deps.now() };
+      inflight = { seq, at: deps.now(), kind: "give" };
       try {
         const at = await deps.weatherAt(coarse);
         if (deps.scope() !== owner || gen !== generation || seq !== requestSeq) return false;
@@ -118,10 +119,11 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return;
       // Une demande est en vol : sa réponse donnera la position la plus récente (deux relectures ne se chevauchent jamais). Une relecture
       // sautée n'est pas rejouée : le prochain minuteur ou retour au premier plan s'en charge.
-      if (inflight !== null && deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS) return;
+      if (inflight !== null && (inflight.kind === "give" || deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS))
+        return;
       const gen = generation;
       const seq = ++requestSeq;
-      inflight = { seq, at: deps.now() };
+      inflight = { seq, at: deps.now(), kind: "refresh" };
       try {
         const at = await deps.weatherAt(coarse);
         if (

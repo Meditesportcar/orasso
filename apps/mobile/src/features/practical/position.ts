@@ -29,8 +29,10 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
   scope: cacheScope,
   now: () => Date.now(),
   weatherAt: async (coarse): Promise<PracticalAt> => {
+    // L'exacte est prise AU DÉPART de cette demande (avant toute attente) : une réponse ne reprend jamais l'exacte d'un autre geste.
+    const exact = pendingExact ?? store.getState().at?.exact ?? coarse;
     const data = await api.practical({ near: "position", lat: coarse.lat, lng: coarse.lng });
-    return { exact: pendingExact ?? store.getState().at?.exact ?? coarse, data };
+    return { exact, data };
   },
 });
 
