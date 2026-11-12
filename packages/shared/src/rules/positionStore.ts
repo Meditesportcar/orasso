@@ -12,6 +12,8 @@ import type { WeatherAt } from "../weather";
 export const POSITION_REFRESH_MS = 10 * 60_000;
 /** Une demande en vol depuis plus longtemps que ça ne bloque plus les relectures (une requête suspendue sans délai). */
 export const POSITION_INFLIGHT_STALE_MS = 30_000;
+/** Une demande de météo qui ne répond pas en 15 s est abandonnée : échec, `inflight` libéré, une nouvelle tentative peut partir. */
+export const POSITION_REQUEST_TIMEOUT_MS = 15_000;
 
 export type PositionState<T = WeatherAt> = {
   owner: string | null;
@@ -26,6 +28,8 @@ export type PositionDeps<T = WeatherAt> = {
   scope: () => string | null;
   now: () => number;
   weatherAt: (position: LatLng) => Promise<T>;
+  /** Délai de chaque demande (défaut `POSITION_REQUEST_TIMEOUT_MS`) : au-delà, la demande échoue ; une réponse tardive est ignorée. */
+  timeoutMs?: number;
 };
 
 /** La session et la génération capturées au geste (« Utiliser ma position ») : revérifiées après chaque attente. */
@@ -47,6 +51,22 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
     state = { ...state, ...patch };
     for (const l of listeners) l();
   };
+
+  /** La demande de météo, bornée dans le temps : l'abandon est un échec (rejet), la réponse tardive ne fait rien. */
+  const request = (coarse: LatLng): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("délai dépassé")), deps.timeoutMs ?? POSITION_REQUEST_TIMEOUT_MS);
+      deps.weatherAt(coarse).then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
 
   const forget = () => {
     generation += 1;
@@ -101,7 +121,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       const seq = ++requestSeq;
       inflight = { seq, at: deps.now(), kind: "give" };
       try {
-        const at = await deps.weatherAt(coarse);
+        const at = await request(coarse);
         if (deps.scope() !== owner || gen !== generation || seq !== requestSeq) return false;
         set({ owner, coarse, at, fetchedAt: deps.now() });
         return true;
@@ -125,7 +145,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       const seq = ++requestSeq;
       inflight = { seq, at: deps.now(), kind: "refresh" };
       try {
-        const at = await deps.weatherAt(coarse);
+        const at = await request(coarse);
         if (
           deps.scope() !== owner ||
           gen !== generation ||

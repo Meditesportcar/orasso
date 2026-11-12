@@ -33,6 +33,8 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
     const res = await apiFetch<PracticalData>("/practical", {
       method: "POST",
       json: { near: "position", lat: coarse.lat, lng: coarse.lng },
+      // Abandon au bout de 15 s : échec, le magasin libère la demande en vol (tour 9).
+      timeoutMs: 15_000,
     });
     if (!res.ok) throw new Error(res.error.message);
     return { exact, data: res.data };

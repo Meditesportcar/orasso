@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WeatherAt } from "../weather";
 
-import { createPositionStore, POSITION_INFLIGHT_STALE_MS, POSITION_REFRESH_MS } from "./positionStore";
+import {
+  createPositionStore,
+  POSITION_INFLIGHT_STALE_MS,
+  POSITION_REFRESH_MS,
+  POSITION_REQUEST_TIMEOUT_MS,
+} from "./positionStore";
 
 const at = (label: string): WeatherAt => ({ label, weather: null });
 const here = { lat: 42.7, lng: 2.9 };
@@ -331,5 +336,39 @@ describe("position en mémoire de « Ma météo »", () => {
     t.pending[1]?.resolve(at("A, très ancienne"));
     await stuck;
     expect(t.store.view().at?.label).toBe("A, relue");
+  });
+
+  it("tour 9 : un give dont la requête dépasse le délai : échec, inflight libéré, la relecture suivante part ; la réponse tardive est ignorée", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup();
+      const first = t.store.give(here);
+      t.pending[0]?.resolve(at("A"));
+      await vi.advanceTimersByTimeAsync(0);
+      await first;
+      const give = t.store.give({ lat: 42.7, lng: 2.9 });
+      // Un refresh ne passe pas devant un give actif.
+      t.advance(1);
+      const blocked = t.store.refresh(true);
+      expect(t.calls()).toBe(2);
+      await blocked;
+      // La requête ne répond jamais : abandonnée au bout du délai.
+      await vi.advanceTimersByTimeAsync(POSITION_REQUEST_TIMEOUT_MS + 1);
+      expect(await give).toBe(false);
+      // L'état reste sur A ; une nouvelle relecture peut partir.
+      expect(t.store.view().at?.label).toBe("A");
+      const refresh = t.store.refresh(true);
+      expect(t.calls()).toBe(3);
+      t.pending[2]?.resolve(at("A, relue"));
+      await vi.advanceTimersByTimeAsync(0);
+      await refresh;
+      expect(t.store.view().at?.label).toBe("A, relue");
+      // La réponse tardive du geste abandonné ne fait rien.
+      t.pending[1]?.resolve(at("B, très tard"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(t.store.view().at?.label).toBe("A, relue");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

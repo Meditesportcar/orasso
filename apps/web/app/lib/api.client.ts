@@ -11,6 +11,8 @@ export async function apiFetch<T>(
     method?: string;
     json?: unknown /** La requête survit à un changement de page (« lu » posé juste avant de naviguer). */;
     keepalive?: boolean;
+    /** Délai avant d'abandonner la requête (ms) ; sans lui, aucun (comportement d'origine). */
+    timeoutMs?: number;
   } = {},
 ): Promise<ClientResult<T>> {
   try {
@@ -20,6 +22,7 @@ export async function apiFetch<T>(
       body: init.json !== undefined ? JSON.stringify(init.json) : undefined,
       credentials: "same-origin",
       keepalive: init.keepalive,
+      signal: init.timeoutMs ? AbortSignal.timeout(init.timeoutMs) : undefined,
     });
     if (res.ok) return { ok: true, status: res.status, data: (res.status === 204 ? null : await res.json()) as T };
     const payload = (await res.json().catch(() => null)) as Partial<ApiError> | null;
