@@ -12,7 +12,7 @@ import {
   normalizePlate,
   vehicleCreateSchema,
 } from "@orasso/shared";
-import { and, count, eq, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 
 import { auth } from "../../auth";
 import { db } from "../../db/client";
@@ -20,6 +20,7 @@ import {
   applicationEvents,
   applications,
   checkins,
+  emailOutbox,
   expressInvites,
   profiles,
   user,
@@ -59,18 +60,70 @@ async function usableInvite(token: string) {
 }
 
 /** L'invitation déjà créée par cet auteur avec cet identifiant (même réponse que la première fois), ou `undefined`. */
-async function replayed(userId: string, clientId: string) {
+async function replayed(userId: string, clientId: string, event: Awaited<ReturnType<typeof eventsRepo.byId>>) {
   const [row] = await db
     .select()
     .from(expressInvites)
     .where(and(eq(expressInvites.createdBy, userId), eq(expressInvites.clientId, clientId)));
   if (!row) return undefined;
+  // Une panne entre l'invitation et l'e-mail laisse une invitation sans message : le rejeu le répare (une seule fois).
+  await ensureMail(row, event);
   return {
     id: row.id,
     email: row.email,
     expiresAt: row.expiresAt.toISOString(),
     url: `${env.PUBLIC_URL}/express/${row.token}`,
   };
+}
+
+/** Une ligne « en attente » plus vieille que cela est restée en route (arrêt du processus) : l'e-mail est considéré non envoyé. */
+const STALE_QUEUED_MS = 10 * 60_000;
+
+/**
+ * Envoie l'e-mail de l'invitation **sauf s'il est parti ou en route** : la dernière trace de la boîte d'envoi est « envoyé »,
+ * « écarté par le budget » ou « en attente » depuis moins de 10 minutes. Pas de trace, un échec (`failed`) ou une attente
+ * trop ancienne : il repart. Sous un verrou propre à l'invitation, la ligne d'envoi est écrite **dans la transaction** (donc
+ * visible des autres dès le verrou relâché) ; la livraison se fait **après**, hors transaction : aucune connexion de la base
+ * n'attend le transport (la réserve du pool est de 10).
+ */
+async function ensureMail(
+  row: { id: string; eventId: string; email: string; token: string },
+  event: { title: string; startsAt: Date },
+): Promise<void> {
+  const content = renderMail(
+    `Inscription express · ${event.title}`,
+    [
+      `Tu es à l'entrée de « ${event.title} » (${formatDateTime(event.startsAt)}).`,
+      "Crée ton compte Orasso et ton véhicule en une minute : ton QR d'accès s'affiche aussitôt.",
+      "Lien valable 24 h.",
+    ],
+    { label: "M'inscrire", url: `${env.PUBLIC_URL}/express/${row.token}` },
+    { footer: "invitation" },
+  );
+  const queued = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`express-mail:${row.id}`}))`);
+    const [last] = await tx
+      .select({ status: emailOutbox.status, createdAt: emailOutbox.createdAt })
+      .from(emailOutbox)
+      .where(and(eq(emailOutbox.template, "express_invite"), sql`${emailOutbox.payload}->>'inviteId' = ${row.id}`))
+      .orderBy(desc(emailOutbox.createdAt))
+      .limit(1);
+    const onItsWay =
+      last &&
+      (last.status === "sent" ||
+        last.status === "skipped_quota" ||
+        (last.status === "queued" && now().getTime() - last.createdAt.getTime() < STALE_QUEUED_MS));
+    if (onItsWay) return undefined;
+    return mail.enqueue(
+      "express_invite",
+      row.email,
+      content,
+      { eventId: row.eventId, inviteId: row.id },
+      env.MAIL_TRANSPORT,
+      tx,
+    );
+  });
+  if (queued) await mail.deliver(queued, row.email, content);
 }
 
 export const expressService = {
@@ -82,7 +135,7 @@ export const expressService = {
       throw new AppError(423, "locked", "Inscription express : de la veille à la fin de l'événement");
     }
     // Rejeu d'un envoi dont la réponse s'est perdue (R8p, tour 5) : la première invitation, aucun second e-mail.
-    const replay = clientId ? await replayed(v.user.id, clientId) : undefined;
+    const replay = clientId ? await replayed(v.user.id, clientId, event) : undefined;
     if (replay) return replay;
     // Limite d'envoi : un compte staff ne peut pas servir à arroser des adresses (anti-abus du formulaire).
     const [sent] = await db
@@ -114,26 +167,12 @@ export const expressService = {
       .returning();
     if (!row) {
       // Une autre requête avec le même identifiant vient d'insérer : c'est elle qui envoie l'e-mail.
-      const again = clientId ? await replayed(v.user.id, clientId) : undefined;
+      const again = clientId ? await replayed(v.user.id, clientId, event) : undefined;
       if (again) return again;
       throw new Error("Invitation non enregistrée");
     }
     const url = `${env.PUBLIC_URL}/express/${token}`;
-    await mail.send(
-      "express_invite",
-      row.email,
-      renderMail(
-        `Inscription express · ${event.title}`,
-        [
-          `Tu es à l'entrée de « ${event.title} » (${formatDateTime(event.startsAt)}).`,
-          "Crée ton compte Orasso et ton véhicule en une minute : ton QR d'accès s'affiche aussitôt.",
-          "Lien valable 24 h.",
-        ],
-        { label: "M'inscrire", url },
-        { footer: "invitation" },
-      ),
-      { eventId, inviteId: row.id },
-    );
+    await ensureMail(row, event);
     // Le lien est aussi rendu au staff : il peut le montrer en QR si l'e-mail tarde.
     return { id: row.id, email: row.email, expiresAt: row.expiresAt.toISOString(), url };
   },
