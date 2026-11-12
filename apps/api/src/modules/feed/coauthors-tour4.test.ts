@@ -19,12 +19,14 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { feedPostCoauthors, feedPostReactions, feedPosts, notifications, profiles } from "../../db/schema";
+import { feedPostCoauthors, feedPostReactions, feedPosts, notifications, profiles, user } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
 import { coauthorNotificationsWhere, pendingCoauthorCount, pendingCoauthorRequests } from "./coauthors";
+import * as commentsAnonymize from "./comments/anonymize";
+import { dbPost } from "./comments/testkit";
 import { follow, person } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -164,13 +166,18 @@ describe("anonymisation : un seul verrouillage trié au début (petit lot API, P
    * Chevauchement forcé : une transaction tient `lockedId` ; les deux anonymisations démarrent et attendent toutes les deux ce
    * verrou (sondage de la base), puis tout est relâché : elles se disputent alors tous leurs verrous en même temps.
    */
-  async function overlap(a: TestUser, b: TestUser, lockedId: string) {
+  async function overlap(a: TestUser, b: TestUser, lockedIds: string[]) {
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;
     });
     const holder = db.transaction(async (tx) => {
-      await tx.execute(sql`select 1 from feed_posts where id = ${lockedId} for update`);
+      await tx.execute(
+        sql`select 1 from feed_posts where id in (${sql.join(
+          lockedIds.map((i) => sql`${i}::uuid`),
+          sql`, `,
+        )}) order by id for update`,
+      );
       await gate;
     });
     let first: Promise<unknown> = Promise.resolve();
@@ -212,29 +219,83 @@ describe("anonymisation : un seul verrouillage trié au début (petit lot API, P
         ...posts.d.map((postId) => ({ postId, userId: kenji.id })),
         ...posts.k.map((postId) => ({ postId, userId: damien.id })),
       ]);
-    const results = await overlap(kenji, damien, [...posts.k, ...posts.d].sort()[0]!);
+    const results = await overlap(kenji, damien, [...posts.k, ...posts.d]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
     const alive = await db.select({ id: feedPosts.id }).from(feedPosts).where(sql`${feedPosts.deletedAt} is null`);
     expect(alive).toHaveLength(0);
     expect(await db.select().from(feedPostCoauthors)).toHaveLength(0);
   });
 
-  it("chacun a commenté sa propre publication et mis une flamme au commentaire de l'autre : aucune 40P01", async () => {
+  it("sans co-signature : chacun a commenté sa propre publication et mis une flamme au commentaire de l'autre, aucune 40P01", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
-    const pk = (await publishWith(kenji, { kind: "user", id: damien.id })).json.id as string;
-    const pd = (await publishWith(damien, { kind: "user", id: kenji.id })).json.id as string;
+    // Publications insérées directement : ni co-signature ni flamme sur la publication, seulement les commentaires et leurs flammes.
+    const pk = await dbPost(kenji);
+    const pd = await dbPost(damien);
     const ck = await call(kenji, "POST", `/feed-posts/${pk}/comments`, {
       text: "Mon commentaire",
       clientId: randomUUID(),
     });
     const cd = await call(damien, "POST", `/feed-posts/${pd}/comments`, { text: "Le mien", clientId: randomUUID() });
     expect([ck.status, cd.status]).toEqual([201, 201]);
-    // Croisé : chacun met sa flamme au commentaire de l'autre (sur une publication que l'autre possède).
     expect((await call(kenji, "PUT", `/feed-comments/${cd.json.id}/reaction`)).status).toBe(200);
     expect((await call(damien, "PUT", `/feed-comments/${ck.json.id}/reaction`)).status).toBe(200);
-    const results = await overlap(kenji, damien, [pk, pd].sort()[0]!);
+    const results = await overlap(kenji, damien, [pk, pd]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+  });
+
+  it("deux comptes qui se citent dans leurs commentaires, supprimés au même instant : les deux aboutissent", async () => {
+    const kenji = await person("Kenji_66");
+    const damien = await person("Damien_66");
+    const pk = await dbPost(kenji);
+    const pd = await dbPost(damien);
+    const ck = await call(kenji, "POST", `/feed-posts/${pk}/comments`, {
+      text: "Salut @Damien_66",
+      clientId: randomUUID(),
+    });
+    const cd = await call(damien, "POST", `/feed-posts/${pd}/comments`, {
+      text: "Salut @Kenji_66",
+      clientId: randomUUID(),
+    });
+    expect([ck.status, cd.status]).toEqual([201, 201]);
+    const results = await overlap(kenji, damien, [pk, pd]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+  });
+
+  it("un faux 40P01 au premier essai : la suppression aboutit au second, rien n'est écrit deux fois", async () => {
+    const kenji = await person("Kenji_66");
+    const pk = await dbPost(kenji);
+    expect(
+      (await call(kenji, "POST", `/feed-posts/${pk}/comments`, { text: "Un", clientId: randomUUID() })).status,
+    ).toBe(201);
+    const real = commentsAnonymize.anonymizeFeedCommentsForDeletedAccount;
+    const spy = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockImplementationOnce(async () => {
+        throw Object.assign(new Error("deadlock detected"), { code: "40P01" });
+      });
+    try {
+      await accountService.anonymize(kenji.id, null, {});
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(real).toBeTypeOf("function");
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, kenji.id));
+    expect(profile?.deletedAt).not.toBeNull();
+    const [after] = await db.select({ email: user.email }).from(user).where(eq(user.id, kenji.id));
+    expect(after?.email).toMatch(/^supprime\+[0-9a-f]{8}@orasso\.invalid$/);
+    // Une erreur autre qu'un interblocage ne se reprend pas.
+    const other = await person("Autre_66");
+    const boom = vi
+      .spyOn(commentsAnonymize, "anonymizeFeedCommentsForDeletedAccount")
+      .mockRejectedValue(new Error("panne"));
+    try {
+      await expect(accountService.anonymize(other.id, null, {})).rejects.toThrow("panne");
+      expect(boom).toHaveBeenCalledTimes(1);
+    } finally {
+      boom.mockRestore();
+    }
   });
 });
 

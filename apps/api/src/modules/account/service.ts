@@ -371,6 +371,27 @@ export const accountService = {
     // Lot 33 : `actor` = anonymisation décidée par l'équipe (même service, trace `user.anonymize` avec le motif).
     opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
   ) {
+    // Petit lot API, tour 4 : deux comptes supprimés au même instant peuvent encore s'interbloquer par une voie que le verrouillage
+    // trié ne couvre pas (cascades, mentions croisées). La transaction (annulée par PostgreSQL) est reprise en entier, 3 essais au plus,
+    // avec une courte attente aléatoire ; au-delà, l'erreur remonte comme avant.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.anonymizeOnce(userId, ip, opts);
+      } catch (error) {
+        const e = error as { code?: string; cause?: { code?: string } };
+        const state = (e.cause ?? e).code;
+        if ((state !== "40P01" && state !== "40001") || attempt >= 3) throw error;
+        await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+      }
+    }
+  },
+
+  /** Un essai d'anonymisation (une transaction) ; `anonymize` le reprend sur interblocage. */
+  async anonymizeOnce(
+    userId: string,
+    ip: string | null,
+    opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
+  ) {
     const tag = randomBytes(4).toString("hex");
     const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
