@@ -77,6 +77,8 @@ export function MentionsScreen() {
       return;
     }
     const ticket = gate.start();
+    // Une pagination en vol est désormais jetée (ticket périmé) : son `finally` ne remettra plus le drapeau, c'est ici.
+    setLoadingMore(null);
     try {
       // Un responsable lit aussi les masquées (le filtre les sépare) ; un refus (403) retombe sur la lecture ordinaire.
       const get = async (section: Section) => {

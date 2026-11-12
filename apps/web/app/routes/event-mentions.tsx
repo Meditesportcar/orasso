@@ -19,6 +19,7 @@ import { PostMenu } from "../components/publications/PostMenu";
 import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
+import { listenSession } from "../lib/sessionChannel";
 import "../styles/event-journal.css";
 import type { Route } from "./+types/event-mentions";
 
@@ -80,6 +81,20 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
     setMore({ on_site: [], fans: [] });
     setCursors(firstCursors);
   }, [loaderData]);
+  // Changement de session dans une autre fenêtre (déconnexion de A, connexion de B) : la génération change, les pages lues par A sont
+  // vidées, la page se relit. Une pagination en vol est jetée à son arrivée (jamais les mentions masquées de A chez B).
+  const revalidator = useRevalidator();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'abonnement ne dépend que du chargeur
+  useEffect(
+    () =>
+      listenSession(() => {
+        generation.current += 1;
+        setBusy(null);
+        setMore({ on_site: [], fans: [] });
+        revalidator.revalidate();
+      }),
+    [],
+  );
   const onSite = [...loaderData.onSite, ...more.on_site];
   const fans = [...loaderData.fans, ...more.fans];
   // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
@@ -109,7 +124,6 @@ export default function EventMentions({ loaderData }: Route.ComponentProps) {
         {L.more}
       </Button>
     ) : null;
-  const revalidator = useRevalidator();
   const [filter, setFilter] = useState<"visible" | "hidden">("visible");
   const [menu, setMenu] = useState<MentionItem | null>(null);
   const total = count ?? onSite.filter((i) => !i.hidden).length + fans.filter((i) => !i.hidden).length;

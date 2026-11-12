@@ -314,28 +314,39 @@ export const announcementsService = {
     // Lot R8d : l'annonce et sa publication reprise s'épinglent **dans la même transaction**, sous le verrou de l'épingle de
     // l'événement (`pinInTx`) : jamais une épingle sur l'ancien APK sans la fiche. Une erreur (limite d'écritures, droits)
     // remonte et rien n'est écrit.
-    const row = await withTx(async (tx) => {
-      const [taken] = await tx
-        .select({ id: feedPosts.id })
-        .from(feedPosts)
-        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
-      if (taken) {
-        rateLimit("feedWrite", v.user.id);
-        await pinInTx(tx, v, e.id, taken.id, pinned);
-      }
-      const [updated] = await tx
-        .update(eventAnnouncements)
-        .set({ pinned })
-        .where(
-          and(
-            eq(eventAnnouncements.id, id),
-            eq(eventAnnouncements.eventId, e.id),
-            isNull(eventAnnouncements.deletedAt),
-          ),
-        )
-        .returning();
-      return updated;
-    });
+    // Interblocage possible avec la reprise ou son retour arrière (40P01) : une seule reprise, comme `setPinned` de `pin.ts`.
+    const run = () =>
+      withTx(async (tx) => {
+        const [taken] = await tx
+          .select({ id: feedPosts.id })
+          .from(feedPosts)
+          .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+        if (taken) {
+          rateLimit("feedWrite", v.user.id);
+          await pinInTx(tx, v, e.id, taken.id, pinned);
+        }
+        const [updated] = await tx
+          .update(eventAnnouncements)
+          .set({ pinned })
+          .where(
+            and(
+              eq(eventAnnouncements.id, id),
+              eq(eventAnnouncements.eventId, e.id),
+              isNull(eventAnnouncements.deletedAt),
+            ),
+          )
+          .returning();
+        return updated;
+      });
+    const sqlState = (error: unknown) =>
+      ((error as { cause?: { code?: string }; code?: string }).cause ?? (error as { code?: string })).code;
+    let row: Awaited<ReturnType<typeof run>>;
+    try {
+      row = await run();
+    } catch (error) {
+      if (sqlState(error) !== "40P01") throw error;
+      row = await run();
+    }
     if (!row) throw notFound("Entrée introuvable");
     return serialize(row, s.name);
   },

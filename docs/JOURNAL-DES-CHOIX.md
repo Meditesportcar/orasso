@@ -5634,3 +5634,9 @@ DÃ©cisions de Damien appliquÃ©es (11/11) : **T3** (plus de Â« Nouvelle annonce Â
 - **`--revert`** : verrous d'abord, signalements lus **ensuite** dans une seconde requÃªte (un signalement validÃ© pendant l'attente protÃ¨ge la publication et ses photos) ; une reprise dont un **commentaire** est signalÃ© est aussi gardÃ©e (retrait doux, dÃ©tachÃ©e). Test Ã  deux transactions synchronisÃ©es. Le fichier copiÃ© d'une reprise abandonnÃ©e passe par `removeOrRetry`.
 - **Mentions et filtre** : la rubrique et son Â« Voir plus Â» restent affichÃ©s tant qu'un curseur existe, mÃªme sans rÃ©sultat pour le filtre courant (appli et site).
 - **Info importante d'hier** : dÃ©jÃ  corrigÃ©e par le coordinateur (3c7efc20) ; vÃ©rifiÃ© : `important` n'est posÃ© que pour une importante d'aujourd'hui, test Â« importante d'hier + annonce d'aujourd'hui Â» prÃ©sent et vert.
+
+### Tour 5 (lot R8d, 12/11/2026)
+- **Site, mentions** : un changement de session signalé par le canal (listenSession) incrémente la génération, vide les pages lues, remet usy à nul et revalide le chargeur : une pagination en vol d'un autre compte est jetée.
+- **Appli, mentions** : load() remet loadingMore à nul au démarrage (le inally d'une pagination périmée ne le fait plus) : « Voir plus » ne reste plus bloqué.
+- **Épingle de la façade** : une reprise sur 40P01, comme setPinned de pin.ts.
+- **Tests** : pas de test automatique du canal de session ni de la pagination suspendue (il faut plus de 20 mentions et une réponse retardée, et l'appli n'a pas de test d'écran) ; recettes de l'appli et du site 12/12 vertes, typechecks et biome propres.
