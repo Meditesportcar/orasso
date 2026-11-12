@@ -5488,6 +5488,16 @@ API seule (aucun écran). Partie 2 (le Fil et les commentaires « en tant que »
 - **Organisateur sur un compte privé** : hors audience limitée, un compteur nul est traité comme un compteur inconnu : le profil s'ouvre sur « Garage » (« Sorties » sans véhicule), pas sur le panneau « Compte privé » (qui reste un clic à côté). Appli et site ; recette Sarah_66 sur Marc_66.
 - **Choix de vue du site** : le compte vient de la mise en page de la session (`useRouteLoaderData("layouts/app")`), plus de `/me` ; `purgeViewChoices` (`components/publications/viewChoice.ts`, testé) efface les clés de tous les comptes à la déconnexion, avec `purgePublished`.
 
+### Tour 8 (R8k1, 11/11/2026)
+- **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
+- **Équivalence** : le test compare aussi publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse vivante et compte supprimé.
+
+### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
+- **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
+- **Marque au départ de chaque lecture, pagination comprise** (`since` est pris pour la première page comme pour « Voir plus », et pour les réponses) ; le compteur de réponses se réconcilie pour **toutes** les pages. Test : page suivante tardive contenant une ancienne version du parent.
+- **Plancher, jamais d'addition** : le compteur reçu est remplacé par le compteur local seulement si une réponse a été confirmée depuis le départ de la lecture et que le local est plus grand (le plus grand des deux) : un GET lu avant l'enregistrement (0) comme après (1) donne 1. Limite connue : une réponse supprimée ailleurs pendant la lecture ne fait redescendre le compteur qu'à la réouverture.
+
+
 ## Lot R8d : la fiche de l'événement, « Publications » (le journal), « Mentions · N », reprise des annonces en publications (API, appli et site, migration 0081 `announcements-to-posts`, D40, 11/11/2026)
 
 Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce » ; une information publique est une publication avec « Info importante », une information privée est un message groupé ; les anciennes annonces réservées aux inscrits restent lisibles des inscrits), **T4** (sans session, la fiche ne montre que le journal de l'organisateur), **T1** (toute publication a un visuel : une annonce reprise sans image prend l'affiche de son événement, sans affiche elle reste une annonce).
@@ -5552,6 +5562,29 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Les photos de la copie hors ligne** ne s'affichent pas (mémoire seulement, règle R5c1). Les garder sur le disque du téléphone, par compte, est un choix de vie privée : à décider.
 - **La raison en ligne de tête** (maquette R8.7) demande de changer `CardShell`, partagé avec toutes les cartes : non fait, la raison reste sous le titre.
 - **Mode avion** : à essayer sur le Xiaomi (la recette web ne voit ni le trousseau ni les fichiers du téléphone).
+
+## Lot R8o : collaboration (« Publier avec… », demande dans l'Activité, double signature, une seule carte, « Me retirer » ; API, appli et site ; migration `0081_feed-coauthors` (0082 prévue : le coordinateur renumérote), D40, 11/11/2026)
+
+### Choix
+- **Migration** : `feed_post_coauthors` seule (aucun `ALTER`), numéro 0081 sur cette base (R8d prend le sien) ; son SQL ne dépend d'aucune autre table de la vague. Vérifiée sur une base au niveau de `vague-r8` (0080 puis 0081) et sur base neuve (tests).
+- **Un seul état final** : toute écriture prend le verrou de la publication puis celui de la ligne du co-auteur, dans cet ordre (réponse, retrait, suppression de la publication). Répéter la même réponse est sans effet (une seule notification) ; l'inverse, ou une réponse à une ligne retirée : 409 `coauthor_closed` / 404. Tests de course : accepter/supprimer, accepter/refuser, deux acceptations, accepter/retirer (auteur), accepter/se retirer.
+- **« Me retirer » d'une invitation en attente vaut un refus** (`declined`, sans notification) ; accepté, c'est `withdrawn` avec `coauthor_withdrawn` à l'auteur. L'auteur d'origine, lui, efface la ligne (annuler ou retirer), sans notification.
+- **Rien ne montre un co-auteur non accepté** : `coAuthor` seulement si `accepted` et cible en règle ; `coAuthorInvite` à l'auteur d'origine seul. **Ajout** (hors fiche) : `coAuthoredByMe` (booléen sur moi-même : moi ou une page que je gère), sans lequel l'écran ne sait pas proposer « Me retirer ».
+- **Vie privée** : auteur en compte privé : le co-auteur personne doit le suivre (accepté), une page doit avoir chacun de ses responsables abonné (422 `coauthor_cannot_see`) ; accepter revérifie que la personne voit encore la publication. Listes et compteurs du co-auteur : visibilité de l'auteur d'origine appliquée en SQL (`coSignedSql`) ; sans session, jamais de co-signature (la page publique d'une structure ne sert que son journal).
+- **Fil** : une seule carte ; si je suis le co-auteur (et pas l'auteur), la carte prend pour affinité le co-auteur (`coSignedOwners`, dans `sources/feedPosts.ts`) ; « Abonnements » l'inclut aussi (clause SQL) ; si je suis le co-auteur lui-même, c'est comme une des miennes.
+- **Pro partenaire** : si le pro invité est partenaire actif de l'auteur (publication personnelle), la mention est posée à l'invitation par `commercialPartnerFor` (choix explicite) et ne se retire jamais ; le titulaire ne reçoit qu'une notification (l'invitation), pas aussi `partner_mention`. **Le volet juridique de la co-signature commerciale attend le juriste (risque 11) : rien inventé.**
+- **Plafond** : 10 invitations par 24 h glissantes et par compte, comptées sous verrou avant d'écrire la publication ; une invitation annulée ne compte plus (les publications ont déjà leur plafond horaire).
+- **Notifications** : invitation → personne ou chaque responsable actif de la page (jamais soi) ; lien vers les Demandes. Acceptation et retrait → l'auteur qui a publié, lien par `postId` (comme les mentions). Les notifications d'une invitation disparaissent quand elle est close ou que la publication est supprimée.
+- **Compte supprimé** : la ligne du co-auteur part (la publication reste) ; les invitations de l'auteur supprimé partent avec ses publications.
+- **Seed** : Garage du Port (pro partenaire de Kenji_66) remplace « Wrap 66 » de la maquette, qui n'existe pas au seed.
+- **Appli et site** : la ligne et le choix (puces, recherche à deux lettres, résultats avec « Pro partenaire »), la demande (confirmation de la maquette un instant, puis la liste se relit), la signature à deux noms (`CoAuthorHead.tsx`), « Avec … » sur la vignette, le menu (Me retirer avec confirmation, Annuler l'invitation, Retirer le co-auteur), l'état de l'invitation (« Invitation refusée ») sur la carte de l'auteur.
+- **Fichiers touchés hors liste** (plus petit changement, comportement par défaut inchangé) : `cards/CardShell.tsx` et `components/fil/Shell.tsx` (propriété `titleNode`, et `reasonText` sur le site) ; `lib/api/feed.ts` (champ `coAuthor` du corps) ; `PublishScreen.tsx` et `PublishForm.tsx` (un bloc : la ligne, plus le corps : `feedPostBodyR8` ne connaît pas `coAuthor`, il part à côté) ; `usePublications` et `publicationsSignal` / `signal` (relecture quand la collaboration change) ; `FeedPostCard.tsx` / `Cards.tsx` (signature et état de l'invitation) ; `styles/coauthors.css` (nouveau).
+
+### À revoir avec Damien (lot R8o)
+- **Les noms de pages** (structure, pro, média) dans la signature ne s'ouvrent pas encore : la vue d'auteur n'a pas d'adresse de page (R8g). Seuls les noms de personnes sont des liens.
+- **Prestataire co-auteur** et notification adressée à une structure : livraison 3.
+- Un co-auteur ne peut pas être ré-invité sur une publication existante (une seule ligne par publication, invitation à la création seulement).
+- À essayer sur le Xiaomi : recherche d'un co-auteur au clavier, accepter depuis une notification, carte à deux noms à 384 dp et police ×1,3.
 
 ### Tour 8 (R8k1, 11/11/2026)
 - **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
@@ -5638,6 +5671,17 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **« Pas de réseau »** : `PostActions` reçoit `offline` (facultatif, porté par un contexte du Fil) ; flamme et commentaire d'une carte de la copie disent « Pas de réseau » avant toute mutation (recette).
 - **`attachPhrase`** : l'élision l'emporte aussi pour un nom féminin (« pour l'Exposition », « à l'Expo »).
 
+### Tour 2 (lot R8o, 12/11/2026) : relectures Opus et Codex
+- **Plafond d'envois** : un journal `feed_coauthor_invite_log` (compte, instant), écrit avec l'invitation, jamais effacé par une annulation ni par la suppression de la publication, purgé au-delà de 24 h et avec le compte ; `reserveInvite` le compte sous le même verrou. Dans la même migration (régénérée, voir ci-dessous).
+- **Mention imposée** : le pro partenaire co-auteur est une source imposée ; un autre pro choisi à la main : 400 `commercial_conflict`.
+- **Identifiant** : validé selon le genre (UUID pour une page, identifiant de compte pour une personne) et écrit en minuscules ; mal formé : 400. Un compte privé non suivi invité par son identifiant : 422 `coauthor_unavailable`.
+- **Compte supprimé** : après le verrou des publications (publication, puis ligne : même ordre que répondre et se retirer), les notifications `coauthor_*` des publications concernées sont retirées **avant** d'effacer les lignes, en une requête bornée par destinataire (index existant de `notifications`). Même ordre à la suppression d'une publication et à l'annulation par l'auteur.
+- **Pastille** : les invitations ne sont plus comptées dans `pendingRequests` (l'ancienne appli n'a pas leur carte : « Demandes · 1 » sur une liste vide) ; la liste et son `total` les comptent, l'invitation arrive aussi dans l'Activité. À revoir : une pastille propre aux nouveaux clients demanderait un en-tête de version.
+- **Fil** : le co-auteur ne fait entrer la carte dans « Abonnements » que s'il est en règle (compte non suspendu, banni ou supprimé ; page ni supprimée ni suspendue).
+- **Listes et Fil** : `notifyPostChanged` et `markFeedDirty` partent dès le succès de l'API (accepter, refuser, me retirer, annuler, retirer) ; le minuteur ne sert qu'à la confirmation visible ; sur le site la page seule se recharge 2 s après.
+- **Brouillon de « Publier »** : l'envoi incertain garde `coAuthor` dans son corps (même `clientId`, rejeu sans doublon) ; le brouillon affiché ne le reprend pas (choix : le co-auteur se choisit de nouveau). Test dans `rules/coauthors.test.ts`.
+- **Signature** : plus de taille en dur, zone de toucher à la hauteur du jeton `touch`.
+
 ### Tour 8 (R8k2, 12/11/2026) : relecture Codex de la nuit sur le tour 7, et mineurs d'Opus
 - **Le compteur du parent n'est rendu que si le parent se lit encore** : `parent` de la réponse du POST (y compris au rejeu du même `clientId`) passe par `requireVisibleComment` ; un 404 (compte privé qui m'a retiré de ses abonnés) donne une réponse sans `parent`, le commentaire reste rendu. Test : avec et sans retrait de l'abonnement.
 - **La suppression d'une réponse ne casse plus la version du compteur** : `DELETE /feed-comments/:id` d'une **réponse** rend **200** `{ parent: { id, repliesCount, countedAt } }`, lu après la suppression (même lecture que le POST) ; un commentaire de premier niveau reste en **204**. L'écran ne décrémente plus rien : il applique cette valeur avec la règle de version (`sheetApplyParentCount`). Compatibilité : l'APK en ligne n'a pas encore l'écran des commentaires (livraison 2) ; le client de l'appli lit le corps en texte et accepte vide ou JSON, le site décode un 200 JSON ; les tests existants qui attendaient 204 pour une réponse supprimée attendent maintenant 200. Tests (shared) : suppression de R1 pendant l'envoi de R2, dans les deux ordres, et GET parti après la suppression ; test API du champ.
@@ -5682,6 +5726,12 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Dédoublonnage jusqu'au curseur** : la recherche des résumés déjà envoyés part de la date de début de fenêtre du compte (dernier résumé moins la marge d'une heure), plus d'une fenêtre fixe de trois jours. Test : résumé, quatre jours sans passage, publication de l'heure précédant l'ancien résumé : non reprise.
 - Écartés par le coordinateur : anciens résumés au format `eventIds` (jamais en ligne) ; `notifyTiming` ignore `endsAt` (règle d'écran de R8n2).
 - Fichiers : `modules/event-notifications/digest.ts`, `tour5.test.ts`.
+
+### Tour 3 (lot R8o, 12/11/2026) : relecture Codex du tour 2
+- **Notifications d'invitation** : retirées par les notifications réellement écrites (type `coauthor_*` et `postId`), plus par des destinataires recalculés : un ancien responsable retiré depuis ne garde rien. Index partiel d'expression `notifications_coauthor_post_idx` ajouté **à la main** à la fin de ma migration (la table `notifications` n'est pas à moi, le schéma Drizzle ne le connaît pas). Migration régénérée en `0083_feed-coauthors` (la vague a pris 0082) ; le coordinateur renumérote.
+- **« Demandes »** : `pendingRequests` garde l'exclusion (ancienne appli) ; champ `pendingCoauthors` du résumé, que `inboxRowCounts` ajoute côté nouveaux clients (l'ancienne appli l'ignore). La ligne « Demandes · 1 » se montre avec la seule invitation.
+- **Journal des envois** : supprimé à l'anonymisation du compte ; la purge des envois de plus de 24 h ne vise que l'inviteur.
+- **UUID** : `commercialPartnerId` passé en minuscules avant les comparaisons.
 
 ### Tour 3 (lot R8d, 12/11/2026) : corrections de la relecture Codex et mineurs d'Opus
 - **Migration** : la vague porte `0081_express-invite-client-id` ; la migration du lot est regénérée en **0082** (`announcements-to-posts`), même SQL (diff vérifié), snapshot et journal refaits par `drizzle-kit`.
@@ -5730,6 +5780,11 @@ Décisions de Damien appliquées (11/11) : **T3** (plus de « Nouvelle annonce �
 - **Delta de « Mentions · N »** : il repart de zéro à chaque **réponse servie** (l'objet de la fiche relue), non à chaque changement de valeur (appli et site). Recettes : masquer, le serveur redit le même nombre, relecture : le nombre servi s'affiche.
 - **Test de la fiche de base d'un pro** : une vraie citation du pro par un tiers (liste et compteur présents avant la fin de gratuité, absents pour un autre lecteur après, maintenus pour le propriétaire).
 - **Mineurs d'Opus** : une photo servie avec une largeur ou une hauteur nulle prend le cadrage 4:5 (appli, vue sans session). Hors décision, à noter : une publication d'un pro qui cite une structure ou un événement reste visible dans les mentions de ceux-ci, dans le Fil et sur `/feed-posts/:id` après la fin de gratuité.
+
+### Tour 4 (lot R8o, 12/11/2026) : relecture Codex du tour 3
+- **Index partiel** : la requête et l'index portent maintenant le même prédicat, mot pour mot (`type in ('coauthor_invited', 'coauthor_accepted', 'coauthor_withdrawn')`) ; avant, un `like` non échappé d'un côté et échappé de l'autre empêchait PostgreSQL de s'en servir. Plan vérifié par un test (`EXPLAIN (FORMAT JSON)` de la requête réelle, paramètres compris, 4 000 notifications, `enable_seqscan = off` pour montrer que l'index est utilisable) : le plan cite `notifications_coauthor_post_idx` (scan par index de l'expression `data ->> 'postId'`). Index corrigé dans la migration `0083_feed-coauthors` (renumérotée par le coordinateur).
+- **Compteur de `GET /me`** : `pendingCoauthorCount` est un comptage (les invitations en attente, puis les mêmes contrôles de visibilité que la liste : publication servie, auteur en règle, compte privé suivi), plus aucune carte construite. Test : même nombre que la liste dans quatre cas (publication supprimée, auteur privé non suivi, auteur banni) ; nombre de requêtes identique pour 1 et 7 invitations.
+- **Tests** : l'UUID en majuscules exige 201 et le bon partenaire ; scénario heures calmes (notification différée) puis anonymisation de l'auteur : ni ligne ni livraison ensuite. Le test de forme du résumé de la Boîte (`activity.test.ts`) accepte `pendingCoauthors`.
 
 ### Tour 7 (lot R8d, 12/11/2026)
 - **Site, mentions** : le rappel de listenSession compare l'annonce au compte du chargeur **courant** (r�f�rence mise � jour � chaque donn�e) : A ? B ? A dans une page rest�e mont�e n'ignore plus la derni�re annonce. Pas de test A ? B ? A (il faut deux comptes dans une m�me fen�tre annonc�s par le canal) ; recette du site non rejou�e ce tour.

@@ -591,6 +591,8 @@ describe("publier", () => {
         "author",
         "caption",
         "coAuthor",
+        "coAuthorInvite",
+        "coAuthoredByMe",
         "commentsCount",
         "commentsOff",
         "commercialPartner",

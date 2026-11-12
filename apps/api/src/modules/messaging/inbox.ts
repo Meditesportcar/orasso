@@ -22,7 +22,7 @@ type Extras = (
   userId: string,
   requests: InboxRequestCounts,
   ex: Executor,
-) => Promise<{ unseenActivity: number; pendingRequests: number }>;
+) => Promise<{ unseenActivity: number; pendingRequests: number; pendingCoauthors?: number }>;
 let extras: Extras | null = null;
 
 /**

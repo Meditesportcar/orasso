@@ -160,6 +160,8 @@ export type InboxSummary = {
   requests: InboxRequestCounts;
   unseenActivity: number;
   pendingRequests: number;
+  /** Lot R8o : invitations à publier en attente, à part (l'ancienne appli n'a pas leur carte) ; les nouveaux clients les ajoutent à « Demandes ». */
+  pendingCoauthors?: number;
 };
 
 export type UploadResult = {

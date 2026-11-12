@@ -13,11 +13,14 @@ import {
   attachDateLabel,
   attachLeadOf,
   attachStateLabel,
+  coauthorLabels as CO,
+  type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
   clearUncertain,
+  coAuthorInputOf,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -68,6 +71,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/fil.css";
 import "../../styles/fil-publish.css";
 import { CommercialLine, useCommercialLine } from "../stories/CommercialLine";
+import { CoAuthorLine } from "./CoAuthorLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
@@ -180,6 +184,9 @@ export function PublishForm({
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
+  // « Publier avec… » (lot R8o) : un seul co-auteur invité ; absent de la publication quand « Info importante » est cochée.
+  const [coAuthor, setCoAuthor] = useState<CoAuthorSearchItem | null>(null);
+  const [invitedName, setInvitedName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -477,9 +484,8 @@ export function PublishForm({
       uploaded.push(key);
     }
     setProgress(L.publishing);
-    const body =
-      (uncertain as ReturnType<typeof feedPostBodyR8> | null) ??
-      feedPostBodyR8({
+    const body = (uncertain as ReturnType<typeof feedPostBodyR8> | null) ?? {
+      ...feedPostBodyR8({
         photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
         caption,
         aspect,
@@ -490,7 +496,10 @@ export function PublishForm({
         placeLabel: choice.placeLabel,
         important,
         ...(fan ? commercialField(commercialLine) : {}),
-      });
+      }),
+      // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
+      ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
+    };
     const second = await accountCheck();
     if (second !== "same") {
       setBusy(false);
@@ -505,6 +514,7 @@ export function PublishForm({
       // compte vient de passer avant l'envoi ; un autre compte, dans le même onglet, n'en voit jamais rien).
       rememberPublished(userId, res.data as FeedPostView);
       setUncertain(null);
+      setInvitedName((res.data as FeedPostView).coAuthorInvite?.name ?? null);
       setDone(true);
       setBusy(false);
       setProgress(null);
@@ -560,6 +570,11 @@ export function PublishForm({
       <div className="fil" data-testid="fil-publish-done">
         <FicheBar title={L.published} back="/app/fil" />
         <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        {invitedName ? (
+          <p className="o-t-body" data-testid="fil-publish-invited">
+            {CO.sent(invitedName)}
+          </p>
+        ) : null}
         <a className="fil-publish" href="/app/fil" data-testid="fil-publish-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
@@ -943,6 +958,7 @@ export function PublishForm({
         />
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
+      {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
       <SaysBlock says={publishSays(author, event, important.on)} />
 
       {error ? (

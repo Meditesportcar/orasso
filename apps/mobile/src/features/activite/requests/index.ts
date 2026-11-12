@@ -4,6 +4,7 @@
 import type { RequestKind } from "@orasso/shared";
 import type { ComponentType } from "react";
 
+import { CoAuthorRequest } from "./coauthor";
 import { ContactRequest } from "./contact";
 import { CrewInvitation, CrewRequest } from "./crew";
 import { EventInvitationRequest } from "./eventInvitation";
@@ -22,6 +23,7 @@ export const requestCards: Partial<Record<RequestKind, ComponentType<RequestCard
   event_invitation: EventInvitationRequest,
   plate_transfer: PlateTransferRequest,
   partnership: PartnershipRequest,
+  coauthor: CoAuthorRequest,
 };
 
 export type { RequestCardProps } from "./types";

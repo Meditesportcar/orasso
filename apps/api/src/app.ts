@@ -50,6 +50,7 @@ import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
+import { coauthorRoutes } from "./modules/feed/routes-coauthors";
 import { feedFilRoutes } from "./modules/feed/routes-fil";
 import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
@@ -290,6 +291,8 @@ app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
 // Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
 app.route("/", feedListRoutes);
+// Vague R8 (lot R8o) : collaboration (co-auteur) ; avant `feedRoutes`.
+app.route("/", coauthorRoutes);
 app.route("/", feedRoutes);
 app.route("/", feedFilRoutes);
 app.route("/", feedCommentRoutes);

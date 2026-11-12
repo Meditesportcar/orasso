@@ -7,15 +7,20 @@ import {
   publicationsLabels as L,
   publicationPath,
   tileMeta,
+  withLabel,
 } from "@orasso/shared";
 
+import "../../styles/coauthors.css";
 import { JournalBadges, type JournalOptions } from "../event-journal/JournalBadges";
 
 export function PublicationsGrid({
   posts,
+  authorKey,
   journal,
 }: {
   posts: readonly FeedPostView[];
+  /** La clé du profil regardé : « Avec <l'autre> » d'une publication co-signée (R8o). */
+  authorKey?: string;
   /** Lot R8d (journal d'un événement) : étiquettes, menu « … » de l'organisateur, vignettes sans lien (sans session). */
   journal?: JournalOptions;
 }) {
@@ -25,6 +30,8 @@ export function PublicationsGrid({
       {posts.map((post) => {
         const meta = tileMeta(post, now);
         const photo = post.photos[0];
+        // Collaboration (R8o) : sur le profil de l'un, « Avec <l'autre> ».
+        const withName = authorKey ? withLabel(authorKey, post) : null;
         return (
           <div key={post.id} className="pub-tile" data-testid="publication-tile">
             {journal?.readOnly ? (
@@ -49,7 +56,7 @@ export function PublicationsGrid({
               <a
                 className="pub-tile__photo"
                 href={publicationPath(post.id, { web: true })}
-                aria-label={`${L.openPost}, ${L.tileLabel(meta.date, meta.place)}`}
+                aria-label={`${L.openPost}, ${L.tileLabel(meta.date, meta.place)}${withName ? `, ${withName}` : ""}`}
                 data-testid="publication-tile-open"
               >
                 {photo ? (
@@ -61,6 +68,12 @@ export function PublicationsGrid({
                     loading="lazy"
                     decoding="async"
                   />
+                ) : null}
+                {withName ? (
+                  <span className="co-pin" data-testid="publication-tile-with">
+                    <Icon name="crew" size={12} />
+                    {withName}
+                  </span>
                 ) : null}
               </a>
             )}
