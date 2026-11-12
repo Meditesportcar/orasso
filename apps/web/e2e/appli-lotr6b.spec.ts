@@ -106,13 +106,13 @@ for (const theme of ["beton", "sable"] as const) {
     // 2. Compte privé : « Demander à suivre » → « Demandé », la ligne réservée aux abonnés.
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Demander à suivre/i);
-    await expect(mine.page.getByTestId("profile-private-note")).toContainText(
-      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
+    await expect(mine.page.getByTestId("publications-private")).toContainText(
+      "ne sont visibles que de ses abonnés acceptés.",
     );
     await shot(mine.page, `04-prive-demander-${theme}`);
     await followButton(mine.page).click();
     await expect(followButton(mine.page)).toHaveText(/Demandé/i);
-    await expect(mine.page.getByTestId("profile-private-note")).toContainText("Ta demande attend sa réponse.");
+    await expect(mine.page.getByTestId("publications-private-ask")).toContainText("Demande envoyée à");
     await shot(mine.page, `05-prive-demande-${theme}`);
 
     // 3. La personne privée accepte dans « Ton réseau » ; une autre demande est refusée sans prévenir.
@@ -137,7 +137,13 @@ for (const theme of ["beton", "sable"] as const) {
     // Moi voit maintenant tout son profil, avec « Abonné ».
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Abonné/i);
-    await expect(mine.page.getByTestId("profile-private-note")).toHaveCount(0);
+    // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+    await mine.page.getByTestId("profil-tab-publications").click();
+    // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+    await expect(mine.page.getByTestId("publications-tab").or(mine.page.getByTestId("publications-empty"))).toBeVisible(
+      { timeout: 30_000 },
+    );
+    await expect(mine.page.getByTestId("publications-private")).toHaveCount(0);
 
     // 4. « Suivre en retour » : la personne privée suit Moi (public : tout de suite) ; Moi voit « Te suit ».
     expect((await apiCall<{ mine: string }>(asker.cookie, "POST", `/users/${me.pseudo}/follow`)).data.mine).toBe(
@@ -199,7 +205,7 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(other.page, `13-reseau-abonne-retire-${theme}`);
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Demander à suivre/i);
-    await expect(mine.page.getByTestId("profile-private-note")).toBeVisible();
+    await expect(mine.page.getByTestId("publications-private")).toBeVisible();
 
     await other.ctx.close();
     await mine.ctx.close();

@@ -37,6 +37,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { parentOfReply, parentToReread } from "./commentParent";
 import { onAccountChange, postLive } from "./commentsLive";
 
 class CallError extends Error {
@@ -288,11 +289,19 @@ export function useComments(
       const t = postLive.ticket(id);
       setActionError(null);
       try {
+        // Le parent est retrouvé avant le retrait : sans lui dans la réponse (204), la discussion du parent est relue.
+        const parentId = parentOfReply(postLive.sheetOf(id), comment.id);
         const done = await call<{ parent?: ParentCount } | null>(`/feed-comments/${comment.id}`, { method: "DELETE" });
         if (postLive.alive(t)) {
           dropRemoved(comment.id, t);
           // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
           update((s) => sheetApplyParentCount(s, done?.parent), t);
+          // Parent illisible ou déjà supprimé : la relecture le retire (404, `parentGoneRef`) ou rend sa liste et son compteur.
+          const reread = parentToReread(parentId, done);
+          if (reread) {
+            void loadReplies(reread);
+            void loadTop();
+          }
         }
       } catch (e) {
         if (!postLive.alive(t)) return;
@@ -307,6 +316,7 @@ export function useComments(
       id,
       dropRemoved,
       loadTop, // Le compteur du parent est celui du serveur, lu après la suppression (jamais un décrément local).
+      loadReplies,
       update,
     ],
   );

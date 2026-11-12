@@ -1,4 +1,4 @@
-import { Icon } from "@orasso/design-system/web";
+import { Button, Icon } from "@orasso/design-system/web";
 import {
   createSerialWriter,
   type EventNotificationPrefsView,
@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { type BellRead, bellControls } from "../../lib/bellControls";
 import "../../styles/event-notify.css";
 import { EssentialBlock, NotifySwitch, useSessionGuard } from "./NotifySignup";
 
@@ -19,20 +20,22 @@ class NoPlaceError extends Error {}
  * « Nouveautés de l'événement », enregistré au changement. Place perdue entre-temps (403 `no_place`) : le message, puis
  * la cloche disparaît à la fermeture de la fenêtre. Sans session ou sans place : rien.
  */
-export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string }) {
+export function NotifyBell({ eventId, userId, stamp }: { eventId: string; userId: string | null; stamp?: string }) {
   const [hasPlace, setHasPlace] = useState(false);
   const [news, setNews] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
+  const [read, setRead] = useState<BellRead>("loading");
+  const [reread, setReread] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   const writer = useRef<SerialWriter<boolean> | null>(null);
-  const accountAlive = useSessionGuard();
+  const guard = useSessionGuard(userId);
   const url = `/me/events/${encodeURIComponent(eventId)}/notification-prefs`;
   // Un écrivain neuf à chaque lecture de la place : envois sérialisés, dernier choix gardé, réponses périmées ignorées.
   const startWriter = (initial: boolean) => {
     writer.current = createSerialWriter<boolean>({
       initial,
-      alive: accountAlive,
+      alive: guard.alive,
       write: async (value) => {
         const saved = await apiFetch<EventNotificationPrefsView>(url, { method: "PUT", json: { news: value } });
         if (saved.ok) return saved.data.news;
@@ -48,27 +51,37 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         } else setMessage(e instanceof Error && e.message ? e.message : L.ficheSaveFailed);
       },
     });
+    guard.watch(writer.current);
   };
 
   // `stamp` : l'état des candidatures de la fiche (la place est relue quand il change).
+  // Le compte de la page change sans démontage (A -> B sur la même fiche) : `guard` change, l'écrivain est recréé avec la garde de
+  // B et les préférences de B sont relues.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` relance la lecture, il n'est pas lu.
   useEffect(() => {
     let alive = true;
+    // Aucun envoi de l'ancien compte dans la fenêtre avant la relecture : l'écrivain d'avant n'existe plus.
+    writer.current = null;
+    setRead("loading");
     void apiFetch<EventNotificationPrefsView>(`/me/events/${encodeURIComponent(eventId)}/notification-prefs`).then(
       (res) => {
-        if (!alive || !res.ok) return;
+        if (!alive) return;
+        // Lecture impossible : l'interrupteur reste désactivé (il n'enverrait rien), l'erreur et « Réessayer » le disent.
+        if (!res.ok) return setRead("failed");
         setHasPlace(res.data.hasPlace);
         setNews(res.data.news);
         startWriter(res.data.news);
         setGone(false);
+        setRead("ready");
       },
     );
     return () => {
       alive = false;
     };
-  }, [eventId, stamp]);
+  }, [eventId, stamp, guard, reread]);
 
   if (!hasPlace) return null;
+  const controls = bellControls(read);
 
   function change(next: boolean) {
     setNews(next);
@@ -83,7 +96,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         className="en-bell"
         aria-label={L.bellLabel}
         onClick={() => {
-          setMessage(null);
+          // Un échec tardif arrivé fenêtre fermée reste à lire : le message s'efface à la fermeture, pas à l'ouverture.
           dialog.current?.showModal();
         }}
         data-testid="notify-bell"
@@ -95,6 +108,7 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
         className="en-dialog"
         aria-labelledby="notify-bell-title"
         onClose={() => {
+          setMessage(null);
           if (gone) setHasPlace(false);
         }}
         data-testid="notify-sheet"
@@ -114,9 +128,26 @@ export function NotifyBell({ eventId, stamp }: { eventId: string; stamp?: string
             help={L.eventNewsHelpOnFiche}
             checked={news}
             onChange={change}
+            disabled={controls.switchDisabled}
             testId="notify-news-switch"
           />
-          {message ? (
+          {controls.showError ? (
+            <div className="en-box" data-testid="notify-read-error">
+              <p className="en-error" role="alert">
+                {L.readFailed}
+              </p>
+              {controls.showRetry ? (
+                <Button
+                  variant="secondary"
+                  icon="undo"
+                  onClick={() => setReread((n) => n + 1)}
+                  data-testid="notify-read-retry"
+                >
+                  {L.retry}
+                </Button>
+              ) : null}
+            </div>
+          ) : message ? (
             <p className="en-error" role="alert" data-testid="notify-message">
               {message}
             </p>

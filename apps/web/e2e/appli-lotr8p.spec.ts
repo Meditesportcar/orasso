@@ -84,7 +84,7 @@ test("un compte à une seule casquette ne voit pas « Publier en tant que » ; u
   await expect(missing(d.page)).toHaveText("Ajoute au moins une photo.");
   await addPhoto(d.page);
   await eventByTitle(d.page, "Nocturne de Canet").click();
-  await expect(d.page.getByTestId("fil-publish-says-phrase")).toContainText("sera au Nocturne de Canet");
+  await expect(d.page.getByTestId("fil-publish-says-phrase")).toContainText("sera à la Nocturne de Canet");
   await expect(d.page.getByTestId("fil-publish-stamp")).toHaveCount(0);
   // Le véhicule et le lieu libre : le lieu disparaît dès qu'un événement est choisi.
   await expect(d.page.getByTestId("fil-publish-place")).toHaveCount(0);
@@ -116,7 +116,7 @@ test("une structure publie « pour le … » sans photo : l'affiche est le visue
   await expect(page.getByTestId("fil-publish-poster")).toContainText(
     "Sans photo : l'affiche de l'événement sera le visuel.",
   );
-  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour le Expo Rivesaltes");
+  await expect(page.getByTestId("fil-publish-says-phrase")).toContainText("pour l'Expo Rivesaltes");
   await expect(page.getByTestId("fil-publish-says-where")).toContainText("journal");
   await expect(missing(page)).toHaveCount(0);
   await expect(page.getByTestId("fil-publish-send")).toBeEnabled();

@@ -5937,3 +5937,40 @@ Points de `petit-lot-appli.md`, tous dans `apps/mobile` (aucune dépendance nati
 - **PublicPublications** : un échec de relecture ou de page suivante après une lecture réussie affiche `LoadError` sous la liste (les éléments restent) ; « Voir plus » n'est plus grisé pendant une relecture.
 - **Classement du 503** : `staffSendOutcome` (`lib/staff/model.ts`, testée : 503 et réseau gardés, 400/403/409 retirés, 408/429 gardés, 401 attend) utilisée par `sendOther` ; comportement inchangé.
 - **P30a mineur** : sur un DELETE en 204, la première page est relue d'abord, puis la discussion du parent seulement s'il est encore dans la feuille : plus de double relecture ni de parent retiré avec l'ancien compteur. Pas de test (ordre d'appels du hook).
+
+## Petit lot site (12/11/2026)
+
+- **P24, garde de compte** (`lib/sessionGuard.ts`, `useSessionGuard(userId)`) : le compte de référence est le `userId` de la page (chargeur de la fiche et de la candidature, qui le renvoie désormais), pas la première annonce du canal. Le dernier compte annoncé décide : une annonce de B refuse, un retour de A rend l'accord (plus de refus définitif). L'écoute survit au démontage tant que l'écrivain n'a pas fini (`guard.watch`). Cloche : le message d'erreur s'efface à la fermeture de la fenêtre, plus à l'ouverture, pour qu'un échec tardif arrivé fenêtre fermée reste à lire. Fichiers : `NotifySignup.tsx`, `NotifyBell.tsx`, `routes/candidater.tsx`, `routes/event.tsx`.
+- **P14a** : la règle est dans `components/fil/eventDrop.ts` (`mustDropChosenEvent`) ; `PublishForm.tsx` ne retire plus l'événement tant qu'un envoi est figé.
+- **P26b** : `lib/retryTracker.ts` retient quel appel a échoué ; `usePublications` expose `retry()`, `PageMentions` l'utilise (les éléments déjà lus restent affichés).
+- **P30b** : `components/fil/commentParent.ts` retrouve le parent avant le retrait ; sans `parent` dans la réponse, `useComments.remove` relit les réponses du parent (404 : retiré par `parentGoneRef`) puis la première page (compteur).
+- **P41** : `afterPostChanged` (`publications/signal.ts`) annule son minuteur au démontage et avant d'en poser un nouveau.
+- **P45** : `lib/sessionGeneration.ts` extrait la génération de `event-mentions.tsx`, comportement inchangé.
+- **P09** : les recettes lisent le panneau `publications-private` (« Compte privé », « ne sont visibles que de ses abonnés acceptés. », puis `publications-private-ask` « Demande envoyée à »). Les recettes du site (`lotr5b-site`, `lotr6b-site`, `lotr7b1-site`, `social`) cherchaient aussi `profile-private-note` : adaptées de la même façon.
+- **P12** : le bouton « Publier » de l'état vide du profil est un `.o-button` de 48 px (hauteur du kit), plus un lien `.fil-publish` de 50 : le seuil du test passe de 50 à 48.
+- **P39** : les deux recettes cliquent `page-tab-presentation` avant de lire `pro-partners`.
+- **Accord du rattachement (demande du coordinateur)** : les recettes `appli-lotr8p` et `lotr8p-site` attendent « sera à la Nocturne de Canet » et « pour l'Expo Rivesaltes » (le petit lot API corrige `attachPhraseOf`). Non lancées dans ce lot : elles passent à la vérification d'ensemble, une fois les deux lots fusionnés.
+- **Assertions voisines de P09** : pour un compte privé vu d'un inconnu, la rangée d'onglets existe avec « Publications » seul (R8b2) : `appli-lotr7b1` vérifie l'absence de Garage et Sorties au lieu de `profil-tabs` absent. Pour l'abonné accepté, le profil s'ouvre sur « Publications » : les recettes `appli-lotr7b1` et `lotr7b1-site` cliquent « Garage » avant de lire `profile-car`.
+
+### Petit lot site, tour 2 (12/11/2026)
+- **Recettes périmées depuis R8b2** : le profil s'ouvre sur « Publications ». `appli-lotr7b1` (`:55`, `:101`, `:325`, `:351`) et `lotr7b1-site` (Mon compte) attendent « Publications » d'abord, puis cliquent « Garage » ou « Sorties ». Aucun défaut du produit révélé.
+- **`lotr5b-site` (audit des textes tronqués)** : le texte « coupé » est la bio de la carte du profil sur `/app/moi` (une ligne avec points de suspension et « plus », par construction depuis R8b1) : pas un nom, pas un véhicule. L'audit lisait la page avant la pose du « plus » (mesuré après coup par le navigateur) et ne l'exemptait donc pas. La recette attend maintenant que chaque bio coupée ait son « plus » avant l'audit ; le message d'échec de `truncated` liste le texte. Aucun changement de code du site.
+
+### Petit lot site, tour 3 (12/11/2026)
+- **P14a, affichage** : l'événement du corps incertain est gardé avec lui, dans l'onglet (`fil.publish.held-event:<compte>`, à côté du corps : le corps lui-même part à l'API et ne porte donc pas d'affichage). Pendant un envoi incertain, `shownEvent` (`fil/eventDrop.ts`) montre l'événement de la liste relue, sinon celui gardé, ajouté aux choix, coché et figé ; « Info importante » et la phrase suivent. L'événement gardé s'efface avec le corps. Sans envoi incertain, l'événement absent de la liste est retiré comme avant. Recette : `lotr8p-site` (envoi incertain, rechargement, événement absent de la liste, « Réessayer » renvoie l'`eventId`).
+- **Cloche** : `guardFor` (`lib/sessionGuard.ts`) rend une garde neuve quand le compte de la page change sans démontage ; l'effet de lecture dépend de la garde, donc l'écrivain est recréé et les préférences du nouveau compte relues.
+- **Inscription** : lectures numérotées (`lib/readSeq.ts`) ; la réponse d'une lecture dépassée est jetée.
+- **Journal de l'événement** : « Réessayer » passe par `retry()` (règle `retryTracker`, comme P26b).
+- **Recettes** : sept assertions `profile-private-note` sans objet remplacées par `publications-private` absent sur l'onglet « Publications » sélectionné (abonné accepté) ; les deux de `lotr8b1` (appli et site), qui suivaient l'attente du panneau, sont retirées. `appli-lot40` clique « Garage » avant `garage-add`.
+- **Journal écrit au shell** : l'outil Edit refuse ce fichier (octets en codage hérité dans d'anciennes sections, qui ne sont pas de ce lot) ; la section est ajoutée en fin de fichier par une ajout shell en UTF-8, sans toucher au reste.
+
+### Petit lot site, tour 4 (12/11/2026)
+- **Événement gardé** : rangé sous le préfixe `orasso:fil:publish-uncertain:` (`held-event:<compte>`, `fil/heldEvent.ts`) avec le corps incertain ; la déconnexion (`purgeUncertain`) les efface ensemble.
+- **Écran périmé** : `PublishForm` écoute `listenSession` ; une annonce d'un autre compte (`pageSessionStale`) remplace le formulaire et son envoi en attente par « Ta session a changé… » et « Recharger la page » (libellé local, à passer dans les libellés partagés au prochain passage dans le paquet).
+- **Cloche** : l'écrivain est remis à nul au début de l'effet de lecture.
+- **Recettes** : les assertions `publications-private` absent attendent l'onglet chargé ; `lotr7b1-site` retrouve « Publications par défaut » ; la recette d'événement gardé de `lotr8p-site` coupe « Réessayer » de nouveau pour rester rejouable sur la même base.
+
+### Petit lot site, tour 5 (12/11/2026)
+- **Session changée** : `latchStale` verrouille l'état « session changée » de `PublishForm` jusqu'au rechargement ; une annonce tardive du compte de la page ne réaffiche pas l'écran périmé.
+- **Cloche** : l'interrupteur est désactivé tant que la lecture des préférences n'a pas réussi (`bellControls`) ; un échec montre l'erreur de lecture et « Réessayer » (relit). Une première lecture qui échoue sans place connue laisse la cloche masquée, comme avant.
+- **Ancienne clé `fil.publish.held-event:<compte>`** : non migrée (née au tour 3, jamais déployée), décision du coordinateur.

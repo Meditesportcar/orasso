@@ -28,10 +28,19 @@ const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 test.use({ actionTimeout: 30_000 });
 
 async function audit(page: Page) {
+  // La bio du haut du profil tient sur une ligne par construction (R8b1) ; son « plus » est posé après la mesure du navigateur :
+  // l'audit attend que chaque bio coupée ait le sien (sinon il lit la page une image trop tôt).
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-testid="profil-bio"], [data-testid="profile-bio"]')].every(
+      (p) =>
+        p.scrollWidth <= p.clientWidth + 1 ||
+        document.querySelector(`[data-testid="${p.getAttribute("data-testid")}-toggle"]`),
+    ),
+  );
   const a = await auditPage(page);
   expect(a.greens).toEqual([]);
   expect(a.horizontalScroll).toBe(false);
-  expect(a.truncated).toEqual([]);
+  expect(a.truncated, JSON.stringify(a.truncated)).toEqual([]);
   expect(a.brokenWords, JSON.stringify(a.brokenWords)).toEqual([]);
   expect(a.primaryButtons).toBeLessThanOrEqual(1);
 }
@@ -158,8 +167,8 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
       await expect(pb.getByTestId("profile-together")).toContainText("Toi aussi : vous y serez tous les deux");
       // Compte privé.
       await pb.goto(`/u/${cPseudo}`);
-      await expect(pb.getByTestId("profile-private-note")).toContainText(
-        "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
+      await expect(pb.getByTestId("publications-private")).toContainText(
+        "ne sont visibles que de ses abonnés acceptés.",
       );
       // Lot R6b : un compte privé se suit sur demande.
       await expect(pb.getByTestId("follow-button")).toContainText("Demander à suivre");
@@ -263,15 +272,20 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   expect((await apiCall(d, "PATCH", "/me/profile", { visibility: "private" })).status).toBe(200);
   await page.goto(`/u/${dPseudo}`);
-  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
+  // Abonné accepté : l'onglet « Publications » n'a pas de panneau « Compte privé ».
+  await page.getByTestId("profil-tab-publications").click();
+  await expect(page).toHaveURL(/onglet=publications/);
+  // L'onglet chargé (liste ou état vide) avant de constater l'absence du panneau « Compte privé ».
+  await expect(page.getByTestId("publications-tab").or(page.getByTestId("publications-empty"))).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("publications-private")).toHaveCount(0);
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   await audit(page);
   await page.screenshot({ path: `${DIR}/tour2-prive-suivi-beton-390.png`, fullPage: true });
   await page.getByTestId("follow-button").click();
   await page.getByTestId("follow-confirm-yes").click();
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
-  await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
-  );
+  await expect(page.getByTestId("publications-private")).toContainText("ne sont visibles que de ses abonnés acceptés.");
   await ctx.close();
 });

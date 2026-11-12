@@ -138,11 +138,7 @@ export function EventJournal({
           {list.error ? (
             <p className="s-notice" role="alert" data-testid="journal-error">
               {L.error}{" "}
-              <button
-                type="button"
-                className="s-link"
-                onClick={() => void (list.nextCursor ? list.more() : list.reload())}
-              >
+              <button type="button" className="s-link" onClick={() => void list.retry()}>
                 {L.retry}
               </button>
             </p>
