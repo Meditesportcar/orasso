@@ -42,6 +42,11 @@ CREATE TABLE "event_albums" (
 	CONSTRAINT "event_albums_published_check" CHECK ("event_albums"."status" <> 'published' or "event_albums"."published_at" is not null)
 );
 --> statement-breakpoint
+CREATE TABLE "legacy_file_blocks" (
+	"key" text PRIMARY KEY NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "event_album_photos" ADD CONSTRAINT "event_album_photos_album_id_event_albums_id_fk" FOREIGN KEY ("album_id") REFERENCES "public"."event_albums"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_albums" ADD CONSTRAINT "event_albums_event_id_events_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_albums" ADD CONSTRAINT "event_albums_media_profile_id_media_profiles_id_fk" FOREIGN KEY ("media_profile_id") REFERENCES "public"."media_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

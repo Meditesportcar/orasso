@@ -10,7 +10,7 @@ import { ALBUM_COVER_PHOTOS, type AlbumPhotoView, type AlbumSummary, albumTitle,
 import { and, eq, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, events, mediaProfiles } from "../../db/schema";
+import { eventAlbumPhotos, eventAlbums, events, legacyFileBlocks, mediaProfiles } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
 import { profileOkSql } from "../feed/access";
@@ -80,6 +80,15 @@ export function albumVisibleSql(at: Date): SQL {
  * (`storage_key` est unique).
  */
 export async function legacyFileState(key: string, at: Date): Promise<"visible" | "hidden" | "unknown"> {
+  // 1. Une clé bloquée (original copié sous une clé privée) n'est jamais servie : lecture de clé primaire, sans lien avec un album,
+  //    un événement ou un compte (rien ne la supprime ; voir `legacyFileBlocks`). Une clé inventée s'arrête ici.
+  const [blocked] = await db
+    .select({ key: legacyFileBlocks.key })
+    .from(legacyFileBlocks)
+    .where(eq(legacyFileBlocks.key, key))
+    .limit(1);
+  if (blocked) return "hidden";
+  // 2. Une photo reprise d'une ancienne galerie (clé gardée sur place) suit la visibilité de son album.
   const [row] = await db
     .select({ visible: sql<boolean>`(${eventAlbumPhotos.deletedAt} is null and ${albumVisibleSql(at)})` })
     .from(eventAlbumPhotos)
@@ -89,15 +98,7 @@ export async function legacyFileState(key: string, at: Date): Promise<"visible" 
     .where(eq(eventAlbumPhotos.storageKey, key))
     .limit(1);
   if (row) return row.visible ? "visible" : "hidden";
-  // Un envoi `media_content` **copié** sous un album (publication par l'ancien chemin) n'est plus servi : l'original public devait être
-  // effacé ; s'il est encore là (effacement en échec, compte supprimé depuis), la colonne `legacy_source_key` (unique, gardée quel que soit
-  // l'état de la photo, de l'album ou du compte) le dit. Une lecture par index unique : ni `uploads`, ni autre colonne.
-  const [copied] = await db
-    .select({ id: eventAlbumPhotos.id })
-    .from(eventAlbumPhotos)
-    .where(eq(eventAlbumPhotos.legacySourceKey, key))
-    .limit(1);
-  return copied ? "hidden" : "unknown";
+  return "unknown";
 }
 
 /** La base de toute lecture d'album : l'album, son événement, son média. */

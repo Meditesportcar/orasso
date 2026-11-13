@@ -15,7 +15,7 @@ import {
 import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, events } from "../../db/schema";
+import { eventAlbumPhotos, eventAlbums, events, legacyFileBlocks } from "../../db/schema";
 import { requireOrganizerWrite } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -227,8 +227,9 @@ export const albumsLegacy = {
         if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
         if (!(await isAccredited(tx, input.eventId, media.id))) throw forbidden(mediaLabels.notAccredited);
         // Comme `addPhoto` : les photos sont copiées sous une clé **privée** d'album (jamais lisibles par `/api/files`) ; l'envoi
-        // d'origine (public) est effacé après la validation. L'identifiant de l'envoi sert de `client_id` : c'est ce qui permet de
-        // reconnaître une tentative rejouée avec les mêmes clés (`sameGallery`).
+        // d'origine (public) est effacé après la validation (`removeOrRetry`). La clé de l'envoi est gardée dans `legacy_source_key` (rejeu
+        // d'une galerie, `sameGallery`) et **bloquée** dans `legacy_file_blocks` (accès : `/api/files` répond 404 tant que le fichier existe,
+        // même si l'album, l'événement ou le compte disparaissent).
         const albumId = randomUUID();
         const uploaded: { key: string; width: number | null; height: number | null; sourceKey: string }[] = [];
         for (const key of input.photoKeys) {
@@ -241,6 +242,7 @@ export const albumsLegacy = {
           await storage.put(target, data);
           written.push(target);
           sources.push(up.key);
+          await tx.insert(legacyFileBlocks).values({ key: up.key }).onConflictDoNothing();
           uploaded.push({ key: target, width: up.width, height: up.height, sourceKey: up.key });
         }
         const [album] = await tx

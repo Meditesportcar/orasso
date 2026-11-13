@@ -45,6 +45,10 @@ describe("le SQL de reprise est celui de la migration", () => {
     expect(file).toContain('"legacy_source_key" text');
     expect(file).toContain('CONSTRAINT "event_album_photos_legacy_source_key_key" UNIQUE("legacy_source_key")');
     expect(file).not.toContain("client_trace_idx");
+    // Table des clés bloquées de `/api/files` : clé primaire, aucune clé étrangère (rien ne la supprime en cascade).
+    const blocks = /CREATE TABLE "legacy_file_blocks" \(([\s\S]*?)\n\);/.exec(file)?.[1] ?? "";
+    expect(blocks).toContain('"key" text PRIMARY KEY NOT NULL');
+    expect(file).not.toMatch(/ALTER TABLE "legacy_file_blocks" ADD CONSTRAINT .* FOREIGN KEY/);
   });
 });
 

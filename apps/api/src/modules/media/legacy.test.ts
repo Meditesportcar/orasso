@@ -11,6 +11,7 @@ import {
   eventAlbumPhotos,
   eventAlbums,
   events,
+  legacyFileBlocks,
   mediaContents,
   mediaProfiles,
   notifications,
@@ -391,8 +392,9 @@ describe("tour 3 : finition", () => {
     expect((await app.request(`/api/files/${a.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(404);
   });
 
-  it("de bout en bout : effacement de l'original en échec, puis suppression du compte : l'ancienne URL reste 404 jusqu'à la reprise de l'effacement", async () => {
+  it("de bout en bout : effacement de l'original en échec, suppression du compte puis suppression physique de l'événement : l'ancienne URL reste 404 jusqu'à la reprise de l'effacement", async () => {
     const sent = await sendUpload(leo, "media_content");
+    const upper = `/api/files/${sent.key.replace("media-contents/", "MEDIA-CONTENTS/")}`;
     // 1. La galerie est publiée par l'ancien chemin ; l'effacement de l'original échoue (disque occupé).
     vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("disque occupé"));
     const res = await call(leo, "POST", "/me/media-contents", {
@@ -405,33 +407,35 @@ describe("tour 3 : finition", () => {
     expect(res.status).toBe(201);
     expect(await storage.get(sent.key)).not.toBeNull();
     expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
-    // La preuve est dans la photo d'album, pas dans `uploads`.
-    const [photo] = await photoRows(res.json.id);
-    expect(photo?.legacySourceKey).toBe(sent.key);
+    // Le blocage est posé dans la transaction de la copie, en table à part (aucune clé étrangère).
+    expect(await db.select().from(legacyFileBlocks).where(eq(legacyFileBlocks.key, sent.key))).toHaveLength(1);
     // 2. Le compte est supprimé (anonymisation complète) ; l'effacement échoue encore.
     vi.spyOn(storage, "remove").mockRejectedValue(new Error("disque toujours occupé"));
     await accountService.anonymize(leo.id, null);
     vi.restoreAllMocks();
-    expect(await db.select().from(uploads).where(eq(uploads.userId, leo.id))).toHaveLength(0); // la preuve ne dépendait pas d'elle
+    expect(await db.select().from(uploads).where(eq(uploads.userId, leo.id))).toHaveLength(0);
+    expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
+    // 3. L'événement est **physiquement** supprimé : la cascade emporte l'album et ses photos, pas le blocage.
+    await db.delete(events).where(eq(events.id, eventId));
+    expect(await db.select().from(eventAlbums)).toHaveLength(0);
+    expect(await db.select().from(eventAlbumPhotos)).toHaveLength(0);
     expect(await storage.get(sent.key)).not.toBeNull();
     expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
-    expect((await app.request(`/api/files/${sent.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(
-      404,
-    );
-    // L'effacement de l'original est programmé (tâche persistante, rejouable).
+    expect((await app.request(upper)).status).toBe(404);
+    expect(await db.select().from(legacyFileBlocks).where(eq(legacyFileBlocks.key, sent.key))).toHaveLength(1);
+    // L'effacement de l'original est programmé (tâche persistante, rejouable) ; la reprise l'efface.
     expect(clock.jobs.jobs.some((j) => j.name === "storage.remove" && j.data.key === sent.key)).toBe(true);
-    // 3. La reprise l'efface ; la ligne de preuve est gardée.
     await retryRemove(sent.key);
     expect(await storage.get(sent.key)).toBeNull();
     expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
-    expect((await photoRows(res.json.id))[0]?.legacySourceKey).toBe(sent.key);
+    // Une clé inventée : lecture de clé primaire, rien de bloqué, rien à servir (404 par absence de fichier).
+    expect((await app.request(`/api/files/media-contents/${crypto.randomUUID()}.webp`)).status).toBe(404);
   });
 
-  it("une clé d'ancienne galerie qui n'est la source d'aucune photo reste servie ; la colonne est unique", async () => {
+  it("une clé d'ancienne galerie non bloquée reste servie ; legacy_source_key ne sert plus qu'au rejeu (unique), le blocage est la table", async () => {
     const key = `media-contents/${crypto.randomUUID()}.webp`;
     await storage.put(key, Buffer.from("fichier d'un lien ou d'une galerie non reprise"));
     expect((await app.request(`/api/files/${key}`)).status).toBe(200);
-    expect((await app.request(`/api/files/media-contents/${crypto.randomUUID()}.webp`)).status).toBe(404);
     const album = await call(leo, "POST", "/me/albums", { eventId });
     const mk = (name: string) =>
       db.insert(eventAlbumPhotos).values({
@@ -443,7 +447,12 @@ describe("tour 3 : finition", () => {
       });
     await mk("a".repeat(32));
     await expect(mk("b".repeat(32))).rejects.toThrow();
+    // La colonne seule ne bloque rien : seule la table de blocage le fait.
+    expect((await app.request(`/api/files/${key}`)).status).toBe(200);
+    await db.insert(legacyFileBlocks).values({ key });
     expect((await app.request(`/api/files/${key}`)).status).toBe(404);
+    // Le blocage ne dépend pas de la casse du préfixe demandé.
+    expect((await app.request(`/api/files/${key.replace("media-contents/", "Media-Contents/")}`)).status).toBe(404);
   });
 
   it("le rejeu exact du POST d'une galerie publiée avant le correctif (album repris, photos sans client_id) rend le contenu existant", async () => {

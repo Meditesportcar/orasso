@@ -27,8 +27,8 @@ export async function anonymizeAlbumsForDeletedAccount(tx: Tx, mediaProfileIds: 
       .where(inArray(eventAlbums.id, ids));
   }
   // Les **originaux** publics encore référencés (galerie publiée par l'ancien chemin dont l'effacement avait échoué), de **tous** les albums
-  // du média, supprimés avant ou maintenant, photos retirées comprises : leur effacement est programmé. La preuve `legacy_source_key` reste en
-  // base (la ligne de photo est gardée) : tant que le fichier existe, `/api/files` répond 404.
+  // du média, supprimés avant ou maintenant, photos retirées comprises : leur effacement est programmé. L'accès, lui, est bloqué par `legacy_file_blocks` (jamais
+  // supprimée) : tant que le fichier existe, `/api/files` répond 404.
   const originals = await tx
     .select({ key: eventAlbumPhotos.legacySourceKey })
     .from(eventAlbumPhotos)

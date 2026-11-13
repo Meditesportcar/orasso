@@ -101,8 +101,9 @@ export const eventAlbumPhotos = pgTable(
     clientId: uuid("client_id"),
     /**
      * La clé de l'**original** (`media-contents/<uuid>.webp`, publique) d'une photo copiée sous une clé privée quand une galerie est publiée par
-     * l'ancien chemin (APK en ligne). C'est la preuve **durable** que cet original ne doit plus être servi par `/api/files`, même si son
-     * effacement a échoué : elle survit à la suppression de l'album, de la photo (la ligne est gardée avec `deleted_at`) et du compte.
+     * l'ancien chemin (APK en ligne). Elle ne sert qu'à **reconnaître le rejeu** d'une galerie et à retrouver les originaux à effacer à la
+     * suppression d'un compte ; le blocage de l'accès par `/api/files` est dans `legacy_file_blocks` (aucune clé étrangère, jamais supprimée :
+     * cette colonne disparaît avec la photo en cascade, pas la table de blocage).
      */
     legacySourceKey: text("legacy_source_key"),
     deletedAt: tstz("deleted_at"),
@@ -120,3 +121,15 @@ export const eventAlbumPhotos = pgTable(
     ),
   ],
 );
+
+/**
+ * Clés **bloquées** de `/api/files` : l'original public (`media-contents/<uuid>.webp`) d'une photo copiée sous une clé privée quand une
+ * galerie est publiée par l'ancien chemin (APK en ligne). Remplie dans la transaction de la copie. **Aucune clé étrangère** (ni vers l'album,
+ * ni vers l'événement, ni vers le compte) et **jamais supprimée** : aucune cascade, aucun nettoyage de compte ne peut la faire disparaître ;
+ * quelques octets par photo. Tant que le fichier existe, `/api/files` répond 404 (lecture de clé primaire). L'effacement physique de l'original
+ * passe toujours par `removeOrRetry`.
+ */
+export const legacyFileBlocks = pgTable("legacy_file_blocks", {
+  key: text("key").primaryKey(),
+  createdAt: tstz("created_at").notNull().defaultNow(),
+});

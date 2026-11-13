@@ -1,5 +1,5 @@
 {
-  "id": "961ec445-aae7-4be2-a5b4-2ef20bea0f81",
+  "id": "3110a61b-7247-4fdb-9c66-364c5118252d",
   "prevId": "304257da-c20a-456c-a8dd-06ea3a86af59",
   "version": "7",
   "dialect": "postgresql",
@@ -1325,6 +1325,32 @@
           "value": "\"event_albums\".\"status\" <> 'published' or \"event_albums\".\"published_at\" is not null"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.legacy_file_blocks": {
+      "name": "legacy_file_blocks",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.application_events": {
