@@ -1,0 +1,15 @@
+// La logique d'envoi d'un album (lot R9e) vit dans `@orasso/shared` (`rules/albumUploads.ts`, partagée avec le site) ; ce fichier la réexporte pour l'appli.
+export {
+  type AlbumItem,
+  AlbumSendStopped,
+  type BatchChoice,
+  blurredOf,
+  decisionOf,
+  PICK_PER_OPEN,
+  pickLimit,
+  platedCount,
+  remaining,
+  type SendDeps,
+  sendAlbumPhotos,
+  signatureOf,
+} from "@orasso/shared";

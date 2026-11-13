@@ -12,7 +12,7 @@ const ICON: Record<PageTab, IconName> = {
   publications: "gallery",
   offers: "ticket",
   services: "truck",
-  contents: "layers",
+  albums: "layers",
   mentions: "bubble",
 };
 

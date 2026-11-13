@@ -5,6 +5,7 @@ import { accountApi } from "./account";
 import { activityApi } from "./activity";
 import { adminApi } from "./admin";
 import { afterEventApi } from "./after-event";
+import { albumsApi } from "./albums";
 import { applicationsApi } from "./applications";
 import { coauthorsApi } from "./coauthors";
 import { communicationApi } from "./communication";
@@ -76,6 +77,7 @@ export const api = {
   ...eventsApi,
   ...lineupApi,
   ...mediaApi,
+  ...albumsApi,
   ...explorerApi,
   ...applicationsApi,
   ...staffApi,
