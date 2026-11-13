@@ -17,7 +17,7 @@ import {
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
@@ -34,7 +34,7 @@ import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 import { UnderTabs } from "@/ui/UnderTabs";
 import { ask } from "./ask";
-import { CrewHead } from "./CrewHead";
+import { CrewHead, CrewSwitchOnly } from "./CrewHead";
 import { CrewScroll, type CrewScrollProps } from "./CrewScroll";
 import { type CrewTabId, tabOfParam } from "./crewTabModel";
 import { CrewMembers } from "./Members";
@@ -90,6 +90,20 @@ export function CrewSpace({
     seenLink.current = linkTab.n;
     if (linkTab.value) setTab(tabOfParam(linkTab.value));
   }, [linkTab]);
+  // La rangée d'onglets collée : sa place dans la zone qui défile et sa hauteur (mesurées), pour garder le début d'un onglet
+  // sous elle au changement d'onglet et pour la pastille « nouvelle publication ».
+  const tabsBox = useRef({ y: 0, h: 0 });
+  const feedScroller = useMemo<CrewFeedScroller | undefined>(
+    () => (scroller ? { ...scroller, inset: () => tabsBox.current.h } : undefined),
+    [scroller],
+  );
+  const scrollRef = scroll.scrollRef;
+  const scrollY = scroll.scrollY;
+  const changeTab = (id: CrewTabId) => {
+    // Défilé au-delà du haut du crew : le début du nouvel onglet revient sous la barre collante ; sinon on ne bouge pas.
+    if (scrollY.current > tabsBox.current.y) scrollRef.current?.scrollTo({ y: tabsBox.current.y, animated: false });
+    setTab(id);
+  };
   const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,14 +170,18 @@ export function CrewSpace({
   }
 
   // Rien à montrer encore (lecture, panne, crew perdu) : un seul bloc dans la zone qui défile.
-  const alone = (node: ReactElement) => <CrewScroll {...scroll}>{[node]}</CrewScroll>;
+  const alone = (node: ReactElement, withSwitch = false) => (
+    <CrewScroll {...scroll}>
+      {withSwitch ? [<CrewSwitchOnly key="switch" crews={crews} slug={slug} onChoose={onChoose} />, node] : [node]}
+    </CrewScroll>
+  );
   if (!v) {
     if (crew.error && crew.error.status !== 404) {
-      return alone(<LoadError key="error" message={crew.error.message} onRetry={() => void crew.reload()} />);
+      return alone(<LoadError key="error" message={crew.error.message} onRetry={() => void crew.reload()} />, true);
     }
     // Crew introuvable (404) puis panne en relisant mes crews : « Réessayer », jamais un « Chargement… » sans fin.
     if (crew.error?.status === 404 && lostFailed) {
-      return alone(<LoadError key="lost" message={T.loadError} onRetry={() => void retryLost()} />);
+      return alone(<LoadError key="lost" message={T.loadError} onRetry={() => void retryLost()} />, true);
     }
     return alone(
       <Muted key="loading" variant="body">
@@ -272,13 +290,19 @@ export function CrewSpace({
     // Onglets soulignés (collants) ; « Publier » : le bouton icône moutarde au bout de la rangée, comme le haut du Fil. C'est le
     // seul bouton principal et le seul néon de l'écran.
     blocks.push(
-      <View key="tabs" style={[styles.tabsBar, { backgroundColor: c.ground }]}>
+      <View
+        key="tabs"
+        style={[styles.tabsBar, { backgroundColor: c.ground }]}
+        onLayout={(e) => {
+          tabsBox.current = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
+        }}
+      >
         <View style={styles.tabsRow}>
           <View style={styles.tabsGrow}>
             <UnderTabs<CrewTabId>
               fade
               value={tab}
-              onChange={setTab}
+              onChange={changeTab}
               accessibilityLabel={crewLabels.crew}
               testID="crew-tabs"
               itemTestID={(id) => `crew-tab-${id}`}
@@ -305,7 +329,7 @@ export function CrewSpace({
       </View>,
       <View key="body">
         {tab === "feed" ? (
-          <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} scroller={scroller} />
+          <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} scroller={feedScroller} />
         ) : null}
         {tab === "outings" ? (
           <CrewOutings

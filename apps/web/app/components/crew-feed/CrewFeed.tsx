@@ -56,15 +56,12 @@ export function CrewFeed({
   crew,
   publishTick = 0,
   autoPublish = false,
-  onPublishClosed,
 }: {
   crew: CrewFeedCrew;
   /** Petit lot de fin, partie E : « Publier » est au bout des onglets du crew ; chaque appui (le numéro monte) ouvre la fenêtre. */
   publishTick?: number;
   /** Arrivé par « Publier » depuis un autre onglet (`?publier=1`) : la fenêtre s'ouvre à l'arrivée. */
   autoPublish?: boolean;
-  /** La fenêtre de publication est refermée (publiée ou fermée) : l'adresse perd `?publier=1`. */
-  onPublishClosed?: () => void;
 }) {
   const [feed, setFeed] = useState<CrewFeedState<CrewFeedItem> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -119,7 +116,11 @@ export function CrewFeed({
   };
 
   /** Le haut du fil est à l'écran (ou plus bas) : une nouvelle entrée s'insère sans faire sauter la liste. */
-  const atTop = () => (listRef.current?.getBoundingClientRect().top ?? 0) >= -8;
+  const atTop = () => {
+    // Le haut du fil visible est sous la rangée d'onglets collée (sa hauteur réelle), pas en haut de la fenêtre.
+    const bar = document.querySelector(".crw-tabsbar")?.getBoundingClientRect().bottom ?? 0;
+    return (listRef.current?.getBoundingClientRect().top ?? 0) >= bar - 8;
+  };
 
   /** Une publication relue ou changée sur place (`null` : retirée), partout où elle est (affichée, en attente). */
   const put = (id: string, next: CrewPostView | null | ((p: CrewPostView) => CrewPostView)) =>
@@ -381,13 +382,9 @@ export function CrewFeed({
         options={options}
         optionsError={optionsError}
         onRetryOptions={() => void loadOptions()}
-        onClose={() => {
-          setPublishing(false);
-          onPublishClosed?.();
-        }}
+        onClose={() => setPublishing(false)}
         onPublished={() => {
           setPublishing(false);
-          onPublishClosed?.();
           setOk(crewFeedLabels.published);
           void load();
         }}

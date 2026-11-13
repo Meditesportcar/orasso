@@ -38,7 +38,12 @@ import { useCrewLive } from "./useCrewLive";
 export type CrewFeedCrew = { id: string; slug: string; archived?: boolean };
 
 /** Lot R6a : la zone qui défile de la page du crew (la pastille y remonte au haut du fil). */
-export type CrewFeedScroller = { scrollTo: (y: number, animated: boolean) => void; y: () => number };
+export type CrewFeedScroller = {
+  scrollTo: (y: number, animated: boolean) => void;
+  y: () => number;
+  /** Hauteur de la rangée d'onglets collée en haut (mesurée) : le haut du fil visible est sous elle. */
+  inset?: () => number;
+};
 
 /** Marge sous le haut de l'écran quand la pastille remonte au fil. */
 const TOP_MARGIN = tokens.spacing.space3;
@@ -80,7 +85,9 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
     new Promise<boolean>((resolve) => {
       const node = listRef.current;
       if (!node) return resolve(true);
-      node.measureInWindow((_x, y) => resolve(!(Number.isFinite(y) && y < insets.top - TOP_MARGIN)));
+      node.measureInWindow((_x, y) =>
+        resolve(!(Number.isFinite(y) && y < insets.top - TOP_MARGIN + (scroller?.inset?.() ?? 0))),
+      );
     });
 
   const live = async (needs: CrewLiveNeeds) => {
@@ -130,7 +137,10 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
     if (scroller && node) {
       node.measureInWindow((_x, y) => {
         if (Number.isFinite(y))
-          scroller.scrollTo(Math.max(0, scroller.y() + y - insets.top - TOP_MARGIN), !reducedMotion);
+          scroller.scrollTo(
+            Math.max(0, scroller.y() + y - insets.top - TOP_MARGIN - (scroller.inset?.() ?? 0)),
+            !reducedMotion,
+          );
         accept();
       });
     } else {

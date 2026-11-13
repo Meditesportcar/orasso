@@ -181,7 +181,7 @@
     display: grid;
   }
   /* Petit lot de fin, partie E : l'onglet « Sorties » n'a plus lieu d'être (les sorties sont à droite). */
-  .crw-tabsbar [data-testid="crew-tab-sorties"] {
+  .crw-tabsbar .crw-tab-outings {
     display: none;
   }
 }
@@ -765,4 +765,20 @@ div.crw-head__nm {
 }
 .crw-head .crw-sel__list {
   top: 88px;
+}
+
+/* Tour 1 de la partie E : couches. La liste « Mes crews » passe au-dessus de la rangée d'onglets collée (12) ; le début d'un
+   élément du fil, remonté par la pastille, reste visible sous la barre du haut et la rangée d'onglets. */
+.crw-head .crw-sel__list {
+  z-index: 20;
+}
+.crw-page .cf-list {
+  scroll-margin-top: calc(var(--bar-top) + var(--touch) + var(--space-3));
+}
+@media (min-width: 1000px) {
+  /* Le bouton Discussion est à sa largeur : la pastille des non-lus se pose sur son coin, pas sur le mot. */
+  .crw-head__disc .crw-dot {
+    top: -6px;
+    right: -6px;
+  }
 }

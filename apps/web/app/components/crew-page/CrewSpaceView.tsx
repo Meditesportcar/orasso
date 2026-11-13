@@ -13,8 +13,8 @@ import {
   type MyCrew,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { useState } from "react";
-import { Form, useNavigation, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, useNavigate, useNavigation, useSearchParams } from "react-router";
 
 import type { CrewActionData } from "../../lib/crews.server";
 import { CrewFeed } from "../crew-feed/CrewFeed";
@@ -67,12 +67,15 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
   const [publishTick, setPublishTick] = useState(0);
   const [params] = useSearchParams();
   const autoPublish = params.get("publier") === "1" && tab === "fil";
-  const stripPublish = () => {
-    if (!params.has("publier")) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("publier");
-    window.history.replaceState(null, "", url);
-  };
+  // Une fois la fenêtre ouverte, `publier` quitte l'adresse par la navigation du routeur (un F5 ne la rouvre pas, l'état du
+  // routeur est gardé).
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!autoPublish) return;
+    const next = new URLSearchParams(params);
+    next.delete("publier");
+    navigate(`?${next.toString()}`, { replace: true, preventScrollReset: true });
+  }, [autoPublish, params, navigate]);
   // Sur grand écran, les sorties sont toujours à droite : l'onglet « Sorties » y montre le fil à gauche.
   const main = tab === "sorties" ? "fil" : tab;
 
@@ -80,9 +83,10 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
     <aside className="crw-col crw-side" data-active={tab === "sorties" ? "" : undefined} data-testid="crew-outings">
       {space.canProposeOuting ? (
         <>
-          {/* Tour 2 : un seul bouton principal par écran. Sur grand écran, le fil et son « Publier » sont à côté des
-              sorties : « Proposer une sortie » y passe en secondaire (CSS `crw-propose--narrow` / `crw-propose--wide`). */}
+          {/* Un seul bouton principal par écran : « Publier » (icône moutarde, au bout des onglets). « Proposer une sortie » est
+              toujours secondaire (deux versions, l'une cachée selon la largeur : CSS `crw-propose--narrow` / `--wide`). */}
           <Button
+            variant="secondary"
             icon="add"
             href={`/c/${crew.slug}/sortie`}
             fullWidth
@@ -174,7 +178,6 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
                       crew={{ id: crew.id, slug: crew.slug, archived: crew.archived }}
                       publishTick={publishTick}
                       autoPublish={autoPublish}
-                      onPublishClosed={stripPublish}
                     />
                   </div>
                 ) : null}

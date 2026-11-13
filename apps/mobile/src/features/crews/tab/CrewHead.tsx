@@ -256,3 +256,46 @@ const styles = StyleSheet.create({
   sheetSub: { flexDirection: "row", alignItems: "center", gap: space3 },
   sheetBio: { fontSize: 14, lineHeight: 21 },
 });
+
+/**
+ * Le nom du crew et « Mes crews » quand le détail du crew n'a pas pu être lu (panne) : le changement de crew reste à un
+ * toucher, à partir de la liste de mes crews déjà chargée. Un seul crew : rien.
+ */
+export function CrewSwitchOnly({
+  crews,
+  slug,
+  onChoose,
+}: {
+  crews: readonly MyCrew[];
+  slug: string;
+  onChoose: (slug: string) => void;
+}) {
+  const { t } = useTheme();
+  const [open, setOpen] = useState(false);
+  const current = crews.find((c) => c.slug === slug);
+  if (crews.length < 2 || !current) return null;
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={T.selectorA11y(current.name)}
+        testID="crew-selector"
+        style={styles.nameRow}
+      >
+        <Text variant="posterL" color={t.color.ink} style={styles.name}>
+          {current.name}
+        </Text>
+        <Icon name="down" size={20} color={t.color.inkMuted} />
+      </Pressable>
+      <CrewSwitchSheet
+        crews={crews}
+        current={current}
+        unread={0}
+        onChoose={onChoose}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  );
+}

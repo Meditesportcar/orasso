@@ -281,6 +281,7 @@ export function CrewTabsBar({
         label={crewLabels.crew}
         testId="crew-tabs"
         itemTestId={(id) => `crew-tab-${id}`}
+        itemClass={(id) => (id === "sorties" ? "crw-tab-outings" : undefined)}
       />
       {button}
     </div>
