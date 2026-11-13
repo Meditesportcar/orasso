@@ -1,7 +1,7 @@
 // Blocs de l'Accueil du passionné (lot C2a, artefact DA v2 `s-home`), reproduits d'après le HTML et le CSS de
 // l'artefact : intitulé de section `.sec-h`, mini-tickets `.stat-strip` / `.mini-t`, incitation
 // `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 à 18.
-import { Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, Photo, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import {
   type EventCard,
   type HomeSponsored,
@@ -276,9 +276,9 @@ export function PosterRail({
                 {homeLabels.sponsored}
               </Text>
             </View>
-            <Text variant="posterS" color={c.ink} style={styles.mpTitle}>
+            <WordSafeText variant="posterS" base={styles.mpTitle.fontSize} color={c.ink} style={styles.mpTitle}>
               {sponsored.pro.name}
-            </Text>
+            </WordSafeText>
           </View>
         </Pressable>
       ) : null}
@@ -304,9 +304,10 @@ export function PosterRail({
               ) : null}
             </View>
             <View style={styles.mpBody}>
-              <Text variant="posterS" color={c.ink} style={styles.mpTitle}>
+              {/* Un mot ne se coupe jamais (« EXPO RIVESALTE / S » à 384 dp, police ×1,3) : le corps baisse au besoin. */}
+              <WordSafeText variant="posterS" base={styles.mpTitle.fontSize} color={c.ink} style={styles.mpTitle}>
                 {e.title}
-              </Text>
+              </WordSafeText>
               <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>
                 {`${day.charAt(0).toUpperCase()}${day.slice(1)}${dist}`}
               </Text>

@@ -128,6 +128,7 @@ export function Button(props: ButtonProps) {
         flexDirection: "column",
         gap: 4,
         paddingHorizontal: 12,
+        paddingVertical: 0,
         backgroundColor: c.surface,
         borderWidth: theme === "sable" ? 2 : 1.5,
         borderColor: c.ink,
@@ -237,11 +238,14 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: spacing.touch,
     paddingHorizontal: 20,
+    // Petit lot de fin : un libellé qui passe sur deux lignes (police agrandie) garde de l'air en haut et en bas ; sur une ligne,
+    // la hauteur minimale (48) l'emporte, rien ne change.
+    paddingVertical: 12,
     borderRadius: radius.radiusMd,
     alignSelf: "flex-start",
   },
   full: { alignSelf: "stretch" },
   disabled: { opacity: 0.4, boxShadow: "none" },
-  label: { flexShrink: 1 },
+  label: { flexShrink: 1, textAlign: "center" },
   columnLabel: { textAlign: "center" },
 });
