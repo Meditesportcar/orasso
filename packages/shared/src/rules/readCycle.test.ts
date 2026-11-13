@@ -284,8 +284,12 @@ describe("l'issue est gardée par le calendrier de position (suite R8q, tour 7)"
     expect(calendar.failed()).toBe(true);
     calendar.retry();
     expect(refresh).toHaveBeenCalledTimes(2);
-    expect(calendar.failed()).toBe(false);
+    // Pendant sa lecture, « Réessayer » reste visible (désactivé) : l'état d'échec n'est remplacé que par le résultat.
+    expect(calendar.failed()).toBe(true);
+    expect(calendar.busy()).toBe(true);
     pending[1]?.("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(false);
     await vi.advanceTimersByTimeAsync(3_000);
     expect(refresh).toHaveBeenCalledTimes(3);
   });
@@ -392,5 +396,58 @@ describe("un remontage ne consomme jamais une étape (suite R8q, tour 8)", () =>
     calendar.resume();
     expect(seen).toHaveBeenCalled();
     expect(calendar.busy()).toBe(true);
+  });
+});
+
+describe("un calendrier commencé se réarme, il ne se recommence pas (suite R8q, tour 9)", () => {
+  it("« Réessayer », panne transitoire, démontage puis remontage : la relance garde son espacement de 15 s, le compteur n'est pas remis à 0", async () => {
+    const { pending, refresh, calendar } = position();
+    let release = calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    calendar.retry();
+    pending[1]?.("transient");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.state().networkAttempt).toBe(1);
+    for (let i = 0; i < 3; i += 1) {
+      release();
+      release = calendar.retain();
+    }
+    expect(calendar.state().networkAttempt).toBe(1);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it("une lecture qui lève une exception : erreur inconnue, jamais bloquée en lecture", async () => {
+    const env = { visible: true };
+    const refresh = vi.fn(() => Promise.reject<PositionOutcome>(new TypeError("bogue")));
+    const calendar = createPositionCalendar({ refresh, visible: () => env.visible });
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(calendar.busy()).toBe(false);
+    expect(calendar.failed()).toBe(true);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("des allers-retours rapides ne repoussent pas la relecture : `rearm` ne reprogramme que le reste de l'échéance", () => {
+    vi.setSystemTime(2_000_000);
+    const run = vi.fn();
+    const cycle = createReadCycle({ run, visible: () => true });
+    cycle.begin();
+    cycle.settled("partial");
+    vi.advanceTimersByTime(1_000);
+    cycle.dispose();
+    vi.advanceTimersByTime(1_000);
+    cycle.rearm();
+    vi.advanceTimersByTime(999);
+    expect(run).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

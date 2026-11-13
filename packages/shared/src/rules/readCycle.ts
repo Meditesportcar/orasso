@@ -36,6 +36,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
   let pending = false;
   // Le délai de la prochaine lecture programmée (gardé quand les minuteries sont suspendues : `rearm` le reprogramme tel quel).
   let scheduledDelay: number | null = null;
+  // L'heure de cette échéance : une reprise ne reprogramme que le reste (des allers-retours rapides ne repoussent rien).
+  let dueAt = 0;
   // Un numéro par reprise manuelle ou remise à zéro : l'issue d'une lecture partie avant est ignorée (pas de double lecture).
   let epoch = 0;
 
@@ -85,6 +87,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
       calendarStep = step.calendarStep;
       networkAttempt = step.networkAttempt;
       scheduledDelay = step.delay;
+      dueAt = now() + (step.delay ?? 0);
       if (step.delay !== null) timer.schedule(fire, step.delay);
       // Un échec transitoire reprend au retour sur l'écran même quand la série de relances est finie.
       if (outcome === "transient") pending = true;
@@ -117,12 +120,12 @@ export function createReadCycle(deps: ReadCycleDeps) {
       return "idle";
     },
     /**
-     * Reprend après une suspension (`dispose`) SANS rien avancer : l'échéance en attente est reprogrammée telle quelle (au même délai),
-     * jamais une nouvelle issue. Sans échéance en attente, un refus ou une erreur inconnue, rien ne change.
+     * Reprend après une suspension (`dispose`) SANS rien avancer : l'échéance en attente est reprogrammée pour son heure (le reste du
+     * délai, jamais un délai neuf), jamais une nouvelle issue. Sans échéance en attente, un refus ou une erreur inconnue, rien ne change.
      */
     rearm() {
       if (halted || refusedAt > 0 || scheduledDelay === null) return;
-      timer.schedule(fire, scheduledDelay);
+      timer.schedule(fire, Math.max(0, dueAt - now()));
     },
     /** Un refus ou une erreur inconnue : aucune relecture automatique d'ici là (sauf le retour après `PRACTICAL_STALE_MS` d'un refus). */
     blocked(): boolean {
@@ -167,9 +170,16 @@ export function createPositionCalendar(deps: {
   let generation = 0;
   // Une lecture est en vol (une seule, partagée par tous les écrans montés) : « Réessayer » la rejoint au lieu d'en lancer une autre.
   let reading = false;
+  // Le calendrier est commencé (vrai dès le premier départ, faux seulement au changement de session ou de position) : un remontage le
+  // réarme, il ne le recommence jamais (`calendarStep === 0` ne dit pas « premier départ » : « Réessayer » puis une panne le laisse à 0).
+  let started = false;
+  // « Réessayer » est proposé : vrai tant qu'un refus ou une erreur inconnue n'a pas été remplacé par le résultat d'une lecture.
+  let failedShown = false;
   const bump = () => {
     generation += 1;
     reading = false;
+    started = false;
+    failedShown = false;
   };
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -188,15 +198,20 @@ export function createPositionCalendar(deps: {
     reading = true;
     cycle.begin();
     notify();
-    void deps.refresh().then((outcome) => {
-      // Une autre position (ou une autre session, ou les lieux complets) entre-temps : cette réponse n'a plus de suite ni d'effet.
-      if (gen !== generation) return;
-      reading = false;
-      cycle.settled(outcome === "ok" ? "partial" : outcome);
-      // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
-      if (!active()) cycle.dispose();
-      notify();
-    });
+    void deps
+      .refresh()
+      // Une lecture qui échoue autrement (exception) ne laisse jamais `reading` bloqué : erreur inconnue.
+      .catch((): PositionOutcome => "unknown")
+      .then((outcome) => {
+        // Une autre position (ou une autre session, ou les lieux complets) entre-temps : cette réponse n'a plus de suite ni d'effet.
+        if (gen !== generation) return;
+        reading = false;
+        cycle.settled(outcome === "ok" ? "partial" : outcome);
+        failedShown = cycle.blocked();
+        // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
+        if (!active()) cycle.dispose();
+        notify();
+      });
   };
   const sync = () => {
     if (!partial) {
@@ -217,8 +232,11 @@ export function createPositionCalendar(deps: {
         // seul le tout premier départ d'un calendrier programme la première relecture.
         if (cycle.blocked()) cycle.resume();
         else if (!reading) {
-          if (cycle.state().calendarStep === 0) cycle.settled("partial");
-          else cycle.rearm();
+          if (started) cycle.rearm();
+          else {
+            started = true;
+            cycle.settled("partial");
+          }
         }
       }
     } else if (running) {
@@ -265,13 +283,17 @@ export function createPositionCalendar(deps: {
       if (reading) return;
       cycle.manual();
       running = active();
+      // L'état d'échec reste affiché jusqu'au résultat (le bouton est visible et désactivé pendant la lecture).
+      const shown = failedShown;
       bump();
+      failedShown = shown;
+      started = true;
       start();
     },
     /** Une lecture de la position est en vol : « Réessayer » est désactivé (avec son libellé, sans indicateur qui tourne). */
     busy: () => reading,
     /** Le calendrier est arrêté par un refus ou une erreur inconnue : « Réessayer » est proposé. */
-    failed: () => partial && cycle.blocked(),
+    failed: () => partial && failedShown,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
