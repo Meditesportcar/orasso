@@ -561,3 +561,21 @@
   background: var(--night);
   color: var(--night-ink);
 }
+.myp-who {
+  flex-wrap: wrap;
+}
+.myp-who__text {
+  flex: 1 1 140px;
+}
+.myp-row__actions .o-button {
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .myp-row {
+    flex-direction: column;
+  }
+  .myp-row__thumb {
+    width: 100%;
+    height: 180px;
+  }
+}
