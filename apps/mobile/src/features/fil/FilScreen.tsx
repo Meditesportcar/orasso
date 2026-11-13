@@ -8,6 +8,8 @@
 import { EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   CONTACT_EMAIL,
+  casquetteFeedPhrases,
+  casquettesLabels,
   caughtUpIndex,
   type FeedCard,
   feedCardKindLabels,
@@ -20,11 +22,15 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
+import { ActorLine } from "@/features/casquettes/ActorLine";
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
 import { StoriesBar } from "@/features/stories/StoriesBar";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
+import { tabHref } from "@/lib/personaModel";
+import { useActor } from "@/lib/useActor";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Notice } from "@/ui/Notice";
@@ -38,7 +44,6 @@ import { HotRail } from "./HotRail";
 import { HowFeedSheet } from "./HowFeedSheet";
 import { FilOfflineContext } from "./offlineContext";
 import { CardIdContext } from "./openFromCard";
-import { PublishChoice } from "./PublishChoice";
 import { noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
@@ -94,8 +99,11 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const [faded, setFaded] = useState<Record<string, FeedCard>>({});
   const [lessNote, setLessNote] = useState<{ card: FeedCard; error: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // « Publier » demande où : en story (9:16, 24 h) ou dans le Fil (4:5).
-  const [choosing, setChoosing] = useState(false);
+  // Lot R9n : en casquette, le Fil est lu « en tant que » la page : sa pastille, les phrases d'« Abonnements » et la casquette
+  // de départ de « Publier » (T18 : un seul geste, le segment « Publication | Story » est en haut de l'écran).
+  const actor = useActor();
+  const { active, persona } = usePersona();
+  const followingPhrase = actor ? casquetteFeedPhrases.following(active.label) : null;
   // « Comment le Fil choisit » (le « i » à côté de la phrase).
   const [how, setHow] = useState(false);
   // Le bandeau « Publié sur ton profil » se ferme pour la publication en cours (une nouvelle publication le rouvre).
@@ -210,6 +218,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   return (
     <FilOfflineContext.Provider value={feed.offline}>
       <View ref={anchor} collapsable={false} style={styles.anchor} />
+      <ActorLine />
       <StoriesBar />
       {/* Lot R8f1 (variante A1 de la maquette R8.2) : une seule rangée, le sélecteur prend la place restante et le bouton
           icône « Publier » (le bouton principal de l'écran, 48 px, sans texte) reste à droite. Police agrandie : les
@@ -226,20 +235,25 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
             testID="fil-filters"
           />
         </View>
-        <SmButton
-          kind="p"
-          big
-          icon="camera"
-          onPress={() => setChoosing(true)}
-          testID="fil-publish-open"
-          accessibilityLabel={L.publish}
-          style={styles.publish}
-        />
+        {/* Lot R9n (tour 1, point 10) : en survol d'une structure (assistance), pas de « Publier » personnel. */}
+        {active.assisted ? null : (
+          <SmButton
+            kind="p"
+            big
+            icon="camera"
+            onPress={() =>
+              router.push((actor ? `/fil/publier?auteur=${encodeURIComponent(actor)}` : "/fil/publier") as never)
+            }
+            testID="fil-publish-open"
+            accessibilityLabel={L.publish}
+            style={styles.publish}
+          />
+        )}
       </View>
       {/* Lot R8c2 : la phrase de l'onglet (maquette `r8phr`) et le « i » qui ouvre « Comment le Fil choisit ». */}
       <View style={styles.phrase}>
         <Text variant="caption" color={t.color.inkMuted} style={styles.phraseText} testID="fil-phrase">
-          {feedPhrases[feed.filter]}
+          {feed.filter === "following" && followingPhrase ? followingPhrase : feedPhrases[feed.filter]}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -262,17 +276,21 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           <View style={styles.bannerBody}>
             <Text variant="caption" color={t.color.ink} style={styles.bannerText}>
               <Text variant="caption" color={t.color.ink} style={styles.bannerTitle}>
-                {L.bannerTitle}
+                {actor ? casquettesLabels.bannerTitle : L.bannerTitle}
               </Text>
               {L.bannerText}
             </Text>
             <SmButton
               kind="s"
               icon="profile"
-              onPress={() => router.push("/profil?onglet=publications")}
+              onPress={() =>
+                router.push(
+                  (actor ? (tabHref(persona.kind, "page") ?? "/profil") : "/profil?onglet=publications") as never,
+                )
+              }
               testID="fil-banner-profile"
             >
-              {L.bannerProfile}
+              {actor ? casquettesLabels.bannerLink : L.bannerProfile}
             </SmButton>
           </View>
           <Pressable
@@ -291,6 +309,9 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         <HotRail
           cards={feed.hot}
           scope={feed.filter === "nearby" ? "nearby" : "following"}
+          scopeLabel={
+            feed.filter === "following" && actor ? casquetteFeedPhrases.hotFollowing(active.label) : undefined
+          }
           onOpen={(card) => {
             noteSeen(card.id, "open");
             router.push(`/publication/${card.payload.post.id}`);
@@ -364,6 +385,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                   </>
                 ) : null}
                 <View
+                  nativeID={`fil-card-${card.id}`}
                   style={frontier >= 0 && i >= frontier ? styles.seenCard : undefined}
                   testID={frontier >= 0 && i >= frontier ? "fil-card-seen" : undefined}
                 >
@@ -433,7 +455,6 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         />
         <WhyThisSheet card={why} onClose={() => setWhy(null)} />
         <HowFeedSheet visible={how} onClose={() => setHow(false)} />
-        <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
     </FilOfflineContext.Provider>
   );

@@ -57,9 +57,15 @@ export const explorerApi = {
     request<ProActivityCounts>(
       `/api/pros/activities${qs({ ...query, limit: undefined, cursor: undefined, withTotal: undefined })}`,
     ),
-  proBySlug: (slug: string) => request<ProPublic>(`/api/pros/by-slug/${encodeURIComponent(slug)}`),
-  followStructure: (id: string) => request<unknown>(`/api/structures/${id}/follow`, { method: "POST" }),
-  followPro: (id: string) => request<unknown>(`/api/pros/${id}/follow`, { method: "POST" }),
-  unfollowPro: (id: string) => request<unknown>(`/api/pros/${id}/follow`, { method: "DELETE" }),
-  unfollowStructure: (id: string) => request<unknown>(`/api/structures/${id}/follow`, { method: "DELETE" }),
+  proBySlug: (slug: string, actor?: string | null) =>
+    request<ProPublic>(`/api/pros/by-slug/${encodeURIComponent(slug)}`, { actor }),
+  // Lot R9n (liste blanche, T19) : suivre au nom de la casquette active (`actor`).
+  followStructure: (id: string, actor?: string | null) =>
+    request<unknown>(`/api/structures/${id}/follow`, { method: "POST", actor }),
+  followPro: (id: string, actor?: string | null) =>
+    request<unknown>(`/api/pros/${id}/follow`, { method: "POST", actor }),
+  unfollowPro: (id: string, actor?: string | null) =>
+    request<unknown>(`/api/pros/${id}/follow`, { method: "DELETE", actor }),
+  unfollowStructure: (id: string, actor?: string | null) =>
+    request<unknown>(`/api/structures/${id}/follow`, { method: "DELETE", actor }),
 };

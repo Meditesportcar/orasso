@@ -356,63 +356,6 @@ export function sheetReopen(state: SheetState): SheetState {
   };
 }
 
-// --- La flamme d'un commentaire : une mutation à la fois -----------------------------------------------------------------
-
-type FlameState = { reactionsCount: number; reactedByMe: boolean };
-
-/**
- * Sérialise les flammes par commentaire : des touchers rapides ne partent pas en parallèle (leurs réponses pourraient arriver dans le
- * désordre et inverser l'état). On garde la **dernière intention** ; chaque envoi attend le précédent, seul le dernier résultat s'affiche,
- * et une panne remet l'état connu de l'API (jamais une annulation périmée).
- */
-export function createFlameGate() {
-  const running = new Map<string, { want: boolean; known: FlameState }>();
-  return {
-    /**
-     * `current` : ce que l'écran montre. `send(on)` : l'appel de l'API. `apply` : écrit l'état à l'écran. `alive` : le compte n'a pas changé.
-     * Rend la promesse de la fin de la série.
-     */
-    /** `id` : clé de la file, à composer avec la génération du compte et de la publication (`<g>|<p>|<commentaire>`) : jamais partagée entre deux comptes. */
-    fire(
-      id: string,
-      current: FlameState,
-      io: {
-        send: (on: boolean) => Promise<FlameState>;
-        apply: (state: FlameState) => void;
-        alive?: () => boolean;
-      },
-    ): Promise<void> {
-      const live = running.get(id);
-      const on = !(live ? live.want : current.reactedByMe);
-      io.apply(reactionGuess(live ? { reactionsCount: current.reactionsCount, reactedByMe: live.want } : current, on));
-      if (live) {
-        live.want = on;
-        return Promise.resolve();
-      }
-      const entry = { want: on, known: current };
-      running.set(id, entry);
-      return (async () => {
-        let last: FlameState = entry.known;
-        try {
-          for (;;) {
-            // Le compte a changé pendant la série : aucun nouvel envoi ne part sous la session suivante.
-            if (io.alive && !io.alive()) return;
-            const sent = entry.want;
-            last = await io.send(sent);
-            if (entry.want === sent) break;
-          }
-        } catch {
-          // Panne : l'état connu de l'API (le dernier rendu, ou celui d'avant le premier toucher).
-        } finally {
-          running.delete(id);
-        }
-        if (io.alive && !io.alive()) return;
-        io.apply(last);
-      })();
-    },
-  };
-}
-
 // --- Les envois en attente ---------------------------------------------------------------------------------------------
 
 /** Un envoi commence : la ligne apparaît grisée. Un même `clientId` n'est jamais ajouté deux fois. */

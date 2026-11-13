@@ -36,7 +36,7 @@ export function BansScreen() {
   const [fieldError, setFieldError] = useState<string | undefined>();
 
   // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
-  const close = useCloseTo("/(orga)/structure");
+  const close = useCloseTo("/(orga)/page");
   const list = sortedBans(bans.data ?? []);
 
   function askAdd() {

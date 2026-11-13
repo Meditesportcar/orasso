@@ -5,8 +5,13 @@ import { type FeedCard, type FeedFilter, feedCopyKey, feedFilters } from "@orass
 import { accountGuard } from "@/lib/kv";
 import { deletePhoto, prunePhotos, readCopy, saveCopy } from "@/lib/offlineCopy";
 
-/** Adresses voulues par onglet : une photo reçue en ligne n'est gardée que si sa carte est dans une copie. */
-const wanted = new Map<FeedFilter, Set<string>>();
+/**
+ * Adresses voulues par copie (onglet, et acteur : lot R9n, T20) : une photo reçue en ligne n'est gardée que si sa carte est dans
+ * une copie. La clé est celle de la copie (`feedCopyKey`).
+ */
+const wanted = new Map<string, Set<string>>();
+/** Les acteurs dont la copie existe sur cet appareil : la personne (`null`) et chacune de ses casquettes de page. */
+let actors: (string | null)[] = [null];
 
 /** La première photo de chaque publication des cartes de la copie. */
 export function firstPhotoUrls(cards: readonly FeedCard[]): string[] {
@@ -20,21 +25,30 @@ export function firstPhotoUrls(cards: readonly FeedCard[]): string[] {
 }
 
 /** La copie de cet onglet vient d'être écrite (ou relue) : ses photos sont voulues ; les autres sont nettoyées. */
-export function setWantedPhotos(filter: FeedFilter, cards: readonly FeedCard[], prune = true): void {
-  wanted.set(filter, new Set(firstPhotoUrls(cards)));
+export function setWantedPhotos(
+  filter: FeedFilter,
+  cards: readonly FeedCard[],
+  prune = true,
+  actor: string | null = null,
+): void {
+  wanted.set(feedCopyKey(filter, actor), new Set(firstPhotoUrls(cards)));
   if (!prune) return;
-  // Un onglet jamais relu dans cette séance : on ne sait pas encore ce qu'il garde, aucun nettoyage d'orphelines.
-  if (!feedFilters.every((f) => wanted.has(f))) {
+  // Une copie jamais relue dans cette séance : on ne sait pas encore ce qu'elle garde, aucun nettoyage d'orphelines.
+  const keys = actors.flatMap((a) => feedFilters.map((f) => feedCopyKey(f, a)));
+  if (!keys.every((key) => wanted.has(key))) {
     void prunePhotos(null);
     return;
   }
-  void prunePhotos(new Set(feedFilters.flatMap((f) => [...(wanted.get(f) ?? [])])));
+  void prunePhotos(new Set(keys.flatMap((key) => [...(wanted.get(key) ?? [])])));
 }
 
-export const isWantedPhoto = (url: string): boolean => feedFilters.some((f) => wanted.get(f)?.has(url));
+export const isWantedPhoto = (url: string): boolean => [...wanted.values()].some((urls) => urls.has(url));
 
-/** Un autre compte : rien n'est voulu. */
-export const resetWantedPhotos = (): void => wanted.clear();
+/** Un autre compte (ou d'autres casquettes) : rien n'est voulu ; `known` = les acteurs dont une copie peut exister. */
+export const resetWantedPhotos = (known: readonly (string | null)[] = [null]): void => {
+  wanted.clear();
+  actors = [...known];
+};
 
 /**
  * Que faire d'une réponse du serveur pour une photo : `show` (200), `forget` (401, 403, 404, 410 : l'accès est retiré, la photo
@@ -56,13 +70,17 @@ export async function forgetIfRefused(url: string, status: number, account = acc
  * chaque lecture et écriture : si un autre compte devient courant entre les deux, rien n'est écrit sous lui.
  */
 export async function dropFromCopies(id: string, account = accountGuard()): Promise<void> {
-  for (const f of feedFilters) {
-    const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(feedCopyKey(f), account);
-    const items = saved?.value.items;
-    if (saved && Array.isArray(items) && items.some((c) => c.id === id) && account.current()) {
-      const left = items.filter((c) => c.id !== id);
-      setWantedPhotos(f, left);
-      await saveCopy(feedCopyKey(f), { ...saved.value, items: left }, new Date(saved.savedAt), account);
+  // Lot R9n : la publication sort des copies de tous les acteurs (la personne et ses casquettes).
+  for (const actor of actors) {
+    for (const f of feedFilters) {
+      const key = feedCopyKey(f, actor);
+      const saved = await readCopy<{ filter: FeedFilter; items: FeedCard[] }>(key, account);
+      const items = saved?.value.items;
+      if (saved && Array.isArray(items) && items.some((c) => c.id === id) && account.current()) {
+        const left = items.filter((c) => c.id !== id);
+        setWantedPhotos(f, left, true, actor);
+        await saveCopy(key, { ...saved.value, items: left }, new Date(saved.savedAt), account);
+      }
     }
   }
 }

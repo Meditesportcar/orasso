@@ -131,6 +131,11 @@ export type PersonaEntry = {
   label: string;
   logoUrl: string | null;
   badge: number;
+  /**
+   * Lot R9n (tour 1, point 7) : la structure est suspendue (`verification = suspended`). Présent (`true`) seulement alors : ajout, aucune
+   * forme retirée. Une casquette suspendue reste dans la liste, mais l'appli n'y lit ni n'y agit au nom de la page.
+   */
+  suspended?: boolean;
 };
 
 export type Me = {

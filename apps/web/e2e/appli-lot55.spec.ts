@@ -338,7 +338,7 @@ for (const theme of THEMES) {
     await expect(page.getByRole("tab", { name: "Presse", exact: true })).toBeVisible({ timeout: 30_000 });
 
     // --- Contenus -----------------------------------------------------------------------------------------------------------
-    await tab(page, "Contenus");
+    await tab(page, "Page"); // R9n : les Contenus sont l'écran de l'onglet Page
     await expect(page.getByRole("heading", { name: "Contenus", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("media-stats")).toBeVisible();
     await expect(page.getByText("Vues depuis Orasso", { exact: true })).toBeVisible();
@@ -420,22 +420,21 @@ for (const theme of THEMES) {
     expect(uploads[0]).toContain("plateRects");
     expect(uploads[1]).not.toContain("plateRects");
 
-    // --- Profil : la ligne de la casquette ----------------------------------------------------------------------------------
-    await tab(page, "Profil");
-    await expect(page.getByTestId("casquette-quick-media-profile")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("casquette-quick-media-profile").getByText("Profil vérifié")).toBeVisible();
-    await expect(page.getByTestId("casquette-quick-press")).toBeVisible();
-    await expect(page.getByTestId("casquette-quick-contents")).toBeVisible();
+    // --- Page : la ligne du profil média (R9n : l'ancien Profil de la casquette n'est plus un onglet) --------------------------
+    await tab(page, "Page");
+    await expect(page.getByTestId("page-row-media-profile")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("page-row-media-profile").getByText("Profil vérifié")).toBeVisible();
+    await expect(page.getByTestId("page-row-casquettes")).toBeVisible();
     // Aucun écran de passionné : ni points, ni crew, ni véhicules archivés.
     await expect(page.getByTestId("profil-points")).toHaveCount(0);
     await expect(page.getByTestId("profil-crew")).toHaveCount(0);
     await expect(page.getByTestId("profil-archived")).toHaveCount(0);
     await shot(page, "profil", theme);
-    await rules(page, theme, "Profil");
+    await rules(page, theme, "Page");
     await noFanScreen(page);
 
     // Modifier mon profil média : pas de numéro de carte de presse, liens, zone couverte.
-    await page.getByTestId("casquette-quick-media-profile").click();
+    await page.getByTestId("page-row-media-profile").click();
     await expect(page.getByRole("heading", { name: "Profil média", exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });
@@ -533,7 +532,7 @@ for (const theme of THEMES) {
     await tab(page, "Presse");
     await expect(page.getByText("Aucune accréditation à venir", { exact: true })).toBeVisible({ timeout: 30_000 });
     await shot(page, "presse-vide", theme);
-    await tab(page, "Contenus");
+    await tab(page, "Page"); // R9n : les Contenus sont l'écran de l'onglet Page
     await expect(page.getByTestId("media-stats")).toBeVisible({ timeout: 30_000 });
     await shot(page, "contenus-vide", theme);
     // Le profil est en base, sans numéro de carte de presse.
