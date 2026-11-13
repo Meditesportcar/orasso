@@ -14,8 +14,8 @@ import {
   explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
-import { data, redirect, type ShouldRevalidateFunctionArgs, useRevalidator, useRouteLoaderData } from "react-router";
+import { useEffect, useState } from "react";
+import { data, redirect, type ShouldRevalidateFunctionArgs, useRouteLoaderData } from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
@@ -40,17 +40,12 @@ export function meta() {
  * navigation du routeur : sans ceci, elle relancerait les quatre lectures de la page (mes crews, le crew, ses membres, ses demandes)
  * pour rien, et une panne à cet instant ferait basculer la page sur la limite d'erreur. Rien d'autre ne change : la page ne se relit pas.
  */
-/** Vrai tant que la page affiche les données d'un autre compte que le compte courant : alors, toute navigation relit le Crew. */
-let foreignNow = false;
-
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
   formMethod,
   defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
-  // Les données affichées sont celles d'un autre compte : rien ne les garde (même pendant le retrait de `publier`).
-  if (foreignNow) return true;
   if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
   const without = (url: URL) => {
     const p = new URLSearchParams(url.search);
@@ -145,82 +140,76 @@ export async function action({ request }: Route.ActionArgs) {
   return data<CrewActionData>({ crewError: "Action inconnue." }, { status: 400 });
 }
 
+/** Rechargements automatiques du Crew : au troisième en moins de 20 s, on s'arrête (jamais de boucle). */
+const RELOAD_KEY = "orasso-crew-reloads";
+const RELOAD_WINDOW_MS = 20_000;
+const RELOAD_MAX = 3;
+
+/**
+ * Note un rechargement automatique ; faux (et rien n'est rechargé) si c'est le troisième en moins de 20 s. Sans stockage, un seul
+ * rechargement automatique : la page rechargée par le navigateur lui-même (type « reload ») n'en refait pas.
+ */
+function mayReload(now: number): boolean {
+  try {
+    const raw = sessionStorage.getItem(RELOAD_KEY);
+    const stamps = (raw ? (JSON.parse(raw) as unknown[]) : []).filter(
+      (t): t is number => typeof t === "number" && now - t >= 0 && now - t < RELOAD_WINDOW_MS,
+    );
+    if (stamps.length + 1 >= RELOAD_MAX) return false;
+    sessionStorage.setItem(RELOAD_KEY, JSON.stringify([...stamps, now]));
+    return true;
+  } catch {
+    const nav = performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type !== "reload";
+  }
+}
+
 export default function AppCrew({ loaderData, actionData }: Route.ComponentProps) {
   // Les données du Crew (sorties, garage, demandes) sont celles du compte qui les a chargées (`userId`). Si le compte courant est un
-  // autre (la mise en page parent relue, ou l'annonce d'un autre onglet) : rien n'en est affiché, et la page se relit.
+  // autre, rien n'en est affiché et la page se recharge en entier (rendu serveur avec le cookie courant : les données sont celles du
+  // compte courant, ou la page de connexion). Aucune relecture, aucune réconciliation.
   const layout = useRouteLoaderData("layouts/app") as { userId?: string } | undefined;
+  // Le dernier compte annoncé par une AUTRE fenêtre (les annonces de cette fenêtre, dont celle de sa propre mise en page, sont ignorées).
   const [announced, setAnnounced] = useState<string | null | undefined>(undefined);
-  // Génération d'annonce : incrémentée à chaque annonce reçue. Une relecture ne réconcilie que si elle a commencé APRÈS la dernière annonce.
-  const announceGen = useRef(0);
-  const loggedOutGen = useRef(0);
-  const trustedGen = useRef(0);
   useEffect(
     () =>
-      listenSession((id) => {
-        announceGen.current += 1;
-        // Une déconnexion annoncée reste « en suspens » tant qu'une relecture commencée après elle n'a pas rendu de données : la mise en
-        // page qui rend de nouveau un compte annonce ce compte, ce qui ne doit pas effacer la déconnexion.
-        if (id === null) loggedOutGen.current = announceGen.current;
-        setAnnounced(id);
+      listenSession((id, self) => {
+        if (!self) setAnnounced(id);
       }),
     [],
   );
   // `userId` est dans tous les résultats du chargeur (sans crew, les invitations de `/me/crew-requests` sont aussi privées).
   const owner = loaderData.userId;
   const foreign =
-    (layout?.userId !== undefined && layout.userId !== owner) ||
-    (announced !== undefined && announced !== owner) ||
-    loggedOutGen.current > trustedGen.current;
-  foreignNow = foreign;
-  const revalidator = useRevalidator();
-  // Une relecture reprise par une navigation en cours peut ne pas relire le Crew : tant que la discordance dure et qu'aucune relecture
-  // n'est en cours, on relit de nouveau (trois fois au plus, sans boucle).
-  const tries = useRef(0);
-  // La relecture en cours : la génération d'annonce et la référence des données à son départ.
-  const started = useRef<{ gen: number; data: unknown } | null>(null);
+    (layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner);
   const [gaveUp, setGaveUp] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seuls la discordance et la fin d'une relecture comptent
   useEffect(() => {
     if (!foreign) {
-      tries.current = 0;
       setGaveUp(false);
       return;
     }
-    if (revalidator.state !== "idle") return;
-    // Une relecture authentifiée vient de finir et la mise en page dit le même compte que les données : seule l'annonce est périmée
-    // (un autre onglet l'a faite puis est revenu au compte de la page). Elle est réconciliée, pas obéie.
-    // Seulement si cette relecture a commencé après la dernière annonce (une déconnexion ou un autre compte annoncé pendant elle ne
-    // s'efface pas) ET que les chargeurs ont réellement rendu de nouvelles données (un retour à « idle » sans relecture ne prouve rien).
-    const run = started.current;
-    if (
-      tries.current >= 1 &&
-      layout?.userId === owner &&
-      run !== null &&
-      run.gen === announceGen.current &&
-      run.data !== loaderData
-    ) {
-      tries.current = 0;
-      trustedGen.current = run.gen;
-      started.current = null;
-      setAnnounced(undefined);
-      return;
-    }
-    if (tries.current < 3) {
-      tries.current += 1;
-      started.current = { gen: announceGen.current, data: loaderData };
-      void revalidator.revalidate();
-    } else {
-      setGaveUp(true);
-    }
-  }, [foreign, revalidator.state]);
+    if (mayReload(Date.now())) window.location.reload();
+    else setGaveUp(true);
+  }, [foreign]);
   if (foreign && gaveUp) {
-    // Les relectures n'ont pas résolu la discordance : jamais « Mise à jour… » à vie, une action de reprise.
+    // Les rechargements n'ont pas résolu la discordance : jamais « Mise à jour… » à vie, une action de reprise.
     return (
       <div className="s-narrow s-stack" data-testid="crew-refresh-failed">
         <p className="s-error" role="alert">
           {L.refreshFailed}
         </p>
-        <Button variant="secondary" icon="undo" onClick={() => window.location.reload()}>
+        <Button
+          variant="secondary"
+          icon="undo"
+          onClick={() => {
+            try {
+              sessionStorage.removeItem(RELOAD_KEY);
+            } catch {
+              // Stockage indisponible : le rechargement a lieu quand même.
+            }
+            window.location.reload();
+          }}
+        >
           {L.refreshReload}
         </Button>
       </div>
