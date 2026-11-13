@@ -405,7 +405,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   await shot("22-survol-bandeau-lecture-seule-beton");
   // Écrire sans demande ouverte : l'API refuse, l'appli affiche son message sans planter.
   // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe) ; lot C4b : la feuille se ferme avant l'onglet.
-  await toTab(page, "Structure");
+  // Lot R9b : la Structure s'ouvre par le chip « Réglages de la structure » de la Page.
+  await toTab(page, "Page");
+  await page.getByTestId("page-gest-structure").click();
   await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
@@ -440,7 +442,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
 
   // Le lien profond : la demande arrive au Journal de l'équipe et ouvre la file des demandes d'aide.
   deliverNow("equipe@orasso.local");
-  await toTab(page, "Équipe");
+  // Lot R9b : l'Équipe de la structure survolée s'ouvre par le chip de la Page (plus d'onglet).
+  await toTab(page, "Page");
+  await page.getByTestId("page-gest-team").click();
   await page.goto("/activite"); // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
   await page
     .getByTestId("activity-row")
@@ -455,7 +459,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   await page.getByTestId("assistance-row").filter({ hasText: name }).getByTestId("admin-survey").click();
   await page.getByTestId("orga-confirm").click();
   // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe) ; lot C4b : la feuille se ferme avant l'onglet.
-  await toTab(page, "Structure");
+  // Lot R9b : la Structure s'ouvre par le chip « Réglages de la structure » de la Page.
+  await toTab(page, "Page");
+  await page.getByTestId("page-gest-structure").click();
   await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toContainText("Intervention en cours", { timeout: 30_000 });
   await shot("27-survol-bandeau-intervention-beton");

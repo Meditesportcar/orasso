@@ -119,7 +119,14 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       if (!id) return null;
       if (kind === "organizer") {
         if (!slug) return null;
-        return { kind, slug, page: (await api.structureBySlug(slug)) as WithPageExtras<StructurePublic> };
+        try {
+          return { kind, slug, page: (await api.structureBySlug(slug)) as WithPageExtras<StructurePublic> };
+        } catch (e) {
+          // Survol d'assistance d'une structure pas encore vérifiée : la page publique la cache (404) ; la route organisateur, autorisée
+          // au super administrateur, sert la même fiche (sans stories ni compteurs de publications).
+          if (!active.assisted) throw e;
+          return { kind, slug, page: (await api.orgStructure(id)) as WithPageExtras<StructurePublic> };
+        }
       }
       if (kind === "pro") {
         if (!slug) return null;
@@ -319,7 +326,9 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
             onFilter={setFilter}
             total={pagePublicationsCount(data.page) ?? null}
             session
-            publishAs={key}
+            publishAs={
+              active.assisted ? undefined : key
+            } /* survol d'assistance : « Publier » publierait au nom du super administrateur */
           />
         ) : tab === "offers" && data.kind === "pro" ? (
           <PageOffers

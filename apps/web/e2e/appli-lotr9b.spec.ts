@@ -351,7 +351,10 @@ test("tour 3 : A → B réseau coupé, rien de A sous B ; « Suivre » appliqué
   await page.getByTestId("page-row-casquettes").first().scrollIntoViewIfNeeded();
   await page.getByTestId("page-row-casquettes").first().click();
   await page.getByTestId("casquettes-organizer").filter({ hasText: "MéditeSportCar" }).first().click();
-  await page.waitForTimeout(3000);
+  // La Page de B : sans réseau ni cache, l'attente ou l'erreur (jamais la page de A).
+  await pageTab(page).click();
+  await expect(page.getByTestId("page-retry").or(page.getByTestId("page-loading"))).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("page-name")).toHaveCount(0);
   // Rien de Roues Libres 66 : ni son nom, ni son QR, ni « Publier » à son nom.
   await expect(page.getByText("Roues Libres 66")).toHaveCount(0);
   await expect(page.getByTestId("page-qr-open")).toHaveCount(0);
@@ -375,4 +378,35 @@ test("tour 3 : A → B réseau coupé, rien de A sous B ; « Suivre » appliqué
   await expect(v.page.getByTestId("follow-media")).toContainText("Suivi", { timeout: 30_000 });
   await expect.poll(() => counter(v.page, "followers"), { timeout: 30_000 }).toBe(before + 1);
   await v.ctx.close();
+});
+
+test("tour 4 : survol d'assistance, la Page porte le nom de la structure et n'offre pas « Publier »", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const s = unique();
+  const ownerCookie = await signUpApi(`AssistR9b_${s}`, `orga-assist-r9b-${s}@e2e.orasso.test`);
+  const name = `Club Aide R9b ${s}`;
+  const created = await apiCall<{ id: string }>(ownerCookie, "POST", "/structures", {
+    kind: "association",
+    name,
+    departments: ["66"],
+  });
+  expect(created.status).toBe(201);
+  const { ctx, page } = await open(browser, "equipe@orasso.local");
+  await go(page, "/moi");
+  await page.getByTestId("casquette-admin").click();
+  await page.waitForURL(/administration/, { timeout: 30_000 });
+  await go(page, "/structures");
+  await page.getByTestId("admin-structures-q").fill(name);
+  await page.getByTestId("admin-structures-q-go").click();
+  const row = page.getByTestId("structure-row").filter({ hasText: name });
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.getByTestId("admin-survey").click();
+  await page.getByTestId("orga-confirm").click();
+  await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
+  await pageTab(page).click();
+  await expect(page.getByTestId("page-name").first()).toContainText(name, { timeout: 60_000 });
+  await expect(page.getByTestId("publications-publish")).toHaveCount(0);
+  await ctx.close();
 });

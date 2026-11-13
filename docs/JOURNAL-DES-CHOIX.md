@@ -6191,7 +6191,7 @@ Maquette R9.3 `n-page` ; décisions § 1, § 6, § 10 ; T6, T8, T22 à T25. L'on
 
 ### Lot R9b, tour 3 (13/11/2026) : relecture Codex
 - **Jamais les données d'une autre casquette** : `OwnerPageBody` est monté avec une clé par casquette (état neuf à chaque changement) et n'affiche que la page dont l'identifiant est celui de la casquette active ; sinon « Chargement… » ou l'erreur.
-- **Survol en assistance** : sans adhésion, le slug de la structure vient de `GET /structures/:id` (route autorisée au super administrateur) ; pas de recette (aucun compte d'assistance dans le seed de recette), le chemin est couvert par la lecture de l'erreur et de « Réessayer ».
+- **Survol en assistance** : sans adhésion, le slug de la structure vient de `GET /structures/:id` (route autorisée au super administrateur) ; recette `appli-lotr9b` (tour 4) avec le compte d'assistance du seed (`equipe@orasso.local`) : la Page porte le nom de la structure survolée. Tour 4 : en survol, pas de « Publier » (`publishAs` absent : il publierait au nom du super administrateur).
 - **`/me/pro` en échec** : message d'erreur + « Réessayer » (icône) ; « tirer pour actualiser » relance aussi cette lecture.
 - **« Suivre »** : la réponse de l'écriture (`following`, `followersCount`) est appliquée tout de suite (`setData`) ; la relecture se fait en arrière-plan.
 - **Pour R9e-2 (`PageContents` → `PageAlbums`)** : après l'échec d'une actualisation d'une liste remplie, « Réessayer » rejoue une **actualisation** (`read(true)`), jamais une suite fusionnée.
