@@ -4,11 +4,78 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { env } from "../../src/env";
 import { now } from "./helpers";
+import { dropSeedRows, type SourceUrls, seedableSources } from "./practical-cache";
 
 const DAY = 86_400_000;
 
 const day = (offset: number) => new Date(now.getTime() + offset * DAY).toISOString().slice(0, 10);
+
+/** Lieux inventés de l'Accueil (Perpignan), posés seulement pour une source remplacée ou coupée ; voir `practical-cache.ts`. */
+export const homeSeedWash = [
+  {
+    name: "Lavage Les Pins (démonstration)",
+    address: "12 avenue du Roussillon, 66000 Perpignan",
+    lat: 42.7035,
+    lng: 2.8958,
+  },
+  {
+    name: "Station de lavage haute pression (démonstration)",
+    address: "Route de Canet, 66000 Perpignan",
+    lat: 42.7202,
+    lng: 2.9317,
+  },
+  {
+    name: "Lavage automatique du Port (démonstration)",
+    address: "Port, 66140 Canet-en-Roussillon",
+    lat: 42.6892,
+    lng: 3.0344,
+  },
+];
+export const homeSeedFuel = [
+  {
+    name: "Station-service",
+    address: "Avenue de Prades, 66000 Perpignan (démonstration)",
+    lat: 42.6996,
+    lng: 2.9001,
+    prices: { sp95: 1.859, sp98: 1.949, gazole: 1.789, e85: 0.799 },
+    updatedAt: now.toISOString(),
+  },
+  {
+    name: "Station-service",
+    address: "Zone de Saint-Charles, 66000 Perpignan (démonstration)",
+    lat: 42.6867,
+    lng: 2.8741,
+    prices: { sp95: 1.839, sp98: null, gazole: 1.769, e85: null },
+    updatedAt: now.toISOString(),
+  },
+  {
+    name: "Station-service",
+    address: "Route de Thuir, 66000 Perpignan (démonstration)",
+    lat: 42.7108,
+    lng: 2.9252,
+    prices: { sp95: 1.879, sp98: 1.969, gazole: 1.809, e85: 0.819 },
+    updatedAt: now.toISOString(),
+  },
+];
+
+/**
+ * Cache factice des sources externes, valable pour la démonstration SANS réseau : posé seulement si la ligne manque ET si la source est
+ * un faux service ou coupée ; avec les vraies sources, retire les lignes que le seed a posées autrefois (contenu exactement le sien).
+ */
+export async function seedHomeCache(sources: SourceUrls = env) {
+  const seedable = seedableSources(sources);
+  const caches: Record<string, unknown> = {};
+  if (seedable.osm) caches["osm:66"] = homeSeedWash;
+  if (seedable.fuel) caches["fuel2:66"] = homeSeedFuel;
+  for (const [key, data] of Object.entries(caches)) {
+    const exists = await db.query.externalCache.findFirst({ where: and(eq(t.externalCache.key, key)) });
+    if (!exists) await db.insert(t.externalCache).values({ key, fetchedAt: now, data });
+  }
+  if (!seedable.osm) await dropSeedRows(["osm:66", "wash:66"], [homeSeedWash]);
+  if (!seedable.fuel) await dropSeedRows(["fuel2:66", "fuel:66"], [homeSeedFuel]);
+}
 
 export async function seedHome() {
   // --- Garage favori de Kenji ---------------------------------------------------------------------------------
@@ -62,61 +129,6 @@ export async function seedHome() {
     });
   }
 
-  // --- Cache factice des sources externes (Perpignan et Aude), valable pour la démonstration -----------------------
-  const fetchedAt = now;
-  const caches: Record<string, unknown> = {
-    "osm:66": [
-      {
-        name: "Lavage Les Pins (démonstration)",
-        address: "12 avenue du Roussillon, 66000 Perpignan",
-        lat: 42.7035,
-        lng: 2.8958,
-      },
-      {
-        name: "Station de lavage haute pression (démonstration)",
-        address: "Route de Canet, 66000 Perpignan",
-        lat: 42.7202,
-        lng: 2.9317,
-      },
-      {
-        name: "Lavage automatique du Port (démonstration)",
-        address: "Port, 66140 Canet-en-Roussillon",
-        lat: 42.6892,
-        lng: 3.0344,
-      },
-    ],
-    "fuel2:66": [
-      {
-        name: "Station-service",
-        address: "Avenue de Prades, 66000 Perpignan (démonstration)",
-        lat: 42.6996,
-        lng: 2.9001,
-        prices: { sp95: 1.859, sp98: 1.949, gazole: 1.789, e85: 0.799 },
-        updatedAt: fetchedAt.toISOString(),
-      },
-      {
-        name: "Station-service",
-        address: "Zone de Saint-Charles, 66000 Perpignan (démonstration)",
-        lat: 42.6867,
-        lng: 2.8741,
-        prices: { sp95: 1.839, sp98: null, gazole: 1.769, e85: null },
-        updatedAt: fetchedAt.toISOString(),
-      },
-      {
-        name: "Station-service",
-        address: "Route de Thuir, 66000 Perpignan (démonstration)",
-        lat: 42.7108,
-        lng: 2.9252,
-        prices: { sp95: 1.879, sp98: 1.969, gazole: 1.809, e85: 0.819 },
-        updatedAt: fetchedAt.toISOString(),
-      },
-    ],
-  };
-  for (const [key, data] of Object.entries(caches)) {
-    const exists = await db.query.externalCache.findFirst({
-      where: and(eq(t.externalCache.key, key)),
-    });
-    if (!exists) await db.insert(t.externalCache).values({ key, fetchedAt, data });
-  }
+  await seedHomeCache();
   console.log("Accueil : garage favori, emplacements sponsorisés et cache factice des sources externes.");
 }
