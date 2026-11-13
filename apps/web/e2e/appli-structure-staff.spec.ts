@@ -57,6 +57,22 @@ async function go(page: Page, path: string) {
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
 
+/** Lot R9n : l'Équipe n'a plus d'onglet, elle s'ouvre par la ligne « Équipe » de la « Page » de la casquette organisateur. */
+async function openTeam(page: Page) {
+  await tab(page, "Page").click();
+  await page.getByTestId("page-row-team").click();
+  await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
+}
+
+/** Lot R9n : l'ancien onglet « Structure » est le corps de l'onglet « Page » (tuiles de la fiche, de la vérification, du logo…). */
+async function openStructure(page: Page, reload = false) {
+  // Après une feuille ouverte par-dessus la barre d'onglets (Équipe → Inviter), l'adresse de l'onglet « Page » recharge l'appli
+  // (comme le faisait `go("/structure")` avant) : la feuille couvre la barre, un onglet n'y est plus joignable.
+  if (reload) await go(page, "/page");
+  else await tab(page, "Page").click();
+  await expect(page.getByTestId("tile-verification")).toBeVisible({ timeout: 30_000 });
+}
+
 type Audit = { greens: string[]; truncated: string[]; horizontalScroll: boolean; noIcon: string[] };
 
 /** Règles du système de design vérifiables dans le DOM de l'appli web : pas de vert, rien de tronqué, pas de défilement horizontal. */
@@ -163,7 +179,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await expect(page.getByTestId("orga-direct-event")).toBeVisible({ timeout: 30_000 });
 
   // Le point de l'onglet Staff : une demande attend.
-  await tab(page, "Équipe").click();
+  await openTeam(page);
   // Lot C4a : les demandes sont derrière la bulle « +N » de la grappe (feuille `sh-req` de l'artefact).
   await expect(page.getByRole("button", { name: /demandes? pour rejoindre l'équipe/ })).toBeVisible({
     timeout: 30_000,
@@ -180,7 +196,9 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   deliverNow("damien@orasso.local");
   await tab(page, "Direct").click();
   await expect(page.getByTestId("orga-direct-event")).toBeVisible({ timeout: 30_000 });
-  await page.goto("/activite"); // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
+  // Lot R9d : la cloche de la casquette organisateur ouvre « Activité · <structure> » (`/activite/orga`), où arrive la demande.
+  await page.goto("/activite/orga");
+  await expect(page).toHaveURL(/\/activite\/orga/);
   await page.getByTestId("activity-row").filter({ hasText: "Demande pour rejoindre le staff" }).first().click();
   await page.getByTestId("team-requests-bubble").click();
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toBeVisible({ timeout: 30_000 });
@@ -352,7 +370,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   // --- Structure (fiche, logo, vérification, badge, partenaires), bannissements : parcours de lecture et d'écriture -
   const s = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(s.page, "MéditeSportCar");
-  await go(s.page, "/structure");
+  await openStructure(s.page);
   // Lot 52 : chaque tuile ouvre son volet, un à la fois.
   await s.page.getByTestId("tile-verification").click();
   await expect(s.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
@@ -406,14 +424,14 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   // --- Les mêmes écrans dans le thème Sable --------------------------------------------------------------------
   const b = await openApp(browser, "damien@orasso.local", "sable");
   await chooseOrganizer(b.page, "MéditeSportCar");
-  await tab(b.page, "Équipe").click();
+  await openTeam(b.page);
   await expect(b.page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "20-equipe-sable");
   await b.page.getByTestId("team-requests-bubble").click();
   await b.page.getByTestId("team-invite").click();
   await shot(b.page, "21-inviter-sable");
   await b.page.keyboard.press("Escape");
-  await go(b.page, "/structure");
+  await openStructure(b.page, true);
   await b.page.getByTestId("tile-verification").click();
   await expect(b.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "22-structure-sable");
@@ -461,7 +479,7 @@ test("une demande de staff refusée disparaît de l'Équipe et le compteur retom
   expect(pseudo).not.toBe("");
   const a = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(a.page, "MéditeSportCar");
-  await tab(a.page, "Équipe").click();
+  await openTeam(a.page);
   await a.page.getByTestId("team-requests-bubble").click();
   const request = a.page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
@@ -504,7 +522,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
 
   const a = await openApp(browser, email, "beton");
   await chooseOrganizer(a.page, name);
-  await go(a.page, "/structure");
+  await openStructure(a.page);
   await expect(a.page.getByTestId("structure-unverified")).toBeVisible({ timeout: 30_000 });
   await a.page.getByTestId("tile-verification").click();
   await expect(a.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
@@ -557,7 +575,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   // Badge qui expire dans 5 jours : l'écran le dit. Structure suspendue : lecture seule, message de l'API à l'écriture.
   const canigou = await openApp(browser, "pres_canigou@orasso.local", "sable");
   await chooseOrganizer(canigou.page, "Écurie du Canigou");
-  await go(canigou.page, "/structure");
+  await openStructure(canigou.page);
   await canigou.page.getByTestId("tile-verification").click();
   await expect(canigou.page.getByTestId("orga-verification")).toContainText(/expire dans/, { timeout: 30_000 });
   await shot(canigou.page, "32-badge-echeance-sable");
@@ -567,7 +585,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await resuspendSeedStructure();
   const tram = await openApp(browser, "pres_tramontane@orasso.local", "sable");
   await chooseOrganizer(tram.page, "Tramontane Auto Club");
-  await tab(tram.page, "Équipe").click();
+  await openTeam(tram.page);
   await expect(tram.page.getByText("Structure suspendue", { exact: false }).first()).toBeVisible({ timeout: 30_000 });
   await tram.page.getByTestId("team-requests-bubble").click(); // Lot C4a : « Inviter » est dans la feuille de la bulle « +N ».
   await tram.page.getByTestId("team-invite").click();
@@ -579,7 +597,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   });
   await shot(tram.page, "33-structure-suspendue-ecriture-refusee-sable");
   await tram.page.keyboard.press("Escape");
-  await go(tram.page, "/structure");
+  await openStructure(tram.page, true);
   await tram.page.getByTestId("tile-verification").click();
   await expect(tram.page.getByTestId("orga-badge-suspended")).toBeVisible({ timeout: 30_000 });
   await shot(tram.page, "34-structure-suspendue-sable");
