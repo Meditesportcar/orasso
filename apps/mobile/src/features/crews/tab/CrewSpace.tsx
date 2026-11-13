@@ -94,8 +94,20 @@ export function CrewSpace({
   // sous elle au changement d'onglet et pour la pastille « nouvelle publication ».
   const tabsBox = useRef({ y: 0, h: 0 });
   const feedScroller = useMemo<CrewFeedScroller | undefined>(
-    () => (scroller ? { ...scroller, inset: () => tabsBox.current.h } : undefined),
-    [scroller],
+    () =>
+      scroller
+        ? {
+            ...scroller,
+            // Le bas de la rangée collée, dans la fenêtre : le haut de la zone qui défile, plus la hauteur de la rangée.
+            barBottom: () =>
+              new Promise<number>((resolve) => {
+                const node = scroll.scrollRef.current as unknown as View | null;
+                if (!node) return resolve(0);
+                node.measureInWindow((_x, y) => resolve(y + tabsBox.current.h));
+              }),
+          }
+        : undefined,
+    [scroller, scroll.scrollRef],
   );
   const scrollRef = scroll.scrollRef;
   const scrollY = scroll.scrollY;
@@ -246,7 +258,16 @@ export function CrewSpace({
 
   // Les blocs de l'espace, à plat : seul un enfant direct de la zone qui défile peut rester collé en haut.
   const blocks: ReactElement[] = [
-    <View key="id" style={styles.col} testID="crew" accessibilityLabel={`${crewLabels.crew} ${v.name}`}>
+    <View
+      key="id"
+      style={styles.col}
+      onLayout={(e) => {
+        // La rangée d'onglets vient juste après ce bloc (l'écart de la zone qui défile : `space3`).
+        tabsBox.current.y = e.nativeEvent.layout.y + e.nativeEvent.layout.height + space3;
+      }}
+      testID="crew"
+      accessibilityLabel={`${crewLabels.crew} ${v.name}`}
+    >
       <CrewHead
         crew={v}
         crews={crews}
@@ -290,14 +311,14 @@ export function CrewSpace({
     // Onglets soulignés (collants) ; « Publier » : le bouton icône moutarde au bout de la rangée, comme le haut du Fil. C'est le
     // seul bouton principal et le seul néon de l'écran.
     blocks.push(
-      <View
-        key="tabs"
-        style={[styles.tabsBar, { backgroundColor: c.ground }]}
-        onLayout={(e) => {
-          tabsBox.current = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
-        }}
-      >
-        <View style={styles.tabsRow}>
+      <View key="tabs" style={[styles.tabsBar, { backgroundColor: c.ground }]}>
+        {/* Le défilement retire `onLayout` de l'enfant collé : la hauteur se mesure sur un bloc à l'intérieur. */}
+        <View
+          style={styles.tabsRow}
+          onLayout={(e) => {
+            tabsBox.current.h = e.nativeEvent.layout.height;
+          }}
+        >
           <View style={styles.tabsGrow}>
             <UnderTabs<CrewTabId>
               fade

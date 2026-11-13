@@ -41,8 +41,8 @@ export type CrewFeedCrew = { id: string; slug: string; archived?: boolean };
 export type CrewFeedScroller = {
   scrollTo: (y: number, animated: boolean) => void;
   y: () => number;
-  /** Hauteur de la rangée d'onglets collée en haut (mesurée) : le haut du fil visible est sous elle. */
-  inset?: () => number;
+  /** Le bas de la rangée d'onglets collée en haut, dans la fenêtre (mesuré) : le haut du fil visible est sous elle. */
+  barBottom?: () => Promise<number>;
 };
 
 /** Marge sous le haut de l'écran quand la pastille remonte au fil. */
@@ -81,14 +81,14 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
   const pill = crewLivePillLabel(feed.pending);
 
   /** Le haut du fil est à l'écran (ou plus bas) : une nouvelle entrée peut s'insérer sans faire sauter la liste. */
-  const atTop = () =>
-    new Promise<boolean>((resolve) => {
+  const atTop = async () => {
+    const floor = (await scroller?.barBottom?.()) ?? insets.top;
+    return new Promise<boolean>((resolve) => {
       const node = listRef.current;
       if (!node) return resolve(true);
-      node.measureInWindow((_x, y) =>
-        resolve(!(Number.isFinite(y) && y < insets.top - TOP_MARGIN + (scroller?.inset?.() ?? 0))),
-      );
+      node.measureInWindow((_x, y) => resolve(!(Number.isFinite(y) && y < floor - TOP_MARGIN)));
     });
+  };
 
   const live = async (needs: CrewLiveNeeds) => {
     for (const id of needs.removedPosts) putPost(id, null);
@@ -131,16 +131,14 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
   const { stale } = useCrewLive(crew.archived ? null : crew.id, live, { refreshOnFirstSubscribe: true });
 
   /** La pastille : les nouvelles entrées s'affichent, la page remonte au haut du fil. */
-  const showFresh = () => {
+  const showFresh = async () => {
     const node = listRef.current;
     const accept = () => feed.acceptPending(acceptCrewFeedPending);
+    // Le haut du fil se pose sous la barre du haut et la rangée d'onglets collée (leur bas réel, mesuré).
+    const floor = (await scroller?.barBottom?.()) ?? insets.top;
     if (scroller && node) {
       node.measureInWindow((_x, y) => {
-        if (Number.isFinite(y))
-          scroller.scrollTo(
-            Math.max(0, scroller.y() + y - insets.top - TOP_MARGIN - (scroller.inset?.() ?? 0)),
-            !reducedMotion,
-          );
+        if (Number.isFinite(y)) scroller.scrollTo(Math.max(0, scroller.y() + y - floor - TOP_MARGIN), !reducedMotion);
         accept();
       });
     } else {

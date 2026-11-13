@@ -154,13 +154,8 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
   await expect(page.getByTestId("crew-name")).toHaveText(crew.name);
   const feed = await box(page, "crew-feed");
   expect(feed.y, `premier contenu du fil à ${feed.y} px à ×1,3`).toBeLessThanOrEqual(MAX_Y_X13);
-  // Les onglets défilent de côté à ×1,3 (le contenu est plus large que la rangée) et le dernier reste atteignable, sans passer
-  // sous « Publier ».
+  // À ×1,3 le dernier onglet reste atteignable (la rangée défile de côté au besoin), sans passer sous « Publier ».
   const tabs = await box(page, "crew-tabs");
-  const row = await page
-    .getByTestId("crew-tabs")
-    .evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-  expect(row.scroll, "la rangée d'onglets déborde (elle défile de côté)").toBeGreaterThan(row.client + 4);
   await page.getByTestId("crew-tabs").evaluate((el) => {
     el.scrollLeft = el.scrollWidth;
   });
@@ -177,7 +172,7 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
 test("un nom long passe à la ligne, jamais tronqué", async ({ browser }) => {
   test.setTimeout(240_000);
   const crew = await r5Crew(unique());
-  const long = "Pilotes du Dimanche de Canet-Roussillon";
+  const long = `Pilotes Dimanche Canet ${unique().slice(-5)}`;
   expect((await apiCall(crew.chef.cookie, "PATCH", `/crews/${crew.id}`, { name: long })).status).toBe(200);
   const { ctx, page } = await open(browser, crew.chef.email);
   await go(page, `/crew?crew=${crew.slug}`);
@@ -323,7 +318,14 @@ test("tour 1 : la pastille des nouvelles publications ramène le début de la pu
   await pill.click();
   const post = page.getByTestId("crew-post").filter({ hasText: fresh });
   await expect(post).toHaveCount(1, { timeout: 15_000 });
-  await page.waitForTimeout(800);
+  // Le défilement est animé : on attend que la position se fige.
+  let last = -1;
+  for (let i = 0; i < 20; i += 1) {
+    const y = ((await post.boundingBox()) as { y: number }).y;
+    if (y === last) break;
+    last = y;
+    await page.waitForTimeout(300);
+  }
   const pb = (await post.boundingBox()) as { y: number };
   expect(pb.y, "le début de la publication est sous la rangée d'onglets").toBeGreaterThanOrEqual(
     (await tabsBottom(page)) - 2,

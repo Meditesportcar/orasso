@@ -74,7 +74,7 @@ export function UnderTabs<T extends string>({
   const contentW = useRef(0);
   const [more, setMore] = useState(false);
   const checkMore = () =>
-    fade && setMore(contentW.current > rowW.current + 1 && scrollX.current + rowW.current < contentW.current - 1);
+    fade && setMore(contentW.current > rowW.current + 8 && scrollX.current + rowW.current < contentW.current - 1);
   const tabs = items.map((it) => {
     const on = it.id === value;
     const text = underTabLabel(it.label, it.count);
