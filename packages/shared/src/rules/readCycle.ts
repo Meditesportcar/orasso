@@ -40,6 +40,9 @@ export function createReadCycle(deps: ReadCycleDeps) {
   let dueAt = 0;
   // Un numéro par reprise manuelle ou remise à zéro : l'issue d'une lecture partie avant est ignorée (pas de double lecture).
   let epoch = 0;
+  // Une panne transitoire a épuisé le calendrier (aucune relance programmée) : la lecture reste due, `dispose` ne l'efface pas (un
+  // remontage la relit) et « Réessayer » est proposé, comme pour un refus.
+  let stalled = false;
 
   // La seule programmation : l'échéance mémorisée et la minuterie se mettent à jour ensemble (`settled`, `resume`, `rearm`).
   const schedule = (delay: number) => {
@@ -67,6 +70,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
     refusedAt = 0;
     halted = false;
     pending = false;
+    stalled = false;
   };
 
   return {
@@ -83,6 +87,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
     settled(outcome: ReadCycleOutcome) {
       timer.cancel();
       pending = false;
+      stalled = false;
       if (outcome === "unknown") {
         halted = true;
         refusedAt = 0;
@@ -96,7 +101,10 @@ export function createReadCycle(deps: ReadCycleDeps) {
       scheduledDelay = null;
       if (step.delay !== null) schedule(step.delay);
       // Un échec transitoire reprend au retour sur l'écran même quand la série de relances est finie.
-      if (outcome === "transient") pending = true;
+      if (outcome === "transient") {
+        pending = true;
+        stalled = step.delay === null;
+      }
     },
     /**
      * Retour sur l'écran (onglet visible, appli au premier plan, retour en ligne). Une reprise due part à l'écart de 15 s (tout de
@@ -137,6 +145,10 @@ export function createReadCycle(deps: ReadCycleDeps) {
     blocked(): boolean {
       return halted || refusedAt > 0;
     },
+    /** Une panne transitoire après la fin du calendrier : plus de relance automatique, la lecture reste due (retour, remontage, « Réessayer »). */
+    stalledByFailure(): boolean {
+      return stalled;
+    },
     /** « Réessayer » : tout repart à 0 (le hook lance la lecture). */
     manual,
     /** Nouvelles entrées ou autre compte : plus rien d'avant. */
@@ -146,7 +158,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
     },
     dispose() {
       timer.cancel();
-      pending = false;
+      // Une panne qui a épuisé le calendrier reste due : un remontage ou le retour sur l'écran la relit.
+      if (!stalled) pending = false;
     },
     /** Pour les tests. */
     state: () => ({ calendarStep, networkAttempt, refusedAt, halted, pending, scheduled: timer.pending() }),
@@ -213,7 +226,7 @@ export function createPositionCalendar(deps: {
         if (gen !== generation) return;
         reading = false;
         cycle.settled(outcome === "ok" ? "partial" : outcome);
-        failedShown = cycle.blocked();
+        failedShown = cycle.blocked() || cycle.stalledByFailure();
         // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
         if (!active()) cycle.dispose();
         notify();
@@ -236,7 +249,8 @@ export function createPositionCalendar(deps: {
         // Remontage : jamais une nouvelle issue. Une issue gardée (refus, erreur inconnue) n'est pas effacée (un refus ancien est relu
         // s'il a plus de 60 s) ; une lecture en vol garde sa réponse ; l'échéance en attente est reprogrammée sans avancer l'étape ;
         // seul le tout premier départ d'un calendrier programme la première relecture.
-        if (cycle.blocked()) cycle.resume();
+        // Une panne transitoire restée en suspens après la fin du calendrier est relue de même (au plus tôt à 15 s de la précédente).
+        if (cycle.blocked() || cycle.stalledByFailure()) cycle.resume();
         else if (!reading) {
           if (started) cycle.rearm();
           else {
@@ -298,7 +312,7 @@ export function createPositionCalendar(deps: {
     },
     /** Une lecture de la position est en vol : « Réessayer » est désactivé (avec son libellé, sans indicateur qui tourne). */
     busy: () => reading,
-    /** Le calendrier est arrêté par un refus ou une erreur inconnue : « Réessayer » est proposé. */
+    /** Le calendrier est arrêté (refus, erreur inconnue, ou panne après la fin du calendrier) : « Réessayer » est proposé. */
     failed: () => partial && failedShown,
     subscribe(listener: () => void) {
       listeners.add(listener);

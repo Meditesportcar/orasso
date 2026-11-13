@@ -480,3 +480,73 @@ describe("un calendrier commencé se réarme, il ne se recommence pas (suite R8q
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("une panne transitoire après la fin du calendrier reste due (petit lot de fin, partie A)", () => {
+  /** Le calendrier de 3, 9, 21 puis 45 s est consommé (quatre lectures partielles), la quatrième lecture tombe en panne transitoire. */
+  async function stalledCalendar() {
+    const ctx = position();
+    const release = ctx.calendar.retain();
+    ctx.calendar.setPartial(true, "A");
+    for (const [index, wait] of [3_000, 6_000, 12_000, 24_000].entries()) {
+      await vi.advanceTimersByTimeAsync(wait);
+      expect(ctx.refresh).toHaveBeenCalledTimes(index + 1);
+      ctx.pending[index]?.(index < 3 ? "ok" : "transient");
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    return { ...ctx, release };
+  }
+
+  it("la règle pure : plus de relance programmée, la lecture reste due après `dispose`, « Réessayer » est proposé", async () => {
+    const { calendar, refresh, release } = await stalledCalendar();
+    expect(calendar.state().scheduled).toBe(false);
+    expect(calendar.failed()).toBe(true);
+    release();
+    // Aucune minuterie ne reste écran démonté, mais la panne n'est pas oubliée.
+    expect(calendar.state().scheduled).toBe(false);
+    expect(calendar.state().pending).toBe(true);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refresh).toHaveBeenCalledTimes(4);
+  });
+
+  it("le remontage relit la panne restée en suspens, jamais avant 15 s après la lecture précédente", async () => {
+    const { calendar, refresh, pending, release } = await stalledCalendar();
+    release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    calendar.retain();
+    expect(refresh).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(refresh).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refresh).toHaveBeenCalledTimes(5);
+    // Une réponse complète arrête tout ; « Réessayer » disparaît.
+    pending[4]?.("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    calendar.setPartial(false);
+    expect(calendar.failed()).toBe(false);
+  });
+
+  it("« Réessayer » reste visible puis désactivé pendant la relecture, puis disparaît avec le résultat", async () => {
+    const { calendar, refresh, pending } = await stalledCalendar();
+    expect(calendar.failed()).toBe(true);
+    expect(calendar.busy()).toBe(false);
+    calendar.retry();
+    expect(refresh).toHaveBeenCalledTimes(5);
+    expect(calendar.busy()).toBe(true);
+    expect(calendar.failed()).toBe(true);
+    pending[4]?.("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.busy()).toBe(false);
+    expect(calendar.failed()).toBe(false);
+  });
+
+  it("une panne encore relancée par le calendrier n'est pas proposée en « Réessayer » ; un refus reste un refus", async () => {
+    const { calendar, pending } = position();
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("transient");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(false);
+    expect(calendar.state().scheduled).toBe(true);
+  });
+});
