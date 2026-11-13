@@ -195,6 +195,24 @@ export function placesAround<T extends { id: string; lat: number; lng: number }>
     .map((k) => k.place);
 }
 
+/**
+ * Comme `placesAround`, avec la coupe (petit lot de fin F, tour 2) : `cut` quand plus de `max` lieux étaient dans le rayon ; `coveredKm` est
+ * alors la distance du dernier lieu gardé (tout lieu plus proche est servi), sans dépasser `radiusKm`.
+ */
+export function placesAroundInfo<T extends { id: string; lat: number; lng: number }>(
+  places: readonly T[],
+  origin: LatLng,
+  radiusKm = PRACTICAL_RADIUS_KM,
+  max = PRACTICAL_MAX,
+): { places: T[]; cut: boolean; coveredKm: number } {
+  const all = placesAround(places, origin, radiusKm, Number.POSITIVE_INFINITY);
+  if (all.length <= max) return { places: all, cut: false, coveredKm: radiusKm };
+  const kept = all.slice(0, max);
+  const last = kept[kept.length - 1];
+  const reach = last ? distanceKm(origin, last) : 0;
+  return { places: kept, cut: true, coveredKm: Math.max(0, Math.min(reach - 0.05, radiusKm)) };
+}
+
 const tenth = (n: number) => Math.round(n * 10) / 10;
 
 /** Les lieux avec leur distance à `from`, du plus proche au plus éloigné : le tri se fait sur la distance exacte, l'arrondi (au dixième de km) n'est que pour l'affichage. */

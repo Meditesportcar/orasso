@@ -173,6 +173,25 @@ describe("POST /practical : near zone", () => {
     expect(small.json.coveredKm).toBeUndefined();
   });
 
+  it("la coupe est signalée aussi à l'ouverture (position) : 200 lieux centraux et un lavage à 20 km, le disque couvert ne l'atteint pas", async () => {
+    const wash = Array.from({ length: 250 }, (_, i) => ({
+      name: `Lavage ${i}`,
+      lat: 42.7 + ((i % 25) - 12) * 0.002,
+      lon: 2.9 + (Math.floor(i / 25) - 5) * 0.003,
+    }));
+    wash.push({ name: "Lavage lointain", lat: 42.52, lon: 2.9 });
+    practicalSources({ wash: { "66": wash }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Ouverture");
+    const res = await call(u, "POST", "/practical", { near: "position", lat: 42.7, lng: 2.9 });
+    expect(res.status).toBe(200);
+    expect(res.json.places).toHaveLength(200);
+    expect(res.json.truncated).toBe(true);
+    // Le rayon couvert (autour de la case) est celui du dernier lieu gardé : bien en deçà des 20 km du lavage lointain.
+    expect(res.json.coveredKm).toBeGreaterThan(0);
+    expect(res.json.coveredKm).toBeLessThan(5);
+    expect(res.json.places.map((p: { name: string }) => p.name)).not.toContain("Lavage lointain");
+  });
+
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {
     practicalSources(data);
     const u = await signUp("Fan_Ancien");

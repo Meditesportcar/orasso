@@ -104,14 +104,16 @@ const halfCells = (spanDegrees: number) =>
  * dépasse ce plafond part sans élargissement). Deux positions de la même case, à la même taille de vue, donnent toujours la même zone :
  * elle ne laisse jamais deviner une position plus finement que la case. Elle contient toujours la vue.
  */
-export function zoneForRequest(view: PracticalZone): PracticalZone {
+export function zoneForRequest(view: PracticalZone, expand = true): PracticalZone {
   const centre = zoneCenter(view);
   const cLat = cellDown(centre.lat);
   const cLng = cellDown(centre.lng);
   const max = maxCells((cLat + 0.5) / 10);
   const axis = (cell: number, spanDegrees: number, limit: number): [number, number] => {
-    const h = halfCells(spanDegrees);
-    const grown = h + Math.ceil((2 * h + 1) / 2);
+    // Jamais plus de cases que l'API n'en accepte (60 km plus l'arrondi) : une vue de 60 km à une fraction près ne reçoit pas un refus.
+    const h = Math.min(halfCells(spanDegrees), Math.floor((limit + PRACTICAL_ZONE_REQUEST_EXTRA_CELLS - 1) / 2));
+    // `expand` faux : une zone déjà coupée (trop de lieux) ne s'élargit plus, elle se resserre sur la vue.
+    const grown = expand ? h + Math.ceil((2 * h + 1) / 2) : h;
     const cap = Math.floor((limit - 1) / 2);
     const h2 = grown > cap ? Math.max(h, cap) : grown;
     return [cell - h2, cell + 1 + h2];
@@ -267,6 +269,17 @@ export function zoneAround(p: LatLng, widthKm: number, heightKm = widthKm): Prac
   const dLat = heightKm / 2 / KM_PER_DEG;
   const dLng = widthKm / 2 / (KM_PER_DEG * Math.max(0.05, Math.cos((p.lat * Math.PI) / 180)));
   return { south: p.lat - dLat, north: p.lat + dLat, west: p.lng - dLng, east: p.lng + dLng };
+}
+
+/** Remplace dans la mémoire de l'écran les lieux que `gone` désigne par ceux reçus (une réponse complète remplace son emprise). */
+export function replaceInStore<T extends { id: string }>(
+  store: ReadonlyMap<string, T>,
+  gone: (p: T) => boolean,
+  incoming: readonly T[],
+): Map<string, T> {
+  const next = new Map<string, T>();
+  for (const [id, p] of store) if (!gone(p)) next.set(id, p);
+  return mergeStore(next, incoming);
 }
 
 /** Ce que l'écran garde en mémoire (jamais écrit) : les lieux reçus, sans doublon, `PRACTICAL_STORE_MAX` au plus (les plus anciens sortent). */

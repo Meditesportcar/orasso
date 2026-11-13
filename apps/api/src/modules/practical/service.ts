@@ -18,7 +18,7 @@ import {
   type PracticalOrigin,
   type PracticalPlace,
   type PracticalZone,
-  placesAround,
+  placesAroundInfo,
   placesInZoneInfo,
   practicalPlaceId,
   practicalTexts,
@@ -252,10 +252,12 @@ export const practicalService = {
     // Mode zone : la coupe (plus de 200 lieux, ou plus de 12 départements) est signalée, jamais « en moins » en silence : l'écran ne marque
     // comme chargé que le disque couvert (0 km : rien de sûr quand des départements manquent).
     const inZone = zone ? placesInZoneInfo(all, zone) : null;
-    const places = inZone ? inZone.places : placesAround(all, origin);
+    const around = inZone ? null : placesAroundInfo(all, origin);
+    const places = inZone ? inZone.places : (around?.places ?? []);
     const cutDepartments = zoneDepartments?.cut === true;
-    const truncated = cutDepartments || inZone?.cut === true;
-    const coveredKm = cutDepartments ? 0 : (inZone?.coveredKm ?? 0);
+    // Tous les modes : plus de 200 lieux dans le rayon de 30 km (ouverture) signalent la coupe, comme en mode zone.
+    const truncated = cutDepartments || inZone?.cut === true || around?.cut === true;
+    const coveredKm = cutDepartments ? 0 : (inZone?.coveredKm ?? around?.coveredKm ?? 0);
     // Les deux sources sont citées quand les deux ont servi une station de la réponse.
     const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
     const usedGov = served.some((x) => x?.gov);

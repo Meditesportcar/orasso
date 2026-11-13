@@ -61,7 +61,8 @@ describe("hybride : filtre local dans le chargé, bouton au-delà", () => {
     z.ingest(partial);
     expect(z.getState().cover).toHaveLength(0);
     z.ingest(opening([place("a", 42.7, 2.9)]));
-    z.ingest(opening([place("b", 42.7, 2.91)]));
+    // Une ouverture complète remplace les lieux de son disque (tour 2) : celle-ci apporte les deux.
+    z.ingest(opening([place("a", 42.7, 2.9), place("b", 42.7, 2.91)]));
     expect(z.getState().cover).toHaveLength(1);
     expect(z.getState().places.size).toBe(2);
   });
