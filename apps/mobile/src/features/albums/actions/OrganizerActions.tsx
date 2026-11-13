@@ -113,7 +113,7 @@ export function OrganizerHost({
               onPress={() => {
                 const slug = album?.event.slug;
                 setDone(null);
-                if (slug) router.push(`/e/${slug}` as never);
+                if (slug) router.dismissTo(`/e/${slug}` as never); // revient à la fiche déjà dans la pile (sinon l'empile) : pas de deuxième fiche
               }}
               testID="repost-see-journal"
             >
