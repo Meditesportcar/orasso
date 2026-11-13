@@ -36,7 +36,7 @@ async function world() {
       type: "food_truck",
       name: "La Brasa",
       phone: "0611223344",
-      contactEmail: "brasa@exemple.fr",
+      email: "brasa@exemple.fr",
     })
     .returning();
   return { holder, kenji, structureA, structureB, brasa: brasa as NonNullable<typeof brasa> };
@@ -197,7 +197,7 @@ describe("GET /providers/:id : liste blanche", () => {
     for (const secret of ["Brasa_Titulaire", w.holder.id, w.holder.email, "0611223344", "brasa@exemple.fr"]) {
       expect(res.text, secret).not.toContain(secret);
     }
-    for (const key of ["userId", "ownerUserId", "pseudo", "phone", "contactEmail", "email"]) {
+    for (const key of ["userId", "ownerUserId", "pseudo", "phone", "email"]) {
       expect(res.json).not.toHaveProperty(key);
     }
   });
