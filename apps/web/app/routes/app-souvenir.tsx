@@ -2,9 +2,11 @@
 // un an, jour pour jour », « Tu étais à … », la date, mon tampon, « Voir le récap » si je l'ai vécu, et la place du bouton
 // « En story » (R7f4). 404 de l'API (pas mon tampon, pas encore un an) : « Ce souvenir n'est pas disponible », rien de plus.
 // Cible de la notification `memory` (`/app/souvenir/<eventId>`).
+
 import { Button } from "@orasso/design-system/web";
 import { type MemoryDetail, memoryLabels, shareLabels, widestWordEm } from "@orasso/shared";
 import type { CSSProperties } from "react";
+import { MemoryAlbumLine } from "../components/albums/AlbumMentions";
 import { PassportStamp } from "../components/PassportStamp";
 import { ShareDialog } from "../components/ShareSheet";
 import { api, requireMe } from "../lib/api.server";
@@ -83,6 +85,8 @@ export default function Souvenir({ loaderData }: Route.ComponentProps) {
           </div>
           <PassportStamp stamp={m.stamp} size={96} />
         </div>
+
+        <MemoryAlbumLine albumPhotos={m.albumPhotos} carLabel={m.car?.label ?? null} testId="memory-album" />
 
         <div className="sv-actions">
           {m.recapAvailable ? (

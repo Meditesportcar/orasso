@@ -212,3 +212,352 @@
 .alb-tiles > li {
   min-width: 0;
 }
+
+/* Identification sur une photo d'album et « Tes photos » (lot R9f). Jetons seulement. */
+.tag-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.tag-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.tag-banner--mine {
+  border-color: var(--accent);
+}
+.tag-banner__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tag-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+.tag-box__title {
+  margin: 0;
+}
+.tag-who {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+.tag-list,
+.tag-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tag-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.tag-line.is-mine {
+  border-color: var(--accent);
+}
+.tag-line__thumb {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.tag-line__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tag-line__remove {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tag-done {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.tag-dialog {
+  width: min(720px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--ground);
+  color: var(--ink);
+}
+.tag-dialog::backdrop {
+  background: var(--scrim);
+}
+.tag-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.tag-dialog__title {
+  margin: 0;
+}
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tag-pick {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tag-pick:disabled,
+.tag-person:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.tag-person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.tag-person__name {
+  flex: 1;
+  text-align: left;
+}
+
+/* « Tes photos » : l'en-tête du média, une ligne par photo, la feuille « … ». */
+.myp-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.myp-who__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.myp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.myp-row {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.myp-row__thumb {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+.myp-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.myp-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.myp-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.myp-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.myp-sheet__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.myp-sheet__row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.myp-sheet__row span {
+  display: flex;
+  flex-direction: column;
+}
+.myp-preview {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.myp-credit {
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--night);
+  color: var(--night-ink);
+}
+
+/* « Vu au … » : le rail de vignettes d'une mention (fiche de la voiture, sortie, souvenir). */
+.mention {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.mention__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mention__head strong {
+  flex: 1;
+}
+.mention__rail {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+.mention__thumb {
+  position: relative;
+  flex: none;
+  width: 104px;
+  height: 104px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+.mention__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mention__pill {
+  position: absolute;
+  left: var(--space-1);
+  right: var(--space-1);
+  bottom: var(--space-1);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--night);
+  color: var(--night-ink);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+}
+.act-strip {
+  display: flex;
+  gap: var(--space-1);
+  margin: var(--space-1) 0;
+}
+.act-strip__thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+.act-strip__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.act-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--accent-text);
+}
+.alb-car-badge {
+  position: absolute;
+  right: var(--space-1);
+  bottom: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--night);
+  color: var(--night-ink);
+}
