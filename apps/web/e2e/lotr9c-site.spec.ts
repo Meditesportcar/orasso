@@ -161,7 +161,8 @@ test("envoi incertain d'une offre : rechargement, l'offre est affichée et figé
   await expect(page.getByTestId("fil-publish-offer-title")).toBeDisabled();
   await expect(page.getByTestId("fil-publish-offer-dates")).toContainText("Jusqu'au");
   await expect(page.getByTestId("fil-publish-says-tag")).toContainText("Offre");
-  let resent: { offer?: { title?: string; endsOn?: string } } | null = null;
+  // Assertion de type : la variable est remplie dans le rappel de `page.route`, que l'analyse de flux de TypeScript ne suit pas.
+  let resent = null as { offer?: { title?: string; endsOn?: string } } | null;
   await page.route("**/api/me/feed-posts", (route) => {
     if (route.request().method() !== "POST") return route.continue();
     resent = JSON.parse(route.request().postData() ?? "{}");
