@@ -18,6 +18,7 @@ import {
   type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
+  casquettesLabels,
   chooseAuthor,
   chooseEvent,
   clearUncertain,
@@ -62,6 +63,7 @@ import {
   publishSays,
   publishStartChoice,
   publishStartOffer,
+  resolvePublishAuthor,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -191,7 +193,11 @@ export function PublishForm({
   // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
   const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
   const [doneOffer, setDoneOffer] = useState<string | null>(null);
-  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  // Les noms des auteurs vus : si la casquette choisie disparaît pendant la rédaction (suspension), son nom reste dans le message.
+  const authorNames = useRef(new Map<string, string>());
+  for (const a of authors) authorNames.current.set(a.key, a.name);
+  // Jamais de repli silencieux sur « Moi » (R9h, tour 2) : un auteur perdu bloque l'envoi, avec un choix explicite.
+  const { author, lost: authorLost } = resolvePublishAuthor(authors, choice.authorKey, authorNames.current);
   const fan = vehicleAllowed(author);
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
   const [reloadEvents, setReloadEvents] = useState(0);
@@ -462,6 +468,7 @@ export function PublishForm({
   const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
+      authorLost,
       photos: items,
       caption,
       preparing,
@@ -938,8 +945,8 @@ export function PublishForm({
               <button
                 key={a.key}
                 type="button"
-                aria-pressed={a.key === author.key}
-                className={a.key === author.key ? "fp-opt is-on" : "fp-opt"}
+                aria-pressed={!authorLost && a.key === author.key}
+                className={!authorLost && a.key === author.key ? "fp-opt is-on" : "fp-opt"}
                 disabled={frozen}
                 onClick={() => setChoice((c) => chooseAuthor(c, authors, a.key))}
                 data-testid={`fil-publish-as-${a.key}`}
@@ -1088,6 +1095,16 @@ export function PublishForm({
         <p className="o-t-caption" data-testid="fil-publish-missing">
           {issue}
         </p>
+      ) : null}
+      {authorLost ? (
+        <Button
+          variant="secondary"
+          icon="profile"
+          onClick={() => setChoice((c) => chooseAuthor(c, authors, "me"))}
+          data-testid="fil-publish-author-lost-me"
+        >
+          {casquettesLabels.authorLostChoice}
+        </Button>
       ) : null}
       {loaded.forbidden && eventBlock ? (
         <p className="s-error" role="alert" data-testid="fil-publish-forbidden">

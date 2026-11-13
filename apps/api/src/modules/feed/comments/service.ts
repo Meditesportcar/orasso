@@ -153,8 +153,11 @@ export const feedCommentsService = {
     const asPage = Boolean(actor && isPageActor(actor));
     const reader = readerOf(v, actor);
     const post = await requireVisiblePost(reader, postId);
-    // Une page ne modère pas par la personne qui la tient : `manages` est faux, la suppression repasse par `requireAuthorship`.
-    const manages = asPage ? false : await managesPost(v, post.post);
+    // Une page garde la main sur la conversation de SES publications (tour 2, décision du coordinateur) : sur une publication de P, la
+    // page lit tout comme son responsable (y compris le commentaire d'un compte privé qu'elle ne suit pas) et peut le supprimer ; sur la
+    // publication de quelqu'un d'autre, `manages` est faux (droits de la page sans lien, rien de privé dans la liste).
+    const own = asPage && actor ? pageKeyOf(post.post) === actor.key : false;
+    const manages = asPage && !own ? false : await managesPost(v, post.post);
     return page(v, reader.user.id, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
   },
 
@@ -163,10 +166,21 @@ export const feedCommentsService = {
     rateLimit("feedRead", v.user.id);
     const asPage = Boolean(actor && isPageActor(actor));
     const reader = readerOf(v, actor);
-    const parent = await requireVisibleComment(reader, commentId);
+    // Sur une publication de sa propre page, la page lit comme son responsable (voir `list`) : le commentaire parent aussi. La publication
+    // est lue d'abord, sans droit de lecture : un commentaire privé ne doit pas être refusé avant qu'on sache à qui est la publication.
+    const found = asPage ? await commentRow(commentId) : undefined;
+    const ofPost = found ? await postWithAuthor(found.c.postId) : null;
+    const own = asPage && actor && ofPost ? pageKeyOf(ofPost.post) === actor.key : false;
+    const parent = await requireVisibleComment(own ? v : reader, commentId);
     // Un seul niveau : un commentaire qui est lui-même une réponse n'a pas de réponses.
     if (parent.c.parentId) return { items: [], nextCursor: null };
-    return page(v, reader.user.id, eq(c.parentId, parent.c.id), asPage ? false : parent.manages, cursor);
+    return page(
+      v,
+      own ? v.user.id : reader.user.id,
+      eq(c.parentId, parent.c.id),
+      asPage && !own ? false : parent.manages,
+      cursor,
+    );
   },
 
   /** `POST /feed-posts/:id/comments` */
@@ -224,10 +238,14 @@ export const feedCommentsService = {
         let target: { id: string; authorId: string } | null = null;
         let parentId: string | null = null;
         if (input.parentId) {
-          const asked = await requireVisibleComment(reader, input.parentId, tx).catch((error: unknown) => {
-            if (error instanceof AppError && error.status === 404) return null;
-            throw error;
-          });
+          // Sur une publication de sa propre page, le commentaire parent se lit comme son responsable le lit (tour 2).
+          const ownPost = page ? pageKeyOf(post.post) === page.key : false;
+          const asked = await requireVisibleComment(ownPost ? v : reader, input.parentId, tx).catch(
+            (error: unknown) => {
+              if (error instanceof AppError && error.status === 404) return null;
+              throw error;
+            },
+          );
           const verdict = commentParent(
             asked && { id: asked.c.id, parentId: asked.c.parentId, postId: asked.c.postId, deleted: false },
             post.post.id,

@@ -33,6 +33,7 @@ import {
   publishIssueR8,
   publishSays,
   purgeUncertain,
+  resolvePublishAuthor,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
@@ -745,5 +746,46 @@ describe("draftFromBody : l'offre du corps gardé (R9c)", () => {
     expect(d.choice.authorKey).toBe("pro:p1");
     expect(d.offer).toEqual({ on: true, title: "Polish", startsOn: "2026-11-10", endsOn: "2026-11-30" });
     expect(draftFromBody({ persona: "fan", photos: [] }, authors).offer.on).toBe(false);
+  });
+});
+
+describe("auteur devenu indisponible pendant la rédaction (R9h, tour 2)", () => {
+  const photos = [{ rects: [], noPlate: true }] as never;
+  it("suspension après la sélection de l'auteur : l'auteur est signalé perdu, jamais « Moi » en silence ; l'envoi est bloqué", () => {
+    const before = publishAuthors(personas, "Damien_66");
+    const names = new Map(before.map((a) => [a.key, a.name]));
+    // La structure s1 est suspendue après son choix : elle n'est plus proposée.
+    const after = publishAuthors(
+      personas.map((p) => (p.id === "s1" ? { ...p, suspended: true } : p)),
+      "Damien_66",
+    );
+    const resolved = resolvePublishAuthor(after, "structure:s1", names);
+    expect(resolved.lost).toBe("Roues Libres 66");
+    expect(resolved.author.key).toBe("me");
+    const issue = publishIssueR8({
+      photos,
+      caption: "",
+      author: resolved.author,
+      event: null,
+      important: { on: false, reason: null },
+      authorLost: resolved.lost,
+    });
+    expect(issue).toBe("Tu n'as plus accès à Roues Libres 66 : la publication ne peut pas partir en son nom.");
+    // Choix explicite de « Moi » : plus rien ne bloque.
+    const me = resolvePublishAuthor(after, "me", names);
+    expect(me.lost).toBeNull();
+    expect(
+      publishIssueR8({
+        photos,
+        caption: "",
+        author: me.author,
+        event: null,
+        important: { on: false, reason: null },
+        authorLost: me.lost,
+      }),
+    ).toBeNull();
+  });
+  it("une page encore proposée : rien de perdu", () => {
+    expect(resolvePublishAuthor(authors, "structure:s1").lost).toBeNull();
   });
 });

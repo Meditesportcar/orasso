@@ -48,6 +48,7 @@ import {
   publishSays,
   publishStartChoice,
   publishStartOffer,
+  resolvePublishAuthor,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -175,7 +176,11 @@ function PublishForm({ start }: { start?: PublishStart }) {
   );
   // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
   const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
-  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  // Les noms des auteurs vus : si la casquette choisie disparaît pendant la rédaction (suspension), son nom reste dans le message.
+  const authorNames = useRef(new Map<string, string>());
+  for (const a of authors) authorNames.current.set(a.key, a.name);
+  // Jamais de repli silencieux sur « Moi » (R9h, tour 2) : un auteur perdu bloque l'envoi, avec un choix explicite.
+  const { author, lost: authorLost } = resolvePublishAuthor(authors, choice.authorKey, authorNames.current);
   const fan = vehicleAllowed(author);
   const account = me?.user.id ?? "";
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
@@ -440,6 +445,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
+      authorLost,
       photos,
       caption,
       preparing,
@@ -679,6 +685,17 @@ function PublishForm({ start }: { start?: PublishStart }) {
             <Muted variant="caption" testID="fil-publish-missing">
               {issue}
             </Muted>
+          ) : null}
+          {authorLost ? (
+            <SmButton
+              kind="s"
+              wide
+              icon="profile"
+              onPress={() => setChoice((c) => chooseAuthor(c, authors, "me"))}
+              testID="fil-publish-author-lost-me"
+            >
+              {casquettesLabels.authorLostChoice}
+            </SmButton>
           ) : null}
           {uncertain && !busy ? (
             <SmButton
@@ -946,7 +963,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       {showAuthorChoice(authors) ? (
         <AuthorChoice
           authors={authors}
-          value={author.key}
+          value={authorLost ? "" : author.key}
           disabled={frozen}
           onChoose={(key) => setChoice((c) => chooseAuthor(c, authors, key))}
         />

@@ -171,7 +171,7 @@ function uploadWithProgress(
 const PERSON: StoryAuthor = { persona: "fan" };
 
 export function PublishForm({
-  userId,
+  userId: openedAs,
   visibility,
   crews,
   vehicles,
@@ -181,6 +181,9 @@ export function PublishForm({
   authorKey = "me",
   back = "/app/fil",
 }: PublishFormProps) {
+  // L'identité du brouillon est celle de son ouverture : jamais remplacée par une revalidation (la route remonte le formulaire par
+  // `key` = le compte, et cette valeur ne change pas pendant la vie du composant). Le compte attendu de l'envoi est celui-là.
+  const [userId] = useState(openedAs);
   // Un autre onglet connecte un autre compte : cet écran (la page, le brouillon de A) est périmé. Il se masque, verrouillé jusqu'au
   // rechargement ; l'envoi porte de plus le compte attendu (409 `account_changed` si la session n'est plus la sienne).
   const [sessionStale, setSessionStale] = useState(false);

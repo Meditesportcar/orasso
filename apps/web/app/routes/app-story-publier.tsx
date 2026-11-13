@@ -62,6 +62,7 @@ export function meta() {
 export default function AppStoryPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      key={loaderData.userId}
       userId={loaderData.userId}
       visibility={loaderData.visibility}
       crews={loaderData.crews}

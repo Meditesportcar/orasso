@@ -22,10 +22,15 @@ export function ActorProvider({ casquette, children }: { casquette: Casquette | 
   const name = casquette?.name ?? "";
   const logoUrl = casquette?.logoUrl ?? null;
   const value = useMemo(() => (key ? { key, name, logoUrl } : null), [key, name, logoUrl]);
-  // Le magasin des commentaires (brouillons, envois en attente, feuilles lues) est vidé au démontage de l'espace et au changement de
+  // Le magasin des commentaires (brouillons, envois en attente, feuilles lues) est vidé à l'entrée dans un espace, à son démontage et au changement de
   // casquette : une conversation lue au nom d'une page ne reste jamais sous un autre acteur, quel que soit le lien suivi (R9h, tour 1).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` seul déclenche
-  useEffect(() => () => postLive.clear(), [key]);
+  useEffect(() => {
+    // À l'entrée aussi (tour 2) : une navigation sans rechargement du Fil personnel vers une casquette ne garde jamais une feuille lue
+    // avec les droits personnels ni un brouillon qui partirait au nom de la page.
+    postLive.clear(true);
+    return () => postLive.clear();
+  }, [key]);
   return createElement(CasquetteContext.Provider, { value }, children);
 }
 

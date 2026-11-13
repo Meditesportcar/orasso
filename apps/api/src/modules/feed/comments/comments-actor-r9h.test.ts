@@ -4,7 +4,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { callAs } from "../../../../test/actor-call";
-import { resetDb, signUp, useClock } from "../../../../test/helpers";
+import { createStructure, resetDb, signUp, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { providerProfiles } from "../../../db/schema";
 import { dbPost, follow, person, type TestUser } from "./testkit";
@@ -96,5 +96,67 @@ describe("la conversation se lit avec les droits de la page", () => {
     expect(pseudos).not.toContain("Secret_66");
     const asPerson = await callAs(w.sofia, null, "GET", `/feed-posts/${w.post}/mention-suggestions?q=`);
     expect((asPerson.json as { pseudo: string }[]).map((s) => s.pseudo)).toContain("Secret_66");
+  });
+});
+
+describe("une page garde la main sur la conversation de SES publications (tour 2, décision du coordinateur)", () => {
+  async function structureWorld() {
+    const owner = await signUp("Orga_66", { twoFactor: true });
+    const s = await createStructure(owner.id);
+    const other = await createStructure(owner.id);
+    const secret = await person("Secret_66", { visibility: "private" });
+    const marie = await person("Marie_66");
+    const kenji = await person("Kenji_66");
+    const own = await dbPost(owner, {
+      persona: "organizer",
+      structureId: s.id,
+      createdAt: new Date("2026-11-12T11:00:00Z"),
+    });
+    const third = await dbPost(kenji, { createdAt: new Date("2026-11-12T11:00:00Z") });
+    return { owner, s, other, secret, marie, kenji, own, third, as: `s:${s.id}`, asOther: `s:${other.id}` };
+  }
+  const items = (json: unknown) => (json as { items: { id: string; text: string; canDelete: boolean }[] }).items;
+
+  it("sur sa propre publication : le commentaire d'un compte privé non suivi est lu, supprimable et « répondable » sous la page", async () => {
+    const w = await structureWorld();
+    const hidden = await say(w.secret, null, w.own, "Un avis privé");
+    expect(hidden.status, hidden.text).toBe(201);
+    await say(w.marie, null, w.own, "Un avis public");
+    const list = await callAs(w.owner, w.as, "GET", `/feed-posts/${w.own}/comments`);
+    expect(list.status, list.text).toBe(200);
+    expect(
+      items(list.json)
+        .map((i) => i.text)
+        .sort(),
+    ).toEqual(["Un avis privé", "Un avis public"]);
+    // Le compteur et la liste disent la même chose, et tout est supprimable par la page.
+    expect(items(list.json).every((i) => i.canDelete)).toBe(true);
+    // Ses réponses se lisent aussi, et on peut y répondre au nom de la page.
+    expect((await say(w.marie, null, w.own, "Réponse publique", { parentId: hidden.json.id })).status).toBe(404);
+    const reply = await say(w.owner, w.as, w.own, "Merci", { parentId: hidden.json.id });
+    expect(reply.status, reply.text).toBe(201);
+    const replies = await callAs(w.owner, w.as, "GET", `/feed-comments/${hidden.json.id}/replies`);
+    expect(replies.status, replies.text).toBe(200);
+    expect(items(replies.json).map((i) => i.text)).toEqual(["Merci"]);
+    // Supprimer le commentaire privé.
+    expect((await callAs(w.owner, null, "DELETE", `/feed-comments/${hidden.json.id}`)).status).toBe(204);
+  });
+
+  it("sous une autre page, sur la même publication : rien de privé, rien de supprimable", async () => {
+    const w = await structureWorld();
+    await say(w.secret, null, w.own, "Un avis privé");
+    await say(w.marie, null, w.own, "Un avis public");
+    const list = await callAs(w.owner, w.asOther, "GET", `/feed-posts/${w.own}/comments`);
+    expect(items(list.json).map((i) => i.text)).toEqual(["Un avis public"]);
+    expect(items(list.json).some((i) => i.canDelete)).toBe(false);
+  });
+
+  it("sur la publication d'un tiers : droits de la page sans lien, aucun commentaire privé, canDelete faux", async () => {
+    const w = await structureWorld();
+    await say(w.secret, null, w.third, "Un avis privé");
+    await say(w.marie, null, w.third, "Un avis public");
+    const list = await callAs(w.owner, w.as, "GET", `/feed-posts/${w.third}/comments`);
+    expect(items(list.json).map((i) => i.text)).toEqual(["Un avis public"]);
+    expect(items(list.json).some((i) => i.canDelete)).toBe(false);
   });
 });

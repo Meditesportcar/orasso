@@ -3,6 +3,7 @@
 // restent les seules à faire foi (droits, rôle déduit, plafond) ; l'écran les annonce sans les décider. Les anciennes règles
 // (`publishIssue`, `feedPostBody`, `eventsWithPlace`, dans `feedList.ts`) restent pour l'APK en ligne.
 import { BUSINESS_TIMEZONE } from "../enums";
+import { casquettesLabels } from "../labels/casquettes.fr";
 import { publicationErrors } from "../labels/feed.fr";
 import {
   attachPhraseOf,
@@ -216,7 +217,27 @@ export type PublishDraft = {
   forbidden?: EventsForbidden | null;
   /** Étiquette « Offre » (R9c) : comptée seulement pour la casquette pro. */
   offer?: OfferForm | null;
+  /**
+   * Le nom de l'auteur choisi quand il n'est plus disponible (casquette suspendue ou perdue pendant la rédaction) : l'envoi est bloqué
+   * avec un message, jamais de repli silencieux sur « Moi » (R9h, tour 2).
+   */
+  authorLost?: string | null;
 };
+
+/**
+ * L'auteur du brouillon : celui de la clé choisie, ou — s'il n'est plus proposé (suspension, perte de droits) — `lost` avec son nom (lu
+ * dans `names`, les noms vus à l'affichage précédent) et `author` = « Moi » **pour l'affichage seulement** : l'envoi reste bloqué
+ * jusqu'à un choix explicite (R9h, tour 2).
+ */
+export function resolvePublishAuthor<A extends { key: string }>(
+  authors: readonly A[],
+  authorKey: string,
+  names: ReadonlyMap<string, string> = new Map(),
+): { author: A; lost: string | null } {
+  const found = authors.find((a) => a.key === authorKey);
+  if (found) return { author: found, lost: null };
+  return { author: authors[0] as A, lost: names.get(authorKey) ?? casquettesLabels.authorLostUnknown };
+}
 
 /**
  * La ligne « ce qui manque » (jamais un bouton principal grisé sans elle), ou `null`. Dans cet ordre : préparation en cours ;
@@ -224,6 +245,7 @@ export type PublishDraft = {
  * décision de plaque de chaque photo ; légende trop longue ; offre (R9c : titre, dates) ; « Info importante » sans motif.
  */
 export function publishIssueR8(draft: PublishDraft, now: Date = displayNow()): string | null {
+  if (draft.authorLost) return casquettesLabels.postAuthorLost(draft.authorLost);
   if (draft.preparing) return L.preparing;
   if (draft.forbidden)
     return draft.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore;

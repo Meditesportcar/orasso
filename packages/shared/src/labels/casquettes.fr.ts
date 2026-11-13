@@ -39,6 +39,9 @@ export const casquettesLabels = {
   /** L'auteur d'une story perd ses droits pendant la rédaction : l'envoi est bloqué, on choisit (jamais de bascule silencieuse). */
   authorLost: (name: string) => `Tu n'as plus accès à ${name} : la story ne peut pas partir en son nom.`,
   authorLostChoice: "Publier en mon nom",
+  /** « Publier » : la casquette choisie n'est plus disponible pendant la rédaction (R9h, tour 2) ; jamais de repli silencieux sur « Moi ». */
+  postAuthorLost: (name: string) => `Tu n'as plus accès à ${name} : la publication ne peut pas partir en son nom.`,
+  authorLostUnknown: "cette page",
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",
