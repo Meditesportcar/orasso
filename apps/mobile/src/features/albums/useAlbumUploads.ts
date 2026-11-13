@@ -55,12 +55,13 @@ export function useAlbumUploads(albumId: string | null) {
     [update],
   );
 
-  useEffect(
-    () => () => {
+  // Le montage remet « arrêté » à faux (démontage puis remontage du mode strict).
+  useEffect(() => {
+    stopped.current = false;
+    return () => {
       stopped.current = true;
-    },
-    [],
-  );
+    };
+  }, []);
 
   /** Ouvre la photothèque (30 photos au plus par ouverture, jamais au-delà des 200 de l'album) et lance la détection des plaques. */
   const pick = useCallback(

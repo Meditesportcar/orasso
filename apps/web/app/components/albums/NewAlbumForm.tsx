@@ -95,13 +95,15 @@ export function NewAlbumForm({
   const [error, setError] = useState<string | null>(null);
   const retired = useRef<{ id: string }[]>([]);
   const stopped = useRef(false);
-  useEffect(
-    () => () => {
+  // Le montage remet « arrêté » à faux : le mode strict de React démonte puis remonte aussitôt (en développement), sans cela un envoi serait
+  // « interrompu » dès le départ.
+  useEffect(() => {
+    stopped.current = false;
+    return () => {
       stopped.current = true;
       for (const i of latest.current) URL.revokeObjectURL(i.preview);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const update = (fn: (list: Local[]) => Local[]) => {
     latest.current = fn(latest.current);
