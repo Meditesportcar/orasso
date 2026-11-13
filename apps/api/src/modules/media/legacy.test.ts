@@ -28,6 +28,7 @@ import {
   sendUpload,
 } from "../albums/albums-test-helpers";
 import { adoptLegacyGalleries } from "../albums/reprise";
+import { uploadIdOf } from "../albums/view";
 import { anonymizeMediaForDeletedAccount } from "./anonymize";
 import { contentView } from "./serializers";
 import { resetMediaViews } from "./service";
@@ -388,6 +389,45 @@ describe("tour 3 : finition", () => {
     expect((await app.request(`/api/files/${a.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(404);
   });
 
+  it("la trace de copie ne vaut que pour un envoi consommé de l'auteur de l'album : un clientId fourni par un autre ne masque rien", async () => {
+    const key = `media-contents/${crypto.randomUUID()}.webp`;
+    await storage.put(key, Buffer.from("photo de Léo"));
+    await db.insert(uploads).values({
+      key,
+      userId: leo.id,
+      purpose: "media_content",
+      width: 10,
+      height: 10,
+      bytes: 10,
+      consumedAt: new Date(),
+    });
+    const other = await mediaUser("Marc_Photo", "Marc Photo");
+    await accredit(other.user, other.mediaId, eventId);
+    const trace = (albumId: string, name: string) =>
+      db.insert(eventAlbumPhotos).values({
+        albumId,
+        storageKey: `private/albums/${albumId}/${name}.webp`,
+        position: 0,
+        plateState: "none",
+        clientId: uploadIdOf(key),
+      });
+    // La trace est posée en base (le schéma d'ajout n'accepte pas cet identifiant : il n'est pas un UUID de version 4).
+    const draft = await call(other.user, "POST", "/me/albums", { eventId });
+    await trace(draft.json.id, "a".repeat(32));
+    // Marc a posé la trace d'un envoi de Léo : l'image de Léo reste servie.
+    expect((await app.request(`/api/files/${key}`)).status).toBe(200);
+    // Une clé inventée (aucun envoi) : jamais masquée, et sans recherche sur les photos.
+    expect((await app.request(`/api/files/media-contents/${crypto.randomUUID()}.webp`)).status).toBe(404);
+    // La trace laissée par l'auteur lui-même (sa galerie publiée par l'ancien chemin) masque l'original.
+    const mine = await call(leo, "POST", "/me/albums", { eventId });
+    await db.delete(eventAlbumPhotos);
+    await trace(mine.json.id, "b".repeat(32));
+    expect((await app.request(`/api/files/${key}`)).status).toBe(404);
+    // Un envoi non consommé n'est jamais masqué, même avec une trace de son auteur.
+    await db.update(uploads).set({ consumedAt: null }).where(eq(uploads.key, key));
+    expect((await app.request(`/api/files/${key}`)).status).toBe(200);
+  });
+
   it("le rejeu exact du POST d'une galerie publiée avant le correctif (album repris, photos sans client_id) rend le contenu existant", async () => {
     const gallery = await legacyGallery({}, 2);
     await adoptLegacyGalleries(db);
@@ -405,18 +445,20 @@ describe("tour 3 : finition", () => {
     expect((await orgaList()).map((c) => c.id)).toEqual([album.id]);
     await db.execute(sql`update applications set status = 'withdrawn' where media_profile_id = ${leoMedia}`);
     expect(await orgaList()).toHaveLength(0);
+    // L'album du titulaire reste listé (titre, vues) mais sans photos : l'APK en ligne charge les images sans jeton (401 ou 404 sinon).
     const mine = await call(leo, "GET", "/me/media-contents");
     expect(mine.json).toHaveLength(1);
-    const url = mine.json[0].photos[0].url as string;
-    expect(url).toMatch(/^\/api\/albums\//);
-    expect((await app.request(url, { headers: { cookie: leo.cookie } })).status).toBe(200);
-    // Un album repris, invisible : même règle pour ses photos en clé publique (la route publique répondrait 404).
+    expect(mine.json[0]).toMatchObject({ id: album.id, kind: "gallery", photos: [] });
+    // Un album repris, invisible : même règle (la clé publique d'une ancienne galerie n'est plus servie non plus).
     const gallery = await legacyGallery({}, 1);
     await adoptLegacyGalleries(db);
     const again = await call(leo, "GET", "/me/media-contents");
-    const reprise = again.json.find((c: { id: string }) => c.id === gallery.id);
-    expect(reprise.photos[0].url).toMatch(/^\/api\/albums\//);
-    expect((await app.request(reprise.photos[0].url, { headers: { cookie: leo.cookie } })).status).toBe(200);
+    expect(again.json.find((c: { id: string }) => c.id === gallery.id)).toMatchObject({ photos: [] });
+    expect((await app.request(`/api/files/${gallery.photoKeys[0]}`)).status).toBe(404);
+    // Visible de nouveau : les photos reviennent.
+    await db.execute(sql`update applications set status = 'accepted' where media_profile_id = ${leoMedia}`);
+    const back = await call(leo, "GET", "/me/media-contents");
+    expect(back.json.find((c: { id: string }) => c.id === gallery.id).photos).toHaveLength(1);
   });
 });
 

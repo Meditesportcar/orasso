@@ -100,14 +100,17 @@ export async function legacyFileState(key: string, at: Date): Promise<"visible" 
     .limit(1);
   if (row) return row.visible ? "visible" : "hidden";
   // Un envoi `media_content` **consommé puis copié** sous un album (publication par l'ancien chemin) n'est plus servi : l'original public
-  // devait être effacé ; s'il est encore là (effacement en échec), la base le dit — la copie porte son identifiant déterministe.
-  const [copied] = await db
-    .select({ id: eventAlbumPhotos.id })
-    .from(eventAlbumPhotos)
-    .where(eq(eventAlbumPhotos.clientId, uploadIdOf(key)))
-    .limit(1);
-  if (copied) return "hidden";
-  return "unknown";
+  // devait être effacé ; s'il est encore là (effacement en échec), la base le dit — la copie porte son identifiant déterministe. La
+  // recherche part de l'envoi (clé primaire de `uploads` : une clé inventée s'arrête là), n'en tient compte que s'il est consommé et de
+  // la même personne que l'auteur de l'album (un `clientId` fourni par un autre ne masque pas l'image d'un tiers), puis suit l'index
+  // partiel sur `client_id`.
+  const traced = await db.execute<{ id: string }>(sql`
+    select p.id from uploads u
+    join event_album_photos p on p.client_id = ${uploadIdOf(key)}::uuid
+    join event_albums a on a.id = p.album_id and a.author_id = u.user_id
+    where u.key = ${key} and u.purpose = 'media_content' and u.consumed_at is not null
+    limit 1`);
+  return traced.rows.length ? "hidden" : "unknown";
 }
 
 /** La base de toute lecture d'album : l'album, son événement, son média. */

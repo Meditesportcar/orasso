@@ -105,6 +105,8 @@ export const eventAlbumPhotos = pgTable(
     uniqueIndex("event_album_photos_position_key").on(t.albumId, t.position).where(sql`${t.deletedAt} is null`),
     uniqueIndex("event_album_photos_client_key").on(t.albumId, t.clientId),
     index("event_album_photos_album_idx").on(t.albumId),
+    // Trace de la copie d'un envoi (galerie publiée par l'ancien chemin) : `/api/files` la cherche par `client_id` seul, photos retirées comprises.
+    index("event_album_photos_client_trace_idx").on(t.clientId).where(sql`${t.clientId} is not null`),
     // Floutée ou gardée telle quelle : les cadres sont conservés ; aucune plaque ou photo reprise : pas de cadre.
     check(
       "event_album_photos_rects_check",

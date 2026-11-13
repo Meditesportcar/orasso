@@ -1,5 +1,5 @@
 {
-  "id": "50e81fd2-9d03-4a45-a1a6-f04e71938b2e",
+  "id": "cbc8269c-6982-4b0b-acb3-7cf3b911c591",
   "prevId": "304257da-c20a-456c-a8dd-06ea3a86af59",
   "version": "7",
   "dialect": "postgresql",
@@ -978,6 +978,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_album_photos_client_trace_idx": {
+          "name": "event_album_photos_client_trace_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"event_album_photos\".\"client_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -34,7 +34,6 @@ import {
   type AlbumPhotoRow,
   albumBase,
   albumPhotoKey,
-  albumPhotoUrl,
   albumPublicPhotoUrl,
   albumVisibleSql,
   isPrivateAlbumKey,
@@ -43,7 +42,7 @@ import {
 } from "./view";
 
 /** Un album en `MediaContentView`, avec la forme d'avant au champ près. */
-function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[], protectedUrls = false): MediaContentView {
+function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[]): MediaContentView {
   // `contentView` fait le gros du travail ; seules les photos changent d'adresse quand leur clé est privée.
   const row: MediaContentRow = {
     id: a.id,
@@ -66,18 +65,17 @@ function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[], protectedUr
     photos: photos
       .slice(0, MEDIA_GALLERY_MAX_PHOTOS)
       .map((p) =>
-        protectedUrls
-          ? { key: isPrivateAlbumKey(p.storageKey) ? p.id : p.storageKey, url: albumPhotoUrl(a.id, p.storageKey) }
-          : isPrivateAlbumKey(p.storageKey)
-            ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
-            : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
+        isPrivateAlbumKey(p.storageKey)
+          ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
+          : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
       ),
   };
 }
 
 /**
- * `ownerOf` : la liste du titulaire (« Mes contenus ») : un album devenu invisible (accréditation retombée…) reste listé, avec des adresses de
- * photos qu'il peut lire (route protégée), jamais une adresse publique qui répondrait 404.
+ * `ownerOf` : la liste du titulaire (« Mes contenus ») : un album devenu invisible (accréditation retombée…) reste listé (titre, vues) mais
+ * **sans photos** (`photos: []`) : l'APK en ligne charge les images sans jeton, une adresse protégée y donnerait 401 et une adresse publique
+ * 404. L'appli nouvelle (R9e-2) charge les photos protégées avec le mécanisme authentifié de `CrewPhotoImage`.
  */
 async function viewsOf(rows: AlbumJoin[], ownerOf = false): Promise<MediaContentView[]> {
   const ids = rows.map((r) => r.a.id);
@@ -87,7 +85,7 @@ async function viewsOf(rows: AlbumJoin[], ownerOf = false): Promise<MediaContent
     const seen = await albumBase().where(and(inArray(eventAlbums.id, ids), albumVisibleSql(now())));
     for (const r of seen) visible.add(r.a.id);
   }
-  return rows.map((r) => legacyView(r, photos.get(r.a.id) ?? [], ownerOf && !visible.has(r.a.id)));
+  return rows.map((r) => legacyView(r, ownerOf && !visible.has(r.a.id) ? [] : (photos.get(r.a.id) ?? [])));
 }
 
 /** Les liens d'un côté, les albums de l'autre : l'album mis en avant (officiel) d'abord, puis les plus récents. */
@@ -162,9 +160,12 @@ export const albumsLegacy = {
     return viewsOf(rows);
   },
 
-  /** `GET /events/:id/accreditations` (organisation) : les albums publiés de l'événement, sans filtre d'accréditation (comme les contenus d'avant). */
+  /**
+   * `GET /events/:id/accreditations` (organisation) : les albums **visibles** de l'événement (publiés, média accrédité et en règle, événement
+   * publié et pas sur invitation : règle V6). Un album devenu invisible n'est plus proposé à « Mettre en avant » ; sur un événement
+   * `invite_only`, la page presse n'affiche aucun album.
+   */
   async forOrganizer(eventId: string): Promise<MediaContentView[]> {
-    // Seulement les albums **visibles** : un album devenu invisible n'est plus proposé à « Mettre en avant ».
     const rows = await albumBase().where(and(eq(eventAlbums.eventId, eventId), albumVisibleSql(now())));
     return viewsOf(rows);
   },

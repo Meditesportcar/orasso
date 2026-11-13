@@ -48,6 +48,7 @@ ALTER TABLE "event_albums" ADD CONSTRAINT "event_albums_legacy_media_content_id_
 CREATE UNIQUE INDEX "event_album_photos_position_key" ON "event_album_photos" USING btree ("album_id","position") WHERE "event_album_photos"."deleted_at" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "event_album_photos_client_key" ON "event_album_photos" USING btree ("album_id","client_id");--> statement-breakpoint
 CREATE INDEX "event_album_photos_album_idx" ON "event_album_photos" USING btree ("album_id");--> statement-breakpoint
+CREATE INDEX "event_album_photos_client_trace_idx" ON "event_album_photos" USING btree ("client_id") WHERE "event_album_photos"."client_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "event_albums_official_key" ON "event_albums" USING btree ("event_id") WHERE "event_albums"."official_at" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "event_albums_legacy_key" ON "event_albums" USING btree ("legacy_media_content_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "event_albums_client_key" ON "event_albums" USING btree ("media_profile_id","client_id");--> statement-breakpoint
