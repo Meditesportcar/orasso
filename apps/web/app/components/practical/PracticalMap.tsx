@@ -167,6 +167,8 @@ export function PracticalMap({
         el.className = "pq-grp";
         el.setAttribute("aria-label", L.groupAria(g.items.length, stacked));
         el.dataset.testid = "practical-group";
+        // Les lieux de la pastille (lus par la recette : chaque ligne de la liste est une épingle ou dans une pastille).
+        el.dataset.titles = JSON.stringify(g.items.map((p) => p.title));
         el.textContent = String(g.items.length);
         el.addEventListener("click", (e) => {
           e.stopPropagation();

@@ -134,6 +134,8 @@ test("1280 px : hors du chargé, le bouton, un seul appel (zone arrondie au 0,1�
   const button = page.getByTestId("practical-search-here");
   await expect(button).toBeVisible({ timeout: 10_000 });
   await expect(button).toContainText("Rechercher dans cette zone");
+  // La colonne de la liste porte aussi le bouton (ou la phrase vide renvoie à lui) : un appui, un seul appel.
+  await expect(page.getByTestId("practical-search-here-list")).toBeVisible();
   expect(zoneCalls()).toHaveLength(0);
   await shot(page, "site-deplacee-beton-1280");
   await button.click();

@@ -344,7 +344,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 70%;
+  max-width: calc(100% - 70px);
   margin: 0;
   padding: 6px 10px;
   border-radius: var(--radius-md);
@@ -494,4 +494,17 @@
     width: 380px;
     border-radius: var(--radius-lg);
   }
+}
+
+.pq-zonewrap {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.pq-zonenote {
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
 }

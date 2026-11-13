@@ -6,14 +6,20 @@ import {
   countByKind,
   coverContains,
   departmentsInZone,
+  departmentsInZoneInfo,
   elide,
   matchesSearch,
   mergeStore,
   placesInZone,
+  placesInZoneInfo,
   roundZoneOutward,
   unloadedBands,
   viewCovered,
+  zoneAround,
+  zoneContains,
   zoneForRequest,
+  zoneInscribedKm,
+  zoneRequestTooBig,
   zoneSizeKm,
   zoneTooBig,
 } from "./practicalZone";
@@ -39,33 +45,52 @@ describe("arrondi et taille", () => {
       east: 0.1,
     });
   });
-  it("trop grande au-delà de 60 km une fois arrondie", () => {
-    expect(zoneTooBig({ south: 42.4, west: 2.9, north: 42.9, east: 3.4 })).toBe(false);
-    expect(zoneTooBig({ south: 42.395, west: 2.9, north: 42.895, east: 3.4 })).toBe(true);
-    expect(zoneTooBig({ south: 42.5, west: 2.0, north: 42.6, east: 3.0 })).toBe(true);
-    const size = zoneSizeKm({ south: 42.4, west: 2.9, north: 42.9, east: 3.4 });
-    expect(size.height).toBeLessThanOrEqual(60);
-    expect(size.width).toBeLessThanOrEqual(60);
+  it("trop grande : la vue AVANT arrondi dépasse 60 km, quel que soit son calage sur la grille", () => {
+    for (let i = 0; i < 40; i++) {
+      const centre = { lat: 42.5 + i * 0.0137, lng: 2.9 + i * 0.0291 };
+      expect(zoneTooBig(zoneAround(centre, 59.9))).toBe(false);
+      expect(zoneTooBig(zoneAround(centre, 60.1))).toBe(true);
+    }
+    expect(zoneTooBig(zoneAround({ lat: 42.5, lng: 3 }, 8))).toBe(false);
+  });
+  it("côté serveur : la zone arrondie est acceptée jusqu'à maxCells + 3 cases par axe, refusée au-delà", () => {
+    // 60 km au plus avant l'arrondi : toujours accepté, quel que soit le calage.
+    for (let i = 0; i < 60; i++) {
+      const centre = { lat: 42.4 + i * 0.0113, lng: 2.8 + i * 0.0173 };
+      expect(zoneRequestTooBig(roundZoneOutward(zoneAround(centre, 59.9)))).toBe(false);
+    }
+    expect(zoneRequestTooBig({ south: 42.0, west: 2.9, north: 42.8, east: 3.4 })).toBe(false);
+    expect(zoneRequestTooBig({ south: 41.9, west: 2.9, north: 42.8, east: 3.4 })).toBe(true);
+    expect(zoneRequestTooBig({ south: 42.5, west: 2.0, north: 42.6, east: 3.2 })).toBe(true);
   });
 });
 
 describe("zone demandée", () => {
-  it("élargit d'une demi-zone de chaque côté sans dépasser 60 km, jamais refusée par l'API", () => {
-    const view = { south: 42.52, west: 2.99, north: 42.58, east: 3.07 };
+  it("contient toujours la vue, élargie d'une demi-zone, sans jamais être refusée par l'API (vues de 60 km au plus, tous calages)", () => {
+    for (let i = 0; i < 80; i++) {
+      const centre = { lat: 42.3 + i * 0.0091, lng: 2.7 + i * 0.0213 };
+      for (const km of [4, 8, 20, 40, 59.9]) {
+        const view = zoneAround(centre, km, km * 1.1 > 59.9 ? 59.9 : km * 1.1);
+        const asked = zoneForRequest(view);
+        expect(zoneRequestTooBig(asked), `${km} km en ${i}`).toBe(false);
+        for (const lat of [view.south, view.north])
+          for (const lng of [view.west, view.east]) expect(zoneContains(asked, { lat, lng })).toBe(true);
+      }
+    }
+    const view = zoneAround({ lat: 42.55, lng: 3.03 }, 8);
     const asked = zoneForRequest(view);
-    expect(zoneTooBig(asked)).toBe(false);
-    expect(asked.south).toBeLessThanOrEqual(42.5);
-    expect(asked.north).toBeGreaterThanOrEqual(42.6);
-    expect(asked.west).toBeLessThan(2.99);
-    expect(asked.east).toBeGreaterThan(3.07);
-    const wide = zoneForRequest({ south: 42.4, west: 2.9, north: 42.9, east: 3.4 });
-    expect(zoneTooBig(wide)).toBe(false);
-    // La latitude est déjà à 5 cases (le maximum à 60 km) : elle ne grandit pas ; la longitude gagne une case de chaque côté.
-    expect(wide).toEqual({ south: 42.4, west: 2.8, north: 42.9, east: 3.5 });
+    expect(asked.south).toBeLessThan(view.south);
+    expect(asked.north - asked.south).toBeGreaterThan((view.north - view.south) * 1.5);
   });
-  it("tous les bords sont des multiples de 0,1°", () => {
-    const a = zoneForRequest({ south: 42.5234, west: 2.9123, north: 42.5811, east: 3.0467 });
-    for (const v of Object.values(a)) expect(Math.abs(v * 10 - Math.round(v * 10))).toBeLessThan(1e-9);
+  it("vie privée : cent positions de la même case donnent exactement la même zone, aux bords multiples de 0,1°", () => {
+    const first = zoneForRequest(zoneAround({ lat: 42.7001, lng: 2.9001 }, 8, 9));
+    for (let i = 0; i < 100; i++) {
+      const p = { lat: 42.7 + ((i * 37) % 100) / 1000.1, lng: 2.9 + ((i * 61) % 100) / 1000.1 };
+      expect(zoneForRequest(zoneAround(p, 8, 9)), `${p.lat},${p.lng}`).toEqual(first);
+    }
+    for (const v of Object.values(first)) expect(Math.abs(v * 10 - Math.round(v * 10))).toBeLessThan(1e-9);
+    // Une autre case donne une autre zone (la case reste connue, rien de plus fin).
+    expect(zoneForRequest(zoneAround({ lat: 42.81, lng: 2.9 }, 8, 9))).not.toEqual(first);
   });
 });
 
@@ -159,5 +184,31 @@ describe("vue de la carte", () => {
     const shown = viewZone(fit, 352, 400);
     expect(zoneContains(shown, { lat: 42.5, lng: 3.0 })).toBe(true);
     expect(zoneContains(shown, { lat: 42.55, lng: 3.08 })).toBe(true);
+  });
+});
+
+describe("coupes signalées", () => {
+  it("plus de douze départements : coupe signalée, jamais en moins en silence", () => {
+    const wide = { south: 44.0, west: 0.0, north: 50.0, east: 6.0 };
+    const info = departmentsInZoneInfo(wide);
+    expect(info.codes).toHaveLength(12);
+    expect(info.cut).toBe(true);
+    expect(departmentsInZoneInfo({ south: 42.4, west: 2.9, north: 42.6, east: 3.1 }).cut).toBe(false);
+  });
+  it("250 lieux dans la zone : coupée à 200, rayon couvert borné, jamais toute la zone", () => {
+    const z = { south: 48.5, west: 2.0, north: 49.0, east: 2.6 };
+    const places = Array.from({ length: 250 }, (_, i) => ({
+      id: `p${i}`,
+      lat: 48.75 + ((i % 25) - 12) * 0.008 + Math.floor(i / 25) * 0.001,
+      lng: 2.3 + (Math.floor(i / 25) - 5) * 0.012,
+    }));
+    const info = placesInZoneInfo(places, z);
+    expect(info.places).toHaveLength(200);
+    expect(info.cut).toBe(true);
+    expect(info.coveredKm).toBeGreaterThan(0);
+    expect(info.coveredKm).toBeLessThanOrEqual(zoneInscribedKm(z));
+    const cover = [{ t: "disk" as const, lat: 48.75, lng: 2.3, km: info.coveredKm }];
+    expect(viewCovered(cover, { south: 48.55, west: 2.05, north: 48.95, east: 2.55 })).toBe(false);
+    expect(placesInZoneInfo(places.slice(0, 100), z).cut).toBe(false);
   });
 });

@@ -81,6 +81,13 @@ export type PracticalData = {
   places: PracticalPlace[];
   partial: boolean;
   loading?: true;
+  /**
+   * Petit lot de fin F (mode zone seulement, facultatifs : l'APK en ligne les ignore) : la réponse est **coupée** (plus de 200 lieux dans la
+   * zone, ou plus de 12 départements). `coveredKm` : le rayon, autour du centre de la zone, dont tous les lieux sont servis (0 : rien de sûr).
+   * L'écran ne marque comme chargé que ce disque, jamais toute la zone.
+   */
+  truncated?: true;
+  coveredKm?: number;
   attribution: { wash: string; fuel: string };
 };
 

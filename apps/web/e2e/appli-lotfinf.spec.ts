@@ -158,6 +158,8 @@ test("carte : regroupement, feuille « 2 lieux ici », filtre local sans réseau
   // séparer ; la pastille « 2 » restante est la paire à la même adresse, qui ouvre la feuille.
   const groups = page.getByTestId("practical-group");
   await expect(groups.first()).toBeVisible({ timeout: 15_000 });
+  // La plaque du compteur tient sur une ligne à 384 px (maquette).
+  expect((await page.getByTestId("practical-count").boundingBox())?.height ?? 99).toBeLessThan(26);
   await shot(page, "appli-ouverture-carte-beton-384");
   const title = page.getByTestId("practical-group-title");
   for (let i = 0; i < 5 && !(await title.isVisible().catch(() => false)); i++) {
@@ -195,6 +197,14 @@ test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et �
   await expect(page.getByTestId("practical-hint")).toContainText(/Autour (de|du|des|d').+, la zone de la carte\./);
   // Jamais de rechargement surprise : rien n'est parti avant l'appui.
   expect(zoneCalls()).toHaveLength(0);
+  // Le bouton est asphalte dans les deux thèmes (jeton `bar`), jamais crème.
+  const lum = await button.evaluate((el) => {
+    const m =
+      /rgba?((d+), (d+), (d+)/.exec(getComputedStyle(el.parentElement ?? el).backgroundColor) ??
+      /rgba?((d+), (d+), (d+)/.exec(getComputedStyle(el).backgroundColor);
+    return m ? (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3 : 255;
+  });
+  expect(lum).toBeLessThan(60);
   await shot(page, "appli-deplacee-beton-384");
   await button.click();
   await expect(button).toHaveCount(0, { timeout: 30_000 });
@@ -325,13 +335,21 @@ test("hors ligne : le filtre local marche, le bouton dit « Réessayer » avec l
   await expect(page.getByText("Hors ligne : voici ce que ton téléphone a gardé.")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("practical-retry")).toBeVisible();
   await expect(page.getByTestId("practical-search-here")).toContainText("Réessayer");
+  await expect(page.getByTestId("practical-offline-note")).toContainText(
+    "Il faut du réseau pour chercher dans cette zone.",
+  );
   await shot(page, "appli-hors-ligne-beton-384");
   // Aucune boucle : rien ne repart seul.
   const n = zoneCalls().length;
   await page.waitForTimeout(4_000);
   expect(zoneCalls().length).toBe(n);
   await ctx.setOffline(false);
-  await page.getByTestId("practical-retry").click();
+  // « Réessayer » après un déplacement : la zone regardée, pas l'ancienne (un seul appui).
+  await panSouth(page, 8);
+  await expect(page.getByTestId("practical-retry")).toHaveCount(0);
+  await expect(page.getByTestId("practical-search-here")).toContainText("Rechercher dans cette zone");
+  await page.getByTestId("practical-search-here").click();
+  await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId("practical-retry")).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 30_000 });
   await ctx.close();

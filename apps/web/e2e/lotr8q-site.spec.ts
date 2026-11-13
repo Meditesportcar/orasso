@@ -202,6 +202,8 @@ for (const width of [390, 1280]) {
     await expect(list).toBeVisible();
     const rows = list.getByTestId(/practical-row-\d+$/);
     const all = await rows.count();
+    const rowTitles = (await rows.allInnerTexts()).map((t) => t.split("
+")[0]?.trim() ?? "");
     expect(all).toBeGreaterThan(2);
     const kms = (await rows.allInnerTexts()).map((t) =>
       Number((/(\d+(?:,\d)?)\skm/.exec(t) ?? [])[1]?.replace(",", ".")),
@@ -224,9 +226,19 @@ for (const width of [390, 1280]) {
     await expect(page.getByTestId("practical-map-view")).toBeVisible();
     const pins = page.locator('[data-testid^="practical-pin-"]');
     await expect(pins.first()).toBeVisible({ timeout: 30_000 });
-    // Les épingles proches se regroupent (pastille avec leur nombre) : chaque lieu de la zone est une épingle ou compté dans une pastille.
-    const grouped = (await page.getByTestId("practical-group").allInnerTexts()).reduce((n, t) => n + Number(t), 0);
-    expect((await pins.count()) + grouped).toBeGreaterThanOrEqual(all);
+    // Petit lot de fin F : chaque ligne de la liste est une épingle, ou est dans une pastille (jamais un lieu perdu, jamais deux lignes pour une seule
+    // épingle : le titre est consommé une fois).
+    const bag = [
+      ...(await pins.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))),
+      ...(await page
+        .getByTestId("practical-group")
+        .evaluateAll((els) => els.flatMap((e) => JSON.parse((e as HTMLElement).dataset.titles ?? "[]") as string[]))),
+    ];
+    for (const title of rowTitles) {
+      const at = bag.indexOf(title);
+      expect(at, `« ${title} » : ni épingle ni pastille`).toBeGreaterThanOrEqual(0);
+      bag.splice(at, 1);
+    }
     await expect(page.getByTestId("practical-selected")).toContainText(/ · \d+,\d\skm/);
     await shot(page, `site-carte-${width}`);
     const before = await page.getByTestId("practical-selected").innerText();

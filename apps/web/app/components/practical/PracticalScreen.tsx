@@ -241,24 +241,32 @@ export function PracticalScreen() {
     if (read.failed) read.retry();
   };
 
-  const zoneButton =
+  const zoneBtn = (testId: string) =>
     needsSearch || zs.loading ? (
-      <button
-        type="button"
-        className="pq-zonebtn o-t-meta"
-        disabled={zs.loading}
-        aria-busy={zs.loading}
-        onClick={() => (zs.failed ? zone.retry() : zone.searchHere())}
-        data-testid="practical-search-here"
-      >
-        {zs.loading ? (
-          <OLoader size={18} tone="dark" label={null} />
-        ) : (
-          <Icon name={zs.failed ? "undo" : "search"} size={16} />
-        )}
-        <span>{zs.loading ? L.loadingZone : zs.failed ? L.retry : L.searchHere}</span>
-      </button>
+      <div className="pq-zonewrap">
+        {zs.failed && zs.offline ? (
+          <p className="pq-zonenote o-t-caption" data-testid="practical-offline-note">
+            {L.searchHereOffline}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="pq-zonebtn o-t-meta"
+          disabled={zs.loading}
+          aria-busy={zs.loading}
+          onClick={() => (zs.failed ? zone.retry() : zone.searchHere())}
+          data-testid={testId}
+        >
+          {zs.loading ? (
+            <OLoader size={18} tone="dark" label={null} />
+          ) : (
+            <Icon name={zs.failed ? "undo" : "search"} size={16} />
+          )}
+          <span>{zs.loading ? L.loadingZone : zs.failed ? L.retry : L.searchHere}</span>
+        </button>
+      </div>
     ) : null;
+  const zoneButton = zoneBtn("practical-search-here");
 
   const mapNode =
     initial.current && (data || zs.places.size > 0) ? (
@@ -278,7 +286,7 @@ export function PracticalScreen() {
               resume.current = { ...zoneCenter(z), zoom };
             }}
           />
-          <p className="pq-plaque o-t-meta" data-testid="practical-count">
+          <p className="pq-plaque o-t-caption" data-testid="practical-count">
             <Icon name="layers" size={14} />
             <span>{countLine}</span>
           </p>
@@ -328,7 +336,7 @@ export function PracticalScreen() {
         <Icon name="layers" size={14} />
         <span>{countLine}</span>
       </p>
-      {wide ? null : zoneButton}
+      {wide ? zoneBtn("practical-search-here-list") : zoneButton}
       {list.length === 0 ? (
         <p className="o-t-caption s-muted" data-testid="practical-empty">
           {tooWide

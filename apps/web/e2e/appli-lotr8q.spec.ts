@@ -252,6 +252,9 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("practical-row-0")).toContainText(/Station-service|Lavage/);
   await shot(page, "appli-liste-sable-384");
   const all = await list.getByTestId(/practical-row-\d+$/).count();
+  const rowTitles = (await list.getByTestId(/practical-row-\d+$/).allInnerTexts()).map(
+    (t) => t.split("\n")[0]?.trim() ?? "",
+  );
   expect(all).toBeGreaterThan(2);
   // Triée par distance : les km ne décroissent jamais.
   const kms = (await list.getByTestId(/practical-row-\d+$/).allInnerTexts()).map((t) =>
@@ -272,10 +275,19 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("practical-map-view")).toBeVisible();
   const pins = page.locator('[data-testid^="practical-pin-"]');
   await expect(pins.first()).toBeVisible({ timeout: 30_000 });
-  // Petit lot de fin F : les épingles proches se regroupent (pastille avec leur nombre) ; chaque lieu de la zone est une épingle ou compté
-  // dans une pastille (jamais un lieu perdu).
-  const grouped = (await page.getByTestId("practical-group").allInnerTexts()).reduce((n, t) => n + Number(t), 0);
-  expect((await pins.count()) + grouped).toBeGreaterThanOrEqual(all);
+  // Petit lot de fin F : chaque ligne de la liste est une épingle, ou est dans une pastille (jamais un lieu perdu, jamais deux lignes pour une seule
+  // épingle : le titre est consommé une fois).
+  const bag = [
+    ...(await pins.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))),
+    ...(await page
+      .getByTestId("practical-group")
+      .evaluateAll((els) => els.flatMap((e) => JSON.parse((e as HTMLElement).dataset.titles ?? "[]") as string[]))),
+  ];
+  for (const title of rowTitles) {
+    const at = bag.indexOf(title);
+    expect(at, `« ${title} » : ni épingle ni pastille`).toBeGreaterThanOrEqual(0);
+    bag.splice(at, 1);
+  }
   await expect(page.getByTestId("practical-selected")).toBeVisible();
   await expect(page.getByTestId("practical-selected")).toContainText(/ · \d+,\d\skm/);
   await shot(page, "appli-carte-sable-384");

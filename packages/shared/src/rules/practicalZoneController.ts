@@ -11,6 +11,8 @@ import {
   type PracticalZone,
   viewCovered,
   type ZoneCover,
+  zoneCenter,
+  zoneContains,
   zoneForRequest,
   zoneTooBig,
 } from "./practicalZone";
@@ -23,6 +25,8 @@ export type ZoneState = {
   view: PracticalZone | null;
   /** Une lecture est en vol, ou une relecture de la même zone est attendue (« Recherche… », le bouton est occupé). */
   loading: boolean;
+  /** La zone demandée par la dernière recherche (carré de 0,1°) : le bouton redevient actif quand la vue en sort. */
+  asked: PracticalZone | null;
   /** « Réessayer » : la lecture a échoué, ou ses relectures sont épuisées. */
   failed: boolean;
   /** Le réseau n'a pas répondu (hors ligne) : « Hors ligne : voici ce que ton téléphone a gardé. » */
@@ -48,7 +52,15 @@ export const zoneNeedsSearch = (s: Pick<ZoneState, "view" | "cover">): boolean =
 export const zoneIsTooWide = (s: Pick<ZoneState, "view">): boolean => s.view !== null && zoneTooBig(s.view);
 
 export function createPracticalZone(deps: ZoneDeps) {
-  let state: ZoneState = { places: new Map(), cover: [], view: null, loading: false, failed: false, offline: false };
+  let state: ZoneState = {
+    places: new Map(),
+    cover: [],
+    view: null,
+    asked: null,
+    loading: false,
+    failed: false,
+    offline: false,
+  };
   const listeners = new Set<() => void>();
   const seen = new WeakSet<object>();
   let asked: PracticalZone | null = null;
@@ -81,7 +93,14 @@ export function createPracticalZone(deps: ZoneDeps) {
       const places = mergeStore(state.places, data.places);
       if (!data.partial && !data.loading) {
         // Lecture complète : la zone demandée est chargée ; les gestes suivants dedans restent sur le téléphone.
-        set({ places, cover: [...state.cover, { t: "rect", zone }], loading: false, failed: false, offline: false });
+        // Une réponse coupée (plus de 200 lieux, ou plus de 12 départements) ne couvre que le disque dont tous les lieux sont servis, jamais
+        // toute la zone : le bouton revient au-delà.
+        const covered: ZoneCover[] = data.truncated
+          ? (data.coveredKm ?? 0) > 0
+            ? [{ t: "disk", ...zoneCenter(zone), km: data.coveredKm as number }]
+            : []
+          : [{ t: "rect", zone }];
+        set({ places, cover: [...state.cover, ...covered], loading: false, failed: false, offline: false });
         cycle.settled("complete");
         return;
       }
@@ -128,6 +147,19 @@ export function createPracticalZone(deps: ZoneDeps) {
     setView(view: PracticalZone) {
       const v = state.view;
       if (v && v.south === view.south && v.west === view.west && v.north === view.north && v.east === view.east) return;
+      const a = asked;
+      const inside =
+        a !== null &&
+        [view.south, view.north].every((lat) => [view.west, view.east].every((lng) => zoneContains(a, { lat, lng })));
+      // La vue sort de la zone demandée : une relecture attendue de l'ancienne zone est abandonnée (le bouton redevient actif pour la
+      // nouvelle) et un échec ne se rejoue pas sur l'ancienne zone (« Réessayer » : un seul appui pour la zone regardée).
+      if (!inside && (state.failed || (state.loading && !reading))) {
+        generation += 1;
+        cycle.manual();
+        asked = null;
+        set({ view, asked: null, loading: false, failed: false, offline: false });
+        return;
+      }
       set({ view });
     },
     /** Appui sur « Rechercher dans cette zone » (ou ville cherchée hors du chargé). Sans effet si la zone est trop grande ou déjà chargée. */
@@ -135,6 +167,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       const v = state.view;
       if (!v || reading || zoneTooBig(v) || viewCovered(state.cover, v)) return false;
       asked = zoneForRequest(v);
+      state = { ...state, asked };
       generation += 1;
       cycle.manual();
       void load();
@@ -168,7 +201,15 @@ export function createPracticalZone(deps: ZoneDeps) {
       asked = null;
       reading = false;
       cycle.reset();
-      state = { places: new Map(), cover: [], view: state.view, loading: false, failed: false, offline: false };
+      state = {
+        places: new Map(),
+        cover: [],
+        view: state.view,
+        asked: null,
+        loading: false,
+        failed: false,
+        offline: false,
+      };
       for (const l of listeners) l();
     },
   };

@@ -81,19 +81,28 @@ describe("POST /practical : near zone", () => {
     expect((res.json.places as { name: string }[]).map((p) => p.name)).toContain("La Laveuse");
   });
 
-  it("refuse une zone de plus de 60 km de côté (une fois arrondie), sans appeler aucune source", async () => {
+  it("refuse une zone de plus de 60 km de côté plus l'arrondi, accepte une vue de 60 km au plus, sans appeler de source pour un refus", async () => {
     const stub = practicalSources(data);
     const u = await signUp("Fan_Grande");
     for (const body of [
-      { near: "zone", south: 42.0, west: 2.5, north: 42.7, east: 3.0 },
-      { near: "zone", south: 42.5, west: 2.0, north: 42.6, east: 3.0 },
-      // 55 km de côté avant l arrondi (49 km à peine), 66 km après : 6 cases de 0,1°.
-      { near: "zone", south: 42.395, west: 2.9, north: 42.895, east: 3.0 },
+      // Plus de 8 cases de 0,1° en latitude (60 km plus l'arrondi), ou plus de 10 en longitude.
+      { near: "zone", south: 41.9, west: 2.5, north: 42.8, east: 3.0 },
+      { near: "zone", south: 42.5, west: 2.0, north: 42.6, east: 3.2 },
+      { near: "zone", south: 42.0, west: 2.0, north: 43.5, east: 3.5 },
     ]) {
       const res = await call(u, "POST", "/practical", body);
       expect(res.status, JSON.stringify(body)).toBe(400);
     }
     expect(stub.calls).toHaveLength(0);
+    // Une vue de 59,9 km (arrondie : 8 cases) est acceptée, quel que soit son calage.
+    const ok = await call(u, "POST", "/practical", {
+      near: "zone",
+      south: 42.005,
+      west: 2.55,
+      north: 42.543,
+      east: 3.1,
+    });
+    expect(ok.status).toBe(200);
   });
 
   it("refuse une zone mal formée, hors de France ou avec des champs en trop", async () => {
@@ -142,6 +151,26 @@ describe("POST /practical : near zone", () => {
     const u = await signUp("Fan_Journal");
     await call(u, "POST", "/practical", zoneArgelès);
     for (const line of logs) expect(line).not.toMatch(/42\.43|2\.96|3\.07|42\.58/);
+  });
+
+  it("plus de 200 lieux dans la zone : la coupe est signalée (truncated, coveredKm), jamais toute la zone couverte", async () => {
+    const wash = Array.from({ length: 250 }, (_, i) => ({
+      name: `Lavage ${i}`,
+      lat: 42.45 + (i % 25) * 0.011,
+      lon: 2.95 + Math.floor(i / 25) * 0.013,
+    }));
+    practicalSources({ wash: { "66": wash }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Coupe");
+    const res = await call(u, "POST", "/practical", { near: "zone", south: 42.4, west: 2.9, north: 42.8, east: 3.2 });
+    expect(res.status).toBe(200);
+    expect(res.json.places).toHaveLength(200);
+    expect(res.json.truncated).toBe(true);
+    expect(res.json.coveredKm).toBeGreaterThan(0);
+    expect(res.json.coveredKm).toBeLessThan(25);
+    // Une zone sans coupe ne porte aucun de ces champs (l'APK en ligne et l'écran n'ont rien de neuf à lire).
+    const small = await call(u, "POST", "/practical", { near: "zone", south: 42.4, west: 2.9, north: 42.5, east: 3.0 });
+    expect(small.json.truncated).toBeUndefined();
+    expect(small.json.coveredKm).toBeUndefined();
   });
 
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {

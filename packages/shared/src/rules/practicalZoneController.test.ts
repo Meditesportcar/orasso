@@ -214,3 +214,61 @@ describe("champ loading : relectures bornées, puis « Réessayer »", () => {
     expect(z.getState().cover).toHaveLength(0);
   });
 });
+
+describe("tour 1 : coupe, bouton pendant loading, « Réessayer » après déplacement", () => {
+  it("une réponse coupée (200 lieux) ne marque comme chargé que le disque couvert : le bouton revient au bord", async () => {
+    const read = vi.fn().mockResolvedValue(zoneData([place("c", 48.76, 2.31)], { truncated: true, coveredKm: 3 }));
+    const z = make(read);
+    const v = { south: 48.7, west: 2.25, north: 48.8, east: 2.4 };
+    z.setView(v);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.getState().cover).toHaveLength(1);
+    expect(z.getState().cover[0]).toMatchObject({ t: "disk", km: 3 });
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+    // Rien de sûr (0 km) : rien n'est marqué chargé.
+    const none = make(vi.fn().mockResolvedValue(zoneData([], { truncated: true, coveredKm: 0 })));
+    none.setView(v);
+    none.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(none.getState().cover).toHaveLength(0);
+  });
+
+  it("pendant loading, la vue sort de la zone demandée : le bouton redevient actif, l'ancienne relecture est abandonnée", async () => {
+    const read = vi.fn().mockResolvedValue(zoneData([], { partial: true, loading: true }));
+    const z = make(read);
+    z.setView(view);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.getState().loading).toBe(true);
+    // Un geste dans la zone demandée : toujours « Recherche… ».
+    z.setView({ south: 42.48, west: 3.11, north: 42.52, east: 3.15 });
+    expect(z.getState().loading).toBe(true);
+    // Un geste hors de la zone demandée : le bouton est actif pour la nouvelle zone, plus de relecture de l'ancienne.
+    z.setView({ south: 43.4, west: 1.3, north: 43.5, east: 1.4 });
+    expect(z.getState().loading).toBe(false);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(z.searchHere()).toBe(true);
+  });
+
+  it("« Réessayer » après déplacement : un seul appui pour la zone regardée, jamais l'ancienne", async () => {
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(netError)
+      .mockResolvedValue(zoneData([place("t", 43.45, 1.35)]));
+    const z = make(read);
+    z.setView(view);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.getState().failed).toBe(true);
+    const other = { south: 43.4, west: 1.3, north: 43.5, east: 1.4 };
+    z.setView(other);
+    expect(z.getState()).toMatchObject({ failed: false, offline: false });
+    expect(z.searchHere()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    const asked = read.mock.calls[1]?.[0] as { south: number; north: number };
+    expect(asked.south).toBeLessThanOrEqual(other.south);
+    expect(asked.north).toBeGreaterThanOrEqual(other.north);
+  });
+});

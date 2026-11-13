@@ -30,14 +30,14 @@ const stub = async (): Promise<Stub> => (await fetch(`${STUB}/__stub`)).json() a
 
 async function open(
   browser: Browser,
-  opts: { scale?: number; theme?: string; width?: number; geo?: boolean } = {},
+  opts: { scale?: number; theme?: string; width?: number; geo?: boolean; email?: string } = {},
 ): Promise<{
   page: Page;
   ctx: Awaited<ReturnType<Browser["newContext"]>>;
   zoneCalls: () => Record<string, unknown>[];
   allCalls: () => number;
 }> {
-  const { scale = 1, theme = "beton", width = 384, geo = false } = opts;
+  const { scale = 1, theme = "beton", width = 384, geo = false, email = EMAIL } = opts;
   const ctx = await browser.newContext({
     viewport: { width, height: 900 },
     baseURL: APP,
@@ -64,7 +64,7 @@ async function open(
   });
   await page.goto("/auth");
   await afterOpening(page);
-  await page.getByLabel("E-mail").fill(EMAIL);
+  await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 60_000 });
@@ -140,13 +140,22 @@ for (const { theme, width, scale } of COMBOS) {
     await clearPlacesCache();
     await fetch(`${STUB}/__stub?reset=1`);
     const { ctx, page } = await open(browser, { theme, width, scale });
+    // « Ouverture » avec Pilote_005 (une sortie : la bascule « Près de moi | Près de ma sortie » est visible), comme la maquette.
+    {
+      const five = await open(browser, { theme, width, scale, email: "pilote5@orasso.local" });
+      await five.page.goto("/pratique");
+      await expect(five.page.getByTestId("practical-choice")).toBeVisible({ timeout: 30_000 });
+      await five.page.getByTestId("map-toggle").click();
+      await expect(five.page.getByTestId("practical-count")).toContainText("dans la zone", { timeout: 30_000 });
+      await five.page.waitForTimeout(800);
+      await shot(five.page, `appli-ouverture-${tag}`);
+      await five.ctx.close();
+    }
     await page.goto("/pratique");
     await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
     await shot(page, `appli-liste-${tag}`);
     await page.getByTestId("map-toggle").click();
     await expect(page.getByTestId("practical-count")).toContainText("dans la zone", { timeout: 30_000 });
-    await page.waitForTimeout(800);
-    await shot(page, `appli-ouverture-${tag}`);
     // Le groupe « 2 lieux ici ».
     const groups = page.getByTestId("practical-group");
     const title = page.getByTestId("practical-group-title");
@@ -191,10 +200,29 @@ for (const { theme, width, scale } of COMBOS) {
       await page.getByTestId("practical-recenter").click();
       await page.waitForTimeout(1_200);
     }
-    await panSouth(page, scale > 1 ? 16 : 11);
+    // On s'arrête au premier appui qui sort du chargé : des épingles de Collioure et d'Argelès restent visibles sous le voile.
+    for (
+      let i = 0;
+      i < 16 &&
+      !(await page
+        .getByTestId("practical-search-here")
+        .isVisible()
+        .catch(() => false));
+      i++
+    )
+      await panSouth(page, 1);
     await expect(page.getByTestId("practical-search-here")).toBeVisible({ timeout: 10_000 });
     await shot(page, `appli-deplacee-${tag}`);
+    // « Chargement » : le faux service met 6 s à répondre, l'API répond partielle avec `loading`.
+    await clearPlacesCache();
+    await fetch(`${STUB}/__stub?slow=6000`);
     await page.getByTestId("practical-search-here").click();
+    await expect(page.getByTestId("practical-search-here")).toContainText("Recherche des lieux de la zone", {
+      timeout: 15_000,
+    });
+    await shot(page, `appli-chargement-${tag}`);
+    await fetch(`${STUB}/__stub?slow=0`);
+    await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 60_000 });
     await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 30_000 });
     await page.waitForTimeout(600);
     await shot(page, `appli-chargee-${tag}`);

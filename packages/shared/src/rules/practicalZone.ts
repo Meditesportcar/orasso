@@ -53,11 +53,29 @@ function maxCells(midLat: number): { lat: number; lng: number } {
   };
 }
 
-/** Une zone est-elle plus grande que 60 km (une fois arrondie vers l'extérieur) ? Alors l'API la refuse et l'écran demande de zoomer. */
+/**
+ * Côté écran : la zone regardée (AVANT tout arrondi) dépasse-t-elle 60 km de côté ? Alors rien ne part et l'écran demande de zoomer
+ * (« Zoome sur un secteur pour voir ses lieux. »). Jamais de clignotement sous 60 km : la mesure ne dépend pas du calage sur la grille.
+ */
 export function zoneTooBig(z: PracticalZone): boolean {
+  const size = zoneSizeKm(z);
+  return size.width > PRACTICAL_ZONE_MAX_KM || size.height > PRACTICAL_ZONE_MAX_KM;
+}
+
+/** Cases de 0,1° acceptées par l'API au-delà du plafond de 60 km : l'arrondi vers l'extérieur et la demi-case de la zone centrée. */
+export const PRACTICAL_ZONE_REQUEST_EXTRA_CELLS = 3;
+
+/**
+ * Côté API : la zone reçue (arrondie vers l'extérieur) est refusée au-delà de `maxCells + PRACTICAL_ZONE_REQUEST_EXTRA_CELLS` cases par
+ * axe, soit 60 km plus l'arrondi : une vue de 60 km au plus, quel que soit son calage, est toujours acceptée.
+ */
+export function zoneRequestTooBig(z: PracticalZone): boolean {
   const r = roundZoneOutward(z);
   const max = maxCells((r.south + r.north) / 2);
-  return cellUp(r.north) - cellDown(r.south) > max.lat || cellUp(r.east) - cellDown(r.west) > max.lng;
+  return (
+    cellUp(r.north) - cellDown(r.south) > max.lat + PRACTICAL_ZONE_REQUEST_EXTRA_CELLS ||
+    cellUp(r.east) - cellDown(r.west) > max.lng + PRACTICAL_ZONE_REQUEST_EXTRA_CELLS
+  );
 }
 
 /** Une zone au sens large : quatre nombres finis, le sud sous le nord et l'ouest à l'ouest de l'est, dans les limites du globe. */
@@ -76,25 +94,30 @@ export function zoneIsWellFormed(z: PracticalZone): boolean {
 
 export const zoneCenter = (z: PracticalZone): LatLng => ({ lat: (z.south + z.north) / 2, lng: (z.west + z.east) / 2 });
 
+/** Le demi-côté d'une vue, en cases de 0,1° entières (au millième près : la taille ne dépend pas du calage dans la case). */
+const halfCells = (spanDegrees: number) =>
+  Math.max(1, Math.ceil(Math.round((spanDegrees / 2) * 10 * 1000) / 1000 - 1e-9));
+
 /**
- * La zone que l'écran demande à l'appui de « Rechercher dans cette zone » : la zone regardée (arrondie vers l'extérieur) élargie d'une
- * demi-zone de chaque côté, sans dépasser 60 km, pour que les gestes suivants restent sur le téléphone. Toujours dans les limites
- * acceptées par l'API (`zoneTooBig` faux). La zone regardée doit elle-même tenir dans 60 km (sinon aucune demande ne part).
+ * La zone que l'écran demande à l'appui de « Rechercher dans cette zone » : **construite depuis la case de 0,1° du centre de la vue**, avec
+ * une demi-taille en cases entières, symétrique, puis élargie d'une demi-zone de chaque côté sans dépasser 60 km (une vue dont la zone
+ * dépasse ce plafond part sans élargissement). Deux positions de la même case, à la même taille de vue, donnent toujours la même zone :
+ * elle ne laisse jamais deviner une position plus finement que la case. Elle contient toujours la vue.
  */
 export function zoneForRequest(view: PracticalZone): PracticalZone {
-  const r = roundZoneOutward(view);
-  let south = cellDown(r.south);
-  let north = cellUp(r.north);
-  let west = cellDown(r.west);
-  let east = cellUp(r.east);
-  const max = maxCells((r.south + r.north) / 2);
-  const grow = (low: number, high: number, limit: number): [number, number] => {
-    const size = high - low;
-    const extra = Math.min(Math.ceil(size / 2), Math.max(0, Math.floor((limit - size) / 2)));
-    return [low - extra, high + extra];
+  const centre = zoneCenter(view);
+  const cLat = cellDown(centre.lat);
+  const cLng = cellDown(centre.lng);
+  const max = maxCells((cLat + 0.5) / 10);
+  const axis = (cell: number, spanDegrees: number, limit: number): [number, number] => {
+    const h = halfCells(spanDegrees);
+    const grown = h + Math.ceil((2 * h + 1) / 2);
+    const cap = Math.floor((limit - 1) / 2);
+    const h2 = grown > cap ? Math.max(h, cap) : grown;
+    return [cell - h2, cell + 1 + h2];
   };
-  [south, north] = grow(south, north, max.lat);
-  [west, east] = grow(west, east, max.lng);
+  const [south, north] = axis(cLat, view.north - view.south, max.lat);
+  const [west, east] = axis(cLng, view.east - view.west, max.lng);
   return { south: south / 10, west: west / 10, north: north / 10, east: east / 10 };
 }
 
@@ -106,6 +129,11 @@ export const zoneContains = (z: PracticalZone, p: LatLng, padLat = 0, padLng = 0
  * au plus, les plus proches du centre d'abord. Un département peut être lu en trop, jamais en moins.
  */
 export function departmentsInZone(z: PracticalZone): string[] {
+  return departmentsInZoneInfo(z).codes;
+}
+
+/** Les départements de la zone, et `cut` : il y en avait plus que `PRACTICAL_DEPARTMENTS_MAX` (la liste est alors incomplète : jamais « en moins » en silence). */
+export function departmentsInZoneInfo(z: PracticalZone): { codes: string[]; cut: boolean } {
   const margin = BOUNDS_MARGIN_KM;
   const marginLat = margin / KM_PER_DEG;
   const centre = zoneCenter(z);
@@ -125,11 +153,20 @@ export function departmentsInZone(z: PracticalZone): string[] {
     const own = nearestDepartment(centre);
     if (own) found.push({ code: own, km: 0 });
   }
-  return found
-    .sort((a, b) => a.km - b.km || a.code.localeCompare(b.code))
-    .slice(0, PRACTICAL_DEPARTMENTS_MAX)
-    .map((f) => f.code)
-    .sort();
+  const sorted = found.sort((a, b) => a.km - b.km || a.code.localeCompare(b.code));
+  return {
+    codes: sorted
+      .slice(0, PRACTICAL_DEPARTMENTS_MAX)
+      .map((f) => f.code)
+      .sort(),
+    cut: sorted.length > PRACTICAL_DEPARTMENTS_MAX,
+  };
+}
+
+/** Le plus grand cercle centré sur la zone qui tient dans la zone, en km (ce que la zone couvre sûrement autour de son centre). */
+export function zoneInscribedKm(z: PracticalZone): number {
+  const size = zoneSizeKm(z);
+  return Math.min(size.width, size.height) / 2;
 }
 
 /** Les lieux dans la zone (sans doublon d'identifiant), les `max` plus proches du centre de la zone. */
@@ -344,4 +381,23 @@ export function nearestTownName(
   }, null);
   if (best && (!pref || best.km <= 15 || best.km < pref.km)) return best.town;
   return pref?.town ?? best?.town ?? "";
+}
+
+/**
+ * Comme `placesInZone`, avec la coupe : `cut` quand il y avait plus de `max` lieux dans la zone ; `coveredKm` est alors la distance du dernier
+ * lieu gardé au centre de la zone (tout lieu plus proche est servi), sans dépasser le cercle inscrit dans la zone.
+ */
+export function placesInZoneInfo<T extends { id: string; lat: number; lng: number }>(
+  places: readonly T[],
+  z: PracticalZone,
+  max = PRACTICAL_MAX,
+): { places: T[]; cut: boolean; coveredKm: number } {
+  const all = placesInZone(places, z, Number.POSITIVE_INFINITY);
+  if (all.length <= max) return { places: all, cut: false, coveredKm: zoneInscribedKm(z) };
+  const kept = all.slice(0, max);
+  const last = kept[kept.length - 1];
+  const centre = zoneCenter(z);
+  // Un lieu plus loin que le dernier gardé peut manquer : on ne couvre que ce qui est plus près que lui (un cran de marge).
+  const reach = last ? distanceKm(centre, last) : 0;
+  return { places: kept, cut: true, coveredKm: Math.max(0, Math.min(reach - 0.05, zoneInscribedKm(z))) };
 }

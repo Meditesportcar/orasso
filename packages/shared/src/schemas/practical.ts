@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { inFrance } from "../rules/myWeather";
-import { zoneCenter, zoneIsWellFormed, zoneTooBig } from "../rules/practicalZone";
+import { zoneCenter, zoneIsWellFormed, zoneRequestTooBig } from "../rules/practicalZone";
 
 // Lot R8q : « Pratique ». `POST /practical` : la position voyage en corps de requête, jamais dans l'adresse (une adresse
 // finit dans les journaux d'accès). Elle est arrondie à la case de 0,1° par le service, dès sa première ligne.
@@ -29,8 +29,8 @@ export const practicalInput = z.discriminatedUnion("near", [
     .strict()
     .refine((p) => zoneIsWellFormed(p), { message: "Zone invalide", path: ["south"] })
     .refine((p) => !zoneIsWellFormed(p) || inFrance(zoneCenter(p)), { message: "Zone hors de France", path: ["south"] })
-    .refine((p) => !zoneIsWellFormed(p) || !zoneTooBig(p), {
-      message: "Zone trop grande : 60 km de côté au plus",
+    .refine((p) => !zoneIsWellFormed(p) || !zoneRequestTooBig(p), {
+      message: "Zone trop grande : 60 km de côté au plus (plus l'arrondi)",
       path: ["south"],
     }),
   z.object({ near: z.literal("city") }).strict(),

@@ -375,11 +375,13 @@ export function PracticalScreen() {
               }}
               height={MAP_HEIGHT}
             />
-            <View style={[styles.plaque, { backgroundColor: c.surface }]} pointerEvents="none">
-              <Icon name="layers" size={14} color={c.ink} />
-              <Text variant="meta" color={c.ink} testID="practical-count">
-                {countLine}
-              </Text>
+            <View style={styles.plaqueBox} pointerEvents="none">
+              <View style={[styles.plaque, { backgroundColor: c.surface }]}>
+                <Icon name="layers" size={14} color={c.ink} />
+                <Text variant="caption" color={c.ink} style={styles.plaqueText} testID="practical-count">
+                  {countLine}
+                </Text>
+              </View>
             </View>
             {!originInView ? (
               <View style={styles.recenter}>
@@ -404,6 +406,7 @@ export function PracticalScreen() {
                 <ZoneButton
                   busy={busyZone}
                   failed={zs.failed}
+                  offline={zs.offline}
                   onPress={() => (zs.failed ? zone.retry() : zone.searchHere())}
                 />
               ) : null}
@@ -435,6 +438,7 @@ export function PracticalScreen() {
             <ZoneButton
               busy={busyZone}
               failed={zs.failed}
+              offline={zs.offline}
               onPress={() => (zs.failed ? zone.retry() : zone.searchHere())}
             />
           ) : null}
@@ -529,29 +533,51 @@ export function PracticalScreen() {
 }
 
 /** Le bouton « Rechercher dans cette zone » (asphalte, texte crème) : le O vivant remplace l'icône pendant la lecture. */
-function ZoneButton({ busy, failed, onPress }: { busy: boolean; failed: boolean; onPress: () => void }) {
+function ZoneButton({
+  busy,
+  failed,
+  offline = false,
+  onPress,
+}: {
+  busy: boolean;
+  failed: boolean;
+  offline?: boolean;
+  onPress: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const label = failed ? L.retry : L.searchHere;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: busy, busy }}
-      disabled={busy}
-      onPress={onPress}
-      style={[styles.zoneBtn, { backgroundColor: c.bar, borderWidth: 1, borderColor: c.line }]}
-      testID="practical-search-here"
-    >
-      {busy ? (
-        <OLoader size={18} ink={c.barInk} label={null} />
-      ) : (
-        <Icon name={failed ? "undo" : "search"} size={16} color={c.barInk} />
-      )}
-      <Text variant="meta" color={c.barInk}>
-        {busy ? L.loadingZone : label}
-      </Text>
-    </Pressable>
+    <View style={styles.zoneWrap}>
+      {failed && offline ? (
+        <Text
+          variant="caption"
+          color={c.ink}
+          style={[styles.zoneNote, { backgroundColor: c.surface }]}
+          testID="practical-offline-note"
+        >
+          {L.searchHereOffline}
+        </Text>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled: busy, busy }}
+        disabled={busy}
+        onPress={onPress}
+        style={[styles.zoneBtn, { backgroundColor: c.bar, borderWidth: 1, borderColor: c.line }]}
+        testID="practical-search-here"
+      >
+        {busy ? (
+          <OLoader size={18} ink={c.barInk} label={null} />
+        ) : (
+          <Icon name={failed ? "undo" : "search"} size={16} color={c.barInk} />
+        )}
+        <Text variant="meta" color={c.barInk}>
+          {busy ? L.loadingZone : label}
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -711,17 +737,17 @@ const styles = StyleSheet.create({
   hint: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   hintText: { flex: 1 },
   mapWrap: { position: "relative" },
+  // La plaque tient sur une ligne à 384 px (elle laisse sa place à « Recentrer » à droite) ; plus large elle passe à la ligne, sans rien couper.
+  plaqueBox: { position: "absolute", left: 10, right: 58, top: 10, alignItems: "flex-start" },
+  plaqueText: { flexShrink: 1 },
   plaque: {
-    position: "absolute",
-    left: 10,
-    top: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: tokens.radius.radiusMd,
-    maxWidth: "70%",
+    maxWidth: "100%",
   },
   recenter: { position: "absolute", right: 10, top: 10 },
   bottom: { position: "absolute", left: 10, right: 10, bottom: 10, gap: 8, alignItems: "stretch" },
@@ -733,6 +759,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: tokens.radius.radiusMd,
   },
+  zoneWrap: { alignItems: "center", gap: 6 },
+  zoneNote: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   zoneBtn: {
     flexDirection: "row",
     alignItems: "center",

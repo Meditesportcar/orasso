@@ -7,7 +7,7 @@
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
   departmentsAround,
-  departmentsInZone,
+  departmentsInZoneInfo,
   distanceKm,
   homeLabels,
   type LatLng,
@@ -19,7 +19,7 @@ import {
   type PracticalPlace,
   type PracticalZone,
   placesAround,
-  placesInZone,
+  placesInZoneInfo,
   practicalPlaceId,
   practicalTexts,
   type WeatherCell,
@@ -155,10 +155,18 @@ export const practicalService = {
     origin: LatLng,
     budgetMs: number,
     zone?: PracticalZone,
-  ): Promise<{ places: PracticalPlace[]; partial: boolean; loading?: true; attribution: Attribution }> {
+  ): Promise<{
+    places: PracticalPlace[];
+    partial: boolean;
+    loading?: true;
+    truncated?: true;
+    coveredKm?: number;
+    attribution: Attribution;
+  }> {
     // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches ; en mode zone,
     // ceux qui coupent la zone demandée (les sources ne reçoivent toujours qu'un code de département).
-    const departments = zone ? departmentsInZone(zone) : departmentsAround(origin);
+    const zoneDepartments = zone ? departmentsInZoneInfo(zone) : null;
+    const departments = zoneDepartments ? zoneDepartments.codes : departmentsAround(origin);
     type Place = { name: string; address: string | null; lat: number; lng: number };
     // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
     const loads = departments.map(async (d) => {
@@ -241,7 +249,13 @@ export const practicalService = {
       return fuel;
     });
     const all: PracticalPlace[] = [...washes.map((p) => place("wash", p)), ...fuels];
-    const places = zone ? placesInZone(all, zone) : placesAround(all, origin);
+    // Mode zone : la coupe (plus de 200 lieux, ou plus de 12 départements) est signalée, jamais « en moins » en silence : l'écran ne marque
+    // comme chargé que le disque couvert (0 km : rien de sûr quand des départements manquent).
+    const inZone = zone ? placesInZoneInfo(all, zone) : null;
+    const places = inZone ? inZone.places : placesAround(all, origin);
+    const cutDepartments = zoneDepartments?.cut === true;
+    const truncated = cutDepartments || inZone?.cut === true;
+    const coveredKm = cutDepartments ? 0 : (inZone?.coveredKm ?? 0);
     // Les deux sources sont citées quand les deux ont servi une station de la réponse.
     const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
     const usedGov = served.some((x) => x?.gov);
@@ -250,6 +264,7 @@ export const practicalService = {
       places,
       partial,
       ...(loading ? { loading: true as const } : {}),
+      ...(truncated ? { truncated: true as const, coveredKm: Math.round(coveredKm * 100) / 100 } : {}),
       attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
     };
   },
