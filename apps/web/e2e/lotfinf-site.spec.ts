@@ -49,6 +49,11 @@ async function open(browser: Browser, opts: { width?: number; theme?: string } =
   const page = await ctx.newPage();
   const zone: Record<string, unknown>[] = [];
   let all = 0;
+  // Les statuts HTTP de /api/practical sont enregistrés : un 429 (limite de débit) ou un 5xx ne peut pas se cacher derrière un test vert.
+  const statuses: number[] = [];
+  page.on("response", (r) => {
+    if (r.request().method() === "POST" && //api/practical$/.test(r.url())) statuses.push(r.status());
+  });
   page.on("request", (r: Request) => {
     if (r.method() === "POST" && /\/api\/practical$/.test(r.url())) {
       all += 1;
@@ -58,7 +63,7 @@ async function open(browser: Browser, opts: { width?: number; theme?: string } =
   });
   const email = POOL[turn++ % POOL.length] as string;
   await loginInBrowser(page, email, undefined, "/app");
-  return { ctx, page, zoneCalls: () => zone, allCalls: () => all };
+  return { ctx, page, zoneCalls: () => zone, allCalls: () => all, statuses: () => statuses };
 }
 
 const shot = async (page: Page, name: string) => {
@@ -103,12 +108,13 @@ async function zoomInSlightly(page: Page) {
 test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, le champ, la ville", async ({
   browser,
 }) => {
-  const { ctx, page, zoneCalls, allCalls } = await open(browser, { width: 1280 });
+  const { ctx, page, zoneCalls, allCalls, statuses } = await open(browser, { width: 1280 });
   const accueil = allCalls();
   await openPage(page, 1280);
   // Une seule paire de lectures à l'ouverture (ville et sortie) : l'écran n'est monté qu'une fois, la session annoncée ne le remonte pas.
   await page.waitForTimeout(2_000);
   expect(allCalls() - accueil).toBe(2);
+  expect(statuses().every((c) => c === 200)).toBe(true);
   await shot(page, "site-ouverture-beton-1280");
   await expect(page.getByTestId("map-toggle")).toHaveCount(0);
   await expect(page.getByTestId("practical-list")).toBeVisible();

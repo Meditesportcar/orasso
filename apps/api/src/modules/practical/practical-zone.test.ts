@@ -153,7 +153,7 @@ describe("POST /practical : near zone", () => {
     for (const line of logs) expect(line).not.toMatch(/42\.43|2\.96|3\.07|42\.58/);
   });
 
-  it("plus de 200 lieux dans la zone : la coupe est signalée (truncated, coveredKm), jamais toute la zone couverte", async () => {
+  it("plus de 200 lieux dans la zone : la coupe est signalée (truncated, partialCells), répartie par case, jamais toute la zone couverte", async () => {
     const wash = Array.from({ length: 250 }, (_, i) => ({
       name: `Lavage ${i}`,
       lat: 42.45 + (i % 25) * 0.011,
@@ -165,8 +165,10 @@ describe("POST /practical : near zone", () => {
     expect(res.status).toBe(200);
     expect(res.json.places).toHaveLength(200);
     expect(res.json.truncated).toBe(true);
-    expect(res.json.coveredKm).toBeGreaterThan(0);
-    expect(res.json.coveredKm).toBeLessThan(25);
+    // Répartis par case : les cases dont tous les lieux ne sont pas servis sont listées (pas de rayon en mode zone).
+    expect(Array.isArray(res.json.partialCells)).toBe(true);
+    expect(res.json.partialCells.length).toBeGreaterThan(0);
+    expect(res.json.coveredKm).toBeUndefined();
     // Une zone sans coupe ne porte aucun de ces champs (l'APK en ligne et l'écran n'ont rien de neuf à lire).
     const small = await call(u, "POST", "/practical", { near: "zone", south: 42.4, west: 2.9, north: 42.5, east: 3.0 });
     expect(small.json.truncated).toBeUndefined();
@@ -190,6 +192,24 @@ describe("POST /practical : near zone", () => {
     expect(res.json.coveredKm).toBeGreaterThan(0);
     expect(res.json.coveredKm).toBeLessThan(5);
     expect(res.json.places.map((p: { name: string }) => p.name)).not.toContain("Lavage lointain");
+  });
+
+  it("zone dense : 220 lieux au centre d'une case et un lavage dans la case voisine, près du coin : le lavage arrive à la première lecture", async () => {
+    const wash = Array.from({ length: 220 }, (_, i) => ({
+      name: `Lavage ${i}`,
+      lat: 42.505 + (i % 20) * 0.00005,
+      lon: 2.905 + Math.floor(i / 20) * 0.00005,
+    }));
+    wash.push({ name: "Lavage du coin", lat: 42.6006, lon: 2.9995 });
+    practicalSources({ wash: { "66": wash }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Dense");
+    const res = await call(u, "POST", "/practical", { near: "zone", south: 42.4, west: 2.8, north: 42.7, east: 3.1 });
+    expect(res.status).toBe(200);
+    expect(res.json.places).toHaveLength(200);
+    expect(res.json.truncated).toBe(true);
+    expect(res.json.places.map((p: { name: string }) => p.name)).toContain("Lavage du coin");
+    // Seule la case du centre (42,5 à 42,6 N ; 2,9 à 3,0 E) est incomplète.
+    expect(res.json.partialCells).toEqual([[425, 29]]);
   });
 
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {

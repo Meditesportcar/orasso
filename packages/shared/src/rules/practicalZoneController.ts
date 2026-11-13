@@ -73,6 +73,10 @@ const insideZone = (outer: PracticalZone | null, view: PracticalZone) =>
 function coveredBy(data: PracticalData, centre: { lat: number; lng: number }, whole: ZoneCover): ZoneCover[] {
   const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
   if (!cut) return [whole];
+  // Réponse coupée et répartie par case : toute la zone est chargée, sauf les cases dont tous les lieux n'ont pas été servis.
+  if (whole.t === "rect" && data.partialCells) {
+    return [{ ...whole, except: new Set(data.partialCells.map(([i, j]) => `${i},${j}`)) }];
+  }
   const reach = data.coveredKm ?? Math.max(0, ...data.places.map((p) => distanceKm(centre, p))) * 0.98;
   return reach > 0 ? [{ t: "disk", ...centre, km: Math.min(reach, whole.t === "disk" ? whole.km : reach) }] : [];
 }
@@ -98,6 +102,7 @@ export function createPracticalZone(deps: ZoneDeps) {
   /** Les zones demandées dont la réponse a été coupée : une recherche dedans ne s'élargit plus (la zone se resserre sur la vue). */
   let dense: PracticalZone[] = [];
   let reading = false;
+  let lastFailureAt = 0;
   let alive = true;
   let generation = 0;
 
@@ -151,9 +156,12 @@ export function createPracticalZone(deps: ZoneDeps) {
         const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
         const covered = coveredBy(data, zoneCenter(zone), { t: "rect", zone });
         if (cut) dense = [...dense, zone];
-        const crowded = cut && askedTight;
+        // Les anciennes entrées de l'emprise GARANTIE (zone entière, ou disque et cases servis si la réponse est coupée) sont remplacées.
+        const next = store((p) => coverContains(covered, p), data.places, covered);
+        // Toujours coupé après un resserrement : des cases de la vue ne seront jamais complètes à ce zoom.
+        const crowded = cut && askedTight && view !== null && !viewCovered(next.cover, view);
         set({
-          ...store(cut ? () => false : (p) => zoneContains(zone, p), data.places, covered),
+          ...next,
           loading: false,
           failed: false,
           offline: false,
@@ -194,6 +202,7 @@ export function createPracticalZone(deps: ZoneDeps) {
         return;
       }
       // Un refus (4xx autre que 408 et 429) n'est jamais relu : la même zone serait refusée de la même façon.
+      lastFailureAt = (deps.now ?? Date.now)();
       const refused = status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429;
       set({ loading: false, failed: !refused, offline: status === 0, refused });
     }
@@ -227,7 +236,7 @@ export function createPracticalZone(deps: ZoneDeps) {
           c.t === "disk" &&
           state.cover.some((k) => k.t === "disk" && k.lat === c.lat && k.lng === c.lng && k.km >= c.km),
       );
-      set(store(cut ? () => false : inDisk, data.places, known ? [] : covered));
+      set(store((p) => (cut ? coverContains(covered, p) : inDisk(p)), data.places, known ? [] : covered));
     },
     /** Fin d'un geste sur la carte : la zone regardée. Ne lit rien. */
     setView(view: PracticalZone) {
@@ -276,6 +285,13 @@ export function createPracticalZone(deps: ZoneDeps) {
     },
     /** Retour sur l'écran : une relecture due part (au plus tôt à 15 s de la précédente). */
     resume() {
+      // Un échec réseau n'est pas une erreur inconnue : au retour (réseau, onglet, appli), la zone regardée est relue UNE fois (jamais en boucle :
+      // seul un événement du système l'appelle, et pas plus d'une fois toutes les 15 s).
+      const t = (deps.now ?? Date.now)();
+      if (alive && !reading && state.failed && deps.visible() && t - lastFailureAt >= 15_000) {
+        this.retry();
+        return;
+      }
       cycle.resume();
     },
     /** Un lieu est-il dans ce qui est chargé ? */

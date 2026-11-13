@@ -161,6 +161,7 @@ export const practicalService = {
     loading?: true;
     truncated?: true;
     coveredKm?: number;
+    partialCells?: [number, number][];
     attribution: Attribution;
   }> {
     // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches ; en mode zone,
@@ -257,7 +258,10 @@ export const practicalService = {
     const cutDepartments = zoneDepartments?.cut === true;
     // Tous les modes : plus de 200 lieux dans le rayon de 30 km (ouverture) signalent la coupe, comme en mode zone.
     const truncated = cutDepartments || inZone?.cut === true || around?.cut === true;
-    const coveredKm = cutDepartments ? 0 : (inZone?.coveredKm ?? around?.coveredKm ?? 0);
+    // Zone coupée à 200 lieux : répartis par case, avec les cases incomplètes (rien de plus qu'une case de la zone envoyée). Départements
+    // coupés : rien n'est sûr (0 km, aucune case). Ouverture : le rayon du dernier lieu gardé.
+    const coveredKm = cutDepartments ? 0 : inZone ? undefined : around?.coveredKm;
+    const partialCells = !cutDepartments && inZone?.cut ? inZone.partialCells : undefined;
     // Les deux sources sont citées quand les deux ont servi une station de la réponse.
     const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
     const usedGov = served.some((x) => x?.gov);
@@ -266,7 +270,13 @@ export const practicalService = {
       places,
       partial,
       ...(loading ? { loading: true as const } : {}),
-      ...(truncated ? { truncated: true as const, coveredKm: Math.round(coveredKm * 100) / 100 } : {}),
+      ...(truncated
+        ? {
+            truncated: true as const,
+            ...(coveredKm !== undefined ? { coveredKm: Math.round(coveredKm * 100) / 100 } : {}),
+            ...(partialCells ? { partialCells } : {}),
+          }
+        : {}),
       attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
     };
   },

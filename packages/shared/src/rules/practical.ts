@@ -88,6 +88,11 @@ export type PracticalData = {
    */
   truncated?: true;
   coveredKm?: number;
+  /**
+   * Mode zone coupé (tour 4) : les cases de 0,1° (indices du dixième de degré, sud et ouest) dont tous les lieux n'ont PAS été servis ; toutes
+   * les autres cases de la zone sont complètes. Les lieux sont répartis entre les cases (jamais les seuls 200 plus proches du centre).
+   */
+  partialCells?: [number, number][];
   attribution: { wash: string; fuel: string };
 };
 

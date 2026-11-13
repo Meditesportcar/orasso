@@ -18,7 +18,6 @@ import {
   zoneAround,
   zoneContains,
   zoneForRequest,
-  zoneInscribedKm,
   zoneRequestTooBig,
   zoneSizeKm,
   zoneTooBig,
@@ -195,7 +194,7 @@ describe("coupes signalées", () => {
     expect(info.cut).toBe(true);
     expect(departmentsInZoneInfo({ south: 42.4, west: 2.9, north: 42.6, east: 3.1 }).cut).toBe(false);
   });
-  it("250 lieux dans la zone : coupée à 200, rayon couvert borné, jamais toute la zone", () => {
+  it("250 lieux dans la zone : coupée à 200, répartie par case, les cases incomplètes signalées, jamais toute la zone couverte", () => {
     const z = { south: 48.5, west: 2.0, north: 49.0, east: 2.6 };
     const places = Array.from({ length: 250 }, (_, i) => ({
       id: `p${i}`,
@@ -205,10 +204,13 @@ describe("coupes signalées", () => {
     const info = placesInZoneInfo(places, z);
     expect(info.places).toHaveLength(200);
     expect(info.cut).toBe(true);
-    expect(info.coveredKm).toBeGreaterThan(0);
-    expect(info.coveredKm).toBeLessThanOrEqual(zoneInscribedKm(z));
-    const cover = [{ t: "disk" as const, lat: 48.75, lng: 2.3, km: info.coveredKm }];
-    expect(viewCovered(cover, { south: 48.55, west: 2.05, north: 48.95, east: 2.55 })).toBe(false);
+    expect(info.partialCells.length).toBeGreaterThan(0);
+    const cover = [{ t: "rect" as const, zone: z, except: new Set(info.partialCells.map(([i, j]) => `${i},${j}`)) }];
+    // Une case incomplète n'est pas chargée : la vue qui la contient garde le bouton.
+    const [i, j] = info.partialCells[0] as [number, number];
+    expect(
+      viewCovered(cover, { south: i / 10 + 0.01, west: j / 10 + 0.01, north: i / 10 + 0.09, east: j / 10 + 0.09 }),
+    ).toBe(false);
     expect(placesInZoneInfo(places.slice(0, 100), z).cut).toBe(false);
   });
 });

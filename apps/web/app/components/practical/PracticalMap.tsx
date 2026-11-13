@@ -7,6 +7,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { clusterPins, GROUP_MAX_ZOOM, type IconName, iconShapes, isStacked } from "@orasso/design-system";
 import {
+  createOrderQueue,
   fitView,
   practicalTexts as L,
   type LatLng,
@@ -77,7 +78,21 @@ export function PracticalMap({
   const markers = useRef<{ remove: () => void }[]>([]);
   const latest = useRef({ pins, origin, selectedId, onSelect, onGroup, cover, onView });
   latest.current = { pins, origin, selectedId, onSelect, onGroup, cover, onView };
-  const lastSeq = useRef(command?.seq ?? 0);
+  // Les ordres reçus avant que MapLibre soit prêt sont gardés (le dernier) et appliqués à l'initialisation ; ceux d'avant le montage sont
+  // déjà portés par la vue de départ.
+  const orders = useRef<ReturnType<typeof createOrderQueue<MapCommand>> | null>(null);
+  if (!orders.current) {
+    orders.current = createOrderQueue<MapCommand>();
+    orders.current.skipTo(command?.seq ?? 0);
+  }
+  const applyOrder = (order: MapCommand) => {
+    const h = handle.current;
+    if (!h) return;
+    const { w, h: height } = sizeOf();
+    const t = "view" in order ? order.view : fitView(order.fit, w, height);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    h.map.flyTo({ center: [t.lng, t.lat], zoom: t.zoom, duration: reduce ? 0 : 420 });
+  };
 
   const sizeOf = () => {
     const el = handle.current?.map.getContainer();
@@ -239,6 +254,8 @@ export function PracticalMap({
       const { w, h } = sizeOf();
       latest.current.onView(viewZone(initial, w, h), initial.zoom);
       draw();
+      // Un ordre arrivé pendant le chargement de la carte est appliqué maintenant.
+      orders.current?.flush(applyOrder);
       return () => {
         ro.disconnect();
         for (const m of markers.current) m.remove();
@@ -257,13 +274,7 @@ export function PracticalMap({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: un ordre par numéro.
   useEffect(() => {
-    const h = handle.current;
-    if (!command || !h || command.seq === lastSeq.current) return;
-    lastSeq.current = command.seq;
-    const { w, h: height } = sizeOf();
-    const t = "view" in command ? command.view : fitView(command.fit, w, height);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    h.map.flyTo({ center: [t.lng, t.lat], zoom: t.zoom, duration: reduce ? 0 : 420 });
+    if (orders.current?.offer(command) && handle.current) orders.current.flush(applyOrder);
   }, [command]);
 
   if (failed) return <p className="s-muted">La carte n'a pas pu se charger.</p>;

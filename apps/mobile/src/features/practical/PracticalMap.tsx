@@ -31,6 +31,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import {
+  createOrderQueue,
   fitView,
   practicalTexts as L,
   type PracticalZone,
@@ -44,7 +45,7 @@ import { type GestureResponderEvent, Pressable, StyleSheet, View } from "react-n
 import { mapGlyphsOrigin, mapTilesUrl } from "@/features/explorer/mapPins";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { createTouchHold } from "@/ui/scrollHold";
-import type { PracticalMapProps } from "./mapTypes";
+import type { MapCommand, PracticalMapProps } from "./mapTypes";
 import { kindIcon } from "./Row";
 
 /** Vrai : la carte s'affiche ici. */
@@ -105,13 +106,21 @@ export function PracticalMap({
   }, [size, seen, initial]);
 
   // Un ordre à la caméra : aller à une vue, ou cadrer des lieux.
-  const lastSeq = useRef(command?.seq ?? 0);
+  // Un ordre reçu avant que la carte soit prête (style chargé, caméra posée, taille connue) est gardé et appliqué dès qu'elle l'est.
+  const orders = useRef<ReturnType<typeof createOrderQueue<MapCommand>> | null>(null);
+  if (!orders.current) {
+    orders.current = createOrderQueue<MapCommand>();
+    orders.current.skipTo(command?.seq ?? 0);
+  }
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (!command || command.seq === lastSeq.current) return;
-    lastSeq.current = command.seq;
-    const target = "view" in command ? command.view : size.w ? fitView(command.fit, size.w, size.h) : null;
-    if (target) camera.current?.flyTo({ center: [target.lng, target.lat], zoom: target.zoom, duration });
-  }, [command, size, duration]);
+    orders.current?.offer(command);
+    if (!ready || !camera.current || !size.w) return;
+    orders.current?.flush((order) => {
+      const target = "view" in order ? order.view : fitView(order.fit, size.w, size.h);
+      camera.current?.flyTo({ center: [target.lng, target.lat], zoom: target.zoom, duration });
+    });
+  }, [command, size, duration, ready]);
 
   const zoom = seen?.zoom ?? initial.zoom;
   const zone = seen?.zone ?? null;
@@ -187,6 +196,7 @@ export function PracticalMap({
             setSeen({ zone: next, zoom: e.nativeEvent.zoom });
             onViewRef.current(next, e.nativeEvent.zoom);
           }}
+          onDidFinishLoadingMap={() => setReady(true)}
           onDidFailLoadingMap={() => setFellBack(true)}
         >
           <Images images={{ [hatchImageId(theme)]: hatchPngDataUri(theme) }} />

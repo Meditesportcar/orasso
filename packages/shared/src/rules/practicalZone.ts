@@ -59,7 +59,8 @@ function maxCells(midLat: number): { lat: number; lng: number } {
  */
 export function zoneTooBig(z: PracticalZone): boolean {
   const size = zoneSizeKm(z);
-  return size.width > PRACTICAL_ZONE_MAX_KM || size.height > PRACTICAL_ZONE_MAX_KM;
+  // Tolérance de 1 m : un côté de 60 km exactement (calculé en virgule flottante, 60,00000000000032) n'est pas refusé.
+  return size.width > PRACTICAL_ZONE_MAX_KM + 0.001 || size.height > PRACTICAL_ZONE_MAX_KM + 0.001;
 }
 
 /** Cases de 0,1° acceptées par l'API au-delà du plafond de 60 km : l'arrondi vers l'extérieur et la demi-case de la zone centrée. */
@@ -192,10 +193,18 @@ export function placesInZone<T extends { id: string; lat: number; lng: number }>
 }
 
 /** Ce que l'écran a déjà chargé : un disque (la lecture d'ouverture, 30 km autour de l'origine) ou un carré (une zone demandée). */
-export type ZoneCover = ({ t: "disk"; km: number } & LatLng) | { t: "rect"; zone: PracticalZone };
+export type ZoneCover =
+  | ({ t: "disk"; km: number } & LatLng)
+  /** Un carré ; `except` : des cases de 0,1° (clés `cellKey`) dont tous les lieux n'ont PAS été servis (réponse coupée, répartie par case). */
+  | { t: "rect"; zone: PracticalZone; except?: ReadonlySet<string> };
+
+/** La clé de la case de 0,1° d'un point. */
+export const cellKey = (p: LatLng): string => `${cellDown(p.lat)},${cellDown(p.lng)}`;
 
 export const coverContains = (cover: readonly ZoneCover[], p: LatLng): boolean =>
-  cover.some((c) => (c.t === "disk" ? distanceKm(c, p) <= c.km : zoneContains(c.zone, p)));
+  cover.some((c) =>
+    c.t === "disk" ? distanceKm(c, p) <= c.km : zoneContains(c.zone, p) && !(c.except && c.except.has(cellKey(p))),
+  );
 
 /** Toute la zone regardée est-elle dans ce qui est chargé ? (25 points de contrôle, bords compris, comme la maquette.) */
 export function viewCovered(cover: readonly ZoneCover[], view: PracticalZone): boolean {
@@ -397,20 +406,80 @@ export function nearestTownName(
 }
 
 /**
- * Comme `placesInZone`, avec la coupe : `cut` quand il y avait plus de `max` lieux dans la zone ; `coveredKm` est alors la distance du dernier
- * lieu gardé au centre de la zone (tout lieu plus proche est servi), sans dépasser le cercle inscrit dans la zone.
+ * Comme `placesInZone`, avec la coupe (tour 4) : quand plus de `max` lieux sont dans la zone, on en sert `max` **répartis équitablement entre les
+ * cases de 0,1°** de la zone (tour par tour : le lieu le plus proche du centre de chaque case non vide, puis le suivant, les cases prises dans
+ * l'ordre de leur distance au centre de la zone). `partialCells` : les cases dont tous les lieux n'ont pas été servis (les autres, vides
+ * comprises, sont complètes). Un lieu dans un coin de case arrive donc toujours, même sous 200 lieux au centre de la case voisine.
  */
 export function placesInZoneInfo<T extends { id: string; lat: number; lng: number }>(
   places: readonly T[],
   z: PracticalZone,
   max = PRACTICAL_MAX,
-): { places: T[]; cut: boolean; coveredKm: number } {
+): { places: T[]; cut: boolean; partialCells: [number, number][] } {
   const all = placesInZone(places, z, Number.POSITIVE_INFINITY);
-  if (all.length <= max) return { places: all, cut: false, coveredKm: zoneInscribedKm(z) };
-  const kept = all.slice(0, max);
-  const last = kept[kept.length - 1];
-  const centre = zoneCenter(z);
-  // Un lieu plus loin que le dernier gardé peut manquer : on ne couvre que ce qui est plus près que lui (un cran de marge).
-  const reach = last ? distanceKm(centre, last) : 0;
-  return { places: kept, cut: true, coveredKm: Math.max(0, Math.min(reach - 0.05, zoneInscribedKm(z))) };
+  if (all.length <= max) return { places: all, cut: false, partialCells: [] };
+  const cells = new Map<string, { i: number; j: number; list: T[]; km: number }>();
+  for (const p of all) {
+    const i = cellDown(p.lat);
+    const j = cellDown(p.lng);
+    const key = `${i},${j}`;
+    let c = cells.get(key);
+    if (!c) {
+      c = { i, j, list: [], km: distanceKm(zoneCenter(z), { lat: (i + 0.5) / 10, lng: (j + 0.5) / 10 }) };
+      cells.set(key, c);
+    }
+    c.list.push(p);
+  }
+  for (const c of cells.values()) {
+    const mid = { lat: (c.i + 0.5) / 10, lng: (c.j + 0.5) / 10 };
+    c.list.sort((a, b) => distanceKm(mid, a) - distanceKm(mid, b) || a.id.localeCompare(b.id));
+  }
+  const order = [...cells.values()].sort((a, b) => a.km - b.km || a.i - b.i || a.j - b.j);
+  const kept: T[] = [];
+  const taken = new Map<string, number>();
+  for (let round = 0; kept.length < max; round++) {
+    let any = false;
+    for (const c of order) {
+      const p = c.list[round];
+      if (!p) continue;
+      any = true;
+      kept.push(p);
+      taken.set(`${c.i},${c.j}`, round + 1);
+      if (kept.length >= max) break;
+    }
+    if (!any) break;
+  }
+  const partialCells = order
+    .filter((c) => (taken.get(`${c.i},${c.j}`) ?? 0) < c.list.length)
+    .map((c): [number, number] => [c.i, c.j]);
+  return { places: kept, cut: true, partialCells };
+}
+
+/**
+ * Les ordres donnés à la carte avant qu'elle soit prête (MapLibre se charge de façon asynchrone) : le dernier est gardé et appliqué à
+ * l'initialisation ; un ordre déjà appliqué ne l'est jamais deux fois.
+ */
+export function createOrderQueue<T extends { seq: number }>() {
+  let pending: T | null = null;
+  let applied = 0;
+  return {
+    /** Un ordre arrive (la carte est prête ou non) : renvoie vrai s'il est nouveau. */
+    offer(order: T | null): boolean {
+      if (!order || order.seq <= applied) return false;
+      pending = order;
+      return true;
+    },
+    /** La carte est prête : applique l'ordre en attente, une seule fois. */
+    flush(apply: (order: T) => void): void {
+      const order = pending;
+      if (!order) return;
+      pending = null;
+      applied = order.seq;
+      apply(order);
+    },
+    /** Les ordres déjà donnés avant le montage de la carte sont réputés appliqués par sa vue de départ. */
+    skipTo(seq: number): void {
+      applied = Math.max(applied, seq);
+    },
+  };
 }

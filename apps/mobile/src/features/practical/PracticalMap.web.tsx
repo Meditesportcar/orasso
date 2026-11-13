@@ -7,13 +7,13 @@ import "@orasso/design-system/map/map.css";
 import { clusterPins, GROUP_MAX_ZOOM, type IconName, iconShapes, isStacked } from "@orasso/design-system";
 import { createOrassoMap, mapCssVars, type OrassoMap } from "@orasso/design-system/map/web";
 import { tokens, useTheme } from "@orasso/design-system/native";
-import { fitView, practicalTexts as L, unloadedBands, viewZone, zoneContains } from "@orasso/shared";
+import { createOrderQueue, fitView, practicalTexts as L, unloadedBands, viewZone, zoneContains } from "@orasso/shared";
 import { useEffect, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { mapGlyphsOrigin, mapTilesUrl } from "@/features/explorer/mapPins";
 import { quietAttribution } from "@/features/explorer/quietAttribution";
-import type { PracticalMapProps, PracticalPin } from "./mapTypes";
+import type { MapCommand, PracticalMapProps, PracticalPin } from "./mapTypes";
 
 type MapLibre = typeof import("maplibre-gl");
 
@@ -64,7 +64,23 @@ export function PracticalMap({
   themeRef.current = theme;
   const latest = useRef({ pins, origin, selectedId, onSelect, onGroup, cover, onView, reducedMotion });
   latest.current = { pins, origin, selectedId, onSelect, onGroup, cover, onView, reducedMotion };
-  const lastSeq = useRef(command?.seq ?? 0);
+  // Les ordres reçus avant que MapLibre soit prêt sont gardés (le dernier) et appliqués à l'initialisation.
+  const orders = useRef<ReturnType<typeof createOrderQueue<MapCommand>> | null>(null);
+  if (!orders.current) {
+    orders.current = createOrderQueue<MapCommand>();
+    orders.current.skipTo(command?.seq ?? 0);
+  }
+  const applyOrder = (order: MapCommand) => {
+    const created = handle.current;
+    if (!created) return;
+    const { w, h } = size();
+    const target = "view" in order ? order.view : fitView(order.fit, w, h);
+    created.map.flyTo({
+      center: [target.lng, target.lat],
+      zoom: target.zoom,
+      duration: latest.current.reducedMotion ? 0 : 420,
+    });
+  };
 
   const size = () => {
     const m = handle.current?.map;
@@ -280,6 +296,8 @@ export function PracticalMap({
       const { w, h } = size();
       latest.current.onView(viewZone(initial, w, h), initial.zoom);
       draw();
+      // Un ordre arrivé pendant le chargement de la carte est appliqué maintenant.
+      orders.current?.flush(applyOrder);
     })().catch((e: unknown) => console.error("[carte] la carte n'a pas pu s'afficher", e));
     return () => {
       cancelled = true;
@@ -299,16 +317,7 @@ export function PracticalMap({
   // Un ordre à la caméra : aller à une vue, ou cadrer des lieux.
   // biome-ignore lint/correctness/useExhaustiveDependencies: un ordre par numéro.
   useEffect(() => {
-    const created = handle.current;
-    if (!command || !created || command.seq === lastSeq.current) return;
-    lastSeq.current = command.seq;
-    const { w, h } = size();
-    const target = "view" in command ? command.view : fitView(command.fit, w, h);
-    created.map.flyTo({
-      center: [target.lng, target.lat],
-      zoom: target.zoom,
-      duration: reducedMotion ? 0 : 420,
-    });
+    if (orders.current?.offer(command) && handle.current) orders.current.flush(applyOrder);
   }, [command]);
 
   useEffect(() => {
