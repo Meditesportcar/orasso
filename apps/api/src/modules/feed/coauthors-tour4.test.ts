@@ -133,10 +133,14 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
     const readBoth = async () => {
       // Même horloge simulée pour les deux lectures.
       // (le compteur lit `now()`, l'horloge simulée de `useClock`).
-      const list = await pendingCoauthorRequests(kenji.id, db, now());
-      return { list: list.length, count: await pendingCoauthorCount(kenji.id, db) };
+      // Lot R9d : l'invitation adressée à une page se lit dans la cloche de la structure (`scope` « all »), la liste et le compteur
+      // y sont alignés ; la liste personnelle ne l'a plus.
+      const list = await pendingCoauthorRequests(kenji.id, db, now(), "all");
+      return { list: list.length, count: await pendingCoauthorCount(kenji.id, db, "all") };
     };
     expect(await readBoth()).toEqual({ list: 1, count: 1 });
+    expect(await pendingCoauthorRequests(kenji.id, db, now())).toHaveLength(0);
+    expect(await pendingCoauthorCount(kenji.id, db)).toBe(0);
     await db
       .update(profiles)
       .set({ suspendedUntil: new Date(now().getTime() + 86_400_000) })

@@ -267,6 +267,14 @@ describe("candidature sur une mission", () => {
     expect(toSort[0]?.title).toContain("propose ses services");
     expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
 
+    // Lot R9d : une candidate qui est aussi responsable de la structure ne reçoit rien ; l'autre responsable, si.
+    await addMember(structureId, sofia.id, "co_organizer");
+    const second = await addNeed(nocturneId, { quantity: 1 });
+    const own = await applyTo(sofia, nocturneId, second.id);
+    expect(own.status).toBe(201);
+    expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
+    expect(await notifsOf(sofia.id, "need_application_received")).toHaveLength(0);
+    expect(await notifsOf(orga.id, "application_received")).toHaveLength(2);
     // Comblée par Sofia : Léa ne peut plus y répondre.
     await call(orga, "POST", `/events/${nocturneId}/applications/${ok.json.id}/decide`, ACCEPT);
     const lea = await signUp("Lea_Truck");

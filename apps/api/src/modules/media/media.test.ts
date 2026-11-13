@@ -281,6 +281,26 @@ describe("demande d'accréditation", () => {
     expect(list.text).not.toContain("CP-123456");
   });
 
+  it("un média qui est aussi responsable ne reçoit rien ; l'autre responsable si ; la pastille compte une ligne puis tombe une fois triée (lot R9d)", async () => {
+    await addMember(structureId, leo.id, "co_organizer");
+    await putProfile(leo);
+    await openPress(nocturneId);
+    const res = await request(leo, nocturneId);
+    expect(res.status).toBe(201);
+    await notificationsService.deliverDue();
+    const mineOf = (userId: string, type: string) =>
+      db.query.notifications.findMany({ where: and(eq(notifications.userId, userId), eq(notifications.type, type)) });
+    for (const type of ["application_received", "accreditation_requested"]) {
+      expect(await mineOf(leo.id, type)).toHaveLength(0);
+      expect(await mineOf(orga.id, type)).toHaveLength(1);
+    }
+    const unseen = async () => (await call(orga, "GET", `/structures/${structureId}/activity/count`)).json.unseen;
+    // Deux lignes pour une seule demande (la ligne « À trier » et l'ancien envoi) : une seule est comptée.
+    expect(await unseen()).toBe(1);
+    expect((await decide(nocturneId, res.json.id)).status).toBe(200);
+    expect(await unseen()).toBe(0);
+  });
+
   it("quota atteint : 409 press_quota_reached", async () => {
     await openPress(nocturneId, { quota: 1 });
     const first = await signUp("Media_Un");

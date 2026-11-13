@@ -15,7 +15,7 @@ import {
   structureNotificationTexts,
   structureRequestTypes,
 } from "@orasso/shared";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { notifications, profiles, structureMembers } from "../../db/schema";
@@ -81,30 +81,25 @@ async function structureCoauthorPostIds(userId: string, structureId: string, ex:
 type TriageData = { kind?: unknown; eventName?: unknown; eventId?: unknown; applicationId?: unknown };
 
 /**
- * Ce qui reste à trier, en une seule requête : le nombre de candidatures de véhicule `pending` par événement, et les
- * candidatures de média ou de prestataire encore `pending` (1 chacune). Clé : `e:<événement>` ou `a:<candidature>`.
+ * Ce qui reste à trier, en une seule requête : le nombre de candidatures de véhicule `pending` par événement. Une ligne de
+ * média ou de prestataire (une demande, un nom) garde son texte une fois traitée ; elle ne compte plus dans la pastille
+ * (`stillToSort`), c'est le choix le plus simple (journal, tour 2).
  */
 async function pendingLeft(items: readonly { data: Record<string, unknown> }[], ex: Executor = db) {
   const events = new Set<string>();
-  const apps = new Set<string>();
   for (const i of items) {
     const d = i.data as TriageData;
     if (d.kind === "vehicle" && typeof d.eventId === "string" && UUID.test(d.eventId)) events.add(d.eventId);
-    else if (typeof d.applicationId === "string" && UUID.test(d.applicationId)) apps.add(d.applicationId);
   }
   const left = new Map<string, number>();
-  if (!events.size && !apps.size) return left;
-  const list = (ids: Set<string>) =>
-    sql.join(
-      [...ids].map((id) => sql`${id}::uuid`),
-      sql`, `,
-    );
+  if (!events.size) return left;
+  const list = sql.join(
+    [...events].map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
   const res = await ex.execute<{ k: string; n: number }>(sql`
     select 'e:' || event_id::text as k, count(*)::int as n from applications
-      where kind = 'vehicle' and status = 'pending' and event_id in (${events.size ? list(events) : sql`null`}) group by event_id
-    union all
-    select 'a:' || id::text as k, 1 as n from applications
-      where status = 'pending' and id in (${apps.size ? list(apps) : sql`null`})`);
+      where kind = 'vehicle' and status = 'pending' and event_id in (${list}) group by event_id`);
   for (const r of res.rows) left.set(r.k, Number(r.n));
   return left;
 }
@@ -182,7 +177,8 @@ export const structureActivityService = {
     const where = and(
       mine(userId, structureId),
       isNull(notifications.readAt),
-      notInArray(notifications.type, [...structureRequestTypes]),
+      // Seulement les types que la liste montre (une ligne comptée est une ligne lisible), hors demandes.
+      inArray(notifications.type, [...structureActivityTypes("all").filter((t) => !structureRequestTypes.includes(t))]),
       gt(notifications.deliveredAt, since),
       stillToSort,
     );

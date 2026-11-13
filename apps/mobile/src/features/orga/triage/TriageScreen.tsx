@@ -44,7 +44,7 @@ export function TriageScreen() {
   const { structureId, structureName } = useOrga();
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ event?: string; segment?: string }>();
+  const params = useLocalSearchParams<{ event?: string; segment?: string; n?: string }>();
   const at = useNow(60_000);
   // Lot 40 : le tri se fait en glissant les cartes ; le glissement entre onglets est coupé sur cet écran.
   useTabSwipeDisabled();
@@ -52,6 +52,14 @@ export function TriageScreen() {
   const [segment, setSegment] = useState<Segment>(
     params.segment === "press" || params.segment === "providers" ? params.segment : "vehicles",
   );
+  // Les onglets restent montés : une nouvelle ouverture explicite (paramètre `n`) applique le genre demandé, un simple
+  // rafraîchissement ne touche pas au choix manuel.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seulement à chaque navigation explicite
+  useEffect(() => {
+    if (params.segment === "press" || params.segment === "providers" || params.segment === "vehicles") {
+      setSegment(params.segment);
+    }
+  }, [params.segment, params.event, params.n]);
   const [picked, setPicked] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
 

@@ -258,11 +258,23 @@ export async function writeInvite(
   };
   // Lot R9d : une invitation à une structure est une ligne de l'Activité de la structure, une par responsable.
   if (input.invite.kind === "structure") {
+    // Elle se traite dans les demandes de la structure (site : `?vue=demandes`), pas dans la liste personnelle.
+    const [target] = await tx
+      .select({ slug: structures.slug })
+      .from(structures)
+      .where(eq(structures.id, input.invite.id));
+    const { link: _personal, ...rest } = data;
     await notifyStructure(
       tx,
       input.invite.id,
       "coauthor_invited",
-      { title: content.title, body: content.body, data, after: input.after },
+      {
+        title: content.title,
+        body: content.body,
+        data: rest,
+        link: { label: "Répondre", path: `/orga/${target?.slug ?? ""}/activite?vue=demandes` },
+        after: input.after,
+      },
       { exclude: [input.inviterId] },
     );
     return;

@@ -332,9 +332,15 @@ describe("notifications", () => {
     expect(await notifs(owner.id, "coauthor_invited")).toHaveLength(0);
     expect(await notifs(second.id, "coauthor_invited")).toHaveLength(1);
     expect(mine.id).toBeDefined();
-    // Il voit tout de même la demande dans son Activité (il gère la page invitée).
-    const items = (await call(owner, "GET", "/me/requests")).json.items as { kind: string; id: string }[];
+    // Il voit tout de même la demande (il gère la page invitée) : dans les demandes de la structure (ancienne assertion :
+    // `/me/requests`, lot R9d), plus dans sa liste personnelle.
+    const items = (await call(owner, "GET", `/structures/${other.id}/requests`)).json.items as {
+      kind: string;
+      id: string;
+    }[];
     expect(items.some((i) => i.kind === "coauthor" && i.id === post.id)).toBe(true);
+    const personal = (await call(owner, "GET", "/me/requests")).json.items as { kind: string; id: string }[];
+    expect(personal.some((i) => i.kind === "coauthor" && i.id === post.id)).toBe(false);
     // En répondant lui-même, il ne se prévient pas.
     await call(owner, "POST", `/me/feed-coauthor-requests/${post.id}/accept`);
     expect(await notifs(owner.id, "coauthor_accepted")).toHaveLength(0);
@@ -350,5 +356,13 @@ describe("notifications", () => {
     const accepted = (await notifs(kenji.id, "coauthor_accepted"))[0];
     expect(((accepted as { data: unknown }).data as { link?: string }).link).toBe("/app/fil");
     expect(randomUUID()).toBeDefined();
+    // Lot R9d : l'invitation adressée à une structure mène aux demandes de la structure (le site : `?vue=demandes`).
+    const owner = await signUp("Orga_Lien", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    await publishWith(kenji, { kind: "structure", id: structure.id });
+    const forStructure = (await notifs(owner.id, "coauthor_invited"))[0];
+    expect(((forStructure as { data: unknown }).data as { link?: string }).link).toBe(
+      `/orga/${structure.slug}/activite?vue=demandes`,
+    );
   });
 });

@@ -173,7 +173,10 @@ export default function OrgaActivite({ loaderData, actionData }: Route.Component
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
 
   const seenOnce = useRef(false);
+  // `markSeen` provoque lui-même un `inbox.changed` (ses autres appareils) : le signal reçu juste après n'est pas relu.
+  const ownSignalAt = useRef(0);
   const markSeen = () => {
+    ownSignalAt.current = Date.now();
     void apiFetch(`/structures/${structure.id}/activity/seen`, { method: "POST" }).then((r) => {
       if (r.ok) revalidator.revalidate();
     });
@@ -187,7 +190,11 @@ export default function OrgaActivite({ loaderData, actionData }: Route.Component
   // Une ligne regroupée qui s'ajoute à une ligne déjà livrée n'envoie que `inbox.changed` : la liste et le compteur se relisent.
   // Une notification livrée est vue tout de suite (le « vu » se repose après une lecture réussie).
   useChannel(`user:${userId}`, (m) => {
-    if (m.type === "inbox.changed") revalidator.revalidate();
+    if (m.type === "inbox.changed") {
+      if (Date.now() - ownSignalAt.current < 3_000) return;
+      // Une ligne arrivée pendant que la page est ouverte est vue tout de suite ; la liste se relit après le « vu » réussi.
+      markSeen();
+    }
     if (m.type === "notification") markSeen();
   });
 

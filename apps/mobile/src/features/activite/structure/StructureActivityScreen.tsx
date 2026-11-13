@@ -153,7 +153,10 @@ function Body() {
     const target = structureTargetOf(item);
     if (!target) return;
     if (target.kind === "triage")
-      router.push({ pathname: "/tri", params: { event: target.eventId, segment: target.segment } });
+      router.push({
+        pathname: "/tri",
+        params: { event: target.eventId, segment: target.segment, n: String(Date.now()) },
+      });
     else if (target.kind === "team") router.navigate("/(orga)/equipe");
     else if (target.kind === "requests") setShowRequests(true);
     else router.push(target.path as never);
@@ -195,6 +198,12 @@ function Body() {
             </View>
             <Icon name={showRequests ? "up" : "down"} size={20} color={c.ink} />
           </Pressable>
+          {showRequests && requests.error ? (
+            <LoadError
+              message={L.requestsUnknown}
+              onRetry={() => void Promise.all([summary.reload(), requests.reload()])}
+            />
+          ) : null}
           {showRequests ? (
             <StructureRequests
               structureId={structureId}
@@ -237,9 +246,15 @@ function Body() {
 }
 
 const styles = StyleSheet.create({
-  requestsRow: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: 16 },
+  requestsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    padding: space3,
+    borderRadius: tokens.radius.radiusLg,
+  },
   text: { flex: 1, gap: 2 },
   group: { gap: space2 },
-  card: { borderRadius: 16, overflow: "hidden" },
+  card: { borderRadius: tokens.radius.radiusLg, overflow: "hidden" },
   divider: { borderTopWidth: StyleSheet.hairlineWidth },
 });

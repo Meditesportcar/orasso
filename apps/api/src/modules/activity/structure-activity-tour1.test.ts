@@ -194,6 +194,14 @@ describe("livraison et signaux", () => {
       expect(res.status).toBe(204);
     });
     expect(seen).toEqual(expect.arrayContaining([`user:${damien.id}`, `user:${lea.id}`]));
+    // Refuser prévient aussi tous les responsables.
+    const paul = await signUp("Paul_66");
+    await staffRequestsService.request(await viewerOf(paul), structureId, null);
+    const seenDecline = await signals("inbox.changed", async () => {
+      const res = await call(damien, "POST", `/structures/${structureId}/members/${paul.id}/decline`, {});
+      expect(res.status).toBe(204);
+    });
+    expect(seenDecline).toEqual(expect.arrayContaining([`user:${damien.id}`, `user:${lea.id}`]));
   });
 });
 

@@ -466,15 +466,19 @@ export const notificationsService = {
         ),
       )
       .returning();
+    // Les responsables d'une structure, lus une fois par structure pour toute la passe (jusqu'à 200 lignes).
+    const managersOf = new Map<string, Promise<string[]>>();
     for (const n of due) {
       try {
         // Lot R9d : une ligne de structure n'est livrée (temps réel, push, e-mail) qu'à une personne qui en est encore
         // responsable. Retirée entre l'émission (heures calmes) et la livraison : la ligne reste en base, invisible, rien ne part.
-        if (
-          n.structureId &&
-          !(await structureManagers(db, n.structureId, { includeSuspended: true })).includes(n.userId)
-        ) {
-          continue;
+        if (n.structureId) {
+          let managers = managersOf.get(n.structureId);
+          if (!managers) {
+            managers = structureManagers(db, n.structureId, { includeSuspended: true });
+            managersOf.set(n.structureId, managers);
+          }
+          if (!(await managers).includes(n.userId)) continue;
         }
         const guard = deliveryGuards.get(n.type);
         const verdict = guard ? await guard(n) : true;

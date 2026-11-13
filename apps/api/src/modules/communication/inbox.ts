@@ -8,10 +8,10 @@ import {
   messagePreview,
   type OrganizerInboxSummary,
 } from "@orasso/shared";
-import { and, count, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversations, structureMembers } from "../../db/schema";
+import { conversations } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { requestedStaffCount, structureActivityService } from "../activity/structure";

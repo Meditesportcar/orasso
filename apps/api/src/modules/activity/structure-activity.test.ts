@@ -116,18 +116,19 @@ describe("notifyStructure", () => {
   });
 
   it("dix candidatures sur le même événement : une ligne par responsable, compteur à 10 ; genres média et prestataire : leur texte", async () => {
-    const e = await createEvent(structureId, { title: "Nocturne de Canet" });
+    // Lot R9d, tour 1 : le « reste à trier » se lit dans les candidatures réelles : dix vraies candidatures.
+    const e = await createEvent(structureId, { title: "Nocturne de Canet", capacity: 30 });
     for (let i = 0; i < 10; i++) {
-      await withTx((tx, after) =>
-        notifyStructure(tx, structureId, "application_received", {
-          title: "x",
-          body: "x",
-          eventId: e.id,
-          groupKey: `applications:${e.id}:vehicle`,
-          data: { kind: "vehicle", eventName: "Nocturne de Canet" },
-          after,
-        }),
-      );
+      const u = await signUp(`Cand_${i}`);
+      const car = await createVehicle(u.id, ref);
+      await applicationsService.apply(await viewerOf(u), e.id, {
+        vehicleIds: [car.id],
+        rulesAccepted: true,
+        followStructure: false,
+        newsletterOptIn: false,
+        companions: 0,
+        message: null,
+      } as never);
     }
     for (const u of [damien, lea]) {
       const rows = await mineIn(u);

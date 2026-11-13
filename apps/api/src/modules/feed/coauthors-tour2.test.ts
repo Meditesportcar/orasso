@@ -138,8 +138,11 @@ describe("identifiant de la cible", () => {
     expect(sent.status).toBe(201);
     const row = (await db.select().from(feedPostCoauthors))[0];
     expect(row?.coauthorId).toBe(structure.id.toLowerCase());
-    const items = (await call(owner, "GET", "/me/requests")).json.items as { kind: string }[];
+    // Lot R9d : l'invitation d'une structure se lit dans ses demandes (ancienne assertion : `/me/requests`), plus dans la liste personnelle.
+    const items = (await call(owner, "GET", `/structures/${structure.id}/requests`)).json.items as { kind: string }[];
     expect(items.some((i) => i.kind === "coauthor")).toBe(true);
+    const personal = (await call(owner, "GET", "/me/requests")).json.items as { kind: string }[];
+    expect(personal.some((i) => i.kind === "coauthor")).toBe(false);
     expect((await call(owner, "POST", `/me/feed-coauthor-requests/${sent.json.id}/accept`)).status).toBe(200);
   });
 
