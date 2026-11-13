@@ -55,6 +55,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { organizerIds } from "../after-event/helpers";
+import { albumsLegacy, mergeContents } from "../albums/legacy";
 import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
@@ -336,16 +337,22 @@ export const mediaService = {
           isNull(mediaProfiles.deletedAt),
           ne(events.status, "draft"),
           ne(events.admission, "invite_only"),
+          eq(mediaContents.kind, "link"),
           accreditedSql,
           q.cursor ? lt(mediaContents.id, q.cursor) : undefined,
         ),
       )
       .orderBy(desc(mediaContents.id))
       .limit(q.limit + 1);
-    const items = rows.slice(0, q.limit);
+    // Lot R9e : les liens d'ici et les albums publiés (`albumsLegacy`), par identifiant décroissant comme avant.
+    const merged = [
+      ...rows.map(({ c, e, m }) => contentView(c, e, m)),
+      ...(await albumsLegacy.forMedia(id, q.limit + 1, q.cursor)),
+    ].sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    const items = merged.slice(0, q.limit);
     return {
-      items: items.map(({ c, e, m }) => contentView(c, e, m)),
-      nextCursor: rows.length > q.limit ? (items.at(-1)?.c.id ?? null) : null,
+      items,
+      nextCursor: merged.length > q.limit ? (items.at(-1)?.id ?? null) : null,
     };
   },
 
@@ -675,7 +682,11 @@ export const mediaService = {
   async mineContents(v: Viewer): Promise<MediaContentView[]> {
     const profile = await mediaOfUser(v.user.id);
     if (!profile) return [];
-    const rows = await loadContents(and(eq(mediaContents.mediaProfileId, profile.id), isNull(mediaContents.deletedAt)));
+    // Lot R9e : les galeries sont des albums (façade `albumsLegacy`), les liens restent ici.
+    const links = await loadContents(
+      and(eq(mediaContents.mediaProfileId, profile.id), isNull(mediaContents.deletedAt), eq(mediaContents.kind, "link")),
+    );
+    const rows = [...links, ...(await albumsLegacy.mine(profile.id))];
     return rows.sort(
       (a, b) => b.event.startsAt.localeCompare(a.event.startsAt) || b.publishedAt.localeCompare(a.publishedAt),
     );
@@ -683,6 +694,8 @@ export const mediaService = {
 
   /** `POST /me/media-contents` : seulement si le média est accrédité (`accepted`) sur l'événement (V6). */
   async createContent(v: Viewer, input: MediaContentCreate): Promise<MediaContentView> {
+    // Lot R9e : une galerie (APK en ligne) devient un album publié d'un coup ; les liens suivent le chemin d'avant.
+    if (input.kind === "gallery") return albumsLegacy.createGallery(v, input);
     assertWritable(v);
     // Publication idempotente (lot 59d) : les clés d'une galerie servent d'identifiant de tentative. Une reprise après
     // une réponse perdue rend le contenu déjà publié, avant la limite du jour (tour 2 : elle ne compte pas et n'est
@@ -702,6 +715,9 @@ export const mediaService = {
   },
 
   async updateContent(v: Viewer, id: string, input: MediaContentUpdate): Promise<MediaContentView> {
+    // Lot R9e : l'identifiant d'une galerie est celui d'un album.
+    const album = await albumsLegacy.update(v, id, input);
+    if (album) return album;
     assertWritable(v);
     rateLimit("mediaWrite", v.user.id);
     await withTx(async (tx) => {
@@ -723,6 +739,7 @@ export const mediaService = {
 
   /** Retrait d'un contenu : la ligne reste (vues de la couverture), ses photos sont effacées. */
   async deleteContent(v: Viewer, id: string): Promise<void> {
+    if (await albumsLegacy.remove(v, id)) return;
     assertWritable(v);
     const keys = await withTx(async (tx) => {
       const { c } = await ownContent(tx, v, id);
@@ -737,6 +754,9 @@ export const mediaService = {
 
   /** `PATCH /events/:id/media-contents/:cid/feature` : l'organisateur met en avant (ou retire) un contenu. */
   async feature(v: Viewer, eventId: string, contentId: string, featured: boolean): Promise<MediaContentView> {
+    // Lot R9e : « mis en avant » d'une galerie = album officiel de l'événement (R9g pose la vraie route).
+    const album = await albumsLegacy.feature(v, eventId, contentId, featured);
+    if (album) return album;
     const event = await eventsRepo.byId(eventId);
     await requireOrganizerWrite(v, event.structureId);
     if (event.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
@@ -777,24 +797,30 @@ export const mediaService = {
     if (!event || event.status === "draft" || event.admission === "invite_only") {
       throw notFound("Événement introuvable");
     }
-    return loadContents(
+    // Lot R9e : les liens d'ici, les albums publiés de `albumsLegacy`, l'album officiel (mis en avant) d'abord.
+    const links = await loadContents(
       and(
         eq(mediaContents.eventId, event.id),
         isNull(mediaContents.deletedAt),
         isNull(mediaProfiles.deletedAt),
+        eq(mediaContents.kind, "link"),
         accreditedSql,
       ),
     );
+    return mergeContents(links, await albumsLegacy.forEvent(event.id));
   },
 
   /** `POST /media-contents/:id/view` : +1 par session (compte ou visiteur) et par heure ; jamais le média lui-même. */
   async view(id: string, session: string, viewer: Viewer | null): Promise<{ views: number }> {
-    const [row] = await db
+    const [content] = await db
       .select({ c: mediaContents, ownerId: mediaProfiles.userId })
       .from(mediaContents)
       .innerJoin(mediaProfiles, eq(mediaProfiles.id, mediaContents.mediaProfileId))
       .where(and(eq(mediaContents.id, id), isNull(mediaContents.deletedAt)));
-    if (!row) throw notFound(mediaLabels.contentNotFound);
+    // Lot R9e : les vues d'une galerie (devenue album) se comptent de la même façon, sur l'album.
+    const album = content ? null : await albumsLegacy.viewTarget(id);
+    if (!content && !album) throw notFound(mediaLabels.contentNotFound);
+    const row = { c: { views: content?.c.views ?? album?.views ?? 0 }, ownerId: content?.ownerId ?? album?.ownerId };
     if (viewer?.user.id === row.ownerId) return { views: row.c.views };
     rateLimit("mediaView", `${session}|${id}`);
     const t = now().getTime();
@@ -810,6 +836,7 @@ export const mediaService = {
       if (oldest === undefined) break;
       seenViews.delete(oldest);
     }
+    if (album) return { views: await album.bump() };
     const [updated] = await db
       .update(mediaContents)
       .set({ views: sql`${mediaContents.views} + 1` })

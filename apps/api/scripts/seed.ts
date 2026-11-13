@@ -36,6 +36,7 @@ import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
 import { seedInvitations } from "./seed/invitations";
 import { seedLiveEvent } from "./seed/live-event";
+import { seedAlbums } from "./seed/albums";
 import { seedMedia } from "./seed/media";
 import { seedMemories } from "./seed/memories";
 import { seedMessaging } from "./seed/messaging";
@@ -207,6 +208,8 @@ async function main() {
   await seedEventNotifications();
   // Lot R9a : La Brasa et Roues Libres 66 suivent, Damien_66 suit La Brasa et Sud Cars, une story de page chacune.
   await seedPageFollows();
+  // Lot R9e : les galeries d'avant reprises en albums, un album publié (Sud Cars, 12 photos) et un brouillon de 3 photos.
+  await seedAlbums();
 }
 
 try {
