@@ -32,6 +32,8 @@ import type { Actor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
+import { visibleSourcePhotos } from "../albums/source-visible";
+import { albumVisibleSql } from "../albums/view";
 import { followSets } from "../social/pageFollows";
 
 export type StoryRecord = typeof stories.$inferSelect;
@@ -206,9 +208,15 @@ export function selectStories(where: SQL | undefined, ex: Executor = db): Promis
     .leftJoin(originProvider, eq(originProvider.id, originStory.providerId))
     .leftJoin(originMedia, eq(originMedia.id, originStory.mediaId))
     .where(where) as unknown as Promise<StoryRow[]>;
-  return query.then((rows) => {
+  return query.then(async (rows) => {
     const at = now();
-    return rows.filter((r) => originAvailable(r, at));
+    const live = rows.filter((r) => originAvailable(r, at));
+    // Lot R9f : une story reprise d'une photo d'album n'est servie que tant que l'album est visible (lectures, fichiers, exports,
+    // barre : tout passe par ici).
+    const sources = live.flatMap((r) => (r.story.sourceAlbumPhotoId ? [r.story.sourceAlbumPhotoId] : []));
+    if (!sources.length) return live;
+    const visible = await visibleSourcePhotos(ex, sources, at);
+    return live.filter((r) => !r.story.sourceAlbumPhotoId || visible.has(r.story.sourceAlbumPhotoId));
   });
 }
 
@@ -220,10 +228,18 @@ export const liveStory = (at: Date = now()) =>
  * Lot R7h, tour 4 : condition SQL « ce n'est pas une copie masquée » (l'inverse de `originAvailable`). Une copie dont l'originale
  * n'est plus servable (supprimée, auteur suspendu, banni ou supprimé, structure ou pro indisponible, compte passé en privé)
  * ne compte pas dans le plafond de `STORY_LIVE_MAX` : elle est invisible, et à la levée d'une suspension le plafond peut être
- * dépassé pour la journée (elle revient quand même).
+ * dépassé pour la journée (elle revient quand même). Lot R9f : une story reprise d'une photo d'album dont l'album n'est plus visible
+ * est masquée de la même façon (elle ne compte pas non plus, sinon son auteur ne pourrait plus rien publier sans la voir).
  */
 export const notMaskedCopy = (at: Date): SQL =>
-  sql`(${stories.sharedFromStoryId} is null or exists (
+  sql`((${stories.sourceAlbumPhotoId} is null or exists (
+    select 1 from event_album_photos
+      join event_albums on event_albums.id = event_album_photos.album_id
+      join events on events.id = event_albums.event_id
+      join media_profiles on media_profiles.id = event_albums.media_profile_id
+    where event_album_photos.id = ${stories.sourceAlbumPhotoId} and event_album_photos.deleted_at is null
+      and ${albumVisibleSql(at)}))
+  and (${stories.sharedFromStoryId} is null or exists (
     select 1 from stories o join profiles op on op.user_id = o.author_id
     where o.id = ${stories.sharedFromStoryId} and o.deleted_at is null and o.status = 'ready'
       and op.deleted_at is null and op.banned_at is null and (op.suspended_until is null or op.suspended_until <= ${at})
@@ -233,7 +249,7 @@ export const notMaskedCopy = (at: Date): SQL =>
         when 'pro' then exists (select 1 from pro_profiles pp where pp.id = o.pro_id and pp.deleted_at is null)
         when 'provider' then exists (select 1 from provider_profiles pv where pv.id = o.provider_id and pv.deleted_at is null)
         when 'media' then exists (select 1 from media_profiles mp where mp.id = o.media_id and mp.deleted_at is null)
-        else op.visibility = 'public' end))`;
+        else op.visibility = 'public' end)))`;
 
 /** Compte ni supprimé, ni banni, ni suspendu. */
 export const accountActive = (p: Pick<StoryRow["author"], "deletedAt" | "bannedAt" | "suspendedUntil">, at: Date) =>

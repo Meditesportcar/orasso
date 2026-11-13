@@ -11,6 +11,7 @@ export * from "./labels/admin.fr";
 export * from "./labels/adminApp.fr";
 export * from "./labels/after-event.fr";
 export * from "./labels/albums.fr";
+export * from "./labels/albumTags.fr";
 export * from "./labels/arrival.fr";
 export * from "./labels/arrivee.fr";
 export * from "./labels/casquettes.fr";

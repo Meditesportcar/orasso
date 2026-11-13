@@ -21,6 +21,7 @@ import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { albumCreditLineOf } from "../albums/share-to-story";
 import { requireVisiblePost } from "../feed/access";
 import { commercialViews } from "../partnerships/commercial";
 import { MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
@@ -79,12 +80,11 @@ export const exportService = {
     if (!file) throw notFound("Story introuvable");
     // Une vidéo sort telle quelle : pas de floutage de plaque, pas de signature (décision de Damien, 09/11).
     if (story.mediaKind === "video") return { data: file, type: "video/mp4", name: "orasso-story.mp4" };
+    // Lot R9f : une story reprise d'une photo d'album sort avec le crédit du média (« Photos : <média> »), sous la signature.
+    const credit = await albumCreditLineOf(story.sourceAlbumPhotoId);
+    const mention = [await commercialMention(story.commercialPartnerId), credit].filter(Boolean).join(" · ") || null;
     return {
-      data: await signFile(
-        file,
-        { width: STORY_W, height: STORY_H },
-        await commercialMention(story.commercialPartnerId),
-      ),
+      data: await signFile(file, { width: STORY_W, height: STORY_H }, mention),
       ...jpeg("story"),
     };
   },

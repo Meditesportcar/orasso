@@ -4,6 +4,7 @@ export * from "./activity";
 export * from "./admin";
 export * from "./afterEvent";
 export * from "./albums";
+export * from "./albumTags";
 export * from "./application";
 export * from "./auth";
 export * from "./common";

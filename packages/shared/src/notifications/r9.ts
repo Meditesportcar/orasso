@@ -24,6 +24,16 @@ export const r9NotificationTable = {
     push: true,
     email: false,
   },
+  // Lot R9f (T41) : « Ce n'est pas ma voiture » prévient celui qui a posé l'identification (le média ; l'organisateur par la structure).
+  // Journal seul : une correction, pas une urgence.
+  album_tag_declined: {
+    family: "event",
+    label: "Une identification est refusée dans un album",
+    title: "{name}",
+    body: "{name} : une identification a été retirée d'une photo de ton album.",
+    push: false,
+    email: false,
+  },
   // Lot R9d (T27) : le seul type neuf de l'Activité de la structure. Regroupé par événement et par genre (24 h), sans push
   // (150 voitures en 30 minutes : le journal suffit), hors de l'Essentiel. Le titre est composé par l'émetteur (genre).
   application_received: {

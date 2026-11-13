@@ -20,16 +20,34 @@ import { conflict, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
+import { purgeStoryFiles } from "../stories/expire";
+import { dropStoriesOfAlbumPhotos } from "../stories/share";
 import { removeOrRetry } from "../vehicles/photos-blur";
 import { assertAccredited, assertWritable, isUniqueViolation, lockOwnAlbum, mediaOfUser, requireMedia } from "./guards";
+import { tagsByPhoto } from "./tag-visibility";
 import { type AlbumJoin, albumBase, albumPhotos, albumVisibleSql, loadAlbum, photoView, summariesOf } from "./view";
 
 /** L'album ouvert : le résumé et toutes ses photos. */
-export async function albumViewOf(join: AlbumJoin, viewerId: string | null): Promise<AlbumView> {
-  const [summary] = await summariesOf(db, [join], viewerId);
+export async function albumViewOf(join: AlbumJoin, v: Viewer): Promise<AlbumView> {
+  const [summary] = await summariesOf(db, [join], v.user.id);
   if (!summary) throw notFound(albumLabels.notFound);
   const photos = await albumPhotos(db, join.a.id);
-  return { ...summary, photos: photos.map((p) => photoView(join.a.id, p)) };
+  // Lot R9f : les identifications que ce regard a le droit de voir (jamais sans session : cette lecture exige une session).
+  const tags = await tagsByPhoto(
+    db,
+    join,
+    photos.map((p) => p.id),
+    v,
+  );
+  // Les champs n'existent que quand il y a quelque chose à montrer : la forme d'avant est gardée sinon (liste blanche de R9e).
+  return {
+    ...summary,
+    photos: photos.map((p) => {
+      const list = tags.get(p.id);
+      return list?.length ? { ...photoView(join.a.id, p), tags: list } : photoView(join.a.id, p);
+    }),
+    ...(tags.size ? { tagsCount: tags.size } : {}),
+  };
 }
 
 /** Les fichiers à effacer après la validation de la transaction (jamais avant : un retour en arrière les laisserait orphelins de leur ligne). */
@@ -120,14 +138,14 @@ export const albumsService = {
   async getOwn(v: Viewer, id: string): Promise<AlbumView> {
     const join = await loadAlbum(db, id, v.user.id, now());
     if (!join) throw notFound(albumLabels.notFound);
-    return albumViewOf(join, v.user.id);
+    return albumViewOf(join, v);
   },
 
   /** `GET /albums/:id` : tout membre connecté voit un album publié visible ; le média voit aussi ses brouillons. */
   async get(v: Viewer, id: string): Promise<AlbumView> {
     const join = await loadAlbum(db, id, v.user.id, now());
     if (!join) throw notFound(albumLabels.notFound);
-    return albumViewOf(join, v.user.id);
+    return albumViewOf(join, v);
   },
 
   /** `PATCH /me/albums/:id { title?, allowSave? }` : le titre (vide = le titre par défaut) et l'option « Enregistrer ». */
@@ -155,6 +173,7 @@ export const albumsService = {
    */
   async remove(v: Viewer, id: string): Promise<void> {
     assertWritable(v);
+    let dropped: string[] = [];
     const keys = await withTx(async (tx) => {
       const profile = await requireMedia(tx, v);
       const album = await lockOwnAlbum(tx, id, profile.id);
@@ -167,6 +186,11 @@ export const albumsService = {
         .update(eventAlbums)
         .set({ deletedAt: now(), officialAt: null, photosCount: 0 })
         .where(eq(eventAlbums.id, album.id));
+      // Lot R9f : les stories reprises d'une photo de l'album (« En story ») tombent avec lui.
+      dropped = await dropStoriesOfAlbumPhotos(
+        tx,
+        photos.map((p) => p.id),
+      );
       // Une photo signalée garde son fichier jusqu'à la décision de la modération.
       const held = await photosHeldByReport(
         tx,
@@ -175,11 +199,13 @@ export const albumsService = {
       return photos.filter((p) => !held.has(p.id)).map((p) => p.key);
     });
     await removeFiles(keys);
+    if (dropped.length) await purgeStoryFiles(dropped).catch(() => undefined);
   },
 
   /** `DELETE /me/albums/:id/photos/:photoId` : retire une photo et repositionne les suivantes. */
   async removePhoto(v: Viewer, id: string, photoId: string): Promise<void> {
     assertWritable(v);
+    let dropped: string[] = [];
     const key = await withTx(async (tx) => {
       const profile = await requireMedia(tx, v);
       const album = await lockOwnAlbum(tx, id, profile.id);
@@ -199,6 +225,8 @@ export const albumsService = {
         throw conflict("album_empty", albumLabels.emptyAlbum);
       }
       await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
+      // Lot R9f : les stories reprises de cette photo (« En story ») tombent avec elle.
+      dropped = await dropStoriesOfAlbumPhotos(tx, [photo.id]);
       await shiftPositions(tx, album.id, photo.position);
       await tx
         .update(eventAlbums)
@@ -207,6 +235,7 @@ export const albumsService = {
       return (await photosHeldByReport(tx, [photo.id])).has(photo.id) ? null : photo.storageKey;
     });
     if (key) await removeFiles([key]);
+    if (dropped.length) await purgeStoryFiles(dropped).catch(() => undefined);
   },
 
   // --- Listes ---------------------------------------------------------------------------------------------------------

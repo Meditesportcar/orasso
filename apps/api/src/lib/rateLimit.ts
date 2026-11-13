@@ -161,6 +161,10 @@ export const rateRules = {
   },
   mediaContent: { max: 20, windowMs: 86_400_000, message: "Trop de contenus publiés aujourd'hui : réessaie demain." },
   mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /** Lot R9f : identifier une voiture ou une personne sur une photo d'album (poser, retirer) ; « Tes photos » en repartage. */
+  albumTag: { max: 120, windowMs: 3_600_000, message: "Trop d'identifications : réessaie plus tard." },
+  /** Lot R9f : « Enregistrer » une photo d'album (rendu d'image avec le crédit). */
+  albumDownload: { max: 60, windowMs: 3_600_000, message: "Trop de photos enregistrées : réessaie plus tard." },
   /** Vues d'un contenu média : par visiteur et par contenu, comme le compteur de la fiche pro. */
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
   /** Lot R7d1 : « Je suis sur place » (présence par GPS) : 5 essais en 10 minutes par compte, refus compris. */

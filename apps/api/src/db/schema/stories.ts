@@ -26,7 +26,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-
+import { eventAlbumPhotos } from "./albums";
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
@@ -92,6 +92,11 @@ export const stories = pgTable(
       onDelete: "cascade",
     }),
     sharedByUserId: text("shared_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Lot R9f (« En story » d'une photo d'album) : la photo d'origine. La story porte le crédit du média (non retirable) et tombe si
+     * l'identification est retirée ou si l'album est supprimé. Jamais servie telle quelle (le crédit l'est).
+     */
+    sourceAlbumPhotoId: uuid("source_album_photo_id").references(() => eventAlbumPhotos.id, { onDelete: "set null" }),
     viewsCount: integer("views_count").notNull().default(0),
     reactionsCount: integer("reactions_count").notNull().default(0),
     expiresAt: tstz("expires_at").notNull(),
@@ -111,6 +116,7 @@ export const stories = pgTable(
     index("stories_media_idx").on(t.mediaId, t.expiresAt).where(sql`${t.mediaId} is not null`),
     index("stories_crew_idx").on(t.crewId, t.expiresAt).where(sql`${t.crewId} is not null`),
     index("stories_shared_from_idx").on(t.sharedFromStoryId).where(sql`${t.sharedFromStoryId} is not null`),
+    index("stories_source_album_photo_idx").on(t.sourceAlbumPhotoId).where(sql`${t.sourceAlbumPhotoId} is not null`),
     index("stories_sweep_idx").on(t.deletedAt).where(sql`${t.deletedAt} is not null`),
     // Une story de crew a son crew ; les autres n'en ont pas.
     check("stories_crew_check", sql`(${t.audience} = 'crew') = (${t.crewId} is not null)`),

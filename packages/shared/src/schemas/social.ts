@@ -6,6 +6,7 @@ import { storyAudiences, storyPersonas } from "../rules/audience";
 import type { FollowState } from "../rules/follows";
 import type { ProfileSocials } from "../rules/socials";
 import type { ProfileAudience } from "../rules/visibility";
+import type { AlbumMention } from "./albumTags";
 import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";
 import type { PartnerLogo, PartnershipOffer, VehiclePartner } from "./partnerships";
@@ -70,6 +71,12 @@ export type OtherVehicle = (VehiclePublic | VehiclePrivate) & {
   /** Vrai si la fiche complète est consultable (compte public ou abonné accepté). */
   detailed: boolean;
   owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
+  /**
+   * Lot R9f (T42) : « Vu au <événement> · N photos », les photos d'albums de médias où cette voiture est identifiée (six vignettes
+   * par album), seulement celles que **le lecteur** a le droit de voir, seulement quand la fiche complète est visible. Jamais des
+   * publications. Absent de la fiche réduite d'un compte privé et d'une copie plus ancienne.
+   */
+  albumMentions?: AlbumMention[];
 };
 
 export type PeopleSearchPage = { items: PersonCard[]; nextCursor: string | null };

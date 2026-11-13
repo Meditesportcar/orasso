@@ -156,6 +156,10 @@ export const errorCodes = [
   "album_full",
   "album_empty",
   "not_accredited",
+  // Lot R9f : identification sur une photo d'album, « En story » et « Enregistrer ».
+  "tag_declined",
+  "plate_unknown",
+  "save_not_allowed",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */
