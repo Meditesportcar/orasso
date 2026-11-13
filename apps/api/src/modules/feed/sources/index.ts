@@ -1,5 +1,6 @@
 // Les sources du Fil, une par fichier (ARCHITECTURE-R7 § 2.4). Un lot suivant remplace le fichier réservé qui le
 // concerne (`spotMeetup`, `memory`, `sponsored` : aujourd'hui `null`) ; cette liste n'a pas à changer.
+import { source as albums } from "./albums";
 import { source as events } from "./events";
 import { source as feedPosts } from "./feedPosts";
 import { source as lineups } from "./lineups";
@@ -15,5 +16,5 @@ import { source as voteResults } from "./voteResults";
  * Vague R8 (lot R8d) : la source `announcements` n'y est plus, les annonces publiques sont des publications du journal de
  * l'événement et entrent par `feedPosts` ; le genre de carte `announcement` reste dans l'union (l'APK en ligne le connaît).
  */
-const all: unknown[] = [events, vehicles, lineups, voteResults, pros, feedPosts, spotMeetup, memory];
+const all: unknown[] = [events, vehicles, lineups, voteResults, pros, feedPosts, spotMeetup, memory, albums];
 export const rankedSources = all.filter((s) => s !== null) as FeedSource[];

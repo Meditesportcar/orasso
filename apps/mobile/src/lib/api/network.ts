@@ -18,10 +18,11 @@ import { qs } from "./qs";
 export const networkApi = {
   setMainVehicle: (vehicleId: string) =>
     request<{ mainVehicleId: string }>("/api/me/main-vehicle", { method: "PUT", body: { vehicleId } }),
-  follow: (pseudo: string) =>
-    request<FollowResult>(`/api/users/${encodeURIComponent(pseudo)}/follow`, { method: "POST" }),
-  unfollow: (pseudo: string) =>
-    request<FollowResult>(`/api/users/${encodeURIComponent(pseudo)}/follow`, { method: "DELETE" }),
+  // Lot R9n (liste blanche, T19) : suivre une personne au nom de la casquette active (`actor`).
+  follow: (pseudo: string, actor?: string | null) =>
+    request<FollowResult>(`/api/users/${encodeURIComponent(pseudo)}/follow`, { method: "POST", actor }),
+  unfollow: (pseudo: string, actor?: string | null) =>
+    request<FollowResult>(`/api/users/${encodeURIComponent(pseudo)}/follow`, { method: "DELETE", actor }),
   network: () => request<NetworkCounts>("/api/me/network"),
   followers: (q?: string, cursor?: string) => request<FollowersPage>(`/api/me/followers${qs({ q, cursor })}`),
   following: (kind: FollowingKind, q?: string, cursor?: string) =>

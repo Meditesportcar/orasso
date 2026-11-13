@@ -1,6 +1,7 @@
 // Registre des cibles : une ligne par sorte de contenu signalable (ARCHITECTURE-SUITE § 15.3).
 import type { ReportTarget } from "@orasso/shared";
 import { storyTarget } from "../../stories/moderation";
+import { albumPhotoTarget } from "./albumPhoto";
 import { crewTarget, proTarget, providerTarget } from "./community";
 import { crewCommentTarget, crewPostTarget } from "./crewFeed";
 import { announcementTarget, eventTarget, reviewTarget } from "./event";
@@ -27,6 +28,7 @@ const registry: Record<ReportTarget, TargetRules> = {
   feed_post: feedPostTarget,
   story: storyTarget,
   feed_comment: feedCommentTarget,
+  album_photo: albumPhotoTarget,
 };
 
 export const targetOf = (type: ReportTarget): TargetRules => registry[type];

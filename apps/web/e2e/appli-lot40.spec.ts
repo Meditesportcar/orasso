@@ -39,33 +39,34 @@ const BARS = {
     ["Crew", "crew", null], // Lot R7b2 : l’onglet Crew n’a plus de grand titre (ses onglets internes Fil · Sorties · Membres · Spots en tiennent lieu).
     ["Profil", "profil", null],
   ],
+  // Lot R9n (maquette R9.1) : Le Fil et Page dans chaque groupe ; l'écran d'aujourd'hui est celui de l'onglet Page.
   organizer: [
     ["Événements", "evenements", null],
     ["Tri", "tri", "Tri"],
     ["Direct", "direct", null],
-    ["Équipe", "equipe", null],
-    ["Structure", "structure", "Ma structure"],
+    ["Le Fil", "fil", null],
+    ["Page", "page", "Ma structure"],
   ],
   pro: [
     ["Scanner", "scanner", "Scanner"],
-    ["Ma fiche", "fiche", OWN_NAME],
+    ["Le Fil", "fil", null],
     ["Accueil", "accueil", null],
     ["Stats", "stats", "Stats"],
-    ["Profil", "profil", null],
+    ["Page", "page", OWN_NAME],
   ],
   provider: [
     ["Missions", "missions", "Missions"],
-    ["Candidatures", "candidatures", "Candidatures"],
+    ["Le Fil", "fil", null],
     ["Accueil", "accueil", null],
-    ["Vitrine", "vitrine", OWN_NAME],
-    ["Profil", "profil", null],
+    ["Candidatures", "candidatures", "Candidatures"],
+    ["Page", "page", OWN_NAME],
   ],
   media: [
     ["Explorer", "explorer", "Explorer"],
-    ["Presse", "presse", "Accréditations"],
+    ["Le Fil", "fil", null],
     ["Accueil", "accueil", null],
-    ["Contenus", "contenus", "Contenus"],
-    ["Profil", "profil", null],
+    ["Presse", "presse", "Accréditations"],
+    ["Page", "page", "Contenus"],
   ],
 } as const;
 

@@ -102,6 +102,7 @@ export function FollowButton({
   inert = false,
   onChanged,
   testIDFor,
+  actor,
 }: {
   pseudo: string;
   mine: FollowState;
@@ -115,6 +116,8 @@ export function FollowButton({
   onChanged?: (mine: FollowState) => void;
   /** Surcharge des identifiants de test d'une liste (`small`). */
   testIDFor?: (kind: FollowButtonKind) => string;
+  /** Lot R9n : suivre au nom de la casquette active (liste blanche) ; seulement quand l'état `mine` a été lu au même nom. */
+  actor?: string | null;
 }) {
   const { t } = useTheme();
   const [state, setState] = useState<FollowState>(mine);
@@ -144,7 +147,7 @@ export function FollowButton({
 
   const onPress = () => {
     if (inert) return;
-    if (isAction(kind)) void run(() => api.follow(pseudo));
+    if (isAction(kind)) void run(() => api.follow(pseudo, actor));
     else setConfirming(true);
   };
   const cancel = kind === "requested";
@@ -155,7 +158,7 @@ export function FollowButton({
       privateAccount={visibility === "private"}
       busy={busy}
       error={error}
-      onConfirm={() => void run(() => api.unfollow(pseudo))}
+      onConfirm={() => void run(() => api.unfollow(pseudo, actor))}
       onKeep={() => {
         setConfirming(false);
         setError(null);

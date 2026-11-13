@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { initialsOf } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
+import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -29,7 +30,8 @@ export default function ProviderPage() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { status } = useSession();
-  const provider = useApi(() => api.providerPublic(id), [id, status], { enabled: status === "in" });
+  const actor = useActor();
+  const provider = useApi(() => api.providerPublic(id, actor), [id, status, actor], { enabled: status === "in" });
   const reviews = useApi(() => api.providerReviews(id), [id, status], { enabled: status === "in" });
   const p = provider.data;
   const [viewer, setViewer] = useState<number | null>(null);

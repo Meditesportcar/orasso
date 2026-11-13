@@ -105,7 +105,7 @@ for (const theme of THEMES) {
     await toPersona(page, "pro", /\/accueil/);
 
     // Ma fiche : en-tête, segments, activités en tuiles, remises en grands chiffres, réalisations, Y aller · Favori.
-    await tab(page, "Ma fiche");
+    await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page
     // Lot C4b : plus de grand titre, la photo d'atelier en tête (artefact `s-pro`).
     await expect(page.getByTestId("pro-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("pro-identity")).toBeVisible();
@@ -327,7 +327,7 @@ for (const theme of THEMES) {
     await shot(page, "candidatures-passees", theme);
 
     // Vitrine : vue organisateur.
-    await tab(page, "Vitrine");
+    await tab(page, "Page"); // R9n : la Vitrine est l'écran de l'onglet Page
     // Lot C4b : plus de grand titre, le bandeau du métier en tête (artefact `s-vitrine`).
     await expect(page.getByTestId("vitrine-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("vitrine-identity")).toContainText("La Brasa");

@@ -46,7 +46,7 @@ const TEXTS: Partial<
     tag: "principal",
     pseudo: "C'est lui qu'on voit sur ton profil.",
     privacy: "Ta fiche montre le nom de ton atelier, jamais le tien.",
-    bar: ["Scanner", "Ma fiche", "Accueil", "Stats", "Profil"],
+    bar: ["Scanner", "Le Fil", "Accueil", "Stats", "Page"],
   },
   media: {
     why: "On s'en sert pour te montrer d'abord les événements à couvrir près de chez toi, même sans GPS.",
@@ -55,7 +55,7 @@ const TEXTS: Partial<
     pseudo: "C'est lui qu'on voit sur ton profil ; tes demandes portent le nom de ton média.",
     privacy:
       "Les équipes organisatrices des événements où tu interviens et des structures que tu suis peuvent les voir, pour la sécurité.",
-    bar: ["Explorer", "Presse", "Accueil", "Contenus", "Profil"],
+    bar: ["Explorer", "Le Fil", "Accueil", "Presse", "Page"],
   },
 };
 
@@ -259,10 +259,10 @@ test("les six profils ont leur tuile, leur barre et leurs textes ; « J'ai déj�
   const bars: Record<Profile, string[]> = {
     exhibitor: ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"],
     visitor: ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"],
-    pro: ["Scanner", "Ma fiche", "Accueil", "Stats", "Profil"],
-    organizer: ["Événements", "Tri", "Direct", "Équipe", "Structure"],
-    provider: ["Missions", "Candidatures", "Accueil", "Vitrine", "Profil"],
-    media: ["Explorer", "Presse", "Accueil", "Contenus", "Profil"],
+    pro: ["Scanner", "Le Fil", "Accueil", "Stats", "Page"],
+    organizer: ["Événements", "Tri", "Direct", "Le Fil", "Page"],
+    provider: ["Missions", "Le Fil", "Accueil", "Candidatures", "Page"],
+    media: ["Explorer", "Le Fil", "Accueil", "Presse", "Page"],
   };
   for (const [key, labels] of Object.entries(bars)) {
     await page.getByTestId(`profile-${key}`).click();

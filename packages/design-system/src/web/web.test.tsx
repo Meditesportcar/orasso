@@ -309,7 +309,44 @@ describe("rendu serveur des composants", () => {
       expect(bar).toContain("o-center-o");
     }
     expect(tabSets.fan).toBe(tabSets.exhibitor);
-    expect(tabSets.organizer.map((t) => t.label)).toEqual(["Événements", "Tri", "Direct", "Équipe", "Structure"]);
+    // Lot R9n (maquette R9.1) : « Le Fil » et « Page » dans les quatre casquettes ; libellés exacts, ordre, icônes, centre au milieu.
+    const decided = {
+      organizer: [
+        ["Événements", "calendar"],
+        ["Tri", "check"],
+        ["Direct", "live"],
+        ["Le Fil", "feed"],
+        ["Page", "cards"],
+      ],
+      pro: [
+        ["Scanner", "qr"],
+        ["Le Fil", "feed"],
+        ["Accueil", "o"],
+        ["Stats", "live"],
+        ["Page", "cards"],
+      ],
+      provider: [
+        ["Missions", "briefcase"],
+        ["Le Fil", "feed"],
+        ["Accueil", "o"],
+        ["Candidatures", "list"],
+        ["Page", "cards"],
+      ],
+      media: [
+        ["Explorer", "explore"],
+        ["Le Fil", "feed"],
+        ["Accueil", "o"],
+        ["Presse", "press"],
+        ["Page", "cards"],
+      ],
+    } as const;
+    for (const set of ["organizer", "pro", "provider", "media"] as const) {
+      expect(
+        tabSets[set].map((t) => [t.label, t.icon]),
+        set,
+      ).toEqual(decided[set].map((d) => [...d]));
+      expect(tabSets[set][2]?.center, set).toBe(true);
+    }
     for (const icon of ["ticket", "stamp", "briefcase", "shop", "press", "gallery", "badge", "o"]) {
       expect(iconNames).toContain(icon);
     }

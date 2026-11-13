@@ -82,6 +82,7 @@ import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { openStandalone } from "@/lib/standalone";
+import { useActor } from "@/lib/useActor";
 import { useReloadOnForeground, useServerClock } from "@/lib/useAfter";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
@@ -171,9 +172,14 @@ export default function EventPage() {
     wasFocused.current = focused;
   }, [focused, event.reload]);
   const fil = remainingFil(feed.data?.items ?? [], journalRead);
-  const structure = useApi(() => api.structureBySlug(e?.structure.slug ?? ""), [e?.structure.slug, status], {
-    enabled: Boolean(e) && status !== "loading",
-  });
+  const actor = useActor();
+  const structure = useApi(
+    () => api.structureBySlug(e?.structure.slug ?? "", actor),
+    [e?.structure.slug, status, actor],
+    {
+      enabled: Boolean(e) && status !== "loading",
+    },
+  );
   const offer = useApi(() => api.ticketOffer(slug), [slug, status], { enabled: status !== "loading" });
   // Prestataire (lot 21) : a-t-il déjà candidaté ? Alors « Voir ma candidature », comme le prototype.
   const providerApps = useApi(() => api.providerApplications("upcoming"), [status, persona.kind], {
@@ -405,9 +411,9 @@ export default function EventPage() {
     setFollowing(true);
     try {
       if (structure.data?.isFollowing) {
-        await api.unfollowStructure(e.structure.id);
+        await api.unfollowStructure(e.structure.id, actor);
         setFollowing(false);
-      } else await api.followStructure(e.structure.id);
+      } else await api.followStructure(e.structure.id, actor);
       await structure.reload();
     } catch (error) {
       setFollowing(false);

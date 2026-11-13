@@ -42,6 +42,7 @@ import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
 import { errorMessage, request } from "@/lib/http";
 import { useSession } from "@/lib/session";
+import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -57,7 +58,8 @@ export default function ProPage() {
   const { slug, onglet } = useLocalSearchParams<{ slug: string; onglet?: string }>();
   const { status } = useSession();
   const session = status === "in";
-  const pro = useApi(() => api.proBySlug(slug), [slug, status], { enabled: status !== "loading" });
+  const actor = useActor();
+  const pro = useApi(() => api.proBySlug(slug, actor), [slug, status, actor], { enabled: status !== "loading" });
   const p = pro.data as WithPageExtras<ProPublic> | null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +119,8 @@ export default function ProPage() {
     setBusy(true);
     setError(null);
     try {
-      if (p.isFollowing) await api.unfollowPro(p.id);
-      else await api.followPro(p.id);
+      if (p.isFollowing) await api.unfollowPro(p.id, actor);
+      else await api.followPro(p.id, actor);
       await pro.reload();
     } catch (e) {
       setError(errorMessage(e));

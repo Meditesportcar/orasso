@@ -18,7 +18,7 @@ import { CrewDot, Num } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
-import { type AppPersonaEntry, destinationHref, isActive, personaOfEntry, tabHref } from "@/lib/personaModel";
+import { type AppPersonaEntry, destinationHref, isActive, personaOfEntry } from "@/lib/personaModel";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -148,7 +148,7 @@ export function CapRows({ staffEvents }: { staffEvents: MyStaffEvent[] }) {
 
   const open = (entry: AppPersonaEntry, route: string) => {
     const next = personaOfEntry(entry);
-    choose(next, tabHref(entry.kind, route) ?? undefined);
+    choose(next, destinationHref(entry.kind, route) ?? undefined);
   };
   const staffWhere = [...new Set(staffEvents.map((s) => s.structure.name))].slice(0, 2).join(", ");
 

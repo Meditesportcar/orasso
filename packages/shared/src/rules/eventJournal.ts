@@ -188,18 +188,44 @@ export function publicToFeedPost(p: PublicPostView): FeedPostView {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Lot R9n : le préfixe d'une clé d'auteur (`X-Orasso-Actor`) → la destination de « Publier en tant que ». */
+const DESTINATION_OF_AUTHOR_PREFIX: Record<string, string> = { s: "structure", p: "pro", v: "provider", m: "media" };
+
 /**
- * Les valeurs de départ de « Publier » ouvert depuis la fiche de l'événement (`?structure=<id>&evenement=<id>`) : la structure
- * déjà choisie comme auteur (si la personne en est responsable : elle figure dans ses casquettes) et l'événement posé. Une
- * adresse mal formée, une structure qui n'est pas la sienne ou un événement sans structure : les valeurs habituelles. L'écran
+ * Lot R9n : l'inverse — la clé d'auteur de `X-Orasso-Actor` (et de `?auteur=`) d'un auteur de « Publier » : `structure:<id>` →
+ * `s:<id>`, `pro:` → `p:`, `provider:` → `v:`, `media:` → `m:` ; « Moi » et tout le reste : `me`.
+ */
+export function actorKeyOfPublishAuthor(authorKey: string): string {
+  const at = authorKey.indexOf(":");
+  if (at < 1) return "me";
+  const destination = authorKey.slice(0, at);
+  const prefix = Object.entries(DESTINATION_OF_AUTHOR_PREFIX).find(([, d]) => d === destination)?.[0];
+  return prefix ? `${prefix}:${authorKey.slice(at + 1)}` : "me";
+}
+
+/**
+ * Les valeurs de départ de « Publier » : `?structure=<id>&evenement=<id>` depuis la fiche de l'événement (la structure déjà
+ * choisie comme auteur si la personne en est responsable : elle figure dans ses casquettes, et l'événement posé) ; `?auteur=<clé>`
+ * depuis le Fil en casquette (R9n : `s:`, `p:`, `v:` ou `m:` suivi de l'identifiant, ou `me`). Une adresse mal formée, une
+ * page qui n'est pas la sienne, une clé inconnue ou un événement sans structure : les valeurs habituelles (« Moi »). L'écran
  * relâche lui-même un événement que la structure ne peut pas rattacher.
  */
 export function publishStartChoice(
-  params: { structure?: string | null; evenement?: string | null },
+  params: { structure?: string | null; evenement?: string | null; auteur?: string | null },
   authors: readonly { key: string; structureId?: string }[],
 ): PublishChoice {
   const structure = params.structure && UUID.test(params.structure) ? params.structure : null;
-  const author = structure ? authors.find((a) => a.structureId === structure) : undefined;
+  const byStructure = structure ? authors.find((a) => a.structureId === structure) : undefined;
+  const byActor = (() => {
+    const raw = params.auteur?.trim();
+    if (!raw || raw === "me") return undefined;
+    const at = raw.indexOf(":");
+    const destination = at < 1 ? undefined : DESTINATION_OF_AUTHOR_PREFIX[raw.slice(0, at)];
+    if (!destination) return undefined;
+    const key = `${destination}:${raw.slice(at + 1)}`;
+    return authors.find((a) => a.key === key);
+  })();
+  const author = byStructure ?? byActor;
   if (!author) return initialPublishChoice;
   const eventId = params.evenement && UUID.test(params.evenement) ? params.evenement : null;
   return { ...initialPublishChoice, authorKey: author.key, eventId };
