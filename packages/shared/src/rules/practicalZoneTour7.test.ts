@@ -6,8 +6,8 @@ import type { PracticalData, PracticalPlace } from "./practical";
 import {
   coverContains,
   PRACTICAL_ZONE_MAX_PAGES,
-  placesInZonePage,
   type PracticalZone,
+  placesInZonePage,
   viewCovered,
   zoneContains,
   zoneForRequest,
@@ -48,7 +48,11 @@ function dense(tag = "c", shift = 0): PracticalPlace[] {
     for (let cj = 0; cj < 3; cj++)
       for (let k = 0; k < 30; k++)
         all.push(
-          place(`${tag}${ci}${cj}-${k}`, 48.7 + ci * 0.1 + 0.001 + k * 0.0002 + shift, 2.2 + cj * 0.1 + 0.001 + k * 0.0002),
+          place(
+            `${tag}${ci}${cj}-${k}`,
+            48.7 + ci * 0.1 + 0.001 + k * 0.0002 + shift,
+            2.2 + cj * 0.1 + 0.001 + k * 0.0002,
+          ),
         );
   return all;
 }
@@ -295,10 +299,10 @@ describe("409 : la reprise ne garde ni les lieux ni la couverture de l'ancienne 
     const s = z.getState();
     const view = { south: 48.705, west: 2.205, north: 48.795, east: 2.295 };
     const inView = [...s.places.values()].filter((p) => p.lat >= 48.7 && p.lat <= 48.8 && p.lng >= 2.2 && p.lng <= 2.3);
-    // La case est chargée seulement si tous ses lieux y sont (ici : jamais 30 anciens ni plus de ce que la nouvelle version a servi).
+    // La case a grossi (250 lieux, 200 servis au plus par la page 0) : elle n'est plus « chargée », le bouton revient, aucun ancien lieu.
     expect(inView.every((p) => p.id.startsWith("B"))).toBe(true);
-    if (viewCovered(s.cover, view)) expect(inView.length).toBe(250);
-    else expect(zoneNeedsSearch(s)).toBe(true);
+    expect(viewCovered(s.cover, view)).toBe(false);
+    expect(zoneNeedsSearch(s)).toBe(true);
   });
 });
 
@@ -312,14 +316,16 @@ describe("reprise forcée par l'éviction à la dernière page : pas « Trop de 
     const old = Array.from({ length: 2010 }, (_, k) => place(`old${k}`, inTight(k).lat, inTight(k).lng));
     const page = (n: number, k: number, extra: Partial<PracticalData>): PracticalData => ({
       origin: null,
-      places: Array.from({ length: n }, (_, i) => place(`p${k}-${i}`, inTight(k * 200 + i).lat, inTight(k * 200 + i).lng)),
+      places: Array.from({ length: n }, (_, i) =>
+        place(`p${k}-${i}`, inTight(k * 200 + i).lat, inTight(k * 200 + i).lng),
+      ),
       partial: false,
       attribution: att,
       ...extra,
     });
     const cell: [number, number] = [487, 22];
     expect(zoneContains(tight, { lat: 48.72, lng: 2.22 })).toBe(true);
-    const read = vi.fn().mockImplementation(async (zone: PracticalZone, cursor?: string) => {
+    const read = vi.fn().mockImplementation(async (_zone: PracticalZone, cursor?: string) => {
       const k = cursor ? Number(cursor.split(":")[1]) : 0;
       if (read.mock.calls.length === 1) {
         // La première recherche (zone large) revient coupée : la zone devient « dense », la suivante sera resserrée.
@@ -355,5 +361,116 @@ describe("reprise forcée par l'éviction à la dernière page : pas « Trop de 
     expect(z.searchHere()).toBe(true);
     await vi.advanceTimersByTimeAsync(0);
     expect(read.mock.calls.at(-1)?.[1]).toBeUndefined();
+  });
+});
+
+describe("409 : l'invalidation vise toute couverture qui chevauche la zone du curseur", () => {
+  const cellPlaces = (tag: string, ci: number, cj: number, n: number) =>
+    Array.from({ length: n }, (_, k) =>
+      place(`${tag}${ci}${cj}-${k}`, 48.7 + ci * 0.1 + 0.001 + k * 0.0003, 2.4 + cj * 0.1 + 0.001 + k * 0.0002),
+    );
+  /** Un bloc de 3 × 3 cases de 20 lieux (lng 2.4 à 2.7), plus deux cases qui grossissent : G (dans le bloc) et H (à l'est, hors du bloc). */
+  const block = (tag: string) => {
+    const out: PracticalPlace[] = [];
+    for (let ci = 0; ci < 3; ci++) for (let cj = 0; cj < 3; cj++) out.push(...cellPlaces(tag, ci, cj, 20));
+    return out;
+  };
+  const grown = (tag: string) => [
+    ...block(tag),
+    ...cellPlaces(`${tag}g`, 1, 2, 250), // G : lat 48.8-48.9, lng 2.6-2.7
+    ...cellPlaces(`${tag}h`, 1, 4, 250), // H : lat 48.8-48.9, lng 2.8-2.9
+  ];
+  const serveFrom = (get: () => PracticalPlace[]) =>
+    vi.fn().mockImplementation(async (zone: PracticalZone, cursor?: string): Promise<PracticalData> => {
+      const page = cursor ? Number(cursor.split(":")[0]) : 0;
+      const r = placesInZonePage(get(), zone, page);
+      if (cursor && cursor.split(":")[1] !== r.version) throw Object.assign(new Error("409"), { status: 409 });
+      return {
+        origin: null,
+        places: r.places,
+        partial: false,
+        attribution: att,
+        ...(r.more
+          ? {
+              truncated: true,
+              partialCells: r.partialCells,
+              ...(page + 1 < PRACTICAL_ZONE_MAX_PAGES ? { nextCursor: `${page + 1}:${r.version}` } : {}),
+            }
+          : {}),
+      };
+    });
+
+  it("une recherche antérieure sur un AUTRE rectangle qui chevauche la zone : sa couverture et ses anciens lieux sortent aussi", async () => {
+    let data = block("A"); // 180 lieux : la première zone est complète
+    const read = serveFrom(() => data);
+    const z = make(read);
+    z.setView({ south: 48.84, west: 2.34, north: 48.86, east: 2.36 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    const z1 = read.mock.calls[0]?.[0] as PracticalZone;
+    // Les cases G et H grossissent : une zone chevauchante, à l'est, est coupée (deux cases incomplètes, une dans le chevauchement).
+    data = grown("B");
+    z.setView({ south: 48.84, west: 2.84, north: 48.86, east: 2.86 });
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    const z2 = read.mock.calls[1]?.[0] as PracticalZone;
+    expect(z2).not.toEqual(z1);
+    expect(z2.west).toBeLessThan(z1.east); // les deux rectangles se chevauchent
+    // L'utilisateur appuie sur la case H (hors de la première zone) : la page suivante, alors que les données ont encore changé.
+    data = grown("C");
+    z.setView({ south: 48.81, west: 2.81, north: 48.89, east: 2.89 });
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read.mock.calls.map((c) => c[1]?.slice(0, 2))).toEqual([undefined, undefined, "1:", undefined]);
+    // La case G (dans le chevauchement) n'est plus déclarée chargée par l'ancienne recherche : le bouton revient, aucun ancien lieu de la zone.
+    const g = { south: 48.81, west: 2.61, north: 48.89, east: 2.69 };
+    z.setView(g);
+    const s = z.getState();
+    expect(viewCovered(s.cover, g)).toBe(false);
+    expect(zoneNeedsSearch(s)).toBe(true);
+    const stale = [...s.places.values()].filter((p) => zoneContains(z2, p) && !p.id.startsWith("C"));
+    expect(stale).toEqual([]);
+  });
+
+  it("409 reçu alors que la vue est déjà sortie de la zone : l'ancienne version n'y reste pas « chargée », aucune relance", async () => {
+    // Version A : la case (48.7 ; 2.2) a 5 lieux (complète dès la page 0) ; version B : elle passe à 250 lieux.
+    const before: PracticalPlace[] = [];
+    for (let ci = 0; ci < 3; ci++)
+      for (let cj = 0; cj < 3; cj++)
+        for (let k = 0; k < (ci === 0 && cj === 0 ? 5 : 30); k++)
+          before.push(
+            place(`A${ci}${cj}-${k}`, 48.7 + ci * 0.1 + 0.001 + k * 0.0002, 2.2 + cj * 0.1 + 0.001 + k * 0.0002),
+          );
+    const after = [...before];
+    for (let k = 0; k < 250; k++) after.push(place(`Bg-${k}`, 48.7 + 0.001 + k * 0.0003, 2.2 + 0.0015 + k * 0.0002));
+    let data = before;
+    let release: (() => void) | null = null;
+    const inner = serveFrom(() => data);
+    const read = vi.fn().mockImplementation(async (zone: PracticalZone, cursor?: string) => {
+      if (!cursor) return inner(zone);
+      data = after;
+      await new Promise<void>((r) => (release = r));
+      return inner(zone, cursor);
+    });
+    const z = make(read);
+    z.setView({ south: 48.8, west: 2.3, north: 48.9, east: 2.4 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    z.setView({ south: 48.705, west: 2.205, north: 48.995, east: 2.495 });
+    z.searchHere(); // la page 1 est en vol
+    await vi.advanceTimersByTimeAsync(0);
+    z.setView({ south: 47.0, west: 1.0, north: 47.05, east: 1.05 }); // la vue sort de la zone
+    (release as (() => void) | null)?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledTimes(2); // ni relance de la page 0, ni boucle
+    const cell = { south: 48.705, west: 2.205, north: 48.795, east: 2.295 };
+    z.setView(cell);
+    const s = z.getState();
+    expect(viewCovered(s.cover, cell)).toBe(false);
+    expect(zoneNeedsSearch(s)).toBe(true);
+    expect(s.loading).toBe(false);
+    expect(s.failed).toBe(false);
   });
 });

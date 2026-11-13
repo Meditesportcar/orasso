@@ -63,6 +63,9 @@ export const zoneIsTooWide = (s: Pick<ZoneState, "view">): boolean => s.view !==
 
 const zoneEquals = (a: PracticalZone, b: PracticalZone) =>
   a.south === b.south && a.west === b.west && a.north === b.north && a.east === b.east;
+/** Deux zones se recouvrent-elles (des bords qui se touchent seulement ne comptent pas) ? */
+const zonesOverlap = (a: PracticalZone, b: PracticalZone) =>
+  a.south < b.north && b.south < a.north && a.west < b.east && b.west < a.east;
 const insideZone = (outer: PracticalZone | null, view: PracticalZone) =>
   outer !== null &&
   [view.south, view.north].every((lat) => [view.west, view.east].every((lng) => zoneContains(outer, { lat, lng })));
@@ -213,7 +216,13 @@ export function createPracticalZone(deps: ZoneDeps) {
         // (Seulement si la réponse concerne toujours la recherche et la vue courantes, et s'il n'y a plus de page suivante.)
         // (Pas après une reprise forcée par l'éviction : la lecture repart de la première page, ce n'est pas « trop de lieux ».)
         const crowded =
-          !away && !next.restart && cut && !data.nextCursor && askedTight && view !== null && !viewCovered(next.cover, view);
+          !away &&
+          !next.restart &&
+          cut &&
+          !data.nextCursor &&
+          askedTight &&
+          view !== null &&
+          !viewCovered(next.cover, view);
         set({
           ...next,
           loading: false,
@@ -247,18 +256,22 @@ export function createPracticalZone(deps: ZoneDeps) {
       reading = false;
       if (!alive || !cycle.current(token)) return;
       const status = deps.statusOf(error);
-      if (status === 409 && cursor !== undefined && asked === zone) {
-        // Les données ont changé entre deux pages : on repart de la première page de la même zone. Les lieux et la couverture de l'ancienne
-        // version sont invalidés d'abord (une case autrefois complète peut avoir grossi : elle ne reste pas « chargée » sur l'ancien état) ;
-        // les lieux que couvre encore une autre lecture (ouverture) restent.
-        const cover = state.cover.filter((c) => !(c.t === "rect" && zoneEquals(c.zone, zone)));
+      if (status === 409 && cursor !== undefined) {
+        // Les données ont changé entre deux pages : tout ce que l'ancienne version garantissait sur cette zone est invalidé, que la vue soit
+        // encore dans la zone ou non. Toute couverture rectangulaire qui CHEVAUCHE la zone du curseur est retirée (même une recherche
+        // antérieure sur un autre rectangle), puis les lieux de la zone que plus rien ne garantit ; la garantie des lectures d'ouverture
+        // (disques) reste, avec ses lieux. Une case autrefois complète qui a grossi ne reste donc pas « chargée » sur l'ancien état.
+        const cover = state.cover.filter((c) => !(c.t === "rect" && zonesOverlap(c.zone, zone)));
         const places = new Map([...state.places].filter(([, p]) => !zoneContains(zone, p) || coverContains(cover, p)));
         seriesIds = new Set();
         pageState = null;
         set({ places, cover });
-        cursorUsed = undefined;
-        void load();
-        return;
+        if (asked === zone) {
+          // On repart de la première page de la même zone.
+          cursorUsed = undefined;
+          void load();
+          return;
+        }
       }
       if (status === null) deps.onUnknown?.(error);
       // Aucune relance automatique d'un échec : « Réessayer » (le calendrier de `readCycle` ne s'applique qu'aux chargements).
