@@ -539,7 +539,8 @@ test("réponse de suppression perdue APRÈS la suppression effective : la tuile 
     await expect(page.getByTestId("album-count")).toContainText("1");
     let lost = 0;
     await page.route("**/api/me/albums/*/photos/by-client/*", async (route) => {
-      if (route.request().method() === "DELETE" && lost++ === 0) {
+      // Les deux premières réponses se perdent (la suppression est faite côté serveur) : le nouvel essai immédiat se perd aussi.
+      if (route.request().method() === "DELETE" && lost++ < 2) {
         await route.fetch();
         await route.abort();
       } else await route.continue();
@@ -555,7 +556,7 @@ test("réponse de suppression perdue APRÈS la suppression effective : la tuile 
     await page.getByTestId("album-step2-continue").click();
     await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
     expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
-    expect(lost).toBeGreaterThanOrEqual(2);
+    expect(lost).toBeGreaterThanOrEqual(3);
   } finally {
     await leo.ctx.close();
     await sql(DROP_BEZIERS_DRAFTS);

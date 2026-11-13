@@ -165,6 +165,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     // Le titulaire retire une photo depuis la visionneuse : l'album garde les deux autres, le compte suit.
     await page.goto(`/albums/${albumId}`);
     await page.getByTestId("media-gallery-photo").first().click();
+    page.once("dialog", (d) => void d.accept());
     await page.getByTestId("album-photo-remove").click();
     await expect(page.getByTestId("media-gallery-photo")).toHaveCount(2);
     await expect(page.getByTestId("album-tag-count")).toHaveText("2 photos");
@@ -529,7 +530,8 @@ test("réponse de suppression perdue APRÈS la suppression effective : la tuile 
     await expect(page.getByTestId("album-count")).toContainText("1");
     let lost = 0;
     await page.route("**/api/me/albums/*/photos/by-client/*", async (route) => {
-      if (route.request().method() === "DELETE" && lost++ === 0) {
+      // Les deux premières réponses se perdent (la suppression est faite côté serveur) : le nouvel essai immédiat se perd aussi.
+      if (route.request().method() === "DELETE" && lost++ < 2) {
         await route.fetch();
         await route.abort();
       } else await route.continue();
@@ -583,9 +585,9 @@ test("deux signalements successifs sans fermer la visionneuse : le second formul
   await page.getByTestId("report-dialog").locator("input[type=radio]").first().check();
   await page.getByTestId("report-send").click();
   await expect(page.getByTestId("report-done")).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.getByTestId("report-dialog").getByRole("button", { name: "Fermer", exact: true }).click();
   // Photo suivante, la visionneuse reste ouverte : le formulaire n'affiche pas le succès précédent et signale cette photo.
-  await dialog.getByRole("button", { name: "Suivante" }).click();
+  await dialog.getByRole("button", { name: "Photo suivante" }).click();
   await dialog.getByTestId("report-open").click();
   await expect(page.getByTestId("report-done")).toHaveCount(0);
   await page.getByTestId("report-dialog").locator("input[type=radio]").first().check();

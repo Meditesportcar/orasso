@@ -94,7 +94,10 @@ export function PhotoGallery({
         ref={ref}
         className="md-viewer"
         aria-label={title ?? L.galleryViewer}
-        onClose={() => setIndex(null)}
+        // Seule la fermeture de **cette** fenêtre vide la visionneuse : celle d'une fenêtre imbriquée (« Signaler ») remonte en React et la viderait.
+        onClose={(e) => {
+          if (e.target === e.currentTarget) setIndex(null);
+        }}
         onKeyDown={onKeyDown}
         data-testid="media-gallery-viewer"
       >
