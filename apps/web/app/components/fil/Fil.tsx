@@ -80,7 +80,7 @@ export function Fil({ userId }: { userId: string }) {
 
   const load = useCallback(async (f: FeedFilter) => {
     const mine = ++seq.current;
-    const res = await apiFetch<FeedPage>(`/fil?filter=${f}`);
+    const res = await apiFetch<FeedPage>(`/fil?filter=${f}&cards=album`);
     if (mine !== seq.current) return;
     if (!res.ok) {
       setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.loadError);
@@ -154,7 +154,9 @@ export function Fil({ userId }: { userId: string }) {
     const sent = current.nextCursor;
     const mine = seq.current;
     setLoadingMore(true);
-    const res = await apiFetch<FeedPage>(`/fil?filter=${current.filter}&cursor=${encodeURIComponent(sent)}`);
+    const res = await apiFetch<FeedPage>(
+      `/fil?filter=${current.filter}&cursor=${encodeURIComponent(sent)}&cards=album`,
+    );
     setLoadingMore(false);
     if (mine !== seq.current) return;
     if (!res.ok) {
@@ -194,7 +196,7 @@ export function Fil({ userId }: { userId: string }) {
     const timer = window.setInterval(async () => {
       if (document.visibilityState !== "visible") return;
       const res = await apiFetch<{ count: number }>(
-        `/fil/fresh?filter=${filterRef.current}&since=${encodeURIComponent(ref)}`,
+        `/fil/fresh?filter=${filterRef.current}&since=${encodeURIComponent(ref)}&cards=album`,
       );
       if (res.ok && listRef.current?.ref === ref) setFresh(res.data.count);
     }, FRESH_EVERY_MS);

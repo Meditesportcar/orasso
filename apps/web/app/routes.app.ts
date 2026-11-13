@@ -57,6 +57,9 @@ export default [
     route("app/media", "routes/media.tsx"),
     route("app/media/nouveau", "routes/media-nouveau.tsx"),
     route("m/:id", "routes/m.tsx"),
+    // Lot R9e : un album des médias, ouvert (`/albums/:id`) ; sa création en trois étapes.
+    route("albums/:id", "routes/album.tsx"),
+    route("app/media/albums/nouveau", "routes/app-album-nouveau.tsx"),
     route("providers/:id", "routes/prestataires.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),

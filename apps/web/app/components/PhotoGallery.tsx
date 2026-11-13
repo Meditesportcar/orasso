@@ -14,12 +14,18 @@ export function PhotoGallery({
   photos,
   title,
   contentId,
+  credit,
+  actions,
 }: {
   photos: readonly GalleryPhotoView[];
   /** Titre du contenu, affiché en tête de la visionneuse. */
   title?: string;
   /** Identifiant du contenu média : l'ouverture de la galerie compte une consultation. */
   contentId?: string;
+  /** Lot R9e (album) : le crédit sous la photo ouverte (« Photos : <média> »). */
+  credit?: string;
+  /** Lot R9e (album) : l'emplacement des actions de la visionneuse (R9f : « Identifier une voiture » ; R9g : « Reprendre dans le journal »), qui reçoit la photo ouverte. */
+  actions?: (photo: GalleryPhotoView, index: number) => React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState<number | null>(null);
@@ -90,6 +96,16 @@ export function PhotoGallery({
           <div className="md-viewer__body">
             {title && <h2 className="o-t-poster-s o-never-truncate">{title}</h2>}
             <img className="md-viewer__img" src={current.url} alt="" data-testid="media-gallery-current" />
+            {credit && (
+              <div className="o-t-caption" data-testid="media-gallery-credit">
+                {credit}
+              </div>
+            )}
+            {actions && (
+              <div className="md-viewer__actions" data-testid="media-gallery-actions">
+                {actions(current, index ?? 0)}
+              </div>
+            )}
             <div className="md-viewer__bar">
               <Button type="button" variant="secondary" icon="back" onClick={() => go(-1)} disabled={total < 2}>
                 {L.galleryPrev}
