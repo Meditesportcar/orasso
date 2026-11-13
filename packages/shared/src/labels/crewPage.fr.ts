@@ -203,6 +203,10 @@ export const crewTabLabels = {
   otherCrews: (n: number) => `${n} ${plural(n, "autre crew", "autres crews")}`,
   youMember: "tu es membre",
   youLeader: "tu es le chef",
+  // Le haut compact (petit lot de fin, partie E, option B choisie par Damien le 13/11) : la vignette de la couverture,
+  // « Publier » en icône au bout des onglets.
+  coverA11y: "Voir la couverture et la description du crew",
+  publishA11y: "Publier dans le crew",
   unreadMessages: (n: number) => `${n} ${plural(n, "message non lu", "messages non lus")}`,
   joinOrCreate: "Rejoindre ou créer un crew",
   closeA11y: "Fermer",

@@ -1,36 +1,27 @@
-// Le crew affiché dans l'onglet Crew du site (lot R7b2, D38, maquette R7.11), comme l'appli : le sélecteur de crew, l'image du
-// crew, sa description, la Discussion (avec ses non-lus), Réglages (chef), puis les onglets Fil · Sorties · Membres · Spots
-// (`?crew=` et `?onglet=`). Ce que faisait la page du crew (lots 19, R5c2, R6a, R6c) pour un membre actif. Sur grand écran,
+// Le crew affiché dans l'onglet Crew du site (lot R7b2, D38, maquette R7.11), comme l'appli : le haut compact (`CrewHead`, petit
+// lot de fin partie E : vignette de la couverture, nom ▾, description repliée, Inviter et Réglages, Discussion), puis les
+// onglets soulignés Fil · Sorties · Membres · Spots (`?crew=` et `?onglet=`), « Publier » en icône au bout. Ce que faisait la page du crew (lots 19, R5c2, R6a, R6c) pour un membre actif. Sur grand écran,
 // les sorties restent à droite, comme avant ; l'onglet Sorties n'y a plus lieu d'être.
-import { Button, Icon, TextField } from "@orasso/design-system/web";
+import { Button, TextField } from "@orasso/design-system/web";
 import {
   type CrewMemberView,
   type CrewPendingList,
   type CrewView,
-  crewInstagramUrl,
   crewInviteLabels,
   crewLabels,
   crewPageLabels as L,
   type MyCrew,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { Form, useNavigation } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, useNavigate, useNavigation, useSearchParams } from "react-router";
 
 import type { CrewActionData } from "../../lib/crews.server";
 import { CrewFeed } from "../crew-feed/CrewFeed";
 import { CrewLiveProvider } from "../crew-feed/CrewLive";
-import { ReportDialog } from "../ReportDialog";
-import {
-  CrewBadge,
-  CrewEventRow,
-  CrewSecHead,
-  Hidden,
-  MemberFiche,
-  MemberRow,
-  OutingCard,
-  RequestCard,
-} from "./CrewPage";
+import { CrewEventRow, CrewSecHead, Hidden, MemberFiche, MemberRow, OutingCard, RequestCard } from "./CrewPage";
 import { CrewSpots } from "./CrewSpots";
+import { CrewHead, CrewTabsBar } from "./CrewTop";
 
 export type CrewTabId = "fil" | "sorties" | "membres" | "spots";
 export const CREW_TABS: readonly CrewTabId[] = ["fil", "sorties", "membres", "spots"];
@@ -54,67 +45,6 @@ export type CrewSpaceData = {
 export const crewTabHref = (slug: string, tab: CrewTabId = "fil") =>
   `/app/crew?crew=${encodeURIComponent(slug)}${tab === "fil" ? "" : `&onglet=${tab}`}`;
 
-/** Le sélecteur de crew : « Roussillon Drift ▾ » (plusieurs crews) ; avec un seul, le nom seul. */
-function CrewSelector({ crews, crew }: { crews: readonly MyCrew[]; crew: CrewView }) {
-  const several = crews.length > 1;
-  const sub = [
-    crewLabels.membersCount(crew.membersCount),
-    several ? T.otherCrews(crews.length - 1) : crew.viewerState === "leader" ? T.youLeader : T.youMember,
-  ].join(" · ");
-  const head = (
-    <>
-      <CrewBadge name={crew.name} logoUrl={crew.logoUrl} size={40} />
-      <span className="crw-grow">
-        <b className="crw-sel__name o-never-truncate">{crew.name}</b>
-        <span className="o-t-caption s-muted crw-block">{sub}</span>
-      </span>
-      {several ? <Icon name="down" size={20} /> : null}
-    </>
-  );
-  if (!several) {
-    return (
-      <div className="crw-sel" data-testid="crew-selector-single">
-        <div className="crw-sel__head">{head}</div>
-      </div>
-    );
-  }
-  return (
-    <div className="crw-sel">
-      <details className="crw-sel__menu">
-        <summary className="crw-sel__head" aria-label={T.selectorA11y(crew.name)} data-testid="crew-selector">
-          {head}
-        </summary>
-        <ul className="crw-sel__list" aria-label={T.selectorTitle} data-testid="crew-selector-list">
-          {crews.map((c) => (
-            <li key={c.id}>
-              <a
-                href={crewTabHref(c.slug)}
-                aria-current={c.id === crew.id ? "true" : undefined}
-                data-testid={`crew-choice-${c.slug}`}
-              >
-                <CrewBadge name={c.name} logoUrl={c.logoUrl} size={36} />
-                <span className="crw-grow">
-                  <b className="o-never-truncate">{c.name}</b>
-                  <span className="o-t-caption s-muted crw-block">{crewLabels.membersCount(c.membersCount)}</span>
-                </span>
-                {c.id === crew.id ? <Icon name="check" size={20} /> : null}
-              </a>
-            </li>
-          ))}
-          <li>
-            <a href="/app/crews/rejoindre" data-testid="crew-choice-more">
-              <Icon name="add" size={22} />
-              <span className="crw-grow">
-                <b>{T.joinOrCreate}</b>
-              </span>
-            </a>
-          </li>
-        </ul>
-      </details>
-    </div>
-  );
-}
-
 export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: CrewActionData }) {
   const { crews, crew, members, pending, userId, tab } = data;
   const busy = useNavigation().state !== "idle";
@@ -127,12 +57,25 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
   const confirm = (text: string) => (e: React.FormEvent<HTMLFormElement>) => {
     if (!window.confirm(text)) e.preventDefault();
   };
-  const tabs: { id: CrewTabId; label: string }[] = [
+  const tabs: { id: CrewTabId; label: string; count?: number | null }[] = [
     { id: "fil", label: L.tabFeed },
-    { id: "sorties", label: L.tabCount(L.tabOutings, space?.outings.length ?? 0) },
-    { id: "membres", label: L.tabCount(L.tabMembers, leader ? requests.length : 0) },
+    { id: "sorties", label: L.tabOutings, count: space?.outings.length || null },
+    { id: "membres", label: L.tabMembers, count: leader ? requests.length || null : null },
     { id: "spots", label: T.tabSpots },
   ];
+  // « Publier » : sur l'onglet Fil il ouvre la fenêtre de publication du fil ; ailleurs il mène au Fil, fenêtre ouverte (`?publier=1`).
+  const [publishTick, setPublishTick] = useState(0);
+  const [params] = useSearchParams();
+  const autoPublish = params.get("publier") === "1" && tab === "fil";
+  // Une fois la fenêtre ouverte, `publier` quitte l'adresse par la navigation du routeur (un F5 ne la rouvre pas, l'état du
+  // routeur est gardé).
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!autoPublish) return;
+    const next = new URLSearchParams(params);
+    next.delete("publier");
+    navigate(`?${next.toString()}`, { replace: true, preventScrollReset: true });
+  }, [autoPublish, params, navigate]);
   // Sur grand écran, les sorties sont toujours à droite : l'onglet « Sorties » y montre le fil à gauche.
   const main = tab === "sorties" ? "fil" : tab;
 
@@ -140,9 +83,10 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
     <aside className="crw-col crw-side" data-active={tab === "sorties" ? "" : undefined} data-testid="crew-outings">
       {space.canProposeOuting ? (
         <>
-          {/* Tour 2 : un seul bouton principal par écran. Sur grand écran, le fil et son « Publier » sont à côté des
-              sorties : « Proposer une sortie » y passe en secondaire (CSS `crw-propose--narrow` / `crw-propose--wide`). */}
+          {/* Un seul bouton principal par écran : « Publier » (icône moutarde, au bout des onglets). « Proposer une sortie » est
+              toujours secondaire (deux versions, l'une cachée selon la largeur : CSS `crw-propose--narrow` / `--wide`). */}
           <Button
+            variant="secondary"
             icon="add"
             href={`/c/${crew.slug}/sortie`}
             fullWidth
@@ -191,36 +135,14 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
   return (
     <CrewLiveProvider crewId={member && live ? crew.id : null}>
       <div className="crw-page" data-testid="crew" data-state={crew.viewerState}>
-        <CrewSelector crews={crews} crew={crew} />
-        {crew.bannerUrl ? (
-          <div className="crw-hero" data-testid="crew-cover">
-            <img src={crew.bannerUrl} alt={`Bannière de ${crew.name}`} />
-          </div>
-        ) : null}
-        {crew.description ? (
-          <p className="crw-bio s-prewrap" data-testid="crew-description">
-            {crew.description}
-          </p>
-        ) : null}
-        {leader || crew.instagram ? (
-          <div className="crw-chips">
-            {leader ? <span className="crw-tag crw-tag--acc">{L.youLead}</span> : null}
-            {crew.instagram ? (
-              <a
-                className="crw-sc"
-                href={crewInstagramUrl(crew.instagram)}
-                rel="noopener noreferrer"
-                target="_blank"
-                aria-label={L.instagramA11y(crew.instagram)}
-                data-testid="crew-instagram"
-              >
-                <Icon name="instagram" size={16} />
-                {crew.instagram}
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-
+        <CrewHead
+          crews={crews}
+          crew={crew}
+          leader={leader}
+          member={member}
+          live={live}
+          tabHref={(slug, t) => crewTabHref(slug, t as CrewTabId)}
+        />
         {crew.archived && <p className="s-notice">{L.archived}</p>}
         {result?.crewError && (
           <p className="s-error" role="alert">
@@ -233,65 +155,30 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
           </p>
         )}
 
-        {member && crew.conversationId ? (
-          <div className="crw-acts">
-            <span className="crw-acts__main">
-              <Button
-                variant="secondary"
-                icon="chat"
-                href={`/app/messages/${crew.conversationId}`}
-                aria-label={L.discussionA11y(space?.unreadCount ?? 0)}
-                data-testid="crew-discussion"
-              >
-                {L.discussion}
-              </Button>
-              {space && space.unreadCount > 0 ? (
-                <span className="crw-dot" data-testid="crew-unread">
-                  {space.unreadCount > 99 ? "99+" : space.unreadCount}
-                </span>
-              ) : null}
-            </span>
-            {leader && live ? (
-              <>
-                <Button
-                  variant="secondary"
-                  icon="share"
-                  href={`/c/${crew.slug}/inviter`}
-                  aria-label={L.inviteA11y}
-                  data-testid="crew-invite"
-                />
-                <Button
-                  variant="secondary"
-                  icon="gear"
-                  href={`/c/${crew.slug}/reglages`}
-                  aria-label={L.settingsA11y}
-                  data-testid="crew-settings"
-                />
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
         {space ? (
           <>
-            <nav className="crw-tabs" aria-label={crewLabels.crew} data-testid="crew-tabs">
-              {tabs.map((t) => (
-                <a
-                  key={t.id}
-                  href={crewTabHref(crew.slug, t.id)}
-                  className={t.id === "sorties" ? "crw-tab-outings" : undefined}
-                  aria-current={tab === t.id ? "page" : undefined}
-                  data-testid={`crew-tab-${t.id}`}
-                >
-                  {t.label}
-                </a>
-              ))}
-            </nav>
+            <CrewTabsBar
+              value={tab}
+              items={tabs.map((t) => ({ ...t, href: crewTabHref(crew.slug, t.id) }))}
+              publish={
+                member && live
+                  ? tab === "fil"
+                    ? { onClick: () => setPublishTick((n) => n + 1) }
+                    : {
+                        href: `${crewTabHref(crew.slug, "fil")}${crewTabHref(crew.slug, "fil").includes("?") ? "&" : "?"}publier=1`,
+                      }
+                  : null
+              }
+            />
             <div className="crw-layout crw-layout--space">
               <div className="crw-col">
                 {main === "fil" ? (
                   <div className={tab === "sorties" ? "crw-wide-only" : undefined}>
-                    <CrewFeed crew={{ id: crew.id, slug: crew.slug, archived: crew.archived }} />
+                    <CrewFeed
+                      crew={{ id: crew.id, slug: crew.slug, archived: crew.archived }}
+                      publishTick={publishTick}
+                      autoPublish={autoPublish}
+                    />
                   </div>
                 ) : null}
                 {main === "spots" ? <CrewSpots crewId={crew.id} archived={crew.archived} /> : null}
@@ -387,8 +274,6 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
             </div>
           </>
         ) : null}
-        {/* Signaler (lot 32) : un crew dont on n'est pas le chef, depuis son espace comme avant. */}
-        {member && !leader && live ? <ReportDialog look="link" targetType="crew" targetId={crew.id} /> : null}
       </div>
     </CrewLiveProvider>
   );
