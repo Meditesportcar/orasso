@@ -289,8 +289,7 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("go-waze")).toBeVisible();
   await shot(page, "appli-carte-y-aller-sable-384");
   // Le dernier choix est retenu pendant la séance : retour à l'Accueil puis « Voir tout » rouvre la carte.
-  // Depuis la partie C du petit lot de fin, la feuille couvre tout l'écran (la bascule comprise) : on la ferme (voile « Fermer »).
-  await page.getByRole("button", { name: "Fermer" }).last().click();
+  await page.keyboard.press("Escape");
   await page.getByTestId("list-toggle").click();
   await expect(page.getByTestId("practical-list")).toBeVisible();
   await ctx.close();

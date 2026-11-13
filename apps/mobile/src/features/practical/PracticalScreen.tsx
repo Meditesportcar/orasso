@@ -43,7 +43,7 @@ import { FlowScreen } from "@/ui/Screens";
 import type { MapCommand } from "./mapTypes";
 import { PracticalMap } from "./PracticalMap";
 import { usePracticalPosition } from "./position";
-import { kindIcon, PracticalRow, useGoSheet } from "./Row";
+import { kindIcon, PracticalRow, useEscape, useGoSheet } from "./Row";
 import { giveMyPosition, practicalSession, usePracticalSources } from "./usePractical";
 import { useCitySearch, usePracticalZone } from "./useZone";
 
@@ -88,6 +88,7 @@ export function PracticalScreen() {
   // La dernière vue de la carte : la carte remontée (retour de « Liste » à « Carte ») reprend là où on l'avait laissée.
   const resume = useRef<MapViewport | null>(null);
   const { cities, busy: citiesBusy } = useCitySearch(suggest ? field : "");
+  useEscape(groupIds !== null, () => setGroupIds(null));
 
   const outingOrigin = sources.outing.data?.origin ?? null;
   const active: Choice = outingOrigin ? choice : "me";

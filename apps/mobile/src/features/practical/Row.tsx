@@ -2,8 +2,8 @@
 // ligne de détail, et « Y aller » (Maps ou Waze, comme sur la fiche d'un événement). Partagée par le bloc de l'Accueil et l'écran.
 import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { practicalTexts as L, type PracticalKind } from "@orasso/shared";
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, StyleSheet, View } from "react-native";
 
 import { openMaps, openWaze } from "@/lib/directions";
 import { AppSheet } from "@/ui/AppSheet";
@@ -14,9 +14,22 @@ export const kindIcon: Record<PracticalKind, IconName> = { fuel: "fuel", wash: "
 /** Une destination : un lieu (titre et coordonnées). */
 export type GoTarget = { title: string; lat: number; lng: number };
 
+/** Dans un navigateur, Échap ferme la feuille ouverte (sur le téléphone, c'est le retour du système). */
+export function useEscape(open: boolean, close: () => void) {
+  useEffect(() => {
+    if (!open || Platform.OS !== "web") return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open, close]);
+}
+
 /** « Y aller » : la feuille Maps / Waze d'un lieu. `go` l'ouvre, `sheet` est à poser une fois dans l'écran. */
 export function useGoSheet() {
   const [target, setTarget] = useState<GoTarget | null>(null);
+  useEscape(target !== null, () => setTarget(null));
   const sheet = (
     <AppSheet visible={target !== null} onClose={() => setTarget(null)} accessibilityLabel={L.goThere}>
       <Text variant="posterS" accessibilityRole="header" testID="go-title">
