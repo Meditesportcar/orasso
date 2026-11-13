@@ -241,9 +241,9 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
     [nocturne?.id],
   );
   await db.end();
-  // Lot R9n : l'Équipe n'a plus d'onglet, elle est sous « Page » (la ligne « Équipe »).
+  // Lot R9n : l'Équipe n'a plus d'onglet, elle est sous « Page » ; lot R9b : le chip « Équipe » de la Page.
   await tab(page, "Page").click();
-  await page.getByTestId("page-row-team").click();
+  await page.getByTestId("page-gest-team").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
   // Lot 52 : l'équipe en bulles ; un toucher ouvre la feuille du membre, qui propose « Relancer » (sans réponse, pas le jour J).
   await expect(page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 20_000 });
@@ -295,7 +295,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await shot(s.page, "23-boite-sable");
   await s.page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(s.page, "Page").click();
-  await s.page.getByTestId("page-row-team").click();
+  await s.page.getByTestId("page-gest-team").click();
   await expect(s.page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "24-staff-sable");
   await tab(s.page, "Tri").click();
@@ -387,8 +387,8 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
     await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   }
   await page.screenshot({ path: `${DIR}/41-garde-2fa-page-sable.png` });
-  // L'Équipe (ligne de la Page).
-  await page.getByTestId("page-row-team").click();
+  // L'Équipe : sous la garde, la Page ne montre pas ses chips (lot R9b) ; l'écran est ouvert par son adresse.
+  await page.goto("/equipe");
   await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
   await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("team-bubble")).toHaveCount(0);

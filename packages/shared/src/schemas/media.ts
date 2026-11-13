@@ -6,6 +6,7 @@ import type { ApplicationStatus } from "../application";
 import { departmentSchema, type EventFormat } from "../enums";
 import { isoDate, optionalText, pageQuery } from "./common";
 import type { PageFollowState } from "./pageFollows";
+import type { StoriesSummary } from "./stories";
 
 /** Adresse web : http ou https seulement (jamais javascript:, data:…). */
 const httpUrl = z.url().refine((u) => /^https?:\/\//i.test(u), "Adresse en http ou https");
@@ -157,7 +158,13 @@ export type MediaPublic = {
 };
 
 /** `GET /media/:id` : la fiche publique et son état d'abonnement (`followersCount`, `isFollowing` pour l'acteur, lot R9a). */
-export type MediaPage = MediaPublic & PageFollowState;
+export type MediaPage = MediaPublic &
+  PageFollowState & {
+    /** Lot R9b : le résumé de ses stories selon le regard (l'anneau de sa page). */
+    stories?: StoriesSummary;
+    /** Lot R9b (T22) : ses accréditations acceptées sur des événements publiés. */
+    accreditationsCount?: number;
+  };
 
 export type MediaEventBrief = {
   id: string;

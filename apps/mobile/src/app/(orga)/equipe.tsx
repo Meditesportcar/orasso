@@ -4,8 +4,10 @@ import { orgaManageLabels } from "@orasso/shared";
 
 import { OrgaGate } from "@/features/orga/OrgaGate";
 import { TeamScreen } from "@/features/orga/team/TeamScreen";
+import { useBackToPage } from "@/features/pages/useBackToPage";
 
 export default function Equipe() {
+  useBackToPage("/(orga)/page");
   return (
     <OrgaGate title={orgaManageLabels.teamTitle}>
       <TeamScreen />

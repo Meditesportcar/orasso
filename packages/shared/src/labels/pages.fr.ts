@@ -39,6 +39,10 @@ export const pagesLabels = {
   share: "Partager",
   reportStructure: "Signaler cette structure",
   reportPro: "Signaler ce pro",
+  reportProvider: "Signaler ce prestataire",
+  /** Lot R9b : la page d'un prestataire ou d'un média ne s'ouvre qu'avec un compte. */
+  signInToSee: "Connecte-toi pour voir cette page.",
+  signIn: "Se connecter",
   /** La bio sur une ligne. */
   bioMore: "plus",
   bioLess: "moins",
@@ -75,7 +79,40 @@ export const pagesLabels = {
   unhide: "Remettre sur la page",
   hiddenTag: "Masquée",
   hideError: "L'opération n'a pas abouti. Réessaie dans un instant.",
+  /** Lot R9b : la « Page » du propriétaire et les pages d'un prestataire et d'un média. */
+  tabServices: "Prestations",
+  tabContents: "Contenus",
+  typeProvider: "Prestataire",
+  typeMedia: "Média",
+  verifiedMedia: "Vérifié",
+  missions: (n: number) => pluralFr(n, "mission", "missions"),
+  accreditations: (n: number) => pluralFr(n, "accréditation", "accréditations"),
+  publicationsCount: (n: number) => pluralFr(n, "publication", "publications"),
+  /** « Contenus » vu par un visiteur, sans rien de publié. */
+  contentsEmpty: "Aucun contenu publié pour l'instant.",
+  /** Les icônes de côté du propriétaire (R9.3 : « QR de la page », « Réglages »). */
+  qrPage: "QR de la page",
+  settings: "Réglages",
+  qrTitle: "QR de la page",
+  close: "Fermer",
+  /** Média : la vérification est en attente (lue de son profil, jamais d'un autre). */
+  pendingMedia: "Vérification en attente",
+  qrHelp: "Montre ce code : il ouvre ta page.",
+  /** Les chips de gestion (maquette `r9gest`). */
+  gestTeam: "Équipe",
+  gestStructure: "Réglages de la structure",
+  gestFiche: "Modifier ma fiche",
+  gestSubscription: "Abonnement",
+  gestVitrine: "Modifier ma vitrine",
+  gestMedia: "Modifier ma page",
+  gestGroup: "Gérer ta page",
+  /** L'état vide de ses publications, vu par le propriétaire de la page (le titre est celui de son profil : « Publie ta première photo »). */
+  ownEmptyText: "Elle ira sur ta page, et le Fil la montrera à tes abonnés.",
+  /** « Modifier » dans « Plus » de sa propre page publique (ramène à sa casquette). */
+  edit: "Modifier",
   /** Page non trouvée. */
+  providerMissing: "Ce prestataire n'existe pas ou plus.",
+  mediaMissing: "Ce média n'existe pas ou plus.",
   structureMissing: "Cette structure n'existe pas ou plus.",
   proMissing: "Cette fiche n'existe pas ou plus.",
 } as const;

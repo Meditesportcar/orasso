@@ -1,5 +1,5 @@
 // Les onglets soulignés de la page d'une structure et de la fiche d'un pro (lot R8g, maquette R9.3) : « Événements » ou
-// « Présentation », « Publications », « Mentions · N ». Enveloppe mince sur `UnderTabs` du kit ; la rangée est collée par
+// « Présentation » (lot R9b : « Prestations », « Contenus »), « Publications », « Mentions · N ». Enveloppe mince sur `UnderTabs` du kit ; la rangée est collée par
 // l'écran hôte (`StickyHeader`). Identifiants : `page-tabs`, `page-tab-<id>`.
 import type { IconName } from "@orasso/design-system/native";
 import { pagesLabels as L, type PageTab, type PageTabItem } from "@orasso/shared";
@@ -11,6 +11,8 @@ const ICON: Record<PageTab, IconName> = {
   presentation: "briefcase",
   publications: "gallery",
   offers: "ticket",
+  services: "truck",
+  contents: "layers",
   mentions: "bubble",
 };
 

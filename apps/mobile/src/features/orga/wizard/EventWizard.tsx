@@ -622,7 +622,7 @@ export function EventWizard({
     setPhotoSending,
     photoError,
     setPhotoError,
-    openStructure: () => router.push("/(orga)/page"),
+    openStructure: () => router.push("/(orga)/structure"),
   };
   const Screen = SCREENS[step];
   const [title, intro] = HEADS[step];

@@ -369,9 +369,9 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
       await expect(page.getByRole("tab", { name: label })).toBeVisible();
     }
     await shot(page, `12-casquette-organisateur-${theme}`);
-    // Lot R9n : l'Équipe est sous « Page » (la ligne « Équipe »).
+    // Lot R9n : l'Équipe est sous « Page » ; lot R9b : le chip « Équipe » de la Page.
     await page.getByRole("tab", { name: "Page" }).click();
-    await page.getByTestId("page-row-team").click();
+    await page.getByTestId("page-gest-team").click();
     await page.waitForURL(/equipe/, { timeout: 15_000 });
     await page.reload();
     await expect(page.getByRole("tab", { name: "Direct" })).toBeVisible({ timeout: 30_000 });
