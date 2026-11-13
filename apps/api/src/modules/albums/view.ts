@@ -49,6 +49,10 @@ export const albumPublicPhotoUrl = (albumId: string, storageKey: string) =>
 /** Clé privée (une photo neuve) ou publique (une photo reprise d'une ancienne galerie, sous son dossier d'origine). */
 export const isPrivateAlbumKey = (storageKey: string) => storageKey.startsWith("private/");
 
+/** Les dossiers des anciennes galeries : leurs fichiers restent sous `/api/files` (clé publique) et suivent la visibilité de l'album. */
+export const LEGACY_GALLERY_PREFIXES = ["media-contents/", "seed/media/"] as const;
+export const isLegacyGalleryKey = (key: string) => LEGACY_GALLERY_PREFIXES.some((p) => key.startsWith(p));
+
 // --- Qui voit quoi ------------------------------------------------------------------------------------------------------
 
 /** Le média est accrédité (`accepted`) à l'événement de l'album, maintenant. */
@@ -62,6 +66,25 @@ export function albumVisibleSql(at: Date): SQL {
     and ${events.status} = 'published' and ${events.admission} <> 'invite_only'
     and ${albumAccreditedSql}
     and exists (select 1 from profiles ow where ow.user_id = ${mediaProfiles.userId} and ${profileOkSql("ow", at)}))`;
+}
+
+/**
+ * Une clé publique d'ancienne galerie peut-elle être servie ? `visible` : sa photo est dans un album visible de tous ; `hidden` : elle est
+ * dans un album qui ne l'est plus (accréditation retombée, média suspendu ou supprimé, album ou photo retirés, événement annulé ou non
+ * publié) ; `unknown` : aucune photo d'album ne la porte (fichier de lien, galerie non reprise) : servie comme avant. Une requête indexée
+ * (`storage_key` est unique).
+ */
+export async function legacyFileState(key: string, at: Date): Promise<"visible" | "hidden" | "unknown"> {
+  const [row] = await db
+    .select({ visible: sql<boolean>`(${eventAlbumPhotos.deletedAt} is null and ${albumVisibleSql(at)})` })
+    .from(eventAlbumPhotos)
+    .innerJoin(eventAlbums, eq(eventAlbums.id, eventAlbumPhotos.albumId))
+    .innerJoin(events, eq(events.id, eventAlbums.eventId))
+    .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
+    .where(eq(eventAlbumPhotos.storageKey, key))
+    .limit(1);
+  if (!row) return "unknown";
+  return row.visible ? "visible" : "hidden";
 }
 
 /** La base de toute lecture d'album : l'album, son événement, son média. */

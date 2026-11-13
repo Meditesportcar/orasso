@@ -105,12 +105,12 @@ export const albumsRoutes = new Hono<AppEnv>()
   .get("/events/:id/albums", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await albumsService.forEvent(v, { id: uuidParam(c, "id") }));
+    return c.json(await albumsService.forEvent(v, { id: uuidParam(c, "id") }, query(c, albumsListQuery)));
   })
   .get("/events/by-slug/:slug/albums", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await albumsService.forEvent(v, { slug: c.req.param("slug") }));
+    return c.json(await albumsService.forEvent(v, { slug: c.req.param("slug") }, query(c, albumsListQuery)));
   })
   .get("/media/:id/albums", async (c) => {
     const v = await requireUser(c);

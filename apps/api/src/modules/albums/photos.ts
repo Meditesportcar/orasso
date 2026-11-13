@@ -24,7 +24,7 @@ import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { UUID_RE } from "../feed/access";
 import { uploadsService } from "../uploads/service";
-import { blurPlateRegions } from "../vehicles/photos-blur";
+import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
 import { assertAccredited, assertWritable, lockOwnAlbum, requireMedia } from "./guards";
 import { ALBUM_PHOTO_NAME_RE, ALBUM_UPLOAD_FOLDER, albumPhotoKey, loadAlbum, photoView } from "./view";
 
@@ -98,10 +98,10 @@ export async function addPhoto(
         .where(eq(eventAlbums.id, album.id));
       return { photo, source: upload.key };
     });
-    if (done.source) await storage.remove(done.source).catch(() => undefined);
+    if (done.source) await removeOrRetry(done.source);
     return { photo: photoView(albumId, done.photo), created: done.source !== null };
   } catch (error) {
-    for (const key of written) await storage.remove(key).catch(() => undefined);
+    for (const key of written) await removeOrRetry(key);
     throw error;
   }
 }

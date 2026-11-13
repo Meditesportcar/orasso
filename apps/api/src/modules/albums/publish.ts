@@ -7,7 +7,7 @@ import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import { db } from "../../db/client";
 import { eventAlbumPhotos, eventAlbums } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { AppError } from "../../lib/errors";
+import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
@@ -24,7 +24,13 @@ export async function publishAlbum(v: Viewer, id: string): Promise<AlbumView> {
     if (album.status === "published") return;
     if (albumIssue(album)) throw new AppError(400, "album_empty", albumLabels.emptyAlbum);
     await assertAccredited(tx, album.eventId, profile.id);
-    await tx.update(eventAlbums).set({ status: "published", publishedAt: now() }).where(eq(eventAlbums.id, album.id));
+    const done = await tx
+      .update(eventAlbums)
+      .set({ status: "published", publishedAt: now() })
+      .where(and(eq(eventAlbums.id, album.id), eq(eventAlbums.status, "draft"), isNull(eventAlbums.deletedAt)))
+      .returning({ id: eventAlbums.id });
+    // Rien n'a été modifié (album retiré entre-temps) : on ne répond pas « publié ».
+    if (!done.length) throw notFound(albumLabels.notFound);
   });
   return albumsService.getOwn(v, id);
 }

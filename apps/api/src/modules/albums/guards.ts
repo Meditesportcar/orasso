@@ -63,17 +63,19 @@ export async function assertAccredited(ex: Executor, eventId: string, mediaProfi
 }
 
 /**
- * Verrou d'un album (sérialise les ajouts, retraits et la publication) : verrou consultatif de transaction, puis l'album est
- * relu. `404` si l'album n'existe pas, est supprimé ou n'est pas celui du média.
+ * Verrou d'un album (sérialise les ajouts, retraits et la publication) : verrou consultatif de transaction, puis la **ligne** est
+ * verrouillée (`for update`) : la purge des brouillons (`skip locked`) ignore un album en cours d'usage. L'identifiant est mis en
+ * minuscules avant toute clé de verrou : `ABC…` et `abc…` sont le même album. `404` si l'album n'existe pas, est supprimé ou n'est
+ * pas celui du média.
  */
 export async function lockOwnAlbum(tx: Tx, albumId: string, mediaProfileId: string): Promise<AlbumRow> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${albumId}`}))`);
+  const id = albumId.toLowerCase();
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${id}`}))`);
   const [row] = await tx
     .select()
     .from(eventAlbums)
-    .where(
-      and(eq(eventAlbums.id, albumId), eq(eventAlbums.mediaProfileId, mediaProfileId), isNull(eventAlbums.deletedAt)),
-    );
+    .where(and(eq(eventAlbums.id, id), eq(eventAlbums.mediaProfileId, mediaProfileId), isNull(eventAlbums.deletedAt)))
+    .for("update");
   if (!row) throw notFound(albumLabels.notFound);
   return row;
 }

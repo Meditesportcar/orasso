@@ -170,6 +170,10 @@ const RETRY_REMOVABLE = [
   // Lot R7-dettes, tour 2 : photos d'une publication de crew (retrait, décision de modération), dont la suppression
   // avait échoué. Motif strict : le dossier, un identifiant, `.webp`.
   /^private\/crew-posts\/[0-9a-f-]{36}\.webp$/,
+  // Lot R9e (Codex, tour 2) : photos d'un album retirées (clé privée d'album, envoi d'album, photo reprise d'une ancienne galerie).
+  /^private\/albums\/[0-9a-f-]{36}\/[0-9a-f]{32}\.webp$/,
+  /^private\/album-uploads\/[0-9a-f-]{36}\.webp$/,
+  /^media-contents\/[0-9a-f-]{36}\.webp$/,
 ];
 
 /** Tâche `storage.remove` : seules les clés de `RETRY_REMOVABLE` sont concernées. */

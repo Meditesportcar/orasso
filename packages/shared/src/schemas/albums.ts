@@ -70,8 +70,12 @@ export const albumPhotoAddSchema = z
   });
 export type AlbumPhotoAdd = z.infer<typeof albumPhotoAddSchema>;
 
-/** `GET /me/albums?status=` : les miens, brouillons compris. */
-export const albumsMineQuery = z.object({ status: z.enum(albumStatuses).optional() });
+/** `GET /me/albums?status=&limit=&cursor=` : les miens, brouillons compris, par pages (le curseur est l'identifiant du dernier album lu). */
+export const albumsMineQuery = z.object({
+  status: z.enum(albumStatuses).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.uuid().optional(),
+});
 export type AlbumsMineQuery = z.infer<typeof albumsMineQuery>;
 
 /** `GET /media/:id/albums?cursor=&limit=` et `GET /events/:id/albums` : publiés, pagination par identifiant d'album. */

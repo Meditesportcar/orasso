@@ -2,13 +2,14 @@
 // obligatoire, rectangles gardés, floutage réel, rejeu, plafond de 200 sous verrou), publication, retrait, purge des brouillons,
 // signalement d'une photo.
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { eventAlbums, reports, uploads } from "../../db/schema";
 import { storage } from "../../lib/storage";
+import { retryRemove } from "../vehicles/photos-blur";
 import {
   accredit,
   addPhoto,
@@ -24,6 +25,7 @@ import {
   sendUpload,
   spread,
 } from "./albums-test-helpers";
+import { lockOwnAlbum } from "./guards";
 import { purgeDrafts } from "./publish";
 
 afterAll(async () => {
@@ -444,6 +446,76 @@ describe("signalement d'une photo (cible album_photo)", () => {
       reason: "scam",
     });
     expect(wrong.status).toBe(400);
+  });
+});
+
+describe("verrous (Codex 2 et 3)", () => {
+  it("la purge ignore un brouillon verrouillé par un usage en cours (skip locked), puis le purge une fois libre", async () => {
+    const draft = await draftOf(leo, eventId);
+    await db.execute(sql`update event_albums set updated_at = '2026-11-01T00:00:00Z' where id = ${draft.id}`);
+    const at = new Date("2026-11-20T00:00:00Z");
+    await db.transaction(async (tx) => {
+      await lockOwnAlbum(tx, draft.id, leoMedia);
+      expect(await purgeDrafts(at)).toBe(0);
+    });
+    expect(await albumRow(draft.id)).toBeDefined();
+    expect(await purgeDrafts(at)).toBe(1);
+    expect(await albumRow(draft.id)).toBeUndefined();
+  });
+
+  it("deux ajouts concurrents avec l'identifiant en minuscules et en majuscules à 199 photos : un seul passe", async () => {
+    const album = await draftOf(leo, eventId);
+    await db.update(eventAlbums).set({ photosCount: 199 }).where(eq(eventAlbums.id, album.id));
+    const [a, b] = await Promise.all([sendUpload(leo), sendUpload(leo)]);
+    const results = await Promise.all([
+      addPhoto(leo, album.id.toLowerCase(), { upload: a }),
+      addPhoto(leo, album.id.toUpperCase(), { upload: b }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect((await albumRow(album.id))?.photosCount).toBe(200);
+  });
+
+  it("la publication d'un album retiré entre-temps ne répond pas « publié »", async () => {
+    const album = await draftOf(leo, eventId);
+    await addPhoto(leo, album.id);
+    await db.update(eventAlbums).set({ deletedAt: new Date() }).where(eq(eventAlbums.id, album.id));
+    expect((await call(leo, "POST", `/me/albums/${album.id}/publish`)).status).toBe(404);
+  });
+});
+
+describe("effacement persistant des fichiers (Codex 6)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("un premier effacement en échec est replanifié (storage.remove) puis repris ; le fichier part à la reprise", async () => {
+    const album = await publishedAlbum(leo, eventId, 2);
+    const [first] = await photoRows(album.id);
+    const key = first?.storageKey as string;
+    const real = storage.remove.bind(storage);
+    vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("disque occupé"));
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${first?.id}`)).status).toBe(204);
+    // La requête a réussi, le fichier est encore là, et un effacement est planifié.
+    expect(await storage.get(key)).not.toBeNull();
+    const job = clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === key);
+    expect(job).toBeDefined();
+    // La reprise (tâche pg-boss) l'efface ; ses motifs acceptent les clés d'album.
+    vi.mocked(storage.remove).mockImplementation(real);
+    await retryRemove(key);
+    expect(await storage.get(key)).toBeNull();
+    for (const k of [
+      `private/albums/${crypto.randomUUID()}/${"a".repeat(32)}.webp`,
+      `private/album-uploads/${crypto.randomUUID()}.webp`,
+      `media-contents/${crypto.randomUUID()}.webp`,
+    ]) {
+      await storage.put(k, Buffer.from("x"));
+      await retryRemove(k);
+      expect(await storage.get(k)).toBeNull();
+    }
+    // Une clé qui n'est pas d'un album n'est jamais effacée par cette tâche.
+    await storage.put("avatars/x/y.webp", Buffer.from("x"));
+    await retryRemove("avatars/x/y.webp");
+    expect(await storage.get("avatars/x/y.webp")).not.toBeNull();
   });
 });
 

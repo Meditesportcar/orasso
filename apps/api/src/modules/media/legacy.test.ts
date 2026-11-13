@@ -7,7 +7,15 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, events, mediaContents, mediaProfiles, notifications } from "../../db/schema";
+import {
+  eventAlbumPhotos,
+  eventAlbums,
+  events,
+  mediaContents,
+  mediaProfiles,
+  notifications,
+  uploads,
+} from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import {
@@ -261,6 +269,25 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
       photoKeys: [a.key],
     });
     expect(cancelled.status).toBe(409);
+  });
+
+  it("un envoi dont le fichier manque est refusé (400), comme un envoi inconnu ; rien n'est créé", async () => {
+    await db.insert(uploads).values({
+      key: "media-contents/sans-fichier.webp",
+      userId: leo.id,
+      purpose: "media_content",
+      width: 10,
+      height: 10,
+      bytes: 10,
+    });
+    const res = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: ["media-contents/sans-fichier.webp"],
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(eventAlbums)).toHaveLength(0);
   });
 
   it("un lien suit toujours le chemin d'avant (media_contents)", async () => {

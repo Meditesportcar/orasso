@@ -19,8 +19,8 @@ import { now } from "../../lib/deps";
 import { conflict, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
-import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { removeOrRetry } from "../vehicles/photos-blur";
 import { assertAccredited, assertWritable, isUniqueViolation, lockOwnAlbum, mediaOfUser, requireMedia } from "./guards";
 import { type AlbumJoin, albumBase, albumPhotos, albumVisibleSql, loadAlbum, photoView, summariesOf } from "./view";
 
@@ -34,7 +34,8 @@ export async function albumViewOf(join: AlbumJoin, viewerId: string | null): Pro
 
 /** Les fichiers à effacer après la validation de la transaction (jamais avant : un retour en arrière les laisserait orphelins de leur ligne). */
 export async function removeFiles(keys: readonly string[]): Promise<void> {
-  for (const key of keys) await storage.remove(key).catch(() => undefined);
+  // Un échec n'est pas perdu : `removeOrRetry` le journalise et replanifie l'effacement (tâche `storage.remove`, rejouable).
+  for (const key of keys) await removeOrRetry(key);
 }
 
 /**
@@ -214,17 +215,34 @@ export const albumsService = {
   async mine(v: Viewer, q: AlbumsMineQuery): Promise<AlbumsList> {
     const profile = await mediaOfUser(db, v.user.id);
     if (!profile) return { items: [], nextCursor: null };
+    const at = sql`coalesce(${eventAlbums.publishedAt}, ${eventAlbums.createdAt})`;
+    // Reprise après le dernier album lu : même ordre (date, puis identifiant), une page de `limit` albums.
+    const after = q.cursor
+      ? await db
+          .select({
+            at: sql<string>`coalesce(${eventAlbums.publishedAt}, ${eventAlbums.createdAt})::text`,
+            id: eventAlbums.id,
+          })
+          .from(eventAlbums)
+          .where(and(eq(eventAlbums.id, q.cursor), eq(eventAlbums.mediaProfileId, profile.id)))
+          .then((r) => r[0])
+      : undefined;
     const rows = await albumBase()
       .where(
         and(
           eq(eventAlbums.mediaProfileId, profile.id),
           isNull(eventAlbums.deletedAt),
           q.status ? eq(eventAlbums.status, q.status) : undefined,
+          after ? sql`(${at}, ${eventAlbums.id}) < (${after.at}::timestamptz, ${after.id}::uuid)` : undefined,
         ),
       )
-      .orderBy(sql`coalesce(${eventAlbums.publishedAt}, ${eventAlbums.createdAt}) desc`, desc(eventAlbums.id))
-      .limit(200);
-    return { items: await summariesOf(db, rows, v.user.id), nextCursor: null };
+      .orderBy(sql`${at} desc`, desc(eventAlbums.id))
+      .limit(q.limit + 1);
+    const page = rows.slice(0, q.limit);
+    return {
+      items: await summariesOf(db, page, v.user.id),
+      nextCursor: rows.length > q.limit ? (page.at(-1)?.a.id ?? null) : null,
+    };
   },
 
   /** `GET /media/:id/albums?cursor=` : les albums publiés d'une page de média, du plus récent au plus ancien. */
@@ -252,7 +270,7 @@ export const albumsService = {
   },
 
   /** `GET /events/:id/albums` et `/events/by-slug/:slug/albums` : publiés, l'officiel en tête puis du plus récent. */
-  async forEvent(v: Viewer, ref: { id: string } | { slug: string }): Promise<AlbumsList> {
+  async forEvent(v: Viewer, ref: { id: string } | { slug: string }, q: AlbumsListQuery): Promise<AlbumsList> {
     const [event] = await db
       .select()
       .from(events)
@@ -260,11 +278,36 @@ export const albumsService = {
     if (!event || event.status === "draft" || event.admission === "invite_only") {
       throw notFound(albumLabels.eventNotFound);
     }
+    // L'officiel d'abord, puis du plus récent : le curseur est le dernier album lu, la reprise suit le même ordre.
+    const official = sql`(${eventAlbums.officialAt} is not null)`;
+    const after = q.cursor
+      ? await db
+          .select({
+            official: sql<boolean>`(${eventAlbums.officialAt} is not null)`,
+            at: sql<string>`${eventAlbums.publishedAt}::text`,
+            id: eventAlbums.id,
+          })
+          .from(eventAlbums)
+          .where(and(eq(eventAlbums.id, q.cursor), eq(eventAlbums.eventId, event.id)))
+          .then((r) => r[0])
+      : undefined;
     const rows = await albumBase()
-      .where(and(eq(eventAlbums.eventId, event.id), albumVisibleSql(now())))
-      .orderBy(sql`(${eventAlbums.officialAt} is not null) desc`, desc(eventAlbums.publishedAt), desc(eventAlbums.id))
-      .limit(100);
-    return { items: await summariesOf(db, rows, v.user.id), nextCursor: null };
+      .where(
+        and(
+          eq(eventAlbums.eventId, event.id),
+          albumVisibleSql(now()),
+          after
+            ? sql`(${official}, ${eventAlbums.publishedAt}, ${eventAlbums.id}) < (${after.official}, ${after.at}::timestamptz, ${after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(sql`${official} desc`, desc(eventAlbums.publishedAt), desc(eventAlbums.id))
+      .limit(q.limit + 1);
+    const page = rows.slice(0, q.limit);
+    return {
+      items: await summariesOf(db, page, v.user.id),
+      nextCursor: rows.length > q.limit ? (page.at(-1)?.a.id ?? null) : null,
+    };
   },
 
   /** `GET /media/:id` : combien d'albums publiés et de photos (une requête). */

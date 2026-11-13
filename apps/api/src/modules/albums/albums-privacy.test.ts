@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { mediaContents } from "../../db/schema";
+import { eventAlbums, mediaContents } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import {
   accredit,
@@ -206,6 +206,147 @@ describe("photos reprises d'une ancienne galerie (nom de clé libre)", () => {
       headers: { cookie: kenji.cookie },
     });
     expect(traversal.status).toBe(404);
+  });
+});
+
+describe("/api/files : les clés d'anciennes galeries suivent la visibilité de leur album (Codex 1)", () => {
+  async function adopted() {
+    const keys = [0, 1].map((i) => `media-contents/7d3f5b0e-6a0f-4a39-9e3a-1c4d8f2a9b0${i}.webp`);
+    for (const key of keys) await storage.put(key, Buffer.from(`photo ${key}`));
+    const [row] = await db
+      .insert(mediaContents)
+      .values({
+        mediaProfileId: leoMedia,
+        eventId,
+        kind: "gallery",
+        title: "Galerie",
+        photoKeys: keys,
+        publishedAt: paris(11, 4, 9),
+      })
+      .returning();
+    await adoptLegacyGalleries(db);
+    return { keys, id: row?.id as string };
+  }
+  const get = (key: string, headers: Record<string, string> = {}) => app.request(`/api/files/${key}`, { headers });
+
+  it("album visible : servi sans session avec `public, no-cache` et un ETag (304 à la revalidation) ; les autres clés ne changent pas", async () => {
+    const { keys } = await adopted();
+    const res = await get(keys[0] as string);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, no-cache");
+    const etag = res.headers.get("etag") as string;
+    expect(etag).toMatch(/^"[0-9a-f-]{36}"$/);
+    expect((await get(keys[0] as string, { "if-none-match": etag })).status).toBe(304);
+    // Une clé hors des dossiers de galeries garde son cache d'un an.
+    await storage.put("vehicles/abc/photo.webp", Buffer.from("x"));
+    const other = await get("vehicles/abc/photo.webp");
+    expect(other.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    // Une clé de galerie sans album (lien, galerie non reprise) : servie, mais revalidée.
+    await storage.put("media-contents/00000000-0000-4000-8000-000000000001.webp", Buffer.from("y"));
+    const orphan = await get("media-contents/00000000-0000-4000-8000-000000000001.webp");
+    expect(orphan.status).toBe(200);
+    expect(orphan.headers.get("cache-control")).toBe("public, no-cache");
+  });
+
+  it("404 dès que l'album n'est plus visible : accréditation retombée, compte suspendu, média supprimé, événement annulé, album supprimé", async () => {
+    const { keys, id } = await adopted();
+    const key = keys[0] as string;
+    for (const status of ["refused", "withdrawn", "pending"] as const) {
+      await setAccreditation(leoAccreditation, status);
+      expect((await get(key)).status).toBe(404);
+    }
+    await setAccreditation(leoAccreditation, "accepted");
+    expect((await get(key)).status).toBe(200);
+    await db.execute(sql`update profiles set suspended_until = now() + interval '3 days' where user_id = ${leo.id}`);
+    expect((await get(key)).status).toBe(404);
+    await db.execute(sql`update profiles set suspended_until = null where user_id = ${leo.id}`);
+    expect((await get(key)).status).toBe(200);
+    await db.execute(sql`update events set status = 'cancelled' where id = ${eventId}`);
+    expect((await get(key)).status).toBe(404);
+    await db.execute(sql`update events set status = 'published' where id = ${eventId}`);
+    expect((await get(key)).status).toBe(200);
+    await softDeleteMedia(leoMedia);
+    expect((await get(key)).status).toBe(404);
+    await db.execute(sql`update media_profiles set deleted_at = null where id = ${leoMedia}`);
+    // Une photo retirée de l'album, puis l'album supprimé.
+    const [photo] = await photoRows(id);
+    expect((await call(leo, "DELETE", `/me/albums/${id}/photos/${photo?.id}`)).status).toBe(204);
+    expect((await get(key)).status).toBe(404);
+    expect((await get(keys[1] as string)).status).toBe(200);
+    expect((await call(leo, "DELETE", `/me/albums/${id}`)).status).toBe(204);
+    expect((await get(keys[1] as string)).status).toBe(404);
+  });
+});
+
+describe("pagination effective (Codex 7)", () => {
+  async function many(n: number) {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const [row] = await db
+        .insert(eventAlbums)
+        .values({
+          eventId,
+          mediaProfileId: leoMedia,
+          authorId: leo.id,
+          title: `Album ${String(i).padStart(2, "0")}`,
+          status: "published",
+          publishedAt: new Date(paris(11, 5, 0).getTime() + i * 60_000),
+          photosCount: 1,
+        })
+        .returning({ id: eventAlbums.id });
+      ids.push(row?.id as string);
+    }
+    return ids;
+  }
+
+  it("GET /me/albums : pages de `limit` albums, sans doublon ni trou, au-delà de 100", async () => {
+    const ids = await many(23);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const res = await call(leo, "GET", `/me/albums?limit=10${cursor ? `&cursor=${cursor}` : ""}`);
+      expect(res.status).toBe(200);
+      seen.push(...res.json.items.map((a: { id: string }) => a.id));
+      cursor = res.json.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(seen).toEqual([...ids].reverse());
+    // Par défaut : une page de 50, avec la suite promise quand il y en a plus.
+    const more = await many(40);
+    const first = await call(leo, "GET", "/me/albums");
+    expect(first.json.items).toHaveLength(50);
+    expect(first.json.nextCursor).toBe(first.json.items[49].id);
+    const second = await call(leo, "GET", `/me/albums?cursor=${first.json.nextCursor}`);
+    expect(second.json.items).toHaveLength(13);
+    expect(second.json.nextCursor).toBeNull();
+    expect(more).toHaveLength(40);
+  });
+
+  it("GET /events/:id/albums : l'officiel d'abord, puis du plus récent, par pages ; curseur inconnu ignoré", async () => {
+    const ids = await many(7);
+    await db.execute(sql`update event_albums set official_at = now() where id = ${ids[0]}`);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const res = await call(kenji, "GET", `/events/${eventId}/albums?limit=3${cursor ? `&cursor=${cursor}` : ""}`);
+      expect(res.status).toBe(200);
+      seen.push(...res.json.items.map((a: { id: string }) => a.id));
+      cursor = res.json.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(seen).toEqual([ids[0], ...ids.slice(1).reverse()]);
+    expect((await call(kenji, "GET", `/events/${eventId}/albums?limit=3&cursor=${crypto.randomUUID()}`)).status).toBe(
+      200,
+    );
+    // Défaut : 20 par page.
+    await many(18);
+    const first = await call(kenji, "GET", `/events/by-slug/${eventSlug}/albums`);
+    expect(first.json.items).toHaveLength(20);
+    expect(first.json.nextCursor).not.toBeNull();
   });
 });
 

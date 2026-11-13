@@ -28,7 +28,7 @@ import { contentView, type MediaContentRow } from "../media/serializers";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
 import { assertWritable, isAccredited, isUniqueViolation, mediaOfUser, requireMedia } from "./guards";
-import { albumsService } from "./service";
+import { albumsService, removeFiles } from "./service";
 import {
   type AlbumJoin,
   type AlbumPhotoRow,
@@ -234,15 +234,13 @@ export const albumsLegacy = {
         for (const key of input.photoKeys) {
           const up = await uploadsService.consume(tx, v.user.id, key, "media_content");
           if (!up) throw validation(mediaLabels.imageUnknown);
+          // Un envoi dont le fichier manque est refusé, comme un envoi inconnu.
           const data = await storage.get(up.key);
-          // Fichier absent (état qui ne devrait pas exister) : la clé d'envoi est gardée sur place plutôt que de refuser.
-          let target = up.key;
-          if (data) {
-            target = albumPhotoKey(albumId, randomBytes(16).toString("hex"));
-            await storage.put(target, data);
-            written.push(target);
-            sources.push(up.key);
-          }
+          if (!data) throw validation(mediaLabels.imageUnknown);
+          const target = albumPhotoKey(albumId, randomBytes(16).toString("hex"));
+          await storage.put(target, data);
+          written.push(target);
+          sources.push(up.key);
           uploaded.push({ key: target, width: up.width, height: up.height, clientId: uploadIdOf(up.key) });
         }
         const [album] = await tx
@@ -274,10 +272,10 @@ export const albumsLegacy = {
         return album.id;
       });
       committed = true;
-      for (const key of sources) await storage.remove(key).catch(() => undefined);
+      await removeFiles(sources);
       return await contentById(id);
     } catch (error) {
-      if (!committed) for (const key of written) await storage.remove(key).catch(() => undefined);
+      if (!committed) await removeFiles(written);
       // Deux envois simultanés de la même galerie : le second échoue sur les clés que le premier vient de consommer.
       const media = await mediaOfUser(db, v.user.id);
       const winner = media ? await sameGallery(media.id, input) : null;
@@ -324,7 +322,7 @@ export const albumsLegacy = {
     await requireOrganizerWrite(v, event.structureId);
     if (event.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
     await withTx(async (tx, after) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album-official:${eventId}`}))`);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album-official:${eventId.toLowerCase()}`}))`);
       const [row] = await tx
         .select()
         .from(eventAlbums)
