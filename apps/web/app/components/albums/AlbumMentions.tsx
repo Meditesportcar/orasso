@@ -3,7 +3,7 @@
 // photos »). Une mention = un album : six vignettes au plus, le nom du média en pastille, « Voir les N photos » (« Tes photos » si c'est ma
 // voiture, sinon l'album). Jamais des publications. Rien tant qu'aucune identification n'est visible.
 import { Button, Icon } from "@orasso/design-system/web";
-import { type AlbumMention, albumTagLabels as L, mentionsSummary } from "@orasso/shared";
+import { type AlbumMention, albumTagLabels as L, mentionsSummary, reviewButtonsOf } from "@orasso/shared";
 
 import "../../styles/albums.css";
 
@@ -75,15 +75,15 @@ export function MemoryAlbumLine({
         {s.line}
       </p>
       {/* Un lien par album : le souvenir peut en annoncer plusieurs, chacun s'ouvre. */}
-      {albums.map((m, i) => (
-        <div key={m.albumId}>
+      {reviewButtonsOf(albums).map((b) => (
+        <div key={b.albumId}>
           <Button
             variant="secondary"
             icon="camera"
-            href={`/app/albums/${m.albumId}/mes-photos`}
+            href={`/app/albums/${b.albumId}/mes-photos`}
             data-testid={`${testId}-open`}
           >
-            {albums.length > 1 ? L.screens.reviewAlbum(m.mediaName, i + 1) : L.reviewMyPhotos}
+            {b.label}
           </Button>
         </div>
       ))}

@@ -190,16 +190,32 @@ test("Léo identifie la voiture de Damien, Damien reçoit « Tes photos », en s
   await expect(dam.page.getByTestId("story-photo-credit")).toBeVisible({ timeout: 30_000 });
   await shot(dam.page, "damien-story-credit-beton");
 
-  // Rejouée : la story de cette photo est déjà en ligne, l'écran le dit (ni public ni légende ne la modifient).
-  await dam.page.getByTestId("my-photo-story").first().click();
-  await dam.page.getByTestId("story-publish").click();
-  await expect(dam.page.getByTestId("story-done")).toContainText("Déjà en story · Tout le monde", { timeout: 60_000 });
-  await dam.page
-    .getByTestId("story-done")
-    .press("Escape")
-    .catch(() => undefined);
+  // Le repartage : Kenji est identifié dans la story de Damien et la reprend dans la sienne ; sa copie garde la ligne « Photos : Sud Cars »
+  // **et** la pastille « ajoutée par » (appli).
+  const [orig] = await sql<{ id: string }>(
+    "select id from stories where source_album_photo_id is not null and shared_from_story_id is null order by created_at desc limit 1",
+  );
+  const kenjiApi = await login(KENJI);
+  const kenjiMe = await apiCall<{ user: { id: string } }>(kenjiApi, "GET", "/me");
+  await sql("insert into story_tags (story_id, target_kind, target_id) values ($1, 'user', $2)", [
+    orig?.id,
+    kenjiMe.data.user.id,
+  ]);
+  expect((await apiCall(kenjiApi, "POST", `/stories/${orig?.id}/share-to-mine`, {})).status).toBeLessThan(300);
+  const kenjiCtx = await open(browser, KENJI);
+  await go(kenjiCtx.page, `/story/${encodeURIComponent(`u:${kenjiMe.data.user.id}`)}`);
+  await expect(kenjiCtx.page.getByTestId("story-shared-by")).toBeVisible({ timeout: 30_000 });
+  await expect(kenjiCtx.page.getByTestId("story-photo-credit")).toHaveText("Photos : Sud Cars");
+  await shot(kenjiCtx.page, "kenji-copie-credit-beton");
+  await kenjiCtx.ctx.close();
+
+  // Déjà en story : « Tes photos » le dit directement (« Déjà en story · Tout le monde »), sans formulaire de public ni de légende.
   await go(dam.page, `/album/${s.albumId}/mes-photos`);
-  await expect(dam.page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
+  const first = dam.page.getByTestId("my-photo").first();
+  await expect(first.getByTestId("my-photo-story-live")).toContainText("Déjà en story · Tout le monde", {
+    timeout: 30_000,
+  });
+  await expect(first.getByTestId("my-photo-story")).toHaveCount(0);
 
   // « Enregistrer » : actif quand le média l'autorise (le fichier part), sinon inerte avec sa raison.
   await go(dam.page, `/album/${s.albumId}/mes-photos`);
@@ -381,7 +397,8 @@ test("Kenji retire sa seule identification : la ligne disparaît, il quitte « T
   await k.page.getByTestId(/^photo-sheet-(withdraw|not-mine)$/).click();
   // On quitte l'écran : plus de « Tes photos », jamais une erreur de chargement.
   await expect(k.page.getByTestId("my-photos")).toHaveCount(0, { timeout: 30_000 });
-  await expect(k.page.getByTestId("my-photos-error")).toHaveCount(0);
+  await expect(k.page.getByTestId("load-error")).toHaveCount(0);
+  expect(new URL(k.page.url()).pathname).not.toMatch(/\/mes-photos$/);
   const after = await apiCall(kenji, "GET", `/me/albums/${s.albumId}/my-photos`);
   expect(after.status).toBe(404);
   // Rouverte directement : l'écran dit qu'il n'y a plus rien, sans bouton « Réessayer ».

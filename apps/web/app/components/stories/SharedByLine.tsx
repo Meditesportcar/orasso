@@ -26,7 +26,7 @@ export function SharedByLine({ story, authorName }: { story: StoryView; authorNa
   const full = L.sharedBy(name, authorName);
   const at = name ? full.indexOf(name) : -1;
   const href = hrefOf(credit);
-  return (
+  const line = (
     <p className="story-view__shared o-t-caption" data-testid="story-shared-by">
       <span className="story-view__shared-av" aria-hidden="true">
         {credit.avatarUrl ? <img src={credit.avatarUrl} alt="" /> : <span>{name.charAt(0).toUpperCase()}</span>}
@@ -49,5 +49,16 @@ export function SharedByLine({ story, authorName }: { story: StoryView; authorNa
         )}
       </span>
     </p>
+  );
+  // Lot R9f : une copie repartagée garde le crédit « Photos : <média> » (non retirable), sous la pastille de repartage.
+  return (
+    <>
+      {line}
+      {story.credit ? (
+        <p className="story-view__shared o-t-caption" data-testid="story-photo-credit">
+          {albumLabels.creditLine(story.credit.mediaName)}
+        </p>
+      ) : null}
+    </>
   );
 }

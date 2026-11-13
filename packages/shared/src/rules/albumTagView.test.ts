@@ -4,8 +4,10 @@ import { albumTagLabels as L } from "../labels/albumTags.fr";
 import {
   albumViewerRoleOf,
   appendTaggablePage,
+  createOperationGate,
   mentionsSummary,
   myPhotoTaggedBy,
+  reviewButtonsOf,
   showPeopleTab,
   taggedByText,
   whoLabelOf,
@@ -126,5 +128,42 @@ describe("showPeopleTab", () => {
     expect(showPeopleTab(false, 0)).toBe(false);
     expect(showPeopleTab(true, 0)).toBe(true);
     expect(showPeopleTab(false, 1)).toBe(true);
+  });
+});
+
+describe("createOperationGate", () => {
+  it("réponses dans l'ordre inverse : seule la dernière opération démarrée est appliquée", () => {
+    const gate = createOperationGate();
+    const first = gate.start();
+    const second = gate.start();
+    // La seconde répond d'abord, la première après : la première est périmée.
+    expect(second()).toBe(true);
+    expect(first()).toBe(false);
+  });
+  it("une invalidation (changement d'album, fermeture, perte de focus) périme l'opération en cours, sans reprise au retour", () => {
+    const gate = createOperationGate();
+    const op = gate.start();
+    gate.invalidate();
+    expect(op()).toBe(false);
+    gate.invalidate();
+    expect(op()).toBe(false);
+  });
+});
+
+describe("reviewButtonsOf (souvenir à plusieurs albums)", () => {
+  it("un album : « Revoir mes photos » ; deux albums : deux boutons distincts, chacun vers son album", () => {
+    expect(reviewButtonsOf([{ albumId: "a1", mediaName: "Sud Cars" }])).toEqual([
+      { albumId: "a1", label: "Revoir mes photos" },
+    ]);
+    const two = reviewButtonsOf([
+      { albumId: "a1", mediaName: "Sud Cars" },
+      { albumId: "a2", mediaName: "Sud Cars" },
+    ]);
+    expect(two.map((b) => b.albumId)).toEqual(["a1", "a2"]);
+    expect(new Set(two.map((b) => b.label)).size).toBe(2);
+    expect(two[0]?.label).toBe("Revoir mes photos · Sud Cars (1)");
+  });
+  it("rien sans album", () => {
+    expect(reviewButtonsOf(undefined)).toEqual([]);
   });
 });

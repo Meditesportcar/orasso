@@ -4,9 +4,9 @@
 // (retirer mon identification, ce n'est pas ma voiture, signaler). **Aucun bouton principal** sur cet écran. Ces photos ne
 // deviennent pas mes publications.
 import { Button, Chip, ChipRow, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { albumLabels, albumTagLabels as L, type MyPhoto, myPhotoTaggedBy } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { albumLabels, createOperationGate, albumTagLabels as L, type MyPhoto, myPhotoTaggedBy } from "@orasso/shared";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { openReport } from "@/features/ReportSheet";
@@ -44,16 +44,25 @@ export function MyPhotosScreen({ id }: { id: string }) {
   const [saving, setSaving] = useState<string | null>(null);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
-  // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
+  // Les identifications que je viens de retirer disparaissent tout de suite, **rangées par `tagId`** : une photo peut porter deux
+  // identifications de moi (ma voiture par le média, mon pseudo par moi), l'écran n'en montre qu'une ; retirer l'une laisse la photo.
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
   const alive = useRef(true);
+  // « Enregistrer » : une opération à la fois, périmée à la perte de focus (une story ouverte par-dessus, un retour arrière) et à la fermeture.
+  const saveGate = useRef(createOperationGate());
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      saveGate.current.invalidate();
     };
   }, []);
-  const photos = (v?.photos ?? []).filter((p) => !removed.has(p.id));
+  useFocusEffect(
+    useCallback(() => {
+      return () => saveGate.current.invalidate();
+    }, []),
+  );
+  const photos = (v?.photos ?? []).filter((p) => !removed.has(p.tagId));
 
   async function remove(photo: MyPhoto) {
     setSheetBusy(true);
@@ -62,18 +71,22 @@ export function MyPhotosScreen({ id }: { id: string }) {
       await api.removeMyTag(photo.tagId);
       setSheet(null);
       setNote(L.screens.removed);
-      const left = (v?.photos ?? []).filter((p) => p.id !== photo.id && !removed.has(p.id));
-      setRemoved((cur) => new Set([...cur, photo.id]));
-      // La dernière identification retirée : plus rien à montrer ici (l'API rend 404 ensuite), retour à l'écran d'avant.
-      if (left.length === 0) {
-        close();
-        return;
-      }
-      void view.reload();
+      setRemoved((cur) => new Set([...cur, photo.tagId]));
     } catch (e) {
       setSheetError(errorMessage(e));
-    } finally {
       setSheetBusy(false);
+      return;
+    }
+    setSheetBusy(false);
+    // La sortie de l'écran se décide sur la **relecture** : 404 = plus aucune identification à mon nom dans cet album, on quitte ; sinon la
+    // photo reste (avec son autre identification) et la liste est celle du serveur.
+    try {
+      const next = await api.myPhotos(id);
+      if (!alive.current) return;
+      view.setData(next);
+      setRemoved(new Set());
+    } catch (e) {
+      if ((e as { status?: number }).status === 404) close();
     }
   }
   async function save(photo: MyPhoto) {
@@ -83,7 +96,8 @@ export function MyPhotosScreen({ id }: { id: string }) {
     setNote(null);
     try {
       // Écran fermé ou compte changé pendant le téléchargement : le partage ne s'ouvre pas (`null`).
-      const outcome = await savePhoto(photo.id, () => alive.current);
+      const isCurrent = saveGate.current.start();
+      const outcome = await savePhoto(photo.id, () => alive.current && isCurrent());
       if (outcome === null) return;
       setNote(outcome === "unavailable" ? "Le partage n'est pas disponible sur cet appareil." : L.screens.saved);
     } catch {
@@ -122,7 +136,10 @@ export function MyPhotosScreen({ id }: { id: string }) {
             albumId={id}
             authorKey={me ? `u:${me.user.id}` : null}
             onClose={() => setStory(null)}
-            onDone={(text) => setNote(text)}
+            onDone={(text) => {
+              setNote(text);
+              void view.reload();
+            }}
           />
         </>
       }
@@ -173,9 +190,21 @@ export function MyPhotosScreen({ id }: { id: string }) {
                   {myPhotoTaggedBy(p.taggedBy, v.media.name)}
                 </Text>
                 <View style={styles.actions}>
-                  <SmallButton icon="camera" disabled={!p.canStory} onPress={() => setStory(p)} testID="my-photo-story">
-                    {L.inStory}
-                  </SmallButton>
+                  {p.liveStory ? (
+                    // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
+                    <Text variant="caption" color={t.color.accentText} testID="my-photo-story-live">
+                      {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory.audience))}
+                    </Text>
+                  ) : (
+                    <SmallButton
+                      icon="camera"
+                      disabled={!p.canStory}
+                      onPress={() => setStory(p)}
+                      testID="my-photo-story"
+                    >
+                      {L.inStory}
+                    </SmallButton>
+                  )}
                   <SmallButton
                     icon="export"
                     disabled={!p.canSave || saving !== null}

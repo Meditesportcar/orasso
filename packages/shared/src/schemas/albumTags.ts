@@ -151,6 +151,8 @@ export type MyPhoto = {
   canSave: boolean;
   /** « En story » : faux pour une photo d'ancienne galerie (`unknown`), dont la plaque n'a jamais été regardée. */
   canStory: boolean;
+  /** Ma story originale de cette photo, encore en ligne (« Déjà en story · <public> ») ; `null` sinon. Jamais une copie d'une story d'un autre. */
+  liveStory: { audience: "public" | "followers" | "crew"; expiresAt: string } | null;
 };
 
 export type MyPhotosView = {

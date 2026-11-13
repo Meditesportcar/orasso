@@ -113,11 +113,35 @@ test("Léo identifie la voiture de Damien ; Damien : Tes photos, en story, ce n'
   await expect(dam.getByTestId("story-done")).toBeVisible({ timeout: 60_000 });
   await shot(dam, "damien-en-story-1280");
   await dam.keyboard.press("Escape");
-  // Rejouée : la story est déjà en ligne, l'écran le dit.
-  await dam.getByTestId("my-photo").first().getByTestId("my-photo-story").click();
-  await dam.getByTestId("story-publish").click();
-  await expect(dam.getByTestId("story-done")).toContainText("Déjà en story · Tout le monde", { timeout: 60_000 });
-  await dam.keyboard.press("Escape");
+  // Déjà en story : la page le dit directement, sans formulaire de public ni de légende.
+  const first = dam.getByTestId("my-photo").first();
+  await expect(first.getByTestId("my-photo-story-live")).toContainText("Déjà en story · Tout le monde", {
+    timeout: 30_000,
+  });
+  await expect(first.getByTestId("my-photo-story")).toHaveCount(0);
+  // Le repartage : la copie de Kenji garde le crédit « Photos : Sud Cars » et la pastille « ajoutée par » (site).
+  const [orig] = await sql<{ id: string }>(
+    "select id from stories where source_album_photo_id is not null and shared_from_story_id is null order by created_at desc limit 1",
+  );
+  const kenjiApi = await login("kenji@orasso.local");
+  const kenjiMe = await apiCall<{ user: { id: string } }>(kenjiApi, "GET", "/me");
+  await sql("insert into story_tags (story_id, target_kind, target_id) values ($1, 'user', $2)", [
+    orig?.id,
+    kenjiMe.data.user.id,
+  ]);
+  expect((await apiCall(kenjiApi, "POST", `/stories/${orig?.id}/share-to-mine`, {})).status).toBeLessThan(300);
+  const kCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const kp = await kCtx.newPage();
+  await loginInBrowser(
+    kp,
+    "kenji@orasso.local",
+    undefined,
+    `/app/story/${encodeURIComponent(`u:${kenjiMe.data.user.id}`)}`,
+  );
+  await expect(kp.getByTestId("story-shared-by")).toBeVisible({ timeout: 30_000 });
+  await expect(kp.getByTestId("story-photo-credit")).toHaveText("Photos : Sud Cars");
+  await shot(kp, "kenji-copie-credit-1280");
+  await kCtx.close();
   await expect(dam.getByTestId("my-photos-contact")).toHaveCount(0);
 
   // « Enregistrer » : le fichier part (ou inerte avec sa raison).

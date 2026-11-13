@@ -1,7 +1,7 @@
 // Les photos d'un souvenir « Il y a un an » (lot R9f, maquette R9.7 `an`) : « N photos de ta <voiture> · <média> » et « Revoir mes photos »
 // (« Tes photos »). Rien sans identification : l'API ne sert pas `albumPhotos`.
 import { Text, useTheme } from "@orasso/design-system/native";
-import { albumTagLabels as L, type MemoryItem, mentionsSummary } from "@orasso/shared";
+import { type MemoryItem, mentionsSummary, reviewButtonsOf } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
 
@@ -28,16 +28,16 @@ export function MemoryAlbumLine({
         {s.line}
       </Text>
       {/* Un lien par album : le souvenir peut en annoncer plusieurs, chacun s'ouvre. */}
-      {albums.map((m, i) => (
+      {reviewButtonsOf(albums).map((b) => (
         <SmButton
-          key={m.albumId}
+          key={b.albumId}
           kind="s"
           icon="camera"
-          onPress={() => router.push(`/album/${m.albumId}/mes-photos` as never)}
+          onPress={() => router.push(`/album/${b.albumId}/mes-photos` as never)}
           style={styles.stretch}
           testID={`${testID}-open`}
         >
-          {albums.length > 1 ? L.screens.reviewAlbum(m.mediaName, i + 1) : L.reviewMyPhotos}
+          {b.label}
         </SmButton>
       ))}
     </>

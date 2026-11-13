@@ -107,6 +107,8 @@ export const albumTagLabels = {
     removed: "Identification retirée.",
     reviewAlbum: (media: string, index: number) => `Revoir mes photos · ${media} (${index})`,
     moreCars: "Voir plus de voitures",
+    storyAudienceName: (audience: string) =>
+      audience === "followers" ? "Mes abonnés" : audience === "crew" ? "Ton crew" : "Tout le monde",
     storyAlready: (audience: string) => `Déjà en story · ${audience}`,
     storyAlreadyNote: "Cette photo est déjà dans ta story : le public et la légende d'origine sont gardés.",
     storyPlateNote: "Si une plaque est lisible sur la photo, elle est floutée dans la story.",

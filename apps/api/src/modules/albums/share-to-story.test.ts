@@ -265,7 +265,12 @@ describe("« En story » depuis une photo d'album (T38)", () => {
     expect((await app.request(`/api/stories/${copy?.id}/export`, { headers: { cookie: s.kenji.cookie } })).status).toBe(
       403,
     );
-    // Plus d'identification : la story d'origine et la copie tombent.
+    // Kenji est aussi identifié sur la photo, puis retire SA identification d'album : sa copie reste (son droit vient de son identification sur la story).
+    const kenjiTag = await pose(s.leo, photo(0), { userId: s.kenji.id });
+    expect((await call(s.kenji, "DELETE", `/me/album-tags/${kenjiTag.json.id}`)).status).toBe(204);
+    expect((await storyRow(copy?.id as string))?.deletedAt).toBeNull();
+    expect((await storyRow(story.json.id))?.deletedAt).toBeNull();
+    // Plus d'identification de Damien : la story d'origine et la copie tombent.
     expect((await call(s.dam, "DELETE", `/me/album-tags/${tag.json.id}`)).status).toBe(204);
     expect((await storyRow(copy?.id as string))?.deletedAt).not.toBeNull();
   });

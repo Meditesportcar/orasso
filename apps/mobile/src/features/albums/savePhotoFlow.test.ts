@@ -1,5 +1,5 @@
+import { createOperationGate } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
-
 import { saveFlow } from "./savePhotoFlow";
 
 const deferred = <T>() => {
@@ -54,5 +54,33 @@ describe("« Enregistrer » : le partage ne s'ouvre qu'écran ouvert et compte i
     expect(await p).toBeNull();
     expect(t.state.shared).toBe(0);
     expect(t.state.released).toBe(1);
+  });
+});
+
+describe("« Enregistrer » : la perte de focus périme l'opération (une story ouverte par-dessus « Tes photos »)", () => {
+  it("téléchargement retardé puis perte de focus : pas de feuille de partage, fichier libéré, pas de reprise au retour", async () => {
+    const gate = createOperationGate();
+    const t = setup();
+    const isCurrent = gate.start();
+    t.state.open = true; // l'écran reste monté : seul le focus est perdu
+    const p = saveFlow<string>({
+      isOpen: () => t.state.open && isCurrent(),
+      sameAccount: () => t.state.same,
+      download: () => t.download.promise,
+      release: () => {
+        t.state.released++;
+      },
+      isAvailable: async () => true,
+      share: async () => {
+        t.state.shared++;
+      },
+    });
+    gate.invalidate(); // perte de focus
+    t.download.resolve("f");
+    expect(await p).toBeNull();
+    expect(t.state.shared).toBe(0);
+    expect(t.state.released).toBe(1);
+    // Le focus revient : l'ancienne opération ne reprend pas.
+    expect(isCurrent()).toBe(false);
   });
 });

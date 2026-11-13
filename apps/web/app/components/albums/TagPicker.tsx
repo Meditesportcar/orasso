@@ -8,6 +8,7 @@ import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
   appendTaggablePage,
+  createOperationGate,
   albumTagLabels as L,
   showPeopleTab,
   type Taggable,
@@ -46,6 +47,7 @@ export function TagPicker({
   const [error, setError] = useState<string | null>(null);
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
   const [loadingMore, setLoadingMore] = useState(false);
+  const gate = useRef(createOperationGate());
   // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
   const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
@@ -55,14 +57,20 @@ export function TagPicker({
     if (!d) return;
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
-    if (!open) {
-      setText("");
-      setQ("");
-      setCategory(null);
-      setTab("cars");
-      setError(null);
-      setBusy(null);
-    }
+  }, [open]);
+
+  // Une fenêtre fermée vide tout : recherche, puce, plateau lu et opérations en cours (aucune page lue ne revient à la réouverture).
+  useEffect(() => {
+    if (open) return;
+    gate.current.invalidate();
+    setLoadingMore(false);
+    setData(null);
+    setText("");
+    setQ("");
+    setCategory(null);
+    setTab("cars");
+    setError(null);
+    setBusy(null);
   }, [open]);
 
   // Une requête par pause dans la frappe, jamais une par lettre.
@@ -73,36 +81,44 @@ export function TagPicker({
 
   useEffect(() => {
     if (!open) return;
-    let alive = true;
+    // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
+    const current = gate.current.start();
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
     const suffix = params.size ? `?${params}` : "";
     setLoadError(null);
+    setLoadingMore(false);
     void apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable${suffix}`).then((res) => {
-      if (!alive) return;
+      if (!current()) return;
       if (res.ok) setData(res.data);
       else setLoadError(res.error.message);
     });
-    return () => {
-      alive = false;
-    };
+    return () => gate.current.invalidate();
   }, [open, albumId, q, category]);
 
   useEffect(() => {
     if (!peopleTab && tab === "people") setTab("cars");
-    // Aucune voiture à proposer mais mon pseudo oui : l'onglet « Personnes » s'ouvre tout seul.
+  }, [peopleTab, tab]);
+
+  // Aucune voiture à proposer mais mon pseudo oui : l'onglet « Personnes » s'ouvre tout seul, **à l'arrivée des données** seulement
+  // (un toucher sur « Voitures » est respecté ensuite).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seulement à l'arrivée des données
+  useEffect(() => {
     if (data && data.vehicles.length === 0 && data.people.length > 0 && !q && !category) setTab("people");
-  }, [peopleTab, tab, data, q, category]);
+  }, [data]);
 
   /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
   async function more() {
     if (!data || data.nextCursor === null || loadingMore) return;
     setLoadingMore(true);
+    const current = gate.current.start();
     const params = new URLSearchParams({ cursor: String(data.nextCursor) });
     if (q) params.set("q", q);
     if (category) params.set("category", category);
     const res = await apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable?${params}`);
+    // Recherche, puce, album ou réouverture changés pendant le chargement : la page est jetée.
+    if (!current()) return;
     setLoadingMore(false);
     if (res.ok) setData((cur) => (cur ? appendTaggablePage(cur, res.data) : res.data));
     else setError(res.error.message);

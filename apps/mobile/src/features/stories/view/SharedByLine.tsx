@@ -29,7 +29,7 @@ export function SharedByLine({
   const at = name ? full.indexOf(name) : -1;
   const link = Boolean(onOpen && credit.slug);
   const source = mediaSource(credit.avatarUrl);
-  return (
+  const line = (
     <Pressable
       onPress={link ? () => onOpen?.(credit) : undefined}
       disabled={!link}
@@ -62,6 +62,13 @@ export function SharedByLine({
         )}
       </Text>
     </Pressable>
+  );
+  // Lot R9f : une copie repartagée garde le crédit « Photos : <média> » (non retirable), sous la pastille de repartage.
+  return (
+    <>
+      {line}
+      {story.credit ? <PhotoCredit name={story.credit.mediaName} /> : null}
+    </>
   );
 }
 

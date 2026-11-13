@@ -90,3 +90,35 @@ export function appendTaggablePage(prev: Taggable, next: Taggable): Taggable {
 export function showPeopleTab(searchLongEnough: boolean, peopleCount: number): boolean {
   return searchLongEnough || peopleCount > 0;
 }
+
+/**
+ * Une « génération » d'opération asynchrone : `start()` rend une fonction qui n'est vraie que tant qu'aucune autre opération n'a démarré et
+ * qu'aucune `invalidate()` n'a eu lieu. Sert aux réponses qui arrivent dans le désordre (« Voir plus » du plateau après un changement de
+ * recherche, d'album ou une réouverture) et à « Enregistrer » (jamais repris après une perte de focus).
+ */
+export function createOperationGate() {
+  let n = 0;
+  return {
+    start(): () => boolean {
+      const id = ++n;
+      return () => n === id;
+    },
+    invalidate() {
+      n += 1;
+    },
+  };
+}
+
+/**
+ * Les boutons « Revoir mes photos » d'un souvenir : **un par album** (un seul : le libellé simple ; plusieurs : le média et le rang, pour les
+ * distinguer). Appli et site les rendent tels quels.
+ */
+export function reviewButtonsOf(
+  albums: readonly Pick<AlbumMention, "albumId" | "mediaName">[] | undefined,
+): { albumId: string; label: string }[] {
+  const list = albums ?? [];
+  return list.map((m, i) => ({
+    albumId: m.albumId,
+    label: list.length > 1 ? albumTagLabels.screens.reviewAlbum(m.mediaName, i + 1) : albumTagLabels.reviewMyPhotos,
+  }));
+}

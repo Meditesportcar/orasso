@@ -23,7 +23,8 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
   const [busy, setBusy] = useState(false);
   // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
-  const photos = view.photos.filter((p) => !removed.has(p.id));
+  // Rangées par `tagId` : une photo peut porter deux identifications de moi ; retirer l'une laisse la photo (et son autre identification).
+  const photos = view.photos.filter((p) => !removed.has(p.tagId));
   const count = photos.length;
   const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
 
@@ -35,10 +36,10 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
     if (!res.ok) return setError(res.error.message);
     setSheet(null);
     setNote(L.screens.removed);
-    const left = photos.filter((p) => p.id !== photo.id);
-    setRemoved((cur) => new Set([...cur, photo.id]));
-    // La dernière identification retirée : l'API rend 404 ensuite, on revient à l'album sans relire « Tes photos ».
-    if (left.length === 0) navigate(`/albums/${albumId}`);
+    setRemoved((cur) => new Set([...cur, photo.tagId]));
+    // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album ; sinon la liste est relue.
+    const next = await apiFetch(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
+    if (!next.ok && next.status === 404) navigate(`/albums/${albumId}`);
     else revalidator.revalidate();
   }
 
@@ -78,16 +79,23 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
                 {myPhotoTaggedBy(p.taggedBy, view.media.name)}
               </span>
               <span className="myp-row__actions">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon="camera"
-                  disabled={!p.canStory}
-                  onClick={() => setStory(p)}
-                  data-testid="my-photo-story"
-                >
-                  {L.inStory}
-                </Button>
+                {p.liveStory ? (
+                  // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
+                  <span className="o-t-caption act-go" data-testid="my-photo-story-live">
+                    {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory.audience))}
+                  </span>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="camera"
+                    disabled={!p.canStory}
+                    onClick={() => setStory(p)}
+                    data-testid="my-photo-story"
+                  >
+                    {L.inStory}
+                  </Button>
+                )}
                 {p.canSave ? (
                   <Button
                     variant="secondary"
@@ -179,7 +187,10 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
         mediaName={view.media.name}
         myUserId={myUserId}
         onClose={() => setStory(null)}
-        onDone={setNote}
+        onDone={(text) => {
+          setNote(text);
+          revalidator.revalidate();
+        }}
       />
     </div>
   );
