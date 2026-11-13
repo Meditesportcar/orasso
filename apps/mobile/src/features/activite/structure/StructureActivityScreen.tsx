@@ -200,7 +200,7 @@ function Body() {
           </Pressable>
           {showRequests && requests.error ? (
             <LoadError
-              message={L.requestsUnknown}
+              message={L.requestsListFailed}
               onRetry={() => void Promise.all([summary.reload(), requests.reload()])}
             />
           ) : null}

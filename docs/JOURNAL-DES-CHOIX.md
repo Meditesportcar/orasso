@@ -6151,3 +6151,11 @@ Choix pris seul :
 - **Appli** : le Tri applique le genre à chaque ouverture explicite (paramètre `n` renouvelé), sans toucher au choix manuel d'un simple rafraîchissement ; échec partiel des demandes : l'erreur et « Réessayer » s'affichent même quand le résumé donne un total de secours, les cartes déjà chargées restent ; jeton de rayon (`radiusLg`) à la place de 16. Pas de test de composant (l'appli n'en a pas pour ces écrans) : vérifié à la recette de l'appli.
 - **Site** : `markSeen` pose le « vu » à l'arrivée d'une ligne pendant que la page est ouverte, et ignore le `inbox.changed` qu'il provoque (3 s).
 - **Tests** : l'auteur d'une demande est responsable dans un cas de `media.test.ts` et de `missions.test.ts` (l'assertion « jamais à l'auteur » prouve quelque chose) ; `structure-activity.test.ts` crée dix vraies candidatures ; « refuser » testé pour `inbox.changed` à tous les responsables.
+
+### Lot R9d, tour 3 (points 1 à 5 ; le point 6, le push d'une invitation de structure dans l'appli, se fait avec la barre du haut)
+
+- **Site, « vu » et `inbox.changed`** : plus de fenêtre de temps. Tout `inbox.changed` ou `notification` relit la page (`revalidate`, jamais d'écho : deux signaux rapprochés sont pris tous les deux) ; le « vu » n'est posé que lorsque la lecture montre des lignes non vues (`unseen > 0`, lu par `GET /structures/:id/activity/count`), et la relecture suivante rend 0 : aucune boucle par construction.
+- **Panne partielle des demandes** : libellé « Les demandes n'ont pas pu être chargées. » (appli et site) sous un nombre affiché ; « Le nombre de demandes n'a pas pu être lu. » reste pour le cas où rien n'est connu.
+- **Compteur de collaborations** : le `scope` de `pendingCoauthorCount` ne servait à aucun code du produit : retiré (le compteur de la structure est `requestCounts`, aligné sur la liste). `coauthors-tour4.test.ts` lit ce compteur servi.
+- **Pastille d'une demande de prestataire** testée avant et après la décision (`missions.test.ts`) ; le titre du test « dix candidatures » ne promet plus le texte des genres média et prestataire (testé dans `media.test.ts` et `missions.test.ts`).
+- **Jeton de rayon** : `radiusLg` vaut 18, non 16 : le léger changement visuel (deux pixels) est accepté (règle : jetons seulement).

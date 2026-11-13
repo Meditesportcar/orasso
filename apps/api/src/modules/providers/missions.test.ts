@@ -277,8 +277,16 @@ describe("candidature sur une mission", () => {
     expect(await notifsOf(ines.id, "application_received")).toHaveLength(0);
     expect(await notifsOf(ines.id, "need_application_received")).toHaveLength(0);
     expect(await notifsOf(orga.id, "application_received")).toHaveLength(2);
+    // Pastille de la cloche de la structure : une ligne par demande (l'ancien envoi, non listé, ne compte pas), puis elle tombe
+    // à mesure que les demandes sont décidées.
+    await notificationsService.deliverDue();
+    const unseen = async () => (await call(orga, "GET", `/structures/${structureId}/activity/count`)).json.unseen;
+    expect(await unseen()).toBe(2);
     // Comblée par Sofia : Léa ne peut plus y répondre.
     await call(orga, "POST", `/events/${nocturneId}/applications/${ok.json.id}/decide`, ACCEPT);
+    expect(await unseen()).toBe(1);
+    await call(orga, "POST", `/events/${nocturneId}/applications/${own.json.id}/decide`, ACCEPT);
+    expect(await unseen()).toBe(0);
     const lea = await signUp("Lea_Truck");
     await readyProvider(lea, { name: "La Caravane" });
     expect((await applyTo(lea, nocturneId, need.id)).status).toBe(409);

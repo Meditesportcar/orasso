@@ -13,7 +13,7 @@ import {
   structureActivityFilters,
   structureActivityLabels,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, useLocation, useNavigation, useRevalidator } from "react-router";
 
 import { ActivityRow } from "../components/activity/ActivityRow";
@@ -77,6 +77,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     requestsListFailed: !requests.ok,
     showRequests: url.searchParams.get("vue") === "demandes",
     isFirstPage: cursor === null,
+    unseen: count.ok ? count.data.unseen : 0,
   };
 }
 
@@ -167,35 +168,27 @@ export default function OrgaActivite({ loaderData, actionData }: Route.Component
     requestsListFailed,
     showRequests,
     isFirstPage,
+    unseen,
   } = loaderData;
   const revalidator = useRevalidator();
   const here = useLocation().pathname;
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
 
-  const seenOnce = useRef(false);
-  // `markSeen` provoque lui-même un `inbox.changed` (ses autres appareils) : le signal reçu juste après n'est pas relu.
-  const ownSignalAt = useRef(0);
+  // « Vu » : posé seulement quand la lecture montre des lignes non vues (`unseen > 0`) ; une fois posé, la relecture rend 0 et rien
+  // ne repart. Aucune fenêtre de temps : l'écho du « vu » (`inbox.changed`) ne fait que relire la page, jamais reposer un « vu ».
   const markSeen = () => {
-    ownSignalAt.current = Date.now();
     void apiFetch(`/structures/${structure.id}/activity/seen`, { method: "POST" }).then((r) => {
       if (r.ok) revalidator.revalidate();
     });
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: une seule fois à l'ouverture
+  // biome-ignore lint/correctness/useExhaustiveDependencies: à chaque nouvelle lecture qui compte des lignes non vues
   useEffect(() => {
-    if (seenOnce.current) return;
-    seenOnce.current = true;
-    markSeen();
-  }, []);
-  // Une ligne regroupée qui s'ajoute à une ligne déjà livrée n'envoie que `inbox.changed` : la liste et le compteur se relisent.
-  // Une notification livrée est vue tout de suite (le « vu » se repose après une lecture réussie).
+    if (unseen > 0) markSeen();
+  }, [unseen]);
+  // Une ligne regroupée qui s'ajoute à une ligne déjà livrée n'envoie que `inbox.changed` : tout signal relit la page, sans
+  // exception (deux signaux rapprochés sont pris en compte tous les deux).
   useChannel(`user:${userId}`, (m) => {
-    if (m.type === "inbox.changed") {
-      if (Date.now() - ownSignalAt.current < 3_000) return;
-      // Une ligne arrivée pendant que la page est ouverte est vue tout de suite ; la liste se relit après le « vu » réussi.
-      markSeen();
-    }
-    if (m.type === "notification") markSeen();
+    if (m.type === "inbox.changed" || m.type === "notification") revalidator.revalidate();
   });
 
   const isRead = (i: ActivityItem) => i.read || i.ids.every((id) => readIds.has(id));
@@ -265,7 +258,7 @@ export default function OrgaActivite({ loaderData, actionData }: Route.Component
         <section data-testid="sact-requests">
           {requestsListFailed ? (
             <div className="s-notice" role="alert">
-              <p>{L.requestsUnknown}</p>
+              <p>{L.requestsListFailed}</p>
               <Button variant="secondary" icon="undo" onClick={() => revalidator.revalidate()}>
                 {L.retry}
               </Button>

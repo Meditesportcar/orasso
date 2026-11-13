@@ -115,7 +115,7 @@ describe("notifyStructure", () => {
     expect(all.sort()).toEqual([damien.id, lea.id].sort());
   });
 
-  it("dix candidatures sur le même événement : une ligne par responsable, compteur à 10 ; genres média et prestataire : leur texte", async () => {
+  it("dix candidatures sur le même événement : une ligne par responsable, compteur à 10 (le texte des genres média et prestataire est testé dans media.test.ts et missions.test.ts)", async () => {
     // Lot R9d, tour 1 : le « reste à trier » se lit dans les candidatures réelles : dix vraies candidatures.
     const e = await createEvent(structureId, { title: "Nocturne de Canet", capacity: 30 });
     for (let i = 0; i < 10; i++) {

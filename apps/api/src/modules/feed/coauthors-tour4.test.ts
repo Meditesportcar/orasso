@@ -33,6 +33,7 @@ import { now } from "../../lib/deps";
 import { mail } from "../../lib/mail";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { accountService } from "../account/service";
+import { structureActivityService } from "../activity/structure";
 import { notificationsService } from "../notifications/service";
 import { coauthorNotificationsWhere, pendingCoauthorCount, pendingCoauthorRequests } from "./coauthors";
 import * as commentsAnonymize from "./comments/anonymize";
@@ -136,7 +137,9 @@ describe("compteur de `GET /me` : un comptage, pas les cartes", () => {
       // Lot R9d : l'invitation adressée à une page se lit dans la cloche de la structure (`scope` « all »), la liste et le compteur
       // y sont alignés ; la liste personnelle ne l'a plus.
       const list = await pendingCoauthorRequests(kenji.id, db, now(), "all");
-      return { list: list.length, count: await pendingCoauthorCount(kenji.id, db, "all") };
+      // Le compteur est celui que sert la structure (Boîte et cloche), pas un compteur de test.
+      const served = await structureActivityService.requestCounts(kenji.id, structure.id, db);
+      return { list: list.length, count: served.coauthor };
     };
     expect(await readBoth()).toEqual({ list: 1, count: 1 });
     expect(await pendingCoauthorRequests(kenji.id, db, now())).toHaveLength(0);

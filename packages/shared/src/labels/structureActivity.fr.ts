@@ -13,6 +13,7 @@ export const structureActivityLabels = {
   messageChips: { all: "Tout", participants: "Participants", team: "Équipe" },
   requests: "Demandes",
   staffAsks: "voudrait rejoindre le staff",
+  requestsListFailed: "Les demandes n'ont pas pu être chargées.",
   requestsUnknown: "Le nombre de demandes n'a pas pu être lu.",
   newMessage: "Nouveau message",
   groupedMessage: "Message groupé",

@@ -681,14 +681,10 @@ export const coauthorsService = {
 };
 
 /** Nombre de mes invitations en attente que je peux lire (pour les nouveaux clients : `pendingCoauthors` du résumé). */
-export async function pendingCoauthorCount(
-  userId: string,
-  ex: Executor,
-  scope: CoauthorScope = "personal",
-): Promise<number> {
+export async function pendingCoauthorCount(userId: string, ex: Executor): Promise<number> {
   // Un comptage, jamais les cartes (`GET /me` le lit à chaque fois) : les invitations en attente pour moi ou mes pages, puis les
   // mêmes contrôles de visibilité que la liste (publication servie, auteur en règle, compte privé suivi), en une requête.
-  const pending = await pendingCoauthorPostIds(userId, ex, scope);
+  const pending = await pendingCoauthorPostIds(userId, ex);
   if (!pending.length) return 0;
   const at = now();
   const res = await ex.execute<{ n: number }>(sql`select count(*)::int as n
