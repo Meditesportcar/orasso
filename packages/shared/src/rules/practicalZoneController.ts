@@ -42,7 +42,8 @@ export type ZoneState = {
 };
 
 export type ZoneDeps = {
-  read: (zone: PracticalZone) => Promise<PracticalData>;
+  /** Lit une zone ; `cursor` : la page suivante de la même zone (rendue par l'API quand la réponse est coupée). */
+  read: (zone: PracticalZone, cursor?: string) => Promise<PracticalData>;
   /** L'écran est-il visible (focus, appli au premier plan) ? */
   visible: () => boolean;
   /** Le statut HTTP d'une erreur de lecture (0 : réseau), `null` pour une exception qui n'est pas une réponse du serveur. */
@@ -101,6 +102,15 @@ export function createPracticalZone(deps: ZoneDeps) {
   let askedTight = false;
   /** Les zones demandées dont la réponse a été coupée : une recherche dedans ne s'élargit plus (la zone se resserre sur la vue). */
   let dense: PracticalZone[] = [];
+  /** La suite de la dernière zone coupée : sa page suivante (jamais lue seule, seulement à l'appui sur le bouton). */
+  let pageState: { zone: PracticalZone; token: string } | null = null;
+  /** Le curseur de la lecture en cours ou du dernier échec (« Réessayer » relit la même page). */
+  let cursorUsed: string | undefined;
+  let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearResume = () => {
+    if (resumeTimer !== null) clearTimeout(resumeTimer);
+    resumeTimer = null;
+  };
   let reading = false;
   let lastFailureAt = 0;
   let alive = true;
@@ -138,12 +148,14 @@ export function createPracticalZone(deps: ZoneDeps) {
   async function load(): Promise<void> {
     const zone = asked;
     if (!zone || reading || !alive) return;
+    clearResume();
+    const cursor = cursorUsed;
     reading = true;
     const gen = generation;
     const token = cycle.begin();
     set({ loading: true });
     try {
-      const data = await deps.read(zone);
+      const data = await deps.read(zone, cursor);
       if (gen !== generation) return;
       reading = false;
       if (!alive || !cycle.current(token)) return;
@@ -157,9 +169,18 @@ export function createPracticalZone(deps: ZoneDeps) {
         const covered = coveredBy(data, zoneCenter(zone), { t: "rect", zone });
         if (cut) dense = [...dense, zone];
         // Les anciennes entrées de l'emprise GARANTIE (zone entière, ou disque et cases servis si la réponse est coupée) sont remplacées.
-        const next = store((p) => coverContains(covered, p), data.places, covered);
+        // Une page suivante (curseur) AJOUTE ses lieux à ceux des pages précédentes de la même zone : rien n'est remplacé.
+        const next = store(cursor !== undefined ? () => false : (p) => coverContains(covered, p), data.places, covered);
+        if (!away) pageState = cut && data.nextCursor ? { zone, token: data.nextCursor } : null;
         // Toujours coupé après un resserrement : des cases de la vue ne seront jamais complètes à ce zoom.
-        const crowded = cut && askedTight && view !== null && !viewCovered(next.cover, view);
+        // (Seulement si la réponse concerne toujours la recherche et la vue courantes, et s'il n'y a plus de page suivante.)
+        const crowded =
+          !away &&
+          cut &&
+          !data.nextCursor &&
+          (data.partialCells !== undefined || askedTight) &&
+          view !== null &&
+          !viewCovered(next.cover, view);
         set({
           ...next,
           loading: false,
@@ -264,9 +285,19 @@ export function createPracticalZone(deps: ZoneDeps) {
         return false;
       // Une zone déjà coupée (trop de lieux) : on ne l'élargit plus, la zone se resserre sur la vue (toujours en cases entières).
       const centre = zoneCenter(v);
-      const tight = dense.some((d) => zoneContains(d, centre));
-      asked = zoneForRequest(v, !tight);
-      askedTight = tight;
+      clearResume();
+      if (pageState && zoneContains(pageState.zone, centre)) {
+        // La vue touche une case incomplète de la dernière zone coupée : la page suivante de CETTE zone (rien de géographique de plus).
+        asked = pageState.zone;
+        cursorUsed = pageState.token;
+        askedTight = false;
+      } else {
+        pageState = null;
+        cursorUsed = undefined;
+        const tight = dense.some((d) => zoneContains(d, centre));
+        asked = zoneForRequest(v, !tight);
+        askedTight = tight;
+      }
       state = { ...state, asked, refused: false, tooDense: false };
       generation += 1;
       cycle.manual();
@@ -276,6 +307,7 @@ export function createPracticalZone(deps: ZoneDeps) {
     /** « Réessayer » : la dernière zone demandée si la vue y est encore, sinon une NOUVELLE recherche sur la zone regardée. */
     retry(): boolean {
       if (reading) return false;
+      clearResume();
       const v = state.view;
       if (!asked || (v !== null && !insideZone(asked, v))) return this.searchHere();
       generation += 1;
@@ -285,11 +317,18 @@ export function createPracticalZone(deps: ZoneDeps) {
     },
     /** Retour sur l'écran : une relecture due part (au plus tôt à 15 s de la précédente). */
     resume() {
-      // Un échec réseau n'est pas une erreur inconnue : au retour (réseau, onglet, appli), la zone regardée est relue UNE fois (jamais en boucle :
-      // seul un événement du système l'appelle, et pas plus d'une fois toutes les 15 s).
-      const t = (deps.now ?? Date.now)();
-      if (alive && !reading && state.failed && deps.visible() && t - lastFailureAt >= 15_000) {
-        this.retry();
+      // Un échec réseau n'est pas une erreur inconnue : au retour (réseau, onglet, appli), la zone regardée est relue UNE fois, jamais en boucle.
+      // Avant 15 s depuis l'échec, UNE relance est programmée au délai restant (un retour rapide ne perd pas la relance).
+      if (alive && !reading && state.failed && deps.visible()) {
+        const wait = Math.max(0, 15_000 - ((deps.now ?? Date.now)() - lastFailureAt));
+        if (wait <= 0) {
+          this.retry();
+        } else if (resumeTimer === null) {
+          resumeTimer = setTimeout(() => {
+            resumeTimer = null;
+            if (alive && !reading && state.failed && deps.visible()) this.retry();
+          }, wait);
+        }
         return;
       }
       cycle.resume();
@@ -302,6 +341,7 @@ export function createPracticalZone(deps: ZoneDeps) {
     },
     /** L'écran est démonté : plus aucune réponse n'est appliquée ; `attach` le réveille. */
     dispose() {
+      clearResume();
       alive = false;
       generation += 1;
       reading = false;
@@ -312,6 +352,9 @@ export function createPracticalZone(deps: ZoneDeps) {
       generation += 1;
       asked = null;
       dense = [];
+      pageState = null;
+      cursorUsed = undefined;
+      clearResume();
       askedTight = false;
       reading = false;
       cycle.reset();

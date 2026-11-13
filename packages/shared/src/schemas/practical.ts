@@ -25,6 +25,8 @@ export const practicalInput = z.discriminatedUnion("near", [
       west: coordinate("lng"),
       north: coordinate("lat"),
       east: coordinate("lng"),
+      // Page suivante de la MÊME zone (opaque, rendu par l'API) ; rien de géographique de plus.
+      cursor: z.string().min(1).max(120).optional(),
     })
     .strict()
     .refine((p) => zoneIsWellFormed(p), { message: "Zone invalide", path: ["south"] })

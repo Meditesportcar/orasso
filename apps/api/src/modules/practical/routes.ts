@@ -19,7 +19,7 @@ export const practicalRoutes = new Hono<AppEnv>().post("/practical", async (c) =
     input.near === "position"
       ? { near: "position", cell: weatherCell(input) }
       : input.near === "zone"
-        ? { near: "zone", zone: roundZoneOutward(input) }
+        ? { near: "zone", zone: roundZoneOutward(input), ...(input.cursor ? { cursor: input.cursor } : {}) }
         : input.near === "outing"
           ? { near: "outing", ...(input.eventId ? { eventId: input.eventId } : {}) }
           : { near: "city" };

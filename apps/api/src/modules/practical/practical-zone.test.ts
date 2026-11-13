@@ -212,6 +212,59 @@ describe("POST /practical : near zone", () => {
     expect(res.json.partialCells).toEqual([[425, 29]]);
   });
 
+  it("pagination : neuf cases de 30 lieux (plus de 200 ensemble), le lavage visible arrive à la 2e page par le curseur ; curseur d'une autre zone refusé", async () => {
+    const wash: { name: string; lat: number; lon: number }[] = [];
+    for (let ci = 0; ci < 3; ci++)
+      for (let cj = 0; cj < 3; cj++)
+        for (let k = 0; k < 30; k++)
+          wash.push({
+            name: `L${ci}${cj}-${k}`,
+            lat: 42.4 + ci * 0.1 + 0.001 + k * 0.0002,
+            lon: 2.8 + cj * 0.1 + 0.001 + k * 0.0002,
+          });
+    wash.push({ name: "Lavage visible", lat: 42.4 + 0.1 + 0.099, lon: 2.8 + 0.2 + 0.099 });
+    practicalSources({ wash: { "66": wash }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Pages");
+    const zone = { near: "zone", south: 42.4, west: 2.8, north: 42.7, east: 3.1 };
+    const first = await call(u, "POST", "/practical", zone);
+    expect(first.status).toBe(200);
+    expect(first.json.places).toHaveLength(200);
+    expect(first.json.truncated).toBe(true);
+    expect(typeof first.json.nextCursor).toBe("string");
+    expect(first.json.places.map((p: { name: string }) => p.name)).not.toContain("Lavage visible");
+    const second = await call(u, "POST", "/practical", { ...zone, cursor: first.json.nextCursor });
+    expect(second.status).toBe(200);
+    expect(second.json.places).toHaveLength(71);
+    expect(second.json.places.map((p: { name: string }) => p.name)).toContain("Lavage visible");
+    // Dernière page : la zone est complète, plus de curseur ni de coupe.
+    expect(second.json.truncated).toBeUndefined();
+    expect(second.json.nextCursor).toBeUndefined();
+    expect(second.json.partialCells).toBeUndefined();
+    // Aucun lieu en double d'une page à l'autre.
+    const names = [...first.json.places, ...second.json.places].map((p: { name: string }) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+    // Un curseur d'une autre zone, ou illisible, est refusé (400).
+    const other = await call(u, "POST", "/practical", {
+      ...zone,
+      south: 42.5,
+      north: 42.8,
+      cursor: first.json.nextCursor,
+    });
+    expect(other.status).toBe(400);
+    const junk = await call(u, "POST", "/practical", { ...zone, cursor: "n-importe-quoi" });
+    expect(junk.status).toBe(400);
+  });
+
+  it("au plus dix pages par zone : la page 10 (indice 10) est refusée, l'indice 9 est servi (la dixième page n'a pas de curseur)", async () => {
+    practicalSources({ wash: { "66": [{ name: "Lavage", lat: 42.5, lon: 2.9 }] }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Dix");
+    const zone = { near: "zone", south: 42.4, west: 2.8, north: 42.7, east: 3.1 };
+    const cursorFor = (p: number) => Buffer.from(JSON.stringify({ p, z: "42.4,2.8,42.7,3.1" })).toString("base64url");
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(9) })).status).toBe(200);
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(10) })).status).toBe(400);
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(0) })).status).toBe(400);
+  });
+
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {
     practicalSources(data);
     const u = await signUp("Fan_Ancien");

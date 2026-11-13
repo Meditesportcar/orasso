@@ -44,10 +44,10 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
   const zone = useMemo(
     () =>
       createPracticalZone({
-        read: async (z: PracticalZone) => {
+        read: async (z: PracticalZone, cursor?: string) => {
           const res = await apiFetch<PracticalData>("/practical", {
             method: "POST",
-            json: { near: "zone", ...z },
+            json: { near: "zone", ...z, ...(cursor ? { cursor } : {}) },
             timeoutMs: 15_000,
           });
           if (!res.ok) throw new ZoneReadError(res.status);

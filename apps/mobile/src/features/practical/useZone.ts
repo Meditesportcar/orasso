@@ -43,7 +43,8 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
   const zone = useMemo(
     () =>
       createPracticalZone({
-        read: (z: PracticalZone) => api.practical({ near: "zone", ...z }),
+        read: (z: PracticalZone, cursor?: string) =>
+          api.practical({ near: "zone", ...z, ...(cursor ? { cursor } : {}) }),
         visible: () => AppState.currentState === "active",
         statusOf: (error) => (error instanceof ApiRequestError ? error.status : null),
         onUnknown: (error) => {

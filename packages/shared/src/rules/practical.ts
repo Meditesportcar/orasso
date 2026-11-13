@@ -93,6 +93,8 @@ export type PracticalData = {
    * les autres cases de la zone sont complètes. Les lieux sont répartis entre les cases (jamais les seuls 200 plus proches du centre).
    */
   partialCells?: [number, number][];
+  /** Mode zone coupé : le curseur opaque de la page suivante de la même zone (absent à la dernière page ou après dix pages). */
+  nextCursor?: string;
   attribution: { wash: string; fuel: string };
 };
 

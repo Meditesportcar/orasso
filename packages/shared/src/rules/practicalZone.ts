@@ -206,15 +206,28 @@ export const coverContains = (cover: readonly ZoneCover[], p: LatLng): boolean =
     c.t === "disk" ? distanceKm(c, p) <= c.km : zoneContains(c.zone, p) && !(c.except && c.except.has(cellKey(p))),
   );
 
-/** Toute la zone regardée est-elle dans ce qui est chargé ? (25 points de contrôle, bords compris, comme la maquette.) */
+/**
+ * Toute la zone regardée est-elle dans ce qui est chargé ? On contrôle **chaque case de 0,1° traversée par la vue** (neuf points dans
+ * l'intersection case ∩ vue : bords et centre, contre toute la couverture) : une case incomplète (`except`) ne passe jamais inaperçue,
+ * quelle que soit la taille de la vue. Au plus 60 × 60 cases contrôlées (une vue de 60 km en compte une dizaine).
+ */
 export function viewCovered(cover: readonly ZoneCover[], view: PracticalZone): boolean {
-  for (let i = 0; i <= 4; i++) {
-    for (let j = 0; j <= 4; j++) {
-      const p = {
-        lat: view.south + ((view.north - view.south) * i) / 4,
-        lng: view.west + ((view.east - view.west) * j) / 4,
-      };
-      if (!coverContains(cover, p)) return false;
+  const i0 = cellDown(view.south);
+  const i1 = Math.min(cellUp(view.north) - 1, i0 + 59);
+  const j0 = cellDown(view.west);
+  const j1 = Math.min(cellUp(view.east) - 1, j0 + 59);
+  const inset = 1e-9;
+  for (let i = i0; i <= i1; i++) {
+    const south = Math.max(view.south, i / 10);
+    const north = Math.min(view.north, (i + 1) / 10);
+    if (north <= south) continue;
+    for (let j = j0; j <= j1; j++) {
+      const west = Math.max(view.west, j / 10);
+      const east = Math.min(view.east, (j + 1) / 10);
+      if (east <= west) continue;
+      const lats = [south + inset, (south + north) / 2, north - inset];
+      const lngs = [west + inset, (west + east) / 2, east - inset];
+      for (const lat of lats) for (const lng of lngs) if (!coverContains(cover, { lat, lng })) return false;
     }
   }
   return true;
@@ -416,8 +429,27 @@ export function placesInZoneInfo<T extends { id: string; lat: number; lng: numbe
   z: PracticalZone,
   max = PRACTICAL_MAX,
 ): { places: T[]; cut: boolean; partialCells: [number, number][] } {
+  const page = placesInZonePage(places, z, 0, max);
+  return { places: page.places, cut: page.more, partialCells: page.partialCells };
+}
+
+/** Au plus ce nombre de pages (de 200 lieux) pour une même zone ; au-delà, « Trop de lieux ici : zoome davantage. ». */
+export const PRACTICAL_ZONE_MAX_PAGES = 10;
+
+/**
+ * La page `page` (0 pour la première) de la répartition par case d'une zone : l'ordre est le tour par tour décrit pour `placesInZoneInfo`
+ * (un lieu par case non vide, puis le suivant…), découpé en pages de `max` lieux. `partialCells` : les cases dont tous les lieux ne sont
+ * PAS servis au total (pages précédentes comprises) ; `more` : il reste des lieux (une page suivante existe). La dernière page rend donc la
+ * zone complète (`more` faux, aucune case incomplète).
+ */
+export function placesInZonePage<T extends { id: string; lat: number; lng: number }>(
+  places: readonly T[],
+  z: PracticalZone,
+  page: number,
+  max = PRACTICAL_MAX,
+): { places: T[]; more: boolean; partialCells: [number, number][] } {
   const all = placesInZone(places, z, Number.POSITIVE_INFINITY);
-  if (all.length <= max) return { places: all, cut: false, partialCells: [] };
+  if (all.length <= max && page === 0) return { places: all, more: false, partialCells: [] };
   const cells = new Map<string, { i: number; j: number; list: T[]; km: number }>();
   for (const p of all) {
     const i = cellDown(p.lat);
@@ -435,24 +467,28 @@ export function placesInZoneInfo<T extends { id: string; lat: number; lng: numbe
     c.list.sort((a, b) => distanceKm(mid, a) - distanceKm(mid, b) || a.id.localeCompare(b.id));
   }
   const order = [...cells.values()].sort((a, b) => a.km - b.km || a.i - b.i || a.j - b.j);
-  const kept: T[] = [];
-  const taken = new Map<string, number>();
-  for (let round = 0; kept.length < max; round++) {
+  const sequence: { p: T; key: string }[] = [];
+  for (let round = 0; ; round++) {
     let any = false;
     for (const c of order) {
       const p = c.list[round];
       if (!p) continue;
       any = true;
-      kept.push(p);
-      taken.set(`${c.i},${c.j}`, round + 1);
-      if (kept.length >= max) break;
+      sequence.push({ p, key: `${c.i},${c.j}` });
     }
     if (!any) break;
   }
+  const served = sequence.slice(0, (page + 1) * max);
+  const taken = new Map<string, number>();
+  for (const { key } of served) taken.set(key, (taken.get(key) ?? 0) + 1);
   const partialCells = order
     .filter((c) => (taken.get(`${c.i},${c.j}`) ?? 0) < c.list.length)
     .map((c): [number, number] => [c.i, c.j]);
-  return { places: kept, cut: true, partialCells };
+  return {
+    places: sequence.slice(page * max, (page + 1) * max).map((x) => x.p),
+    more: sequence.length > (page + 1) * max,
+    partialCells,
+  };
 }
 
 /**

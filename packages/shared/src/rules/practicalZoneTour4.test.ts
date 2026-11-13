@@ -79,8 +79,12 @@ describe("zone dense : répartition par case", () => {
   });
 
   it("une case qui dépasse seule le plafond : message « trop de lieux », plus de bouton, jamais de lecture répétée", async () => {
+    // Tour 5 : une première réponse porte un curseur (page suivante de la même zone) ; seule la dernière page, encore incomplète, ferme la porte.
     const read = vi
       .fn()
+      .mockResolvedValueOnce(
+        zoneData(centre.slice(0, 200), { truncated: true, partialCells: [[488, 23]], nextCursor: "page-2" }),
+      )
       .mockResolvedValue(zoneData(centre.slice(0, 200), { truncated: true, partialCells: [[488, 23]] }));
     const z = make(read);
     const vue = { south: 48.803, west: 2.303, north: 48.807, east: 2.307 };
