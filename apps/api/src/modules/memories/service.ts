@@ -38,6 +38,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
+import { myMentionsByEvent } from "../albums/my-photos";
 import { eventPosterUrl } from "../events/card";
 import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { serialize as serializeStamp } from "../passport/service";
@@ -265,6 +266,8 @@ async function toItems(ex: Executor, userId: string, hits: (Hit & { years: numbe
     recapsOf(ex, userId, ids, at),
   ]);
   const ranks = await plateauRanks(ex, ids, new Map([...cars].map(([id, c]) => [id, c.vehicleId])), at);
+  // Lot R9f (T42) : mes photos d'album de cet événement (voiture ou pseudo), les miennes seules ; rien sans identification.
+  const albumPhotos = await myMentionsByEvent(userId, ids);
   const items = hits.map(
     (h): MemoryItem => ({
       eventId: h.event.id,
@@ -283,6 +286,7 @@ async function toItems(ex: Executor, userId: string, hits: (Hit & { years: numbe
         return car?.label && rank ? { label: car.label, ...rank } : null;
       })(),
       recapAvailable: recaps.has(h.event.id),
+      ...(albumPhotos.get(h.event.id)?.length ? { albumPhotos: albumPhotos.get(h.event.id) } : {}),
     }),
   );
   return {

@@ -13,6 +13,7 @@ import { isPageActor, noStore, readActor, writeActor } from "../../lib/actor";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { withAlbumMentions } from "../albums/my-photos";
 import { personCountsFor } from "../feed/lists";
 import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
@@ -65,7 +66,9 @@ export const socialRoutes = new Hono<AppEnv>()
   // `privateVehicleFields`). Jamais la plaque.
   .get("/vehicles/:id", async (c) => {
     const v = await requireUser(c);
-    return c.json(await decorateOtherVehicle(await socialProfile.vehicleOf(v, uuidParam(c, "id"))));
+    const sheet = await decorateOtherVehicle(await socialProfile.vehicleOf(v, uuidParam(c, "id")));
+    // Lot R9f (T42) : « Vu au … · N photos » (seulement avec la fiche complète ; filtré par ce que le lecteur voit).
+    return c.json(await withAlbumMentions(v.user.id, sheet));
   })
   .get("/vehicles/:id/owners-nearby", async (c) => {
     const v = await requireUser(c);

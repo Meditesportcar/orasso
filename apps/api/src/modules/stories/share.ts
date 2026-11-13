@@ -123,6 +123,34 @@ export async function retireCopiesOfPrivateAccount(tx: Tx, after: (cb: () => unk
   if (ids.length) after(() => purgeStoryFiles(ids).catch(() => undefined));
 }
 
+/**
+ * Lot R9f (T38) : retire les stories reprises d'une photo d'album (« En story ») : quand l'identification de leur auteur tombe
+ * (`userId`), ou quand la photo ou l'album disparaît (sans `userId` : toutes). Leurs copies (« Ajouter à ma story ») tombent avec
+ * elles, comme celles d'une story supprimée. Rend les identifiants supprimés ; l'appelant efface les fichiers après la validation.
+ */
+export async function dropStoriesOfAlbumPhotos(
+  ex: Tx | typeof db,
+  photoIds: readonly string[],
+  opts: { userId?: string } = {},
+): Promise<string[]> {
+  if (!photoIds.length) return [];
+  const rows = await ex
+    .select({ id: stories.id })
+    .from(stories)
+    .where(
+      and(
+        inArray(stories.sourceAlbumPhotoId, [...photoIds]),
+        isNull(stories.deletedAt),
+        opts.userId ? eq(stories.authorId, opts.userId) : undefined,
+      ),
+    );
+  if (!rows.length) return [];
+  return softDeleteWithCopies(
+    ex,
+    rows.map((r) => r.id),
+  );
+}
+
 export const storiesShare = {
   /** `POST /stories/:id/share-to-mine` : reprendre une story où je suis identifié dans la mienne (ou celle de ma structure). */
   async shareToMine(v: Viewer, id: string, input: StoryShareInput): Promise<StoryShared> {
