@@ -2,12 +2,16 @@
 // (`POST /me/uploads purpose=album_photo`, cadres de plaque floutés à l'envoi si le média l'a décidé) puis **ajoutée** à l'album
 // (`POST /me/albums/:id/photos`), qui consomme son envoi tout de suite. Rien de React Native ici : la logique se teste seule.
 //
-// - La décision de plaque est une pour le lot (« Flouter et ajouter » ou « Envoyer telle quelle ») ; une photo sans plaque repérée part
-//   « aucune plaque » (`none`). Le lot peut changer d'avis (« Changer ») tant que l'envoi n'est pas parti.
+// - **La décision de plaque est par photo** (tour 1) : une photo sans plaque repérée part « aucune plaque » (`none`) ; une photo à plaque
+//   repérée part avec **sa** décision (« Flouter et ajouter » | « Envoyer telle quelle »). Le bloc du lot pose la décision de toutes les
+//   photos qui n'en ont pas encore ; une photo à plaque ajoutée après coup **rouvre le bloc** pour elle seule. « Changer » ne rouvre que
+//   les photos dont l'ajout n'a pas été demandé : dès qu'un ajout est parti (même sans réponse), la décision est figée, côté écran comme côté
+//   API (409 si un rejeu porte une autre décision).
 // - Reprise après coupure : chaque photo a son `clientId` (l'API rejoue le même ajout sans doublon) et garde son envoi réussi (cache par
-//   signature : photo + décision + cadres). Une photo dont la décision a changé depuis l'envoi voit son envoi retiré (`retire`) et repart.
+//   signature : photo + décision + cadres). Une photo dont la décision ou les cadres ont changé avant l'ajout voit son envoi retiré
+//   (`retire`, puis `release` libère la place avant le remplacement) et repart.
 // - Un échec arrête la série à cette photo ; les photos faites restent faites, « Reprendre l'envoi » repart de la première restante.
-import type { AlbumPlateDecision } from "../schemas/albums";
+import type { AlbumPhotoView, AlbumPlateDecision } from "../schemas/albums";
 import { ALBUM_MAX_PHOTOS } from "../schemas/media";
 import type { PlateRect } from "../schemas/vehicle";
 
@@ -18,7 +22,7 @@ export const PICK_PER_OPEN = 30;
 export const pickLimit = (alreadyInAlbum: number, pending: number): number =>
   Math.max(0, Math.min(PICK_PER_OPEN, ALBUM_MAX_PHOTOS - alreadyInAlbum - pending));
 
-/** Le choix du lot pour les photos dont la plaque est repérée. */
+/** Le choix pour une photo à plaque repérée. */
 export type BatchChoice = "blurred" | "kept";
 
 export type AlbumItem = {
@@ -27,20 +31,32 @@ export type AlbumItem = {
   uri: string;
   width: number;
   height: number;
-  /** Cadres repérés par l'appareil (vide : aucune plaque repérée). */
+  /** Cadres repérés par l'appareil ou posés à la main (vide : aucune plaque). */
   rects: PlateRect[];
   /** La détection est faite (la photo sait si elle porte une plaque). */
   detected: boolean;
+  /** Les cadres ont été réglés ou posés à la main : un résultat de détection qui arrive après ne les remplace jamais. */
+  edited?: boolean;
+  /** La décision prise pour **cette** photo (seulement si elle porte un cadre). */
+  decision?: BatchChoice;
+  /** L'ajout a été demandé à l'API (la réponse a pu se perdre) : décision et cadres ne changent plus. */
+  attempted?: boolean;
   /** Envoi réussi, pas encore ajouté (gardé pour la reprise). */
   upload?: { id: string; key: string; signature: string };
   /** Ajoutée à l'album. */
   photoId?: string;
+  /** Adresse de la version du serveur (floutée si « Flouter ») : ce que le média voit après l'envoi, jamais l'original local. */
+  serverUrl?: string;
 };
 
-/** Ce qui part pour cette photo : « aucune plaque » sans cadre, sinon le choix du lot (`null` : il manque la décision). */
-export function decisionOf(item: Pick<AlbumItem, "rects">, batch: BatchChoice | null): AlbumPlateDecision | null {
+/** L'ajout est parti ou a réussi : la décision et les cadres sont figés. */
+export const isPhotoLocked = (item: Pick<AlbumItem, "attempted" | "photoId">): boolean =>
+  Boolean(item.attempted || item.photoId);
+
+/** Ce qui part pour cette photo : « aucune plaque » sans cadre, sinon **sa** décision (`null` : il manque la décision). */
+export function decisionOf(item: Pick<AlbumItem, "rects" | "decision">): AlbumPlateDecision | null {
   if (item.rects.length === 0) return "none";
-  return batch;
+  return item.decision ?? null;
 }
 
 /** Photo + décision + cadres : l'identité d'un envoi réutilisable. */
@@ -48,29 +64,83 @@ export function signatureOf(item: Pick<AlbumItem, "uri" | "rects">, decision: Al
   return `${item.uri}|${decision}|${decision === "none" ? "" : JSON.stringify(item.rects)}`;
 }
 
-/** Photos dont la plaque est repérée et qui attendent la décision du lot (le bloc « N photos avec une plaque repérée »). */
-export const platedCount = (items: readonly AlbumItem[]): number =>
-  items.filter((i) => !i.photoId && i.detected && i.rects.length > 0).length;
+/** Une photo à plaque dont on attend encore la décision (le bloc « N photos avec une plaque repérée »). */
+const needsDecision = (i: AlbumItem): boolean => !isPhotoLocked(i) && i.detected && i.rects.length > 0 && !i.decision;
+
+/** Photos à plaque qui attendent leur décision. */
+export const platedCount = (items: readonly AlbumItem[]): number => items.filter(needsDecision).length;
 
 /** Photos encore à envoyer. */
 export const remaining = (items: readonly AlbumItem[]): AlbumItem[] => items.filter((i) => !i.photoId);
 
-/** Photos dont la plaque a été floutée avant l'envoi : « N plaques floutées » (celles de l'album, déjà ajoutées, comprises). */
-export const blurredOf = (items: readonly AlbumItem[], batch: BatchChoice | null): number =>
-  batch === "blurred" ? items.filter((i) => i.rects.length > 0).length : 0;
+/** Pose le choix sur chaque photo à plaque qui n'a pas encore de décision (les autres gardent la leur). */
+export function decideAll<T extends AlbumItem>(items: readonly T[], choice: BatchChoice): T[] {
+  return items.map((i) => (needsDecision(i) ? { ...i, decision: choice } : i));
+}
+
+/** « Changer » : seules les décisions des photos dont l'ajout n'est pas parti peuvent être reprises. */
+export const canReopen = (items: readonly AlbumItem[]): boolean =>
+  items.some((i) => !isPhotoLocked(i) && i.rects.length > 0 && i.decision !== undefined);
+
+/** « Changer » : rouvre la décision des photos non figées ; les photos figées gardent la leur. */
+export function reopenDecisions<T extends AlbumItem>(items: readonly T[]): T[] {
+  return items.map((i) => {
+    if (isPhotoLocked(i) || i.decision === undefined) return i;
+    const { decision: _gone, ...rest } = i;
+    return rest as T;
+  });
+}
+
+/** Combien de photos portent chaque décision (une photo sans cadre n'en a pas). */
+export function decidedCounts(items: readonly AlbumItem[]): { blurred: number; kept: number } {
+  let blurred = 0;
+  let kept = 0;
+  for (const i of items) {
+    if (i.rects.length === 0) continue;
+    if (i.decision === "blurred") blurred++;
+    else if (i.decision === "kept") kept++;
+  }
+  return { blurred, kept };
+}
+
+/** Photos dont la plaque est floutée parmi celles de la séance (celles d'un brouillon repris se comptent à part : `blurredCount`). */
+export const blurredOf = (items: readonly AlbumItem[]): number => decidedCounts(items).blurred;
+
+/**
+ * Le résultat de la détection d'une photo : jamais un cadre posé à la main (ni remplacé, ni effacé par un résultat vide) ; sinon les cadres
+ * trouvés.
+ */
+export function detectionPatch(item: Pick<AlbumItem, "rects" | "edited">, found: PlateRect[]): Partial<AlbumItem> {
+  if (item.edited || item.rects.length > 0) return { detected: true };
+  return { detected: true, rects: found };
+}
+
+/** Rapprochement : une photo dont l'ajout a réussi sans réponse est retrouvée dans l'album par son `clientId`. */
+export function reconcile<T extends AlbumItem>(
+  items: readonly T[],
+  photos: readonly Pick<AlbumPhotoView, "id" | "url" | "clientId">[],
+): T[] {
+  const byClient = new Map(photos.filter((p) => p.clientId).map((p) => [p.clientId as string, p]));
+  return items.map((i) => {
+    const found = i.photoId ? undefined : byClient.get(i.clientId);
+    return found ? { ...i, photoId: found.id, serverUrl: found.url, upload: undefined, attempted: true } : i;
+  });
+}
 
 export type SendDeps = {
   /** Envoie le fichier ; les cadres ne partent que pour « floutée ». */
   upload: (item: AlbumItem, rects: PlateRect[] | null) => Promise<{ id: string; key: string }>;
-  /** Ajoute la photo envoyée à l'album (`clientId` = celui de la photo). */
+  /** Ajoute la photo envoyée à l'album (`clientId` = celui de la photo) ; rend la photo du serveur (sa version servie). */
   add: (
     item: AlbumItem,
     body: { uploadKey: string; plateDecision: AlbumPlateDecision; plateRects?: PlateRect[]; clientId: string },
-  ) => Promise<{ id: string }>;
-  /** Un envoi dont la décision a changé : à supprimer côté API (`DELETE /me/uploads/:id`). */
+  ) => Promise<{ id: string; url?: string }>;
+  /** Un envoi dont la décision ou les cadres ont changé : à supprimer côté API (`DELETE /me/uploads/:id`). */
   retire: (upload: { id: string; key: string }) => void;
+  /** Libère la place des envois retirés **avant** d'en envoyer d'autres (le quota d'envois en attente est borné). */
+  release?: () => Promise<void>;
   onProgress?: (current: number, total: number) => void;
-  /** Mise à jour d'une photo (envoi réussi, photo ajoutée) : l'écran garde l'état pour la reprise. */
+  /** Mise à jour d'une photo (envoi réussi, ajout demandé, photo ajoutée) : l'écran garde l'état pour la reprise. */
   onItem: (clientId: string, patch: Partial<AlbumItem>) => void;
   stopped?: () => boolean;
 };
@@ -84,41 +154,46 @@ export class AlbumSendStopped extends Error {
 
 /**
  * Envoie et ajoute, dans l'ordre, les photos qui restent. S'arrête à la première erreur (réseau, refus de l'API) : elle remonte,
- * les photos déjà faites sont signalées par `onItem`. Rend le nombre de photos ajoutées pendant cet appel.
+ * les photos déjà faites sont signalées par `onItem`. Rend le nombre de photos ajoutées pendant cet appel. La progression compte toutes les
+ * photos de la séance (« 38 / 48 » à la reprise), pas seulement celles qui restent.
  */
-export async function sendAlbumPhotos(
-  items: readonly AlbumItem[],
-  batch: BatchChoice | null,
-  deps: SendDeps,
-): Promise<number> {
+export async function sendAlbumPhotos(items: readonly AlbumItem[], deps: SendDeps): Promise<number> {
   const todo = remaining(items);
+  const already = items.length - todo.length;
   let done = 0;
   for (const [i, item] of todo.entries()) {
     if (deps.stopped?.()) throw new AlbumSendStopped();
-    const decision = decisionOf(item, batch);
+    const decision = decisionOf(item);
     if (!decision) throw new Error("Décide du floutage avant d'envoyer.");
-    deps.onProgress?.(i + 1, todo.length);
+    deps.onProgress?.(already + i + 1, items.length);
     const signature = signatureOf(item, decision);
     let upload = item.upload;
-    // La décision a changé depuis l'envoi : l'ancien envoi (déjà flouté ou non) ne convient plus.
+    // La décision ou les cadres ont changé depuis l'envoi (l'ajout n'est pas parti : sinon rien ne peut changer) : l'ancien envoi ne convient plus.
     if (upload && upload.signature !== signature) {
       deps.retire({ id: upload.id, key: upload.key });
       deps.onItem(item.clientId, { upload: undefined });
       upload = undefined;
+      await deps.release?.();
     }
     if (!upload) {
       const sent = await deps.upload(item, decision === "blurred" ? item.rects : null);
       upload = { ...sent, signature };
       deps.onItem(item.clientId, { upload });
     }
+    // L'ajout part : la décision est figée (la réponse peut se perdre, le serveur l'aura peut-être gardée).
+    deps.onItem(item.clientId, { attempted: true, ...(decision === "none" ? {} : { decision }) });
     const added = await deps.add(item, {
       uploadKey: upload.key,
       plateDecision: decision,
       ...(decision === "none" ? {} : { plateRects: item.rects }),
       clientId: item.clientId,
     });
-    // Consommé par l'album : plus d'envoi à garder.
-    deps.onItem(item.clientId, { photoId: added.id, upload: undefined });
+    // Consommé par l'album : plus d'envoi à garder ; la vignette devient la version du serveur.
+    deps.onItem(item.clientId, {
+      photoId: added.id,
+      upload: undefined,
+      ...(added.url ? { serverUrl: added.url } : {}),
+    });
     done++;
   }
   return done;

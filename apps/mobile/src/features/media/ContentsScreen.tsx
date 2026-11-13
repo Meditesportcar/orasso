@@ -143,10 +143,16 @@ export function ContentsScreen({
 
       {contents.error && !contents.data ? <Notice tone="error">{contents.error.message}</Notice> : null}
       {contents.loading && !contents.data ? <OLoader label="Chargement…" /> : null}
-      {contents.data && list.length === 0 ? (
+      {contents.data && list.length === 0 && linksOnly ? (
+        // Des albums sont au-dessus : « Aucun contenu » serait faux, seuls les liens manquent.
+        <Muted variant="body" testID="media-no-links">
+          {albumLabels.noLinks}
+        </Muted>
+      ) : null}
+      {contents.data && list.length === 0 && !linksOnly ? (
         <EmptyState title={L.noContents} text={accredited.length > 0 ? L.noContentsText : L.needAccreditation} />
       ) : null}
-      {contents.data && list.length === 0 && accredited.length === 0 ? (
+      {contents.data && list.length === 0 && accredited.length === 0 && !linksOnly ? (
         <Button variant="secondary" icon="explore" fullWidth onPress={() => goTab("explorer")}>
           {L.pressSeeExplorer}
         </Button>

@@ -22,6 +22,7 @@ import {
   paris,
   photoRows,
   publishedAlbum,
+  RECT,
   sendUpload,
   spread,
 } from "./albums-test-helpers";
@@ -224,6 +225,54 @@ describe("POST /me/albums/:id/photos : une photo à la fois", () => {
     expect(again.json.id).toBe(first.json.id);
     expect(await photoRows(album.id)).toHaveLength(1);
     expect((await albumRow(album.id))?.photosCount).toBe(1);
+  });
+
+  it("rejeu avec une autre décision de plaque : 409, la photo gardée ne change pas (réponse perdue après « telle quelle »)", async () => {
+    const album = await draftOf(leo, eventId);
+    const clientId = crypto.randomUUID();
+    // « Telle quelle » : l'ajout réussit côté serveur, la réponse se perd côté client.
+    const first = await addPhoto(leo, album.id, { clientId, decision: "kept" });
+    expect(first.status).toBe(201);
+    // « Changer → Flouter » : même clientId, autre décision.
+    const sent = await sendUpload(leo, "album_photo", [RECT]);
+    const again = await call(leo, "POST", `/me/albums/${album.id}/photos`, {
+      uploadKey: sent.key,
+      plateDecision: "blurred",
+      plateRects: [RECT],
+      clientId,
+    });
+    expect(again.status).toBe(409);
+    const rows = await photoRows(album.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.plateState).toBe("kept");
+    // Le même rejeu, avec la même décision, rend toujours la même photo.
+    const same = await call(leo, "POST", `/me/albums/${album.id}/photos`, {
+      uploadKey: first.sent.key,
+      plateDecision: "kept",
+      plateRects: [RECT],
+      clientId,
+    });
+    expect(same.status).toBe(200);
+    expect(same.json.id).toBe(first.json.id);
+  });
+
+  it("le titulaire retrouve ses ajouts par clientId et le nombre de plaques floutées ; personne d'autre", async () => {
+    const album = await draftOf(leo, eventId);
+    const a = crypto.randomUUID();
+    await addPhoto(leo, album.id, { clientId: a, decision: "blurred" });
+    await addPhoto(leo, album.id, { decision: "kept" });
+    await addPhoto(leo, album.id);
+    const mine = await call(leo, "GET", `/albums/${album.id}`);
+    expect(mine.status).toBe(200);
+    expect(mine.json.blurredCount).toBe(1);
+    expect(mine.json.photos.map((p: { clientId?: string }) => p.clientId)).toContain(a);
+    // Une fois publié, un autre membre ne voit ni `clientId` ni `blurredCount`.
+    expect((await call(leo, "POST", `/me/albums/${album.id}/publish`)).status).toBe(200);
+    const kenji = await signUp("Kenji_Tour1");
+    const other = await call(kenji, "GET", `/albums/${album.id}`);
+    expect(other.status).toBe(200);
+    expect(other.json.blurredCount).toBeUndefined();
+    expect(other.json.photos.every((p: { clientId?: string }) => p.clientId === undefined)).toBe(true);
   });
 
   it("l'envoi d'un autre, d'un autre usage, ou déjà consommé : 400", async () => {

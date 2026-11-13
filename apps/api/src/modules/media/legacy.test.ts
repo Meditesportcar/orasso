@@ -152,6 +152,29 @@ describe("la forme d'avant, au champ près", () => {
     expect(second.json.items.map((c: { id: string }) => c.id)).toEqual([all[1]]);
     expect(second.json.nextCursor).toBeNull();
   });
+
+  it("`kind=link` : une vraie pagination des liens seuls, sur plusieurs pages mêlant albums et liens (« Voir la suite » ajoute des liens)", async () => {
+    const links = [];
+    for (let i = 0; i < 5; i++) links.push(await linkContent(`Lien ${i}`, paris(11, 9, 9 + i)));
+    await legacyGallery({}, 1);
+    await legacyGallery({}, 1);
+    await adoptLegacyGalleries(db);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const url: string = `/media/${leoMedia}/contents?kind=link&limit=2${cursor ? `&cursor=${cursor}` : ""}`;
+      const res = await call(kenji, "GET", url);
+      expect(res.status).toBe(200);
+      for (const c of res.json.items) expect(c.kind).toBe("link");
+      expect(res.json.items.length).toBeGreaterThan(0);
+      seen.push(...res.json.items.map((c: { id: string }) => c.id));
+      cursor = res.json.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect([...seen].sort()).toEqual(links.map((l) => l.id).sort());
+  });
 });
 
 describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un album publié", () => {

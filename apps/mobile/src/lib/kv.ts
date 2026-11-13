@@ -124,6 +124,8 @@ export const CACHE_KEY_PREFIXES = [
   "journal.",
   // Lot R9b : la Page du titulaire d'une casquette (une clé par casquette, propre au compte).
   "owner-page-",
+  // Lot R9e : un album ouvert (une clé par album, propre au compte : les brouillons du titulaire n'appartiennent qu'à lui).
+  "album-",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {

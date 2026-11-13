@@ -177,14 +177,33 @@ function Links({ mediaId, owner, reloadToken }: { mediaId: string; owner: boolea
 function PublicLinks({ mediaId, reloadToken }: { mediaId: string; reloadToken: number }) {
   const { t } = useTheme();
   const [links, setLinks] = useState<MediaContentView[] | null>(null);
+  const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const load = useCallback(() => {
     setError(null);
     api
       .mediaLinks(mediaId)
-      .then(setLinks)
+      .then((page) => {
+        setLinks(page.items);
+        setNext(page.nextCursor);
+      })
       .catch((e) => setError(errorMessage(e)));
   }, [mediaId]);
+  // « Voir la suite » : une vraie page de liens (le filtre est côté API : chaque page ajoute des liens), sans doublon.
+  const loadMore = useCallback(() => {
+    if (!next) return;
+    setMore(true);
+    setError(null);
+    api
+      .mediaLinks(mediaId, next)
+      .then((page) => {
+        setLinks((list) => [...(list ?? []), ...page.items.filter((c) => !(list ?? []).some((x) => x.id === c.id))]);
+        setNext(page.nextCursor);
+      })
+      .catch((e) => setError(errorMessage(e)))
+      .finally(() => setMore(false));
+  }, [mediaId, next]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: le jeton relit la liste
   useEffect(load, [load, reloadToken]);
   if (error && !links) return <LoadError message={error} onRetry={load} />;
@@ -215,6 +234,12 @@ function PublicLinks({ mediaId, reloadToken }: { mediaId: string; reloadToken: n
           </Plate>
         </Pressable>
       ))}
+      {error ? <LoadError message={error} onRetry={next ? loadMore : load} /> : null}
+      {next && !error ? (
+        <SmButton kind="s" wide icon="down" disabled={more} onPress={loadMore} testID="page-links-more">
+          {L.loadMore}
+        </SmButton>
+      ) : null}
     </View>
   );
 }

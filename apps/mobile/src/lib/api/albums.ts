@@ -30,11 +30,9 @@ export const albumsApi = {
   /** Les albums publiés d'une page de média (`GET /media/:id/albums`). */
   mediaAlbums: (mediaId: string, cursor?: string | null) =>
     request<AlbumsList>(`/api/media/${mediaId}/albums${qs({ cursor, limit: 20 })}`),
-  /** Les liens d'une page de média (les contenus d'avant, sans les galeries) : une page de 100 au plus. */
-  mediaLinks: async (mediaId: string) => {
-    const page = await request<{ items: import("@orasso/shared").MediaContentView[]; nextCursor: string | null }>(
-      `/api/media/${mediaId}/contents${qs({ limit: 100 })}`,
-    );
-    return page.items.filter((c) => c.kind === "link");
-  },
+  /** Les liens d'une page de média (`kind=link` : les contenus d'avant, sans les albums mêlés), par pages au curseur. */
+  mediaLinks: (mediaId: string, cursor?: string | null) =>
+    request<{ items: import("@orasso/shared").MediaContentView[]; nextCursor: string | null }>(
+      `/api/media/${mediaId}/contents${qs({ kind: "link", limit: 20, cursor })}`,
+    ),
 };

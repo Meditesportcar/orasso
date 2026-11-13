@@ -2,7 +2,7 @@
 // photos (plaques : une décision pour le lot ; envoi une photo à la fois), 3. les détails et « Publier l'album ». Quitter en cours : le
 // brouillon reste (« Reprendre l'album » à la prochaine ouverture pour le même événement). Un refus de l'API s'affiche, le flux reste.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -13,6 +13,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { AlbumPhotoSheet, type PhotoTarget } from "./AlbumPhotoSheet";
 import { AlbumStep1Event, eventChoices } from "./AlbumStep1Event";
 import { AlbumStep2Photos } from "./AlbumStep2Photos";
 import { AlbumStep3Details } from "./AlbumStep3Details";
@@ -45,6 +46,9 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [chosen, setChosen] = useState<string | null>(null);
   const [album, setAlbum] = useState<AlbumView | null>(null);
+  // Photos du brouillon d'avant cette séance (créé ou repris) : figées à l'arrivée, jamais relues à chaque retour (celles de la séance sont dans `uploads`).
+  const [basePhotos, setBasePhotos] = useState<AlbumPhotoView[]>([]);
+  const [editing, setEditing] = useState<{ kind: "item"; id: string } | { kind: "base"; id: string } | null>(null);
   const [title, setTitle] = useState("");
   const [allowSave, setAllowSave] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,12 +61,16 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   const firstAvailable = choices.find((c) => c.state === "accredited")?.id ?? null;
   const eventId = chosen ?? firstAvailable;
 
-  const adopt = useCallback((a: AlbumView) => {
+  /** Arrivée sur un brouillon (créé ou repris) : titre, option et photos de départ viennent du serveur, **une seule fois**. */
+  const arrive = useCallback((a: AlbumView) => {
     setAlbum(a);
+    setBasePhotos(a.photos);
     setAllowSave(a.allowSave);
     // Le titre servi par défaut n'est pas un titre choisi : le champ reste vide (il montre le titre proposé).
     setTitle(a.title === albumTitle(null, a.event.title) ? "" : a.title);
   }, []);
+  /** Relecture du brouillon (retour des détails, photos ajoutées) : jamais le titre ni l'option déjà modifiés, ni les photos de départ. */
+  const refresh = useCallback((a: AlbumView) => setAlbum(a), []);
 
   // Reprise d'un brouillon par son adresse (`/album/nouveau?album=<id>`) : on retombe sur l'étape des photos.
   useEffect(() => {
@@ -76,7 +84,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
           router.replace(`/album/${a.id}` as never);
           return;
         }
-        adopt(a);
+        arrive(a);
         setChosen(a.event.id);
         setStep(2);
       })
@@ -84,7 +92,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     return () => {
       live = false;
     };
-  }, [resumeId, router, adopt]);
+  }, [resumeId, router, arrive]);
 
   async function createDraft() {
     if (!eventId) return;
@@ -92,7 +100,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     setError(null);
     try {
       const a = await api.createAlbum({ eventId, title: null });
-      adopt(a);
+      arrive(a);
       setStep(2);
     } catch (e) {
       setError(errorMessage(e));
@@ -106,7 +114,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     setError(null);
     if (uploads.pending > 0 && !(await uploads.send())) return;
     try {
-      adopt(await api.album(album.id));
+      refresh(await api.album(album.id));
       setStep(3);
     } catch (e) {
       setError(errorMessage(e));
@@ -131,7 +139,30 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const mediaName = profile.data?.name ?? album?.media.name ?? "";
-  const blurred = uploads.batch === "blurred" ? uploads.items.filter((i) => i.rects.length > 0).length : 0;
+  // Les plaques floutées de l'album, comptées par le serveur (brouillon repris compris), relues avant l'étape des détails.
+  const blurred = album?.blurredCount ?? 0;
+  const target: PhotoTarget = (() => {
+    if (!editing) return null;
+    if (editing.kind === "item") {
+      const item = uploads.items.find((i) => i.clientId === editing.id);
+      return item ? { kind: "item", item } : null;
+    }
+    const photo = basePhotos.find((p) => p.id === editing.id);
+    return photo ? { kind: "base", photo } : null;
+  })();
+  async function removeTarget(): Promise<boolean> {
+    if (!editing || !album) return false;
+    if (editing.kind === "item") return uploads.remove(editing.id);
+    try {
+      await api.deleteAlbumPhoto(album.id, editing.id);
+      setBasePhotos((list) => list.filter((p) => p.id !== editing.id));
+      refresh(await api.album(album.id));
+      return true;
+    } catch (e) {
+      setError(errorMessage(e));
+      return false;
+    }
+  }
 
   return (
     <FlowScreen
@@ -139,6 +170,15 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       facts={step === 1 ? mediaName : (album?.event.title ?? mediaName)}
       onClose={close}
       header={<StepBar step={step} />}
+      overlays={
+        <AlbumPhotoSheet
+          target={target}
+          onChange={uploads.setRects}
+          onRemove={removeTarget}
+          onClose={() => setEditing(null)}
+          error={uploads.error ?? error}
+        />
+      }
     >
       {(accreditations.error && !accreditations.data) || (profile.error && !profile.data) ? (
         <Notice tone="error">{(accreditations.error ?? profile.error)?.message}</Notice>
@@ -157,7 +197,13 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       ) : null}
       {step === 2 && album ? (
         <>
-          <AlbumStep2Photos uploads={uploads} inAlbum={album.photosCount} onContinue={() => void toDetails()} />
+          <AlbumStep2Photos
+            uploads={uploads}
+            basePhotos={basePhotos}
+            onOpenItem={(id) => setEditing({ kind: "item", id })}
+            onOpenBase={(id) => setEditing({ kind: "base", id })}
+            onContinue={() => void toDetails()}
+          />
           {error && !uploads.error ? <Notice tone="error">{error}</Notice> : null}
         </>
       ) : null}

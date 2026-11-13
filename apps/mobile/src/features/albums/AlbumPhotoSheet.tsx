@@ -1,76 +1,107 @@
-// Le cadre de plaque d'une photo de « Nouvel album » (lot R9e) : l'appareil propose les cadres (ML Kit), le média les règle ou en pose un à la
-// main (comme dans les galeries d'avant : un détecteur qui rate une plaque ne doit pas la laisser lisible), ou retire la photo. Le floutage reste
-// proposé, jamais imposé : la décision du lot (« Flouter et ajouter » | « Envoyer telle quelle ») se prend dans l'étape.
+// Une photo de « Nouvel album » (lot R9e) : le cadre de plaque, ou le retrait. Photo pas encore partie : l'appareil propose les cadres (ML Kit), le
+// média les règle ou en pose un à la main (comme dans les galeries d'avant : un détecteur qui rate une plaque ne doit pas la laisser lisible) ; la
+// décision (« Flouter et ajouter » | « Envoyer telle quelle ») se prend dans l'étape, jamais ici. Photo dont l'ajout est parti ou réussi : sa
+// décision est figée (le serveur la garde), on voit la version du serveur et on peut la retirer. Hébergée par l'écran (`overlays`).
 import { Button, Text, useTheme } from "@orasso/design-system/native";
 import {
+  type AlbumPhotoView,
   albumLabels as L,
   MAX_PLATE_RECTS,
   nextPlateFrame,
   type PlateRect,
   vehicleWizardLabels as W,
 } from "@orasso/shared";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
-import type { AlbumItem } from "./albumUploads";
+import { Notice } from "@/ui/Notice";
+import { AlbumPhoto } from "./AlbumPhoto";
+import { type AlbumItem, isPhotoLocked } from "./albumUploads";
+
+export type PhotoTarget = { kind: "item"; item: AlbumItem } | { kind: "base"; photo: AlbumPhotoView } | null;
+
+/** Le badge de l'éditeur : le nombre de cadres posés (neutre), ou la décision de **cette** photo ; jamais « floutée » pour une photo qui part lisible. */
+export function badgeOf(item: Pick<AlbumItem, "rects" | "decision">): { text: string; accent: boolean } {
+  if (item.rects.length === 0) return { text: W.placeFrame, accent: false };
+  if (item.decision === "blurred") return { text: W.blurredCount(item.rects.length), accent: true };
+  if (item.decision === "kept") return { text: L.keptBadge, accent: false };
+  return { text: L.framesPlaced(item.rects.length), accent: false };
+}
 
 export function AlbumPhotoSheet({
-  item,
+  target,
   onChange,
   onRemove,
   onClose,
+  error,
 }: {
-  item: AlbumItem | null;
+  target: PhotoTarget;
   onChange: (clientId: string, rects: PlateRect[]) => void;
-  onRemove: (clientId: string) => void;
+  /** Retire la photo (rend vrai si elle est retirée : la feuille se ferme). */
+  onRemove: () => Promise<boolean>;
   onClose: () => void;
+  error?: string | null;
 }) {
   const { t } = useTheme();
+  const item = target?.kind === "item" ? target.item : null;
+  const locked = item ? isPhotoLocked(item) : false;
+  const editable = item !== null && !locked;
   return (
-    <AppSheet visible={item !== null} onClose={onClose} accessibilityLabel={L.plateSheetTitle} maxHeight={0.92}>
-      {item ? (
-        <View style={{ gap: 12 }}>
+    <AppSheet visible={target !== null} onClose={onClose} accessibilityLabel={L.plateSheetTitle} maxHeight={0.92}>
+      {target ? (
+        <View style={styles.block}>
           <Text variant="bodyStrong" color={t.color.ink}>
-            {L.plateSheetTitle}
+            {editable ? L.plateSheetTitle : L.addedPhoto}
           </Text>
-          <Muted variant="caption">{L.plateSheetHint}</Muted>
-          <PlateFrameEditor
-            source={{ uri: item.uri }}
-            width={item.width}
-            height={item.height}
-            rects={item.rects}
-            editable
-            onChange={(rects) => onChange(item.clientId, rects)}
-            badge={
-              <PhotoBadge accent={item.rects.length > 0}>
-                {item.rects.length ? W.blurredCount(item.rects.length) : W.placeFrame}
-              </PhotoBadge>
-            }
-            testID="album-frame-editor"
-          />
-          <Button
-            variant="secondary"
-            icon="add"
-            fullWidth
-            disabled={item.rects.length >= MAX_PLATE_RECTS}
-            onPress={() => onChange(item.clientId, [...item.rects, nextPlateFrame(item.rects)])}
-            testID="album-frame-add"
-          >
-            {W.addFrame}
-          </Button>
-          <Button variant="secondary" icon="check" fullWidth onPress={onClose} testID="album-frame-done">
-            {L.plateSheetDone}
-          </Button>
+          {editable && item ? (
+            <>
+              <Muted variant="caption">{L.plateSheetHint}</Muted>
+              <PlateFrameEditor
+                source={{ uri: item.uri }}
+                width={item.width}
+                height={item.height}
+                rects={item.rects}
+                editable
+                onChange={(rects) => onChange(item.clientId, rects)}
+                badge={<PhotoBadge accent={badgeOf(item).accent}>{badgeOf(item).text}</PhotoBadge>}
+                testID="album-frame-editor"
+              />
+              <Button
+                variant="secondary"
+                icon="add"
+                fullWidth
+                disabled={item.rects.length >= MAX_PLATE_RECTS}
+                onPress={() => onChange(item.clientId, [...item.rects, nextPlateFrame(item.rects)])}
+                testID="album-frame-add"
+              >
+                {W.addFrame}
+              </Button>
+              <Button variant="secondary" icon="check" fullWidth onPress={onClose} testID="album-frame-done">
+                {L.plateSheetDone}
+              </Button>
+            </>
+          ) : (
+            <>
+              {target.kind === "base" ? (
+                <AlbumPhoto photo={target.photo} style={styles.preview} />
+              ) : item?.serverUrl ? (
+                <AlbumPhoto photo={{ url: item.serverUrl }} style={styles.preview} />
+              ) : null}
+              {item ? <Notice testID="album-decision-frozen">{L.decisionFrozen}</Notice> : null}
+            </>
+          )}
+          {error ? (
+            <Notice tone="error" testID="album-remove-error">
+              {error}
+            </Notice>
+          ) : null}
           <Button
             variant="plate"
             icon="trash"
             fullWidth
-            onPress={() => {
-              onRemove(item.clientId);
-              onClose();
-            }}
+            onPress={() => void onRemove().then((done) => done && onClose())}
             testID="album-photo-remove"
           >
             {L.photoRemove}
@@ -80,3 +111,8 @@ export function AlbumPhotoSheet({
     </AppSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  block: { gap: 12 },
+  preview: { width: "100%", height: 260 },
+});

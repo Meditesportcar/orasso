@@ -1,16 +1,17 @@
-// Étape 2 de « Nouvel album » (lot R9e, maquette `albumH` e2) : « Les photos ». Le compteur « N photos prêtes » (versions web compressées,
-// les originaux restent chez le média), « Ajouter » (30 par ouverture du sélecteur), le bloc des plaques repérées avec **une décision pour le
-// lot** (« Flouter et ajouter » | « Envoyer telle quelle », « Changer » tant qu'on peut), les vignettes. « Continuer » envoie les photos une à
-// une (« 37 / 48 ») puis passe aux détails ; une coupure laisse les photos faites et propose « Reprendre l'envoi ».
+// Étape 2 de « Nouvel album » (lot R9e, maquette `albumH` e2) : « Les photos ». Le compteur « N photos prêtes » (versions web compressées, les
+// originaux restent chez le média), « Ajouter » (30 par ouverture du sélecteur), le bloc des plaques repérées avec **la décision de chaque photo**
+// (« Flouter et ajouter » | « Envoyer telle quelle » ; une photo à plaque ajoutée après coup rouvre le bloc pour elle ; « Changer » tant qu'aucun
+// ajout n'est parti), les vignettes (une photo ajoutée montre la version du serveur, floutée si « Flouter »). « Continuer » envoie les photos une
+// à une (« 37 / 48 ») puis passe aux détails ; une coupure laisse les photos faites et propose « Reprendre l'envoi ». La feuille de réglage
+// des plaques est hébergée par l'écran (`overlays`), pas ici.
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { albumLabels as L } from "@orasso/shared";
-import { useState } from "react";
+import { type AlbumPhotoView, albumLabels as L } from "@orasso/shared";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { UploadProgress } from "@/ui/PhotoGrid";
-import { AlbumPhotoSheet } from "./AlbumPhotoSheet";
+import { AlbumPhoto } from "./AlbumPhoto";
 import type { useAlbumUploads } from "./useAlbumUploads";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -19,23 +20,31 @@ type Uploads = ReturnType<typeof useAlbumUploads>;
 
 export function AlbumStep2Photos({
   uploads,
-  inAlbum,
+  basePhotos,
+  onOpenItem,
+  onOpenBase,
   onContinue,
 }: {
   uploads: Uploads;
-  /** Photos déjà dans l'album (brouillon repris) : elles comptent dans « prêtes » et dans le plafond. */
-  inAlbum: number;
+  /** Photos déjà dans le brouillon repris, d'avant cette séance : elles comptent dans « prêtes » et dans le plafond, et se retirent. */
+  basePhotos: readonly AlbumPhotoView[];
+  onOpenItem: (clientId: string) => void;
+  onOpenBase: (photoId: string) => void;
   onContinue: () => void;
 }) {
   const { t } = useTheme();
-  const [editing, setEditing] = useState<string | null>(null);
-  const { items, batch, setBatch, plated, detecting, pending, sending, progress, error } = uploads;
-  const ready = inAlbum + items.length;
-  const needsDecision = plated > 0 && batch === null;
+  const { items, plated, counts, canChange, detecting, pending, sending, progress, error } = uploads;
+  const ready = basePhotos.length + items.length;
+  const needsDecision = plated > 0;
   const canContinue =
     (ready > 0 && !needsDecision && !detecting && !sending) || (pending === 0 && ready > 0 && !sending);
-  const withPlate = items.filter((i) => i.rects.length > 0).length;
-  const decidedCount = batch === null ? plated : withPlate;
+  const decided = counts.blurred + counts.kept;
+  const summary = [
+    counts.blurred > 0 ? L.blurredTitle(counts.blurred) : null,
+    counts.kept > 0 ? L.keptTitle(counts.kept) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <View style={styles.block}>
@@ -53,14 +62,14 @@ export function AlbumStep2Photos({
           variant="secondary"
           icon="add"
           disabled={sending}
-          onPress={() => void uploads.pick(inAlbum)}
+          onPress={() => void uploads.pick(basePhotos.length)}
           testID="album-pick"
         >
           {L.add}
         </Button>
       </View>
 
-      {plated > 0 || batch !== null ? (
+      {plated > 0 || decided > 0 ? (
         <View
           style={[styles.plate, { borderColor: t.color.line, backgroundColor: t.color.surface }]}
           testID="album-plates"
@@ -68,51 +77,71 @@ export function AlbumStep2Photos({
           <Icon name="eyeOff" size={22} color={t.color.accentText} />
           <View style={styles.plateText}>
             <Text variant="bodyStrong" color={t.color.ink}>
-              {batch === "blurred"
-                ? L.blurredTitle(decidedCount)
-                : batch === "kept"
-                  ? L.keptTitle(decidedCount)
-                  : L.plateFound(plated)}
+              {plated > 0 ? L.plateFound(plated) : summary}
             </Text>
             <Muted variant="caption">
-              {batch === "blurred" ? L.blurredHint : batch === "kept" ? L.keptHint : L.plateHint(plated)}
+              {plated > 0
+                ? L.plateHint(plated)
+                : counts.blurred > 0 && counts.kept === 0
+                  ? L.blurredHint
+                  : counts.kept > 0 && counts.blurred === 0
+                    ? L.keptHint
+                    : `${L.blurredHint} ${L.keptHint}`}
             </Muted>
-            {batch === null ? (
+            {plated > 0 ? (
               <View style={styles.choices}>
-                <Button variant="secondary" icon="eyeOff" onPress={() => setBatch("blurred")} testID="album-blur">
+                <Button variant="secondary" icon="eyeOff" onPress={() => uploads.decide("blurred")} testID="album-blur">
                   {L.blurAndAdd}
                 </Button>
-                <Button variant="secondary" icon="upload" onPress={() => setBatch("kept")} testID="album-keep">
+                <Button variant="secondary" icon="upload" onPress={() => uploads.decide("kept")} testID="album-keep">
                   {L.sendAsIs}
                 </Button>
               </View>
-            ) : (
-              <Button
-                variant="secondary"
-                icon="undo"
-                disabled={sending}
-                onPress={() => setBatch(null)}
-                testID="album-change"
-              >
+            ) : null}
+            {decided > 0 && plated > 0 && summary ? <Muted variant="caption">{summary}</Muted> : null}
+            {canChange ? (
+              <Button variant="secondary" icon="undo" disabled={sending} onPress={uploads.reopen} testID="album-change">
                 {L.change}
               </Button>
-            )}
+            ) : null}
           </View>
         </View>
       ) : null}
 
       <View style={styles.grid} testID="album-grid">
+        {basePhotos.map((p) => (
+          <Pressable
+            key={p.id}
+            accessibilityRole="button"
+            accessibilityLabel={L.photoRemove}
+            disabled={sending}
+            onPress={() => onOpenBase(p.id)}
+            style={[styles.tile, { backgroundColor: t.color.surface }]}
+            testID="album-tile-base"
+          >
+            <AlbumPhoto photo={p} style={styles.img} cover />
+            <View style={[styles.check, { backgroundColor: t.color.accent }]}>
+              <Icon name="check" size={12} color={t.color.nightInk} />
+            </View>
+          </Pressable>
+        ))}
         {items.map((i) => (
           <Pressable
             key={i.clientId}
             accessibilityRole="button"
-            accessibilityLabel={L.plateSheetTitle}
-            disabled={sending || Boolean(i.photoId)}
-            onPress={() => setEditing(i.clientId)}
+            accessibilityLabel={i.photoId ? L.photoRemove : L.plateSheetTitle}
+            // Un cadre posé à la main n'est jamais écrasé : la tuile s'ouvre quand la détection de cette photo est finie.
+            disabled={sending || (!i.detected && !i.photoId)}
+            onPress={() => onOpenItem(i.clientId)}
             style={[styles.tile, { backgroundColor: t.color.surface }]}
             testID="album-tile"
           >
-            <Image source={{ uri: i.uri }} style={styles.img} resizeMode="cover" accessibilityIgnoresInvertColors />
+            {i.photoId && i.serverUrl ? (
+              // Ajoutée : la version du serveur (floutée si « Flouter »), lue avec la session ; jamais l'original local.
+              <AlbumPhoto photo={{ url: i.serverUrl }} style={styles.img} cover />
+            ) : (
+              <Image source={{ uri: i.uri }} style={styles.img} resizeMode="cover" accessibilityIgnoresInvertColors />
+            )}
             <View style={[styles.check, { backgroundColor: i.photoId ? t.color.accent : t.color.night }]}>
               <Icon name="check" size={12} color={t.color.nightInk} />
             </View>
@@ -120,12 +149,6 @@ export function AlbumStep2Photos({
         ))}
       </View>
 
-      <AlbumPhotoSheet
-        item={items.find((i) => i.clientId === editing) ?? null}
-        onChange={uploads.setRects}
-        onRemove={uploads.remove}
-        onClose={() => setEditing(null)}
-      />
       {progress ? <UploadProgress current={progress.current} total={progress.total} /> : null}
       {sending && progress ? (
         <Muted variant="meta" testID="album-progress">

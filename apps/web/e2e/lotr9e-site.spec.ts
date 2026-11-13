@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, unique } from "./helpers";
+import { sql } from "./helpers/lot48";
 
 // Lot R9e (albums des médias), côté site (API et site lancés sur la base seedée) : Léo (Sud Cars) crée un album en trois étapes (un
 // événement où il est accrédité, trois photos dont une avec un cadre de plaque « Flouter et ajouter », titre, « Enregistrer » autorisé),
@@ -109,6 +110,9 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("album-report")).toHaveCount(0);
     await page.getByTestId("media-gallery-photo").first().click();
     await expect(page.getByTestId("media-gallery-credit")).toHaveText("Photos : Sud Cars");
+    // Le titulaire peut retirer la photo affichée depuis la visionneuse (et ne la signale pas).
+    await expect(page.getByTestId("album-photo-remove")).toBeVisible();
+    await expect(page.getByTestId("media-gallery-viewer").getByTestId("report-open")).toHaveCount(0);
     await page.keyboard.press("Escape");
     // Plaque : une photo floutée, deux sans plaque (l'état vrai côté API, vu du seul titulaire par la base).
     const mine = await leoAlbums("published");
@@ -147,8 +151,18 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await dpage.waitForURL(/\/albums\//);
     await expect(dpage.getByTestId("album-open-title")).toHaveText(title);
     await expect(dpage.getByTestId("album-owner")).toHaveCount(0);
-    await expect(dpage.getByTestId("album-report")).toBeVisible();
+    // « Signaler » vit dans la visionneuse (sur la photo affichée) ; Damien n'a pas « Retirer ».
+    await dpage.getByTestId("media-gallery-photo").first().click();
+    await expect(dpage.getByTestId("media-gallery-viewer").getByTestId("report-open")).toBeVisible();
+    await expect(dpage.getByTestId("album-photo-remove")).toHaveCount(0);
     await damien.close();
+
+    // Le titulaire retire une photo depuis la visionneuse : l'album garde les deux autres, le compte suit.
+    await page.goto(`/albums/${albumId}`);
+    await page.getByTestId("media-gallery-photo").first().click();
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(2);
+    await expect(page.getByTestId("album-tag-count")).toHaveText("2 photos");
   } finally {
     if (albumId) {
       const cookie = await login(LEO);
@@ -208,4 +222,166 @@ test("sans session : la fiche de l'événement montre l'album, sans rien d'ident
   // L'album ouvert est réservé aux membres : sans session, la connexion.
   await page.goto(`/albums/${rassemblement?.id}`);
   await page.waitForURL(/\/connexion/);
+});
+
+// --- Tour 1 (corrections des relectures Opus et Codex) -----------------------------------------------------------------------------
+
+const DROP_BEZIERS_DRAFTS =
+  "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')";
+
+async function openBeziersStep2(page: Page) {
+  await sql(DROP_BEZIERS_DRAFTS);
+  await loginInBrowser(page, LEO, undefined, "/app/media/albums/nouveau");
+  await chooseEvent(page, "Béziers Night");
+  await page.getByTestId("album-step1-continue").click();
+  await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+}
+
+test("la décision de plaque est par photo : une photo à plaque ajoutée après coup rouvre le bloc pour elle, les premières gardent la leur", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg")]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(2);
+    await page.getByTestId("album-mark").nth(0).click();
+    await page.getByTestId("album-mark").nth(1).click();
+    await expect(page.getByTestId("album-plates")).toContainText("2 photos avec une plaque repérée");
+    await page.getByTestId("album-keep").click();
+    await expect(page.getByTestId("album-plates")).toContainText("2 photos gardées telles quelles");
+    // Une troisième photo à plaque : le bloc se rouvre pour elle seule, « Continuer » attend sa décision.
+    await page.getByTestId("album-pick").setInputFiles([photo("car-supra.jpg")]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(3);
+    await page.getByTestId("album-mark").nth(2).click();
+    await expect(page.getByTestId("album-plates")).toContainText("1 photo avec une plaque repérée");
+    await expect(page.getByTestId("album-plates")).toContainText("2 photos gardées telles quelles");
+    await expect(page.getByTestId("album-step2-continue")).toBeDisabled();
+    await page.getByTestId("album-blur").click();
+    // L'album mêle deux décisions : le bloc le dit, rien n'est écrasé.
+    await expect(page.getByTestId("album-plates")).toContainText("1 photo floutée");
+    await expect(page.getByTestId("album-plates")).toContainText("2 photos gardées telles quelles");
+    await expect(page.getByTestId("album-step2-continue")).toBeEnabled();
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("réponse perdue après « telle quelle » : « Changer » ne rouvre rien, la reprise rejoue la même décision, la photo reste « telle quelle »", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    // Le serveur a validé l'ajout, la réponse se perd (la page ne la reçoit pas).
+    let lost = 0;
+    await page.route("**/api/me/albums/*/photos", async (route) => {
+      if (route.request().method() === "POST" && lost++ === 0) {
+        await route.fetch();
+        await route.abort();
+      } else await route.continue();
+    });
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-mark").click();
+    await page.getByTestId("album-keep").click();
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("album-step2-continue")).toHaveText("Reprendre l'envoi");
+    // L'ajout est parti : la décision est figée, « Changer » a disparu, la photo dit pourquoi.
+    await expect(page.getByTestId("album-change")).toHaveCount(0);
+    await expect(page.getByTestId("album-decision-frozen")).toBeVisible();
+    await expect(page.getByTestId("album-mark")).toHaveCount(0);
+    // La reprise rejoue le même clientId avec la même décision : une seule photo, « telle quelle ».
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    const rows = await sql<{ plate_state: string }>(
+      "select p.plate_state from event_album_photos p join event_albums a on a.id = p.album_id join events e on e.id = a.event_id where e.slug = 'beziers-night-2026' and a.status = 'draft' and p.deleted_at is null",
+    );
+    expect(rows.map((r) => r.plate_state)).toEqual(["kept"]);
+    // L'étape 3 compte 0 plaque floutée : jamais « floutée » devant une photo qui part lisible.
+    await expect(page.getByTestId("album-line-photos")).toContainText("1 photo");
+    await expect(page.getByTestId("album-line-photos")).not.toContainText("floutée");
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("le titre et l'option de l'étape 3 survivent à un aller-retour vers les photos ; un brouillon repris compte ses plaques floutées et ses photos une fois", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-mark").click();
+    await page.getByTestId("album-blur").click();
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    await page.getByTestId("album-title").fill("Mon titre choisi");
+    await page.getByTestId("album-allow-save").check();
+    await page.getByTestId("album-line-photos").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3");
+    await expect(page.getByTestId("album-title")).toHaveValue("Mon titre choisi");
+    await expect(page.getByTestId("album-allow-save")).toBeChecked();
+    await expect(page.getByTestId("album-line-photos")).toContainText("1 plaque floutée");
+    // Le brouillon repris (autre séance) : la photo d'avant compte une fois (« 1 photo prête »), ses plaques floutées aussi.
+    await page.goto("/app/media/albums/nouveau");
+    await chooseEvent(page, "Béziers Night");
+    await expect(page.getByTestId("album-step1-continue")).toHaveText("Reprendre l'album");
+    await page.getByTestId("album-step1-continue").click();
+    await expect(page.getByTestId("album-count")).toContainText("1");
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(1);
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    await expect(page.getByTestId("album-line-photos")).toContainText("1 plaque floutée");
+    // Retirer une photo déjà ajoutée (d'avant cette séance) : « Retirer » de l'étape des photos.
+    await page.getByTestId("album-line-photos").click();
+    await page.getByTestId("album-remove-base").click();
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(0);
+    await expect(page.getByTestId("album-count")).toContainText("0");
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("« Signaler » vise la photo affichée dans la visionneuse ; la consultation est comptée à l'ouverture, une fois", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const published = await leoAlbums("published");
+  const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
+  expect(rassemblement).toBeTruthy();
+  const view = await apiCall<{ photos: { id: string }[] }>(await login(DAMIEN), "GET", `/albums/${rassemblement?.id}`);
+  const third = view.data.photos[2]?.id;
+  expect(third).toBeTruthy();
+  const views: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/api\/media-contents\/[^/]+\/view$/.test(r.url())) views.push(r.url());
+  });
+  let target: { targetType?: string; targetId?: string } | null = null;
+  await page.route("**/api/reports", async (route) => {
+    target = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ id: crypto.randomUUID() }),
+    });
+  });
+  await loginInBrowser(page, DAMIEN, undefined, `/albums/${rassemblement?.id}`);
+  await expect(page.getByTestId("media-gallery-photo")).toHaveCount(12);
+  // Damien (membre) ouvre la troisième photo : la consultation est comptée, une fois ; il signale celle-là, jamais la première.
+  await page.getByTestId("media-gallery-photo").nth(2).click();
+  await expect.poll(() => views.length).toBe(1);
+  const dialog = page.getByTestId("media-gallery-viewer");
+  await dialog.getByTestId("report-open").click();
+  await page.getByTestId("report-dialog").locator("input[type=radio]").first().check();
+  await page.getByTestId("report-send").click();
+  await expect.poll(() => target?.targetId).toBe(third);
+  expect(target).toMatchObject({ targetType: "album_photo", targetId: third });
+  // Un membre n'a pas « Retirer » ; il n'y a plus de « Signaler » en pied de page (le seul est dans la visionneuse).
+  await expect(dialog.getByTestId("album-photo-remove")).toHaveCount(0);
+  await expect(page.getByTestId("album-report")).toHaveCount(0);
+  expect(views).toHaveLength(1);
 });

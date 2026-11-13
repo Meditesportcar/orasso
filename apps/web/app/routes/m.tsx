@@ -48,7 +48,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const chunk = await loadChunk<MediaContentView>(cursor, async (c) => {
     const res = await api<Page<MediaContentView>>(
       request,
-      `/media/${id}/contents?limit=${size}${c ? `&cursor=${encodeURIComponent(c)}` : ""}`,
+      `/media/${id}/contents?kind=link&limit=${size}${c ? `&cursor=${encodeURIComponent(c)}` : ""}`,
     );
     return res.ok ? res.data : null;
   });
@@ -225,9 +225,10 @@ function MediaContents({
     (cursor) => pageHref(mediaId, size, cursor),
     (data) => data.chunk,
   );
-  // Lot R9e : les galeries sont des albums (section « Albums ») ; ici, les liens seulement.
-  const links = list.items.filter((c) => c.kind !== "gallery");
-  if (links.length === 0 && !list.failed && list.to === null) return null;
+  // Lot R9e : les galeries sont des albums (section « Albums ») ; ici, les liens seulement (`kind=link` : l'API pagine les liens seuls,
+  // chaque « Voir la suite » ajoute des liens).
+  const links = list.items;
+  if (links.length === 0 && !list.failed) return null;
   return (
     <section className="s-stack" aria-labelledby="m-contents" data-testid="media-public-contents">
       <h2 id="m-contents" className="s-h2">

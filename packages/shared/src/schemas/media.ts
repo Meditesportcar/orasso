@@ -120,7 +120,11 @@ export type MediaContentUpdate = z.infer<typeof mediaContentUpdateSchema>;
 export const mediaContentFeatureSchema = z.object({ featured: z.boolean() });
 
 /** `GET /media/:id/contents` : pagination stable par identifiant décroissant. */
-export const mediaContentsQuerySchema = pageQuery.extend({ cursor: z.uuid().optional() });
+/** `kind=link` (lot R9e, tour 1) : les liens seulement, sans les albums mêlés par la façade (la page du média pagine ses liens à part). */
+export const mediaContentsQuerySchema = pageQuery.extend({
+  cursor: z.uuid().optional(),
+  kind: z.literal("link").optional(),
+});
 export type MediaContentsQuery = z.infer<typeof mediaContentsQuerySchema>;
 
 // --- Vues -------------------------------------------------------------------------------------------------------------

@@ -1,13 +1,16 @@
-// Les photos d'un album en cours de création (lot R9e) : le choix dans la photothèque, la détection des plaques à l'appareil, la décision du
-// lot et l'envoi une photo à la fois (`albumUploads.ts`, la logique testée). Une coupure laisse les photos faites ; « Reprendre l'envoi »
-// repart de la première restante (même `clientId`, l'API rejoue sans doublon).
-import type { PlateRect } from "@orasso/shared";
+// Les photos d'un album en cours de création (lot R9e) : le choix dans la photothèque, la détection des plaques à l'appareil, **la décision de plaque
+// par photo** et l'envoi une photo à la fois (`albumUploads.ts`, la logique testée). Une coupure laisse les photos faites ; « Reprendre l'envoi »
+// repart de la première restante (même `clientId`, l'API rejoue sans doublon). Les envois retirés passent par une file persistante par compte
+// (`removalQueue.ts` : place libérée avant un remplacement, suppression hors ligne rejouée à l'ouverture).
+import { createRemovalQueue, type PlateRect } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
+import { accountRemovalStore } from "@/features/media/galleryUploads";
 import { api } from "@/lib/api";
-import { errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlates } from "@/lib/plates/detect";
 import type { UploadState } from "@/ui/PhotoGrid";
@@ -15,9 +18,15 @@ import {
   type AlbumItem,
   AlbumSendStopped,
   type BatchChoice,
+  canReopen,
+  decideAll,
+  decidedCounts,
+  detectionPatch,
   pickLimit,
   platedCount,
+  reconcile,
   remaining,
+  reopenDecisions,
   sendAlbumPhotos,
 } from "./albumUploads";
 
@@ -35,15 +44,34 @@ async function uploadFile(item: AlbumItem, rects: PlateRect[] | null): Promise<{
   return { id, key };
 }
 
+/** Suppression d'un envoi : un fichier déjà parti (404) est une suppression réussie. */
+async function removeUpload(upload: { id: string }): Promise<void> {
+  try {
+    await api.deleteUpload(upload.id);
+  } catch (e) {
+    if (!(e instanceof ApiRequestError && e.status === 404)) throw e;
+  }
+}
+
+/** Une panne réseau arrête la série de suppressions (les suivantes échoueraient aussi, 15 s chacune). */
+const stopsRemovals = (e: unknown) => !(e instanceof ApiRequestError) || e.isNetwork;
+
 export function useAlbumUploads(albumId: string | null) {
   const [items, setItems] = useState<AlbumItem[]>([]);
   const latest = useRef<AlbumItem[]>([]);
-  const [batch, setBatch] = useState<BatchChoice | null>(null);
   const [progress, setProgress] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const stopped = useRef(false);
-  const retired = useRef<{ id: string }[]>([]);
+
+  // La file des envois à supprimer est celle du compte connecté (une file par compte, rangée dans le cache du compte).
+  const account = cacheScope();
+  const queues = useRef<{ account: string | null; queue: ReturnType<typeof createRemovalQueue> } | null>(null);
+  if (!queues.current || queues.current.account !== account) {
+    const store = accountRemovalStore({ accountGuard, cacheGetJson, cacheSetJson });
+    queues.current = { account, queue: createRemovalQueue({ remove: removeUpload, store, stops: stopsRemovals }) };
+  }
+  const queue = queues.current.queue;
 
   const update = useCallback((fn: (list: AlbumItem[]) => AlbumItem[]) => {
     latest.current = fn(latest.current);
@@ -55,18 +83,19 @@ export function useAlbumUploads(albumId: string | null) {
     [update],
   );
 
-  // Le montage remet « arrêté » à faux (démontage puis remontage du mode strict).
+  // Le montage remet « arrêté » à faux (démontage puis remontage du mode strict) et rejoue les suppressions restées en échec (hors ligne).
   useEffect(() => {
     stopped.current = false;
+    void queue.replay();
     return () => {
       stopped.current = true;
     };
-  }, []);
+  }, [queue]);
 
   /** Ouvre la photothèque (30 photos au plus par ouverture, jamais au-delà des 200 de l'album) et lance la détection des plaques. */
   const pick = useCallback(
     async (inAlbum: number) => {
-      const room = pickLimit(inAlbum, remaining(latest.current).length);
+      const room = pickLimit(inAlbum + latest.current.length, 0);
       if (room === 0) return;
       const picked: PickedPhoto[] = await pickPhotos(room);
       if (picked.length === 0) return;
@@ -80,31 +109,61 @@ export function useAlbumUploads(albumId: string | null) {
       }));
       update((list) => [...list, ...fresh]);
       // Détection une photo à la fois (ML Kit) ; sans détecteur (web, Expo Go) : aucune plaque repérée, la photo part « aucune plaque ».
+      // Un cadre posé entretemps à la main n'est jamais remplacé (`detectionPatch`).
       for (const item of fresh) {
-        let rects: PlateRect[] = [];
+        let found: PlateRect[] = [];
         try {
-          rects = (await detectPlates(item.uri, item.width, item.height)) ?? [];
+          found = (await detectPlates(item.uri, item.width, item.height)) ?? [];
         } catch {
-          rects = [];
+          found = [];
         }
         if (stopped.current) return;
-        patch(item.clientId, { rects, detected: true });
+        const now = latest.current.find((i) => i.clientId === item.clientId);
+        if (now) patch(item.clientId, detectionPatch(now, found));
       }
     },
     [update, patch],
   );
 
-  const remove = useCallback(
-    (clientId: string) => {
-      const gone = latest.current.find((i) => i.clientId === clientId);
-      if (gone?.upload) retired.current.push({ id: gone.upload.id });
-      update((list) => list.filter((i) => i.clientId !== clientId));
-    },
-    [update],
+  /** Règle à la main les cadres de plaque d'une photo (le détecteur peut en rater une) ; sa décision, déjà prise, est gardée. */
+  const setRects = useCallback(
+    (clientId: string, rects: PlateRect[]) => patch(clientId, { rects, edited: true }),
+    [patch],
   );
 
-  /** Règle à la main les cadres de plaque d'une photo (le détecteur peut en rater une) ; un envoi déjà fait pour d'autres cadres repart. */
-  const setRects = useCallback((clientId: string, rects: PlateRect[]) => patch(clientId, { rects }), [patch]);
+  /** La décision du bloc : pour les photos à plaque qui n'en ont pas encore (les autres gardent la leur). */
+  const decide = useCallback((choice: BatchChoice) => update((list) => decideAll(list, choice)), [update]);
+  /** « Changer » : rouvre les décisions des photos dont l'ajout n'est pas parti. */
+  const reopen = useCallback(() => update((list) => reopenDecisions(list)), [update]);
+
+  /**
+   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajoutée : `DELETE /me/albums/:id/photos/:photoId`. Ajout
+   * demandé sans réponse : on la retrouve dans l'album par son `clientId` (aucune photo fantôme). Une erreur laisse la photo en place.
+   */
+  const remove = useCallback(
+    async (clientId: string): Promise<boolean> => {
+      const gone = latest.current.find((i) => i.clientId === clientId);
+      if (!gone) return true;
+      setError(null);
+      try {
+        if (albumId && gone.attempted && !gone.photoId) {
+          const view = await api.album(albumId);
+          const [found] = reconcile([gone], view.photos);
+          if (found?.photoId) await api.deleteAlbumPhoto(albumId, found.photoId);
+        } else if (albumId && gone.photoId) {
+          await api.deleteAlbumPhoto(albumId, gone.photoId);
+        }
+      } catch (e) {
+        setError(errorMessage(e));
+        return false;
+      }
+      if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
+      update((list) => list.filter((i) => i.clientId !== clientId));
+      void queue.release();
+      return true;
+    },
+    [albumId, queue, update],
+  );
 
   /** Envoie les photos qui restent ; vrai quand tout est ajouté à l'album. */
   const send = useCallback(async (): Promise<boolean> => {
@@ -112,17 +171,16 @@ export function useAlbumUploads(albumId: string | null) {
     setSending(true);
     setError(null);
     try {
-      await sendAlbumPhotos(latest.current, batch, {
+      await sendAlbumPhotos(latest.current, {
         upload: uploadFile,
         add: (item, body) => api.addAlbumPhoto(albumId, body),
-        retire: (u) => retired.current.push({ id: u.id }),
+        retire: (u) => queue.retire(u),
+        release: () => queue.release(),
         onProgress: (current, total) => setProgress({ current, total }),
         onItem: patch,
         stopped: () => stopped.current,
       });
       setProgress(null);
-      // Les envois retirés (décision changée) sont supprimés côté API, sans bloquer la suite.
-      for (const u of retired.current.splice(0)) void api.deleteUpload(u.id).catch(() => undefined);
       return true;
     } catch (e) {
       setProgress(null);
@@ -130,22 +188,29 @@ export function useAlbumUploads(albumId: string | null) {
       return false;
     } finally {
       setSending(false);
+      // Ce qui a été retiré pendant l'envoi est supprimé sans bloquer la suite (la liste persistante garde ce qui échoue).
+      void queue.release();
     }
-  }, [albumId, batch, patch]);
+  }, [albumId, patch, queue]);
 
+  const counts = decidedCounts(items);
   return {
     items,
-    batch,
-    setBatch,
     pick,
     remove,
     setRects,
+    decide,
+    reopen,
     send,
     sending,
     progress,
     error,
-    /** Photos dont la plaque est repérée et qui attendent la décision du lot. */
+    /** Photos à plaque qui attendent leur décision. */
     plated: platedCount(items),
+    /** Combien de photos portent chaque décision (le bloc dit « N floutées » / « N gardées telles quelles »). */
+    counts,
+    /** « Changer » est possible tant qu'une décision n'est pas figée par un ajout parti. */
+    canChange: canReopen(items),
     /** La détection n'est pas finie pour toutes les photos. */
     detecting: items.some((i) => !i.detected),
     /** Photos qui n'ont pas encore été ajoutées à l'album. */

@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { DEFAULT_PLATE_FRAME } from "@orasso/shared";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import {
@@ -18,7 +19,7 @@ import {
   unique,
 } from "./helpers";
 import { sql } from "./helpers/lot48";
-import { checkerPhoto } from "./helpers/lot51";
+import { checkerPhoto, inner, regionSpread } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot 57, côté site : parité des fonctions nouvelles de la DA v2 (D20). Organisateur : réglages presse et décision d'une
@@ -366,6 +367,9 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
 
     // Album sur Béziers Night (lot R9e : « Nouvel album » remplace la galerie du formulaire de contenu) : une photo avec un cadre de
     // plaque, une sans ; la décision du lot est « Flouter et ajouter » (D28 : floutage proposé, jamais imposé).
+    await sql(
+      "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')",
+    );
     await page.goto("/app/media?onglet=contenus");
     await page.getByTestId("media-new-album").click();
     await page.waitForURL(/albums\/nouveau/);
@@ -547,6 +551,10 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
     await new Promise((resolve) => setTimeout(resolve, 2500));
     await route.continue();
   });
+  // Passe rejouable : un brouillon laissé sur Béziers Night par une passe interrompue est effacé d'abord.
+  await sql(
+    "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')",
+  );
   await page.goto("/app/media/albums/nouveau");
   await page.locator("label.alb-option", { hasText: "Béziers Night" }).locator("input").check();
   await page.getByTestId("album-step1-continue").click();
@@ -559,7 +567,7 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   // Photo retirée avant l'envoi : plus qu'une tuile, aucun envoi.
   await page.getByTestId("album-remove").last().click();
   await expect(page.getByTestId("album-tile")).toHaveCount(1);
-  // Cadre de plaque et décision du lot, puis « Continuer » : l'envoi retardé est en cours, le bouton est bloqué.
+  // Cadre de plaque et décision, puis « Continuer » : l'envoi retardé est en cours, le bouton est bloqué.
   await page.getByTestId("album-mark").first().click();
   await page.getByTestId("album-blur").click();
   await next.click();
@@ -567,15 +575,66 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   await expect(next).toBeDisabled();
   // Envoyée et ajoutée : l'étape des détails (l'album reste en brouillon, rien n'est publié ici).
   await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+  const leoCookie = await login("leo@orasso.local");
   const draftAlbum = (
     await apiCall<{ items: { id: string; photosCount: number; event: { slug: string } }[] }>(
-      await login("leo@orasso.local"),
+      leoCookie,
       "GET",
       "/me/albums?status=draft&limit=100",
     )
   ).data.items.find((a) => a.event.slug === "beziers-night-2026");
   expect(draftAlbum?.photosCount).toBe(1);
-  if (draftAlbum) await apiCall(await login("leo@orasso.local"), "DELETE", `/me/albums/${draftAlbum.id}`);
+  // Aperçu flouté (exigence d'avant, par le nouveau chemin) : de retour à l'étape des photos, la vignette est **la version du serveur** (jamais
+  // l'original local) et ses pixels sont floutés dans le cadre posé ; le serveur dit « floutée ».
+  await page.getByTestId("album-line-photos").click();
+  await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+  const thumb = page.getByTestId("album-tile").locator("img");
+  const served = (await thumb.getAttribute("src")) ?? "";
+  expect(served).toMatch(/\/api\/albums\/[0-9a-f-]{36}\/photos\/[0-9a-f]+\.webp$/);
+  const image = Buffer.from(await (await page.request.get(served)).body());
+  expect(await regionSpread(image, inner(DEFAULT_PLATE_FRAME))).toBeLessThan(25);
+  const rows = await sql<{ plate_state: string }>("select plate_state from event_album_photos where album_id = $1", [
+    draftAlbum?.id,
+  ]);
+  expect(rows.map((r) => r.plate_state)).toEqual(["blurred"]);
+  // « Changer » ne rouvre plus rien : la décision de cette photo est figée.
+  await expect(page.getByTestId("album-change")).toHaveCount(0);
+  // Photo retirée : l'ajout est défait côté serveur (la place du quota n'est pas en cause : l'envoi a été consommé).
+  const deleted = page.waitForResponse((r) => r.url().includes("/photos/") && r.request().method() === "DELETE");
+  await page.getByTestId("album-remove").click();
+  expect((await deleted).status()).toBe(200);
+  await expect(page.getByTestId("album-tile")).toHaveCount(0);
+  expect(
+    (
+      await sql<{ n: number }>(
+        "select count(*)::int n from event_album_photos where album_id = $1 and deleted_at is null",
+        [draftAlbum?.id],
+      )
+    )[0]?.n,
+  ).toBe(0);
+
+  // Envoi devenu caduc : l'ajout se perd (réponse coupée), la photo est retirée avant la reprise ; son envoi est supprimé côté serveur
+  // (il occupait le quota des envois en attente), comme avant par « Retirer cette photo ».
+  await page.unroute("**/api/me/uploads");
+  let cut = 0;
+  await page.route("**/api/me/albums/*/photos", async (route) => {
+    if (route.request().method() === "POST" && cut++ === 0) await route.abort();
+    else await route.continue();
+  });
+  await page
+    .getByTestId("album-pick")
+    .setInputFiles({ name: "perdue.png", mimeType: "image/png", buffer: await checkerPhoto() });
+  await expect(page.getByTestId("album-tile")).toHaveCount(1);
+  await next.click();
+  await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+  await expect(next).toHaveText("Reprendre l'envoi");
+  const dropped = page.waitForResponse(
+    (r) => r.url().includes("/api/me/uploads/") && r.request().method() === "DELETE",
+  );
+  await page.getByTestId("album-remove").click();
+  expect((await dropped).status()).toBe(204);
+  await expect(page.getByTestId("album-tile")).toHaveCount(0);
+  if (draftAlbum) await apiCall(leoCookie, "DELETE", `/me/albums/${draftAlbum.id}`);
   await ctx.close();
 });
 
@@ -644,14 +703,13 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("media-gallery-viewer")).toBeHidden();
 
-    // Suite au curseur, un élément par page (liens et albums mêlés, seuls les liens s'affichent sous « Liens ») : on franchit la 10e
-    // page sans reboucler, sans doublon, et on retrouve tous les liens.
+    // Suite au curseur, un lien par page (l'API pagine les liens seuls : `kind=link`) : chaque « Voir la suite » ajoute un lien, on franchit la 10e
+    // page sans reboucler ni doublon (exigence d'avant : un contenu de plus à chaque page).
     await page.goto(`/m/${mediaId}?taille=1`);
-    for (let n = 0; n < total * 2 + 5 && (await page.getByTestId("media-public-more").count()) > 0; n++) {
-      const loaded = page.waitForResponse((r) => r.url().includes("cursor=") && r.request().method() === "GET");
+    await expect(page.getByTestId("media-public-content")).toHaveCount(1);
+    for (let n = 2; n <= linkTotal; n++) {
       await page.getByTestId("media-public-more").click();
-      await loaded;
-      await page.waitForTimeout(150);
+      await expect(page.getByTestId("media-public-content")).toHaveCount(n);
     }
     await expect(page.getByTestId("media-public-more")).toHaveCount(0);
     await expect(page.getByTestId("media-public-content")).toHaveCount(linkTotal);

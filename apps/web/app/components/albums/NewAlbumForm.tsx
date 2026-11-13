@@ -7,18 +7,24 @@ import { Button, Icon } from "@orasso/design-system/web";
 import {
   type AlbumCardView,
   type AlbumItem,
+  type AlbumPhotoView,
   type AlbumView,
   albumTitle,
-  type BatchChoice,
-  blurredOf,
+  canReopen,
+  createRemovalQueue,
   DEFAULT_PLATE_FRAME,
+  decideAll,
+  decidedCounts,
+  isPhotoLocked,
   albumLabels as L,
   type MediaAccreditationView,
   PICK_PER_OPEN,
   type PlateRect,
   pickLimit,
   platedCount,
+  reconcile,
   remaining,
+  reopenDecisions,
   sendAlbumPhotos,
 } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -63,12 +69,46 @@ const call = (path: string, init: RequestInit = {}) =>
 
 const uuid = () => (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
+/** La file persistante des envois à supprimer, rangée sous le compte connecté (jamais les envois de A dans la liste de B). */
+function removalStore(accountId: string) {
+  const key = `orasso.album-removals.${accountId}`;
+  return {
+    read: async () => {
+      try {
+        return JSON.parse(localStorage.getItem(key) ?? "[]") as { id: string; key: string }[];
+      } catch {
+        return [];
+      }
+    },
+    write: async (list: { id: string; key: string }[]) => {
+      try {
+        if (list.length === 0) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify(list));
+      } catch {
+        // Stockage refusé (navigation privée) : la file reste celle de cette page.
+      }
+    },
+  };
+}
+
+/** Suppression d'un envoi : un fichier déjà parti (404) est une suppression réussie. */
+async function removeUpload(upload: { id: string }): Promise<void> {
+  const res = await fetch(`/api/me/uploads/${encodeURIComponent(upload.id)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`Suppression refusée (${res.status})`);
+}
+
 export function NewAlbumForm({
+  accountId,
   mediaName,
   accreditations,
   draftEvents,
   resume,
 }: {
+  /** Le compte connecté : la file des envois à supprimer lui appartient. */
+  accountId: string;
   mediaName: string;
   accreditations: MediaAccreditationView[];
   /** Événements qui ont déjà un brouillon (« Reprendre l'album »). */
@@ -81,11 +121,12 @@ export function NewAlbumForm({
   const [step, setStep] = useState<1 | 2 | 3>(resume ? 2 : 1);
   const [chosen, setChosen] = useState<string | null>(resume?.event.id ?? firstAvailable);
   const [album, setAlbum] = useState<AlbumView | null>(resume);
-  // Photos déjà dans l'album avant cette séance (brouillon repris) : celles de la séance sont dans `items`.
-  const [base, setBase] = useState(resume?.photosCount ?? 0);
+  // Photos déjà dans l'album avant cette séance (brouillon créé ou repris) : figées à l'arrivée, celles de la séance sont dans `items`.
+  const [basePhotos, setBasePhotos] = useState<AlbumPhotoView[]>(resume?.photos ?? []);
+  const base = basePhotos.length;
   const [items, setItems] = useState<Local[]>([]);
   const latest = useRef<Local[]>([]);
-  const [batch, setBatch] = useState<BatchChoice | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [title, setTitle] = useState(
     resume && resume.title !== albumTitle(null, resume.event.title) ? resume.title : "",
   );
@@ -93,17 +134,28 @@ export function NewAlbumForm({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const retired = useRef<{ id: string }[]>([]);
   const stopped = useRef(false);
+  const queue = useMemo(
+    () =>
+      createRemovalQueue({
+        remove: removeUpload,
+        store: removalStore(accountId),
+        // Une panne réseau (fetch rejeté) arrête la série ; un refus de l'API laisse l'envoi dans la liste sans bloquer les suivants.
+        stops: (e) => e instanceof TypeError,
+      }),
+    [accountId],
+  );
   // Le montage remet « arrêté » à faux : le mode strict de React démonte puis remonte aussitôt (en développement), sans cela un envoi serait
   // « interrompu » dès le départ.
   useEffect(() => {
     stopped.current = false;
+    // Les suppressions restées en échec (hors ligne) sont rejouées à l'ouverture.
+    void queue.replay();
     return () => {
       stopped.current = true;
       for (const i of latest.current) URL.revokeObjectURL(i.preview);
     };
-  }, []);
+  }, [queue]);
 
   const update = (fn: (list: Local[]) => Local[]) => {
     latest.current = fn(latest.current);
@@ -121,8 +173,9 @@ export function NewAlbumForm({
         await call("/me/albums", { method: "POST", body: JSON.stringify({ eventId: chosen, title: null }) }),
       );
       setAlbum(a);
-      setBase(a.photosCount);
+      setBasePhotos(a.photos);
       setAllowSave(a.allowSave);
+      setTitle(a.title === albumTitle(null, a.event.title) ? "" : a.title);
       setStep(2);
     } catch (e) {
       setError((e as Error).message);
@@ -133,8 +186,10 @@ export function NewAlbumForm({
 
   function pick(files: FileList | null) {
     if (!files) return;
-    const room = pickLimit(base + latest.current.length, 0);
-    const fresh: Local[] = [...files].slice(0, Math.min(room, PICK_PER_OPEN)).map((file) => ({
+    const room = Math.min(pickLimit(base + latest.current.length, 0), PICK_PER_OPEN);
+    // Le plafond coupe la sélection : on le dit (30 photos par ouverture, 200 par album).
+    setNotice(files.length > room ? L.pickCut(room, files.length) : null);
+    const fresh: Local[] = [...files].slice(0, room).map((file) => ({
       clientId: uuid(),
       uri: URL.createObjectURL(file),
       preview: "",
@@ -150,11 +205,44 @@ export function NewAlbumForm({
     update((list) => [...list, ...fresh]);
   }
 
-  function removeItem(clientId: string) {
+  /**
+   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajoutée : `DELETE /me/albums/:id/photos/:photoId`. Ajout
+   * demandé sans réponse : on la retrouve dans l'album par son `clientId` (aucune photo fantôme). Une erreur laisse la photo en place.
+   */
+  async function removeItem(clientId: string) {
     const gone = latest.current.find((i) => i.clientId === clientId);
-    if (gone?.upload) retired.current.push({ id: gone.upload.id });
-    if (gone) URL.revokeObjectURL(gone.preview);
+    if (!gone) return;
+    setError(null);
+    try {
+      if (album && gone.attempted && !gone.photoId) {
+        const view = await json<AlbumView>(await call(`/albums/${album.id}`));
+        const [found] = reconcile([gone], view.photos);
+        if (found?.photoId)
+          await json(await call(`/me/albums/${album.id}/photos/${found.photoId}`, { method: "DELETE" }));
+      } else if (album && gone.photoId) {
+        await json(await call(`/me/albums/${album.id}/photos/${gone.photoId}`, { method: "DELETE" }));
+      }
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
+    if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
+    URL.revokeObjectURL(gone.preview);
     update((list) => list.filter((i) => i.clientId !== clientId));
+    void queue.release();
+  }
+
+  /** Retire une photo du brouillon repris (d'avant cette séance). */
+  async function removeBase(photoId: string) {
+    if (!album) return;
+    setError(null);
+    try {
+      await json(await call(`/me/albums/${album.id}/photos/${photoId}`, { method: "DELETE" }));
+      setBasePhotos((list) => list.filter((p) => p.id !== photoId));
+      setAlbum(await json<AlbumView>(await call(`/albums/${album.id}`)));
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
 
   async function send(): Promise<boolean> {
@@ -162,7 +250,7 @@ export function NewAlbumForm({
     setBusy(true);
     setError(null);
     try {
-      await sendAlbumPhotos(latest.current, batch, {
+      await sendAlbumPhotos(latest.current, {
         upload: async (item, rects) => {
           const local = latest.current.find((i) => i.clientId === item.clientId);
           const form = new FormData();
@@ -174,21 +262,16 @@ export function NewAlbumForm({
           return { id: body.id, key: body.key };
         },
         add: async (item, body) =>
-          json<{ id: string }>(
+          json<{ id: string; url: string }>(
             await call(`/me/albums/${album.id}/photos`, { method: "POST", body: JSON.stringify(body) }),
           ),
-        retire: (u) => retired.current.push({ id: u.id }),
+        retire: (u) => queue.retire(u),
+        release: () => queue.release(),
         onProgress: (current, total) => setProgress({ current, total }),
         onItem: (id, p) => patch(id, p as Partial<Local>),
         stopped: () => stopped.current,
       });
       setProgress(null);
-      for (const u of retired.current.splice(0)) {
-        void fetch(`/api/me/uploads/${encodeURIComponent(u.id)}`, {
-          method: "DELETE",
-          credentials: "same-origin",
-        }).catch(() => undefined);
-      }
       return true;
     } catch (e) {
       setProgress(null);
@@ -196,6 +279,8 @@ export function NewAlbumForm({
       return false;
     } finally {
       setBusy(false);
+      // Ce qui a été retiré pendant l'envoi est supprimé sans bloquer la suite (la liste persistante garde ce qui échoue).
+      void queue.release();
     }
   }
 
@@ -229,10 +314,19 @@ export function NewAlbumForm({
     }
   }
 
-  const plated = platedCount(latest.current);
-  const needsDecision = plated > 0 && batch === null;
+  const plated = platedCount(items);
+  const needsDecision = plated > 0;
   const ready = base + items.length;
-  const blurred = blurredOf(items, batch);
+  const counts = decidedCounts(items);
+  const decided = counts.blurred + counts.kept;
+  // Les plaques floutées de l'album, comptées par le serveur (brouillon repris compris), relues avant l'étape des détails.
+  const blurred = album?.blurredCount ?? 0;
+  const summary = [
+    counts.blurred > 0 ? L.blurredTitle(counts.blurred) : null,
+    counts.kept > 0 ? L.keptTitle(counts.kept) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const preview: AlbumCardView | null = album
     ? {
@@ -345,34 +439,51 @@ export function NewAlbumForm({
             />
           </label>
 
-          {(plated > 0 || batch !== null) && (
+          {notice && (
+            <p role="status" className="o-t-caption" data-testid="album-pick-notice">
+              {notice}
+            </p>
+          )}
+          {(plated > 0 || decided > 0) && (
             <div className="alb-plates" data-testid="album-plates">
-              <strong>
-                {batch === "blurred"
-                  ? L.blurredTitle(blurredOf(items, "blurred"))
-                  : batch === "kept"
-                    ? L.keptTitle(items.filter((i) => i.rects.length > 0).length)
-                    : L.plateFound(plated)}
-              </strong>
+              <strong>{plated > 0 ? L.plateFound(plated) : summary}</strong>
               <span className="o-t-caption s-muted">
-                {batch === "blurred" ? L.blurredHint : batch === "kept" ? L.keptHint : L.plateHint(plated)}
+                {plated > 0
+                  ? L.plateHint(plated)
+                  : counts.blurred > 0 && counts.kept === 0
+                    ? L.blurredHint
+                    : counts.kept > 0 && counts.blurred === 0
+                      ? L.keptHint
+                      : `${L.blurredHint} ${L.keptHint}`}
               </span>
-              {batch === null ? (
+              {plated > 0 && (
                 <div className="s-row">
-                  <Button variant="secondary" icon="plate" onClick={() => setBatch("blurred")} data-testid="album-blur">
+                  <Button
+                    variant="secondary"
+                    icon="plate"
+                    onClick={() => update((list) => decideAll(list, "blurred"))}
+                    data-testid="album-blur"
+                  >
                     {L.blurAndAdd}
                   </Button>
-                  <Button variant="secondary" icon="upload" onClick={() => setBatch("kept")} data-testid="album-keep">
+                  <Button
+                    variant="secondary"
+                    icon="upload"
+                    onClick={() => update((list) => decideAll(list, "kept"))}
+                    data-testid="album-keep"
+                  >
                     {L.sendAsIs}
                   </Button>
                 </div>
-              ) : (
+              )}
+              {decided > 0 && plated > 0 && summary && <span className="o-t-caption s-muted">{summary}</span>}
+              {canReopen(items) && (
                 <div>
                   <Button
                     variant="secondary"
                     icon="undo"
                     disabled={busy}
-                    onClick={() => setBatch(null)}
+                    onClick={() => update((list) => reopenDecisions(list))}
                     data-testid="album-change"
                   >
                     {L.change}
@@ -383,67 +494,97 @@ export function NewAlbumForm({
           )}
 
           <ul className="alb-tiles" data-testid="album-grid">
-            {items.map((i) => (
-              <li key={i.clientId} className="s-stack s-stack--tight">
+            {basePhotos.map((p) => (
+              <li key={p.id} className="s-stack s-stack--tight">
                 <div className="alb-item">
-                  <div className="alb-tile" data-testid="album-tile">
-                    <img src={i.preview} alt="" />
+                  <div className="alb-tile" data-testid="album-tile-base">
+                    <img src={p.url} alt="" />
                   </div>
-                  {!i.photoId && (
+                  <div className="alb-item__actions">
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      icon="trash"
+                      disabled={busy}
+                      onClick={() => void removeBase(p.id)}
+                      aria-label={L.photoRemove}
+                      data-testid="album-remove-base"
+                    />
+                  </div>
+                </div>
+              </li>
+            ))}
+            {items.map((i) => {
+              const locked = isPhotoLocked(i);
+              return (
+                <li key={i.clientId} className="s-stack s-stack--tight">
+                  <div className="alb-item">
+                    <div className="alb-tile" data-testid="album-tile">
+                      {/* Ajoutée : la version du serveur (floutée si « Flouter »), jamais l'original local. */}
+                      <img src={i.photoId && i.serverUrl ? i.serverUrl : i.preview} alt="" />
+                    </div>
                     <div className="alb-item__actions">
-                      <Button
-                        variant="secondary"
-                        type="button"
-                        icon="plate"
-                        disabled={busy}
-                        onClick={() =>
-                          i.marking
-                            ? patch(i.clientId, { marking: false })
-                            : patch(i.clientId, {
-                                marking: true,
-                                rects: i.rects.length ? i.rects : [DEFAULT_PLATE_FRAME],
-                              })
-                        }
-                        data-testid="album-mark"
-                      >
-                        {i.rects.length > 0 ? "Cadre posé" : "Poser un cadre de plaque"}
-                      </Button>
+                      {!locked && (
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          icon="plate"
+                          disabled={busy}
+                          onClick={() =>
+                            i.marking
+                              ? patch(i.clientId, { marking: false })
+                              : patch(i.clientId, {
+                                  marking: true,
+                                  edited: true,
+                                  rects: i.rects.length ? i.rects : [DEFAULT_PLATE_FRAME],
+                                })
+                          }
+                          data-testid="album-mark"
+                        >
+                          {i.rects.length > 0 ? L.frameSet : L.framePlace}
+                        </Button>
+                      )}
+                      {locked && (
+                        <span className="o-t-caption s-muted" data-testid="album-decision-frozen">
+                          {L.decisionFrozen}
+                        </span>
+                      )}
                       <Button
                         variant="secondary"
                         type="button"
                         icon="trash"
                         disabled={busy}
-                        onClick={() => removeItem(i.clientId)}
+                        onClick={() => void removeItem(i.clientId)}
                         aria-label={L.photoRemove}
                         data-testid="album-remove"
                       />
                     </div>
-                  )}
-                </div>
-                {i.marking && !i.photoId && (
-                  <div className="s-stack s-stack--tight">
-                    <PlateFrame
-                      key={i.clientId}
-                      src={i.preview}
-                      alt="Photo choisie"
-                      name={`plate-${i.clientId}`}
-                      initial={i.rects}
-                      onChange={(rects: PlateRect[]) => patch(i.clientId, { rects })}
-                      testId="album-plate-editor"
-                    />
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      icon="close"
-                      onClick={() => patch(i.clientId, { rects: [], marking: false })}
-                      data-testid="album-unmark"
-                    >
-                      Retirer le cadre
-                    </Button>
                   </div>
-                )}
-              </li>
-            ))}
+                  {i.marking && !locked && (
+                    <div className="s-stack s-stack--tight">
+                      <PlateFrame
+                        key={i.clientId}
+                        src={i.preview}
+                        alt={L.chosenPhoto}
+                        name={`plate-${i.clientId}`}
+                        initial={i.rects}
+                        onChange={(rects: PlateRect[]) => patch(i.clientId, { rects, edited: true })}
+                        testId="album-plate-editor"
+                      />
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        icon="close"
+                        onClick={() => patch(i.clientId, { rects: [], marking: false, edited: true })}
+                        data-testid="album-unmark"
+                      >
+                        {L.frameRemove}
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
           {progress && (

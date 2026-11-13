@@ -82,6 +82,7 @@ export * from "./recurrence";
 export * from "./registrationBlock";
 export * from "./registrationWindow";
 export * from "./registry";
+export * from "./removalQueue";
 export * from "./reviews";
 export * from "./scheduleAt";
 export * from "./serialWriter";

@@ -44,9 +44,14 @@ export async function albumViewOf(join: AlbumJoin, v: Viewer): Promise<AlbumView
     ...summary,
     photos: photos.map((p) => {
       const list = tags.get(p.id);
-      return list?.length ? { ...photoView(join.a.id, p), tags: list } : photoView(join.a.id, p);
+      const view = list?.length ? { ...photoView(join.a.id, p), tags: list } : photoView(join.a.id, p);
+      // Le titulaire retrouve ses ajouts par `clientId` (réponse perdue) ; personne d’autre ne le voit.
+      return summary.mine && p.clientId ? { ...view, clientId: p.clientId } : view;
     }),
     ...(tags.size ? { tagsCount: tags.size } : {}),
+    ...(summary.mine && photos.some((p) => p.plateState === "blurred")
+      ? { blurredCount: photos.filter((p) => p.plateState === "blurred").length }
+      : {}),
   };
 }
 

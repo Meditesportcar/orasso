@@ -7,7 +7,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { openReport } from "@/features/ReportSheet";
 import { AlbumPhoto } from "./AlbumPhoto";
 import { type AlbumViewerRole, actionsFor } from "./actions/registry";
 
@@ -18,6 +17,8 @@ export function AlbumPhotoViewer({
   index,
   role,
   onClose,
+  onReport,
+  onRemove,
   actions,
 }: {
   album: AlbumView;
@@ -25,6 +26,10 @@ export function AlbumPhotoViewer({
   index: number | null;
   role: AlbumViewerRole;
   onClose: () => void;
+  /** Signaler la photo **affichée** (l'écran ferme d'abord la visionneuse : un `Modal` natif resterait devant la feuille de signalement). */
+  onReport?: (photo: AlbumPhotoView) => void;
+  /** Retirer la photo affichée (le média seulement). */
+  onRemove?: (photo: AlbumPhotoView) => void;
   /** Emplacement des actions des lots suivants (R9f, R9g). */
   actions?: ReactNode;
 }) {
@@ -57,7 +62,7 @@ export function AlbumPhotoViewer({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={L.report}
-              onPress={() => openReport({ type: "album_photo", id: current.id })}
+              onPress={() => onReport?.(current)}
               hitSlop={8}
               testID="album-viewer-report"
             >
@@ -103,6 +108,11 @@ export function AlbumPhotoViewer({
                   </Button>
                 ))
               : null}
+            {role === "media" && current && onRemove ? (
+              <Button variant="secondary" icon="trash" onPress={() => onRemove(current)} testID="album-viewer-remove">
+                {L.photoRemove}
+              </Button>
+            ) : null}
             {actions}
           </View>
         </View>

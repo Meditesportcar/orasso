@@ -200,6 +200,10 @@ for (const theme of THEMES) {
     );
     // Lot R9e : l'album publié par la passe précédente (la galerie d'hier) est effacé aussi (ses photos suivent).
     await sql("delete from event_albums where title like 'Galerie de la nuit %'");
+    // Et un brouillon sans titre laissé sur Béziers Night par une passe interrompue (passe rejouable).
+    await sql(
+      "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')",
+    );
     // Les demandes de Léo à Toulouse (envoyée, puis retirée par la passe précédente, quel que soit le thème) sont effacées :
     // chaque thème repart de l'état du seed, dans n'importe quel ordre.
     await sql(

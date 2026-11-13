@@ -3,9 +3,9 @@
 // (« Identifier les voitures »), la grille de photos (par paquets : une photo se lit toute seule, avec le jeton), la visionneuse. « Plus » :
 // Partager, Signaler ; pour le média : Modifier le titre, Autoriser l'enregistrement, Supprimer. Aucun nom de véhicule ni pseudo en R9e.
 import { Button, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumView, albumLabels as L } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, albumLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, Share, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
@@ -39,6 +39,9 @@ export function AlbumScreen({ id }: { id: string }) {
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<AlbumPhotoView | null>(null);
+  // Les vues comptent à l'ouverture d'une photo (comme avant par la galerie) : une fois par ouverture de l'écran, reprise après un échec.
+  const counted = useRef(false);
   const [titling, setTitling] = useState<string | null>(null);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const a: AlbumView | null = album.data;
@@ -48,6 +51,32 @@ export function AlbumScreen({ id }: { id: string }) {
     try {
       album.setData(await api.patchAlbum(id, body));
     } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+  function openViewer(i: number) {
+    setViewer(i);
+    if (counted.current || !a) return;
+    counted.current = true;
+    api.viewMediaContent(a.id).catch(() => {
+      counted.current = false;
+    });
+  }
+  /** Signaler la photo affichée : la visionneuse (un `Modal` natif) se ferme avant que la feuille de signalement ne s'ouvre. */
+  function reportPhoto(photo: AlbumPhotoView) {
+    setViewer(null);
+    setTimeout(() => openReport({ type: "album_photo", id: photo.id }), 350);
+  }
+  async function removePhoto() {
+    const photo = removing;
+    setRemoving(null);
+    if (!photo) return;
+    try {
+      await api.deleteAlbumPhoto(id, photo.id);
+      setViewer(null);
+      album.setData(await api.album(id));
+    } catch (e) {
+      setViewer(null);
       setError(errorMessage(e));
     }
   }
@@ -97,20 +126,6 @@ export function AlbumScreen({ id }: { id: string }) {
             <Button variant="secondary" icon="share" fullWidth onPress={() => void share()} testID="album-share">
               {L.share}
             </Button>
-            {a && !a.mine ? (
-              <Button
-                variant="secondary"
-                icon="flag"
-                fullWidth
-                onPress={() => {
-                  setMenu(false);
-                  openReport({ type: "album_photo", id: a.photos[0]?.id ?? a.id });
-                }}
-                testID="album-report"
-              >
-                {L.report}
-              </Button>
-            ) : null}
             {a?.mine ? (
               <>
                 <Button
@@ -184,7 +199,29 @@ export function AlbumScreen({ id }: { id: string }) {
               {L.modify}
             </Button>
           </AppSheet>
-          {a ? <AlbumPhotoViewer album={a} index={viewer} role={role} onClose={() => setViewer(null)} /> : null}
+          <ConfirmSheet
+            visible={removing !== null}
+            title={L.photoRemove}
+            body={L.photoRemoveConfirm}
+            danger
+            confirmLabel={L.photoRemove}
+            onConfirm={() => void removePhoto()}
+            onClose={() => setRemoving(null)}
+          />
+          {a ? (
+            <AlbumPhotoViewer
+              album={a}
+              index={viewer}
+              role={role}
+              onClose={() => setViewer(null)}
+              onReport={reportPhoto}
+              onRemove={(photo) => {
+                // Comme « Signaler » : un Modal natif resterait devant la confirmation.
+                setViewer(null);
+                setTimeout(() => setRemoving(photo), 350);
+              }}
+            />
+          ) : null}
         </Overlay>
       }
     >
@@ -238,7 +275,7 @@ export function AlbumScreen({ id }: { id: string }) {
                 key={p.id}
                 accessibilityRole="button"
                 accessibilityLabel={L.openPhoto(i + 1, a.photos.length)}
-                onPress={() => setViewer(i)}
+                onPress={() => openViewer(i)}
                 style={[styles.tile, { backgroundColor: t.color.surface }]}
                 testID="album-photo"
               >

@@ -34,6 +34,13 @@ export async function action({ request, params }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   const id = encodeURIComponent(params.id);
+  if (intent === "photo-delete") {
+    // Retirer une photo (le titulaire) : la dernière photo d'un album publié ne part pas (l'API le dit, 409).
+    const res = await api(request, `/me/albums/${id}/photos/${encodeURIComponent(String(form.get("photoId") ?? ""))}`, {
+      method: "DELETE",
+    });
+    return res.ok ? data({ error: null }) : data({ error: res.error.message }, { status: res.status });
+  }
   if (intent === "delete") {
     const res = await api(request, `/me/albums/${id}`, { method: "DELETE" });
     if (res.ok) throw redirect("/app/media");
@@ -101,9 +108,30 @@ export default function AlbumPage({ loaderData, actionData }: Route.ComponentPro
           <PhotoGallery
             photos={photos}
             title={a.title}
+            // Les vues comptent à l'ouverture d'une photo (comme avant par la galerie), une fois par page, reprise après un échec.
+            contentId={a.id}
             credit={L.creditLine(a.media.name)}
-            /* Emplacement vide : R9f et R9g y posent leurs actions. */
-            actions={() => null}
+            // Les actions de la photo **affichée** : « Signaler » vise celle-ci (jamais la première), « Retirer » pour le titulaire.
+            // R9f et R9g y posent les leurs.
+            actions={(photo) =>
+              a.mine ? (
+                <Form method="post" data-testid="album-photo-remove-form">
+                  <input type="hidden" name="intent" value="photo-delete" />
+                  <input type="hidden" name="photoId" value={photo.key} />
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    icon="trash"
+                    disabled={busy}
+                    data-testid="album-photo-remove"
+                  >
+                    {L.photoRemove}
+                  </Button>
+                </Form>
+              ) : (
+                <ReportDialog targetType="album_photo" targetId={photo.key} />
+              )
+            }
           />
         )}
         {actionData?.error && (
@@ -143,13 +171,7 @@ export default function AlbumPage({ loaderData, actionData }: Route.ComponentPro
               </Button>
             </Form>
           </div>
-        ) : (
-          a.photos[0] && (
-            <div data-testid="album-report">
-              <ReportDialog targetType="album_photo" targetId={a.photos[0].id} />
-            </div>
-          )
-        )}
+        ) : null}
       </div>
     </>
   );

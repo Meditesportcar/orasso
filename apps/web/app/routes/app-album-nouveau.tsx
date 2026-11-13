@@ -24,7 +24,7 @@ export function meta() {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireMe(request);
+  const me = await requireMe(request);
   const { profile } = await apiOrThrow<{ profile: MediaProfileView | null }>(request, "/me/media-profile");
   if (!profile) throw redirect("/app/media/nouveau");
   const [accreditations, drafts] = await Promise.all([
@@ -38,6 +38,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (res.ok && res.data.mine && res.data.status === "draft") resume = res.data;
   }
   return {
+    accountId: me.user.id,
     mediaName: profile.name,
     accreditations,
     draftEvents: drafts.items.map((d) => d.event.id),
@@ -52,6 +53,7 @@ export default function NewAlbumPage({ loaderData }: Route.ComponentProps) {
       <div className="s-narrow s-stack">
         <NewAlbumForm
           key={loaderData.resume?.id ?? "new"}
+          accountId={loaderData.accountId}
           mediaName={loaderData.mediaName}
           accreditations={loaderData.accreditations}
           draftEvents={loaderData.draftEvents}
