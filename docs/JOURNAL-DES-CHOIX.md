@@ -6183,6 +6183,12 @@ Maquette R9.3 `n-page` ; décisions § 1, § 6, § 10 ; T6, T8, T22 à T25. L'on
 - **Liens de la structure** : `EventPage.tsx` et `EventWizard.tsx` (les deux liens de R9n) et la fermeture ✕ de Bannis et de Notes visent `/(orga)/structure` (l'écran des réglages de la structure) : la Page n'est plus cet écran.
 - **Recettes existantes adaptées** (même exigence) : l'organisateur passe par les chips « Équipe » (`page-gest-team`) et « Réglages de la structure » au lieu des lignes du pied.
 
+### Lot R9b, tour 1 (13/11/2026) : corrections de la relecture Opus
+- **Chips de gestion sans condition** : ils s'affichent même si la page ne se charge pas (hors ligne, première ouverture) : Équipe, Réglages de la structure, Modifier ma fiche, ma vitrine, ma page restent à un toucher.
+- **Retour Android** : `useBackToPage` (`BackHandler` posé à la prise de focus) dans les trois fichiers de route `(orga)/structure`, `(pro)/fiche`, `(provider)/vitrine` : le retour système ramène à la Page ; le retour des autres onglets ne change pas. Recette : retour par l'historique du navigateur dans `appli-lotr9b` (le bouton matériel n'existe pas sur le web : à essayer sur le Xiaomi).
+- **Mineurs** : segment de la fiche relu à chaque prise de focus ; `pageHrefOf` sur l'auteur d'une mention ; `partners` dépend du `slug` ; `encodeURIComponent(id)` ; la story d'une page n'est jamais « non vue » pour son titulaire (`storiesBar.summary`, testé) ; média non vérifié : « Vérification en attente » dans l'en-tête de sa Page ; jetons dans `PageGest` et `PageQrSheet`, « Fermer » dans `pagesLabels` ; exemption de la bio cherchée dans la même bio (lot54, parite) ; `Promise.all` dans les deux routes décorées.
+- **À prévoir (vague suivante, migration)** : index sur `applications (media_profile_id)` et `(provider_profile_id)` pour les compteurs de missions et d'accréditations (aucune migration dans ce lot).
+
 ### À revoir avec Damien (lot R9b)
 - **« Abonnement » du pro reste une consultation** : aucun paiement dans l'appli (règle Stripe en mode présentation) ; le chip ouvre le bloc existant. À décider avec le site.
 - **Cartes `s:` et `p:` du Fil** : l'auteur d'une carte n'a pas de `slug` ; il faudrait l'ajouter à `FeedAuthorView` (API du Fil) pour que la carte d'une structure ou d'un pro ouvre sa page.

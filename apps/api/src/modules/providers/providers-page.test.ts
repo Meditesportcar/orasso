@@ -161,6 +161,16 @@ describe("GET /providers/:id : `stories` (l'anneau de la page)", () => {
     expect(res.json.stories.ring).not.toBeNull();
   });
 
+  it("le titulaire voit sa propre story de page comme déjà vue (jamais « non vue »), un autre membre comme non vue", async () => {
+    const w = await world();
+    await liveStory(w.brasa.id, w.holder.id);
+    expect((await callAs(w.holder, null, "GET", `/providers/${w.brasa.id}`)).json.stories).toMatchObject({
+      count: 1,
+      hasUnseen: false,
+    });
+    expect((await callAs(w.kenji, null, "GET", `/providers/${w.brasa.id}`)).json.stories.hasUnseen).toBe(true);
+  });
+
   it("une story expirée ou supprimée ne compte pas ; la story d'une page est publique par nature (même titulaire en compte privé)", async () => {
     const w = await world();
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, w.holder.id));

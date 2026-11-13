@@ -89,13 +89,14 @@ export const providersRoutes = new Hono<AppEnv>()
     noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un prestataire n'a pas de slug à citer).
     // Lot R9b : `stories` (l'anneau de la page, selon le regard), `missionsCount` et `organizersCount` (la bande de compteurs).
-    return c.json({
-      ...(await providersService.getPublic(id)),
-      ...(await authorCountsFor("provider", id, v)),
-      ...(await pageFollowState(actor, { kind: "provider", id })),
-      stories: await storiesSummaryFor(v, "provider", id),
-      ...(await providersService.pageCounts(id)),
-    });
+    const [pub, counts, follow, stories, page] = await Promise.all([
+      providersService.getPublic(id),
+      authorCountsFor("provider", id, v),
+      pageFollowState(actor, { kind: "provider", id }),
+      storiesSummaryFor(v, "provider", id),
+      providersService.pageCounts(id),
+    ]);
+    return c.json({ ...pub, ...counts, ...follow, stories, ...page });
   })
   .get("/me/provider-applications", async (c) => {
     const v = await requireUser(c);

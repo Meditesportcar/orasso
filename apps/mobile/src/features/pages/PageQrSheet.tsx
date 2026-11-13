@@ -10,7 +10,9 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { QrCode } from "@/ui/QrCode";
 
-const { space2, space3 } = tokens.spacing;
+const { space2, space3, space8, space12 } = tokens.spacing;
+// Côté maximal du QR : 288 px, composé depuis les jetons.
+const QR_MAX = space12 * 6;
 
 export function PageQrSheet({
   visible,
@@ -26,7 +28,7 @@ export function PageQrSheet({
 }) {
   const { t } = useTheme();
   const { width } = useWindowDimensions();
-  const size = Math.min(width - 2 * space3 - 32, 280);
+  const size = Math.min(width - 2 * space3 - space8, QR_MAX);
   const url = path ? siteUrl(path) : null;
   return (
     <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.qrTitle}>
@@ -59,7 +61,7 @@ export function PageQrSheet({
         {L.share}
       </Button>
       <Button variant="plate" icon="close" fullWidth onPress={onClose} testID="page-qr-close">
-        Fermer
+        {L.close}
       </Button>
     </AppSheet>
   );

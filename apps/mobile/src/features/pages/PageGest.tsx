@@ -6,8 +6,9 @@ import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-syst
 import { pagesLabels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
-const { space2, space3 } = tokens.spacing;
-const CHIP_HEIGHT = 40;
+const { space1, space2, space3, space8 } = tokens.spacing;
+// 40 px (la maquette), composé depuis les jetons d'espacement.
+const CHIP_HEIGHT = space8 + space2;
 
 export type GestItem = { id: string; icon: IconName; label: string; onPress: () => void };
 
@@ -51,9 +52,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space3,
     paddingVertical: space2,
     borderRadius: tokens.radius.radiusPill,
-    borderWidth: 1.5,
+    borderWidth: space1 / 2,
   },
   // Le libellé passe à la ligne au lieu de se couper.
-  label: { flexShrink: 1, fontSize: 13, lineHeight: 17 },
+  label: { flexShrink: 1 },
   pressed: { opacity: 0.7 },
 });

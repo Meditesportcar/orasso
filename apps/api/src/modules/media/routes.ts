@@ -75,13 +75,14 @@ export const mediaRoutes = new Hono<AppEnv>()
     noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un média n'a pas de slug à citer).
     // Lot R9b : `stories` (l'anneau de la page, selon le regard) et `accreditationsCount` (la bande de compteurs).
-    return c.json({
-      ...(await mediaService.getPublic(id)),
-      ...(await authorCountsFor("media", id, v)),
-      ...(await pageFollowState(actor, { kind: "media", id })),
-      stories: await storiesSummaryFor(v, "media", id),
-      accreditationsCount: await mediaService.accreditationsCount(id),
-    });
+    const [pub, counts, follow, stories, accreditationsCount] = await Promise.all([
+      mediaService.getPublic(id),
+      authorCountsFor("media", id, v),
+      pageFollowState(actor, { kind: "media", id }),
+      storiesSummaryFor(v, "media", id),
+      mediaService.accreditationsCount(id),
+    ]);
+    return c.json({ ...pub, ...counts, ...follow, stories, accreditationsCount });
   })
   .get("/media/:id/contents", async (c) => {
     await requireUser(c);

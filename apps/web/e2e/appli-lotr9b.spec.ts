@@ -153,6 +153,16 @@ for (const kind of ["organizer", "pro", "provider", "media"] as const) {
     });
     await page.getByTestId(`page-tab-${c.first}`).first().click();
     await shot(page, `page-${kind}-${c.first}`);
+    // Un chip ouvre son écran de réglage. Le retour système (Android, `useBackToPage`) ne se joue pas sur le web : à essayer sur le téléphone.
+    if (kind === "organizer") {
+      await page
+        .getByTestId(`page-gest-${c.gest[c.gest.length - 1]}`)
+        .first()
+        .click();
+      await page.waitForURL((u) => !/\/page(\?|$)/.test(u.pathname), { timeout: 30_000 });
+      await pageTab(page).click();
+      await expect(page.getByTestId("page-gest").first()).toBeVisible({ timeout: 30_000 });
+    }
     // « Mes casquettes » (le pied) ouvre la feuille.
     await page.getByTestId("page-row-casquettes").first().scrollIntoViewIfNeeded();
     await page.getByTestId("page-row-casquettes").first().click();

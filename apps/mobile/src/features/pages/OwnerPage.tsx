@@ -148,9 +148,13 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       enabled: Boolean(organizer),
     },
   );
-  const partners = useApi(() => api.structurePros(data?.kind === "organizer" ? data.slug : ""), [data?.kind], {
-    enabled: Boolean(organizer),
-  });
+  const partners = useApi(
+    () => api.structurePros(data?.kind === "organizer" ? data.slug : ""),
+    [data?.kind === "organizer" ? data.slug : null],
+    {
+      enabled: Boolean(organizer),
+    },
+  );
 
   const [picked, setPicked] = useState<PageTab | null>(null);
   const [filter, setFilter] = useState<AuthorPostsFilter>("all");
@@ -279,7 +283,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
           }
         />
       )}
-      {data ? <PageGest items={gest} /> : null}
+      {/* Sans condition : sans réseau ni cache, les écrans de réglage restent à un toucher (lot R9b, tour 1). */}
+      <PageGest items={gest} />
       {data ? (
         // Onglets soulignés, collants sous l'en-tête (`StickyHeader`, repéré par l'écran).
         <StickyHeader style={[styles.tabsBar, { backgroundColor: t.color.ground }]}>
@@ -401,7 +406,7 @@ function headOf(data: Loaded): {
         logoUrl: p.logoUrl,
         stories: p.stories,
         typeLabel: L.typeMedia,
-        verifiedLabel: p.verified ? L.verifiedMedia : null,
+        verifiedLabel: p.verified ? L.verifiedMedia : L.pendingMedia,
         bio: p.description,
         path: publicPathOf("media", { id: p.id }),
       };

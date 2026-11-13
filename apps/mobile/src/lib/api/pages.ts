@@ -42,9 +42,11 @@ export const pagesApi = {
   unfollowPage: (targetKey: string, actor?: string | null) =>
     request<PageFollowResult>(`/api/me/page-follows/${encodeURIComponent(targetKey)}`, { method: "DELETE", actor }),
   /** La page d'un prestataire (vitrine, avis, abonnement, anneau, compteurs) et celle d'un média. */
-  providerById: (id: string, actor?: string | null) => request<ProviderPage>(`/api/providers/${id}`, { actor }),
-  mediaById: (id: string, actor?: string | null) => request<MediaPage>(`/api/media/${id}`, { actor }),
+  providerById: (id: string, actor?: string | null) =>
+    request<ProviderPage>(`/api/providers/${encodeURIComponent(id)}`, { actor }),
+  mediaById: (id: string, actor?: string | null) =>
+    request<MediaPage>(`/api/media/${encodeURIComponent(id)}`, { actor }),
   /** Les liens et galeries publics d'un média (onglet « Contenus » vu par un visiteur), page par page. */
   mediaPublicContents: (id: string, cursor?: string | null) =>
-    request<Page<MediaContentView>>(`/api/media/${id}/contents${qs({ cursor })}`),
+    request<Page<MediaContentView>>(`/api/media/${encodeURIComponent(id)}/contents${qs({ cursor })}`),
 };

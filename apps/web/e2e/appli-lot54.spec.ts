@@ -91,8 +91,10 @@ async function rules(page: Page, theme: Theme, name: string) {
           getComputedStyle(el).textOverflow === "ellipsis" &&
           el.scrollWidth > el.clientWidth + 1 &&
           // Lot R9b : la bio du haut d'une Page tient sur une ligne par construction (« plus » la déroule), comme celle du Profil
-          // (même exemption que `audit.ts`, lot R8b1) : seulement si « plus » existe.
-          !(el.closest('[data-testid="page-bio"]') && document.querySelector('[data-testid="page-bio-toggle"]'))
+          // (même exemption que `audit.ts`, lot R8b1) : seulement si « plus » existe dans cette même bio.
+          !el
+            .closest('[data-testid="page-bio"]')
+            ?.parentElement?.parentElement?.querySelector('[data-testid="page-bio-toggle"]')
         );
       })
       .map((el) => (el.textContent ?? "").trim().slice(0, 50)),

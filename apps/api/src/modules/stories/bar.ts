@@ -276,7 +276,8 @@ export const storiesBar = {
     const self = kind === "user" && id === v.user.id;
     return {
       count: visible.length,
-      hasUnseen: self ? false : visible.some((r) => !seen.has(r.story.id)),
+      // Mes propres stories (celles de ma page comprises : le titulaire les a publiées) ne sont jamais « non vues » pour moi.
+      hasUnseen: self ? false : visible.some((r) => r.story.authorId !== v.user.id && !seen.has(r.story.id)),
       ring: storyRing({ live: kind === "structure" && (await liveStructureIds(at)).has(id) }, ringStories(visible), at),
     };
   },
