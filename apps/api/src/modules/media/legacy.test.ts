@@ -275,6 +275,39 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
     expect(cancelled.status).toBe(409);
   });
 
+  it("annulation : une première clé valide et une seconde invalide : ni album, ni blocage résiduel ; l'original reste disponible et la publication peut être retentée", async () => {
+    const good = await sendUpload(leo, "media_content");
+    const bad = `media-contents/${crypto.randomUUID()}.webp`;
+    const res = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: [good.key, bad],
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(eventAlbums)).toHaveLength(0);
+    expect(await db.select().from(eventAlbumPhotos)).toHaveLength(0);
+    expect(await db.select().from(legacyFileBlocks)).toHaveLength(0);
+    // L'original est intact, son envoi n'est pas consommé (la transaction est annulée) et il se sert encore comme avant.
+    expect(await storage.get(good.key)).not.toBeNull();
+    const [up] = await db.select().from(uploads).where(eq(uploads.key, good.key));
+    expect(up?.consumedAt).toBeNull();
+    expect((await app.request(`/api/files/${good.key}`)).status).toBe(200);
+    // La copie écrite avant l'échec est effacée : aucun fichier d'album ne reste.
+    const left = await db.execute(sql`select count(*)::int as n from event_album_photos`);
+    expect((left.rows[0] as { n: number }).n).toBe(0);
+    // La publication peut être retentée avec la clé valide seule.
+    const retry = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: [good.key],
+    });
+    expect(retry.status).toBe(201);
+    expect(await db.select().from(legacyFileBlocks)).toHaveLength(1);
+    expect((await app.request(`/api/files/${good.key}`)).status).toBe(404);
+  });
+
   it("un envoi dont le fichier manque est refusé (400), comme un envoi inconnu ; rien n'est créé", async () => {
     await db.insert(uploads).values({
       key: "media-contents/sans-fichier.webp",
@@ -428,6 +461,8 @@ describe("tour 3 : finition", () => {
     await retryRemove(sent.key);
     expect(await storage.get(sent.key)).toBeNull();
     expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
+    // La ligne de blocage n'est jamais retirée, même une fois le fichier effacé.
+    expect(await db.select().from(legacyFileBlocks).where(eq(legacyFileBlocks.key, sent.key))).toHaveLength(1);
     // Une clé inventée : lecture de clé primaire, rien de bloqué, rien à servir (404 par absence de fichier).
     expect((await app.request(`/api/files/media-contents/${crypto.randomUUID()}.webp`)).status).toBe(404);
   });

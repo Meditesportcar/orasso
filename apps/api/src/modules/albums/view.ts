@@ -76,12 +76,13 @@ export function albumVisibleSql(at: Date): SQL {
 /**
  * Une clé publique d'ancienne galerie peut-elle être servie ? `visible` : sa photo est dans un album visible de tous ; `hidden` : elle est
  * dans un album qui ne l'est plus (accréditation retombée, média suspendu ou supprimé, album ou photo retirés, événement annulé ou non
- * publié) ; `unknown` : aucune photo d'album ne la porte (fichier de lien, galerie non reprise) : servie comme avant. Une requête indexée
- * (`storage_key` est unique).
+ * publié) ; `hidden` aussi pour une **clé bloquée** (`legacy_file_blocks` : original copié sous une clé privée, quel que soit l'état de
+ * l'album, de l'événement ou du compte) ; `unknown` : aucune photo d'album ne la porte (fichier de lien, galerie non reprise) : servie comme
+ * avant. Deux lectures de clé unique au plus (clé primaire du blocage, puis `storage_key`).
  */
 export async function legacyFileState(key: string, at: Date): Promise<"visible" | "hidden" | "unknown"> {
   // 1. Une clé bloquée (original copié sous une clé privée) n'est jamais servie : lecture de clé primaire, sans lien avec un album,
-  //    un événement ou un compte (rien ne la supprime ; voir `legacyFileBlocks`). Une clé inventée s'arrête ici.
+  //    un événement ou un compte (rien ne la supprime ; voir `legacyFileBlocks`). Une clé inventée ne coûte qu'une lecture de clé primaire de plus.
   const [blocked] = await db
     .select({ key: legacyFileBlocks.key })
     .from(legacyFileBlocks)
