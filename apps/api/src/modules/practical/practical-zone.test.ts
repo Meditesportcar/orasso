@@ -306,6 +306,31 @@ describe("POST /practical : near zone", () => {
     expect(again.json.places[0].name.startsWith("B")).toBe(true);
   });
 
+  it("bornes du curseur : un client qui recopie la version d'un vrai curseur ne passe ni la page 10 ni la page 0 ; la page 9 est permise", async () => {
+    const wash = Array.from({ length: 270 }, (_, i) => ({
+      name: `L${i}`,
+      lat: 42.4 + Math.floor(i / 90) * 0.1 + 0.001 + (i % 30) * 0.0002,
+      lon: 2.8 + Math.floor((i % 90) / 30) * 0.1 + 0.001 + (i % 30) * 0.0002,
+    }));
+    practicalSources({ wash: { "66": wash }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Bornes");
+    const zone = { near: "zone", south: 42.4, west: 2.8, north: 42.7, east: 3.1 };
+    const first = await call(u, "POST", "/practical", zone);
+    expect(first.status).toBe(200);
+    // Le curseur est opaque pour l'écran ; ici on le décode comme le ferait un client malveillant, et on ne change que la page.
+    const real = JSON.parse(Buffer.from(first.json.nextCursor, "base64url").toString("utf8")) as {
+      p: number;
+      z: string;
+      v: string;
+    };
+    expect(real.p).toBe(1);
+    expect(real.v).not.toBe("");
+    const withPage = (p: number) => Buffer.from(JSON.stringify({ ...real, p })).toString("base64url");
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: withPage(10) })).status).toBe(400);
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: withPage(0) })).status).toBe(400);
+    expect((await call(u, "POST", "/practical", { ...zone, cursor: withPage(9) })).status).toBe(200);
+  });
+
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {
     practicalSources(data);
     const u = await signUp("Fan_Ancien");
