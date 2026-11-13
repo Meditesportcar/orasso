@@ -96,7 +96,9 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
 
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
     await page.getByRole("tab", { name: "Page", exact: true }).click();
-    await page.getByText("Publications", { exact: true }).locator("visible=true").first().click();
+    // Lot R9b : Ma fiche s'ouvre depuis le chip « Modifier ma fiche » de la Page.
+    await page.getByTestId("page-gest-fiche").click();
+    await page.getByTestId("pro-segments").getByText("Publications", { exact: true }).click();
     await page.getByTestId("pro-new-post").locator("visible=true").first().click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {

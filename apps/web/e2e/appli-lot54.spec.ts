@@ -89,7 +89,10 @@ async function rules(page: Page, theme: Theme, name: string) {
           r.right > 0 &&
           r.left < window.innerWidth &&
           getComputedStyle(el).textOverflow === "ellipsis" &&
-          el.scrollWidth > el.clientWidth + 1
+          el.scrollWidth > el.clientWidth + 1 &&
+          // Lot R9b : la bio du haut d'une Page tient sur une ligne par construction (« plus » la déroule), comme celle du Profil
+          // (même exemption que `audit.ts`, lot R8b1) : seulement si « plus » existe.
+          !(el.closest('[data-testid="page-bio"]') && document.querySelector('[data-testid="page-bio-toggle"]'))
         );
       })
       .map((el) => (el.textContent ?? "").trim().slice(0, 50)),
@@ -105,13 +108,15 @@ for (const theme of THEMES) {
     await toPersona(page, "pro", /\/accueil/);
 
     // Ma fiche : en-tête, segments, activités en tuiles, remises en grands chiffres, réalisations, Y aller · Favori.
-    await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page
+    await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page ; R9b : la Page, puis le chip « Modifier ma fiche » et « Vue passionné »
+    await page.getByTestId("page-gest-fiche").click();
+    await page.getByText("Vue passionné", { exact: true }).click();
     // Lot C4b : plus de grand titre, la photo d'atelier en tête (artefact `s-pro`).
     await expect(page.getByTestId("pro-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("pro-identity")).toBeVisible();
     await expect(page.getByTestId("pro-identity")).toContainText(/Pro validé|SIRET à vérifier/);
     await expect(page.getByText("Vue passionné", { exact: true })).toBeVisible();
-    await expect(page.getByText("Modifier ma fiche", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("pro-segments").getByText("Modifier ma fiche", { exact: true })).toBeVisible();
     await expect(page.getByTestId("pro-view-activities")).toBeVisible();
     // Les deux vues restent montées (la saisie survit au changement de segment) : seul ce qui se voit compte.
     await expect(page.getByText("Remises par grade", { exact: true }).locator("visible=true")).toBeVisible();
@@ -126,7 +131,7 @@ for (const theme of THEMES) {
     await shot(page, "fiche", theme);
 
     // Modifier ma fiche : activités à cocher, exemples de format, SIRET et adresse.
-    await page.getByText("Modifier ma fiche", { exact: true }).click();
+    await page.getByTestId("pro-segments").getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByText("Activités · touche pour cocher", { exact: true })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("pro-activities")).toBeVisible();
     await expect(page.getByPlaceholder("ex. 04 68 12 34 56")).toBeVisible();
@@ -138,13 +143,13 @@ for (const theme of THEMES) {
     await page.getByLabel("Présentation").fill("Brouillon gardé en changeant de segment.");
     await page.getByText("Vue passionné", { exact: true }).click();
     await expect(page.getByTestId("pro-view")).toBeVisible();
-    await page.getByText("Modifier ma fiche", { exact: true }).click();
+    await page.getByTestId("pro-segments").getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByLabel("Présentation")).toHaveValue("Brouillon gardé en changeant de segment.");
     await expect(page.getByTestId("pro-address-check")).toBeVisible();
     await rules(page, theme, "Modifier ma fiche");
     await shot(page, "fiche-modifier", theme);
     // Lot C4b (§ 5.2 de l'audit) : publier, publication, partenaires et abonnement dans « Publications ».
-    await page.getByText("Publications", { exact: true }).click();
+    await page.getByTestId("pro-segments").getByText("Publications", { exact: true }).click();
     await expect(page.getByTestId("pro-new-post")).toBeVisible();
     await expect(page.getByTestId("pro-subscription")).toBeVisible();
     await rules(page, theme, "Publications");
@@ -327,7 +332,8 @@ for (const theme of THEMES) {
     await shot(page, "candidatures-passees", theme);
 
     // Vitrine : vue organisateur.
-    await tab(page, "Page"); // R9n : la Vitrine est l'écran de l'onglet Page
+    await tab(page, "Page"); // R9n : la Vitrine est l'écran de l'onglet Page ; R9b : le chip « Modifier ma vitrine » de la Page
+    await page.getByTestId("page-gest-vitrine").click();
     // Lot C4b : plus de grand titre, le bandeau du métier en tête (artefact `s-vitrine`).
     await expect(page.getByTestId("vitrine-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("vitrine-identity")).toContainText("La Brasa");
@@ -347,7 +353,7 @@ for (const theme of THEMES) {
     await shot(page, "vitrine", theme);
 
     // Vitrine : modification, menu mal formé → erreur de ligne, puis enregistrement valide.
-    await page.getByText("Modifier ma vitrine", { exact: true }).click();
+    await page.getByTestId("vitrine-segments").getByText("Modifier ma vitrine", { exact: true }).click();
     await expect(page.getByText("Métier · touche pour cocher", { exact: true })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("vitrine-trades")).toBeVisible();
     const menu = page.getByTestId("vitrine-menu");
@@ -359,7 +365,7 @@ for (const theme of THEMES) {
     await page.getByLabel("Équipe").fill("0");
     await expect(page.getByText("Équipe : de 1 à 50 personnes.")).toBeVisible();
     await page.getByText("Vue organisateur", { exact: true }).click();
-    await page.getByText("Modifier ma vitrine", { exact: true }).click();
+    await page.getByTestId("vitrine-segments").getByText("Modifier ma vitrine", { exact: true }).click();
     await expect(page.getByLabel("Équipe")).toHaveValue("0");
     await expect(page.getByText("Équipe : de 1 à 50 personnes.")).toBeVisible();
     await page.getByLabel("Équipe").fill("2");
@@ -376,7 +382,9 @@ for (const theme of THEMES) {
     const sofia = await login("sofia@orasso.local");
     const profile = await apiCall<{ profile: { id: string } }>(sofia, "GET", "/me/provider-profile");
     await page.goto(`/providers/${profile.data.profile.id}`);
-    await expect(page.getByTestId("provider-identity")).toContainText("La Brasa", { timeout: 30_000 });
+    // Lot R9b : la page publique au gabarit des pages (nom, anneau, compteurs, onglets) ; « Prestations » porte la vitrine d'hier.
+    await expect(page.getByTestId("page-name")).toContainText("La Brasa", { timeout: 30_000 });
+    await page.getByTestId("page-tab-services").click();
     await expect(page.getByTestId("vitrine-menu-list")).toContainText("Brochettes catalanes");
     await expect(page.getByTestId("vitrine-reviews")).toBeVisible();
     await rules(page, theme, "Fiche publique prestataire");

@@ -432,7 +432,7 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
     page: /\/publier/,
   },
   // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la recherche, ouverte
-  // par la loupe depuis l'onglet Missions. Média : la ligne « Mon profil média » de la Page ouvre un écran B.
+  // par la loupe depuis l'onglet Missions. Média : le chip « Modifier ma page » de la Page ouvre un écran B.
   provider: {
     tab: ["Missions", "missions"],
     // Le compte du prestataire de la recette n'a aucune mission et « Voir » d'une mission mène à l'onglet Candidatures : l'écran B est la
@@ -442,7 +442,7 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
   },
   media: {
     tab: ["Page", "page"],
-    open: (page) => page.getByTestId("page-row-media-profile").first().click(),
+    open: (page) => page.getByTestId("page-gest-media").first().click(),
     page: /\/media\/modifier/,
   },
   admin: {

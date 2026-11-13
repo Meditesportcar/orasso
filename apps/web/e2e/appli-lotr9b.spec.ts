@@ -115,12 +115,14 @@ const pageTab = (page: Page) => page.getByTestId("persona-tabbar").getByRole("ta
 /** Le nombre d'une case de la bande de compteurs (« 412 abonnés »). */
 async function counter(page: Page, key: string): Promise<number> {
   const text = (await page.getByTestId(`page-count-${key}`).first().innerText()).replace(/\s/g, " ");
-  const m = /(\d[\d  ]*)/.exec(text);
+  const m = /(\d[\d {2}]*)/.exec(text);
   return m ? Number((m[1] ?? "").replace(/\D/g, "")) : Number.NaN;
 }
 
 for (const kind of ["organizer", "pro", "provider", "media"] as const) {
-  test(`la Page de la casquette ${kind} : en-tête, compteurs, chips, onglets, « Mes casquettes »`, async ({ browser }) => {
+  test(`la Page de la casquette ${kind} : en-tête, compteurs, chips, onglets, « Mes casquettes »`, async ({
+    browser,
+  }) => {
     test.setTimeout(240_000);
     const c = CAS[kind];
     const { ctx, page } = await open(browser, c.email);
@@ -144,7 +146,9 @@ for (const kind of ["organizer", "pro", "provider", "media"] as const) {
     await shot(page, `page-${kind}`);
     // « Mentions » s'ouvre (la liste ou l'état vide), puis l'onglet d'accueil de la casquette.
     await page.getByTestId("page-tab-mentions").first().click();
-    await expect(page.getByTestId("mention-row").or(page.getByText("Personne n'a encore cité cette page."))).toBeVisible({
+    await expect(
+      page.getByTestId("mention-row").or(page.getByText("Personne n'a encore cité cette page.")),
+    ).toBeVisible({
       timeout: 30_000,
     });
     await page.getByTestId(`page-tab-${c.first}`).first().click();
@@ -264,7 +268,9 @@ test("en casquette Roues Libres 66, « Suivre » Sud Cars écrit l'abonnement de
   await ctx.close();
 });
 
-test("police ×1,3 : les onglets et les chips tiennent, aucun mot coupé, aucune page qui déborde", async ({ browser }) => {
+test("police ×1,3 : les onglets et les chips tiennent, aucun mot coupé, aucune page qui déborde", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   for (const kind of ["organizer", "pro"] as const) {
     const c = CAS[kind];
