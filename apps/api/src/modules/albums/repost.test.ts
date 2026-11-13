@@ -94,6 +94,16 @@ describe("POST /events/:id/albums/:albumId/photos/:photoId/repost", () => {
     expect(res.json.caption).toBe("Merci à Sud Cars !");
   });
 
+  it("un événement fini depuis plus de 30 jours : la reprise reste possible (la fenêtre de rattachement ne s'applique pas)", async () => {
+    const a = await threeDecisions();
+    albumId = a.id;
+    useClock(new Date("2027-03-01T10:00:00Z"));
+    const res = await repost(orga, a.photos[1]?.id as string);
+    expect(res.status).toBe(201);
+    const [post] = await db.select().from(feedPosts).where(eq(feedPosts.id, res.json.id));
+    expect(post).toMatchObject({ persona: "organizer", structureId, eventId, eventRole: "organizer" });
+  });
+
   it("plaque : blurred copiée telle quelle, none → no_plate_confirmed, kept → copie FLOUTÉE (pixels changés)", async () => {
     const a = await threeDecisions();
     albumId = a.id;

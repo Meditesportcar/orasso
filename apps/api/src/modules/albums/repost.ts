@@ -25,7 +25,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
-import { attachEventsByIds, deducePostRole, notAttachable } from "../feed/attach";
+import { attachEventsByIds, notAttachable } from "../feed/attach";
 import { pageDepartment } from "../feed/authors";
 import { materializeMentions } from "../feed/mentions";
 import { loadPostViews } from "../feed/posts";
@@ -101,13 +101,13 @@ export const albumRepost = {
     // 3. La plaque : la décision du média est gardée. `unknown` (ancienne galerie) : on ne sait pas, donc on ne reprend pas.
     if (photo.plateState === "unknown") throw new AppError(409, "plate_unknown", L.errors.plateUnknown);
     if (await isReposted(db, photoId)) throw alreadyError();
-    // 4. Le rattachement : le rôle `organizer` est déduit des droits, jamais reçu.
-    const at = now();
+    // 4. Le rattachement : le rôle `organizer` est celui de la structure de l'événement (déjà vérifié par `requireAuthorship`), jamais reçu.
+    //    La fenêtre de 30 jours après la fin (`withinAttachWindow`) ne s'applique pas ici : un album arrive souvent bien après l'événement,
+    //    et la photo reprise existe déjà, publiée par un média accrédité (T44, décision du 13/11 : sinon « Reprendre » aboutirait à un refus
+    //    muet sur tout événement de plus d'un mois). L'événement doit rester visible (publié ou annulé, pas sur invitation).
     const attach = (await attachEventsByIds(db, [eventId])).get(eventId);
-    const eventRole = attach
-      ? await deducePostRole(db, { userId, persona: "organizer", pageId: authorship.id, event: attach }, at)
-      : null;
-    if (!attach || eventRole !== "organizer") throw notAttachable(publicationErrors.event_not_attachable);
+    if (!attach) throw notAttachable(publicationErrors.event_not_attachable);
+    const eventRole = "organizer" as const;
     const department = (await pageDepartment(db, authorship)) ?? attach.department ?? "";
     // 5. Le fichier : lu à l'album, flouté si le média l'a gardé tel quel (`kept` : la copie est floutée avec ses cadres), copié sous la
     //    clé de la publication, hors transaction.
