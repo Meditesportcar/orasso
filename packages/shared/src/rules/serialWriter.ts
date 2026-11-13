@@ -18,7 +18,7 @@ export function createSerialWriter<T>(options: {
   /** Un envoi a échoué : la dernière valeur confirmée, à rendre à l'interrupteur, et l'erreur. */
   onError: (confirmed: T, error: unknown) => void;
   /**
-   * Garde vérifiée avant chaque envoi (comme la file de flammes de l'appli, `flameRouter.ts`) : fausse (autre compte, déconnexion), la file s'arrête sans
+   * Garde vérifiée avant chaque envoi (comme `createFlameGate`) : fausse (autre compte, déconnexion), la file s'arrête sans
    * rien envoyer ni afficher. Sans elle, un envoi différé partirait avec la session du moment.
    */
   alive?: () => boolean;
