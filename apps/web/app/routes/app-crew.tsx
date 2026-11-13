@@ -14,7 +14,7 @@ import {
   explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { data, redirect, type ShouldRevalidateFunctionArgs, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
@@ -40,12 +40,17 @@ export function meta() {
  * navigation du routeur : sans ceci, elle relancerait les quatre lectures de la page (mes crews, le crew, ses membres, ses demandes)
  * pour rien, et une panne à cet instant ferait basculer la page sur la limite d'erreur. Rien d'autre ne change : la page ne se relit pas.
  */
+/** Vrai tant que la page affiche les données d'un autre compte que le compte courant : alors, toute navigation relit le Crew. */
+let foreignNow = false;
+
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
   formMethod,
   defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
+  // Les données affichées sont celles d'un autre compte : rien ne les garde (même pendant le retrait de `publier`).
+  if (foreignNow) return true;
   if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
   const without = (url: URL) => {
     const p = new URLSearchParams(url.search);
@@ -62,7 +67,7 @@ export function shouldRevalidate({
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const mine = await api<MyCrew[]>(request, "/me/crews");
-  if (!mine.ok) return { mode: "error" as const, message: mine.error.message };
+  if (!mine.ok) return { mode: "error" as const, message: mine.error.message, userId: me.user.id };
   const url = new URL(request.url);
   if (mine.data.length === 0) {
     const asked = await api<CrewInboxRequest[]>(request, "/me/crew-requests");
@@ -74,6 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       : null;
     return {
       mode: "none" as const,
+      userId: me.user.id,
       invitations: asked.ok ? asked.data.filter((r) => r.kind === "invitation") : [],
       q,
       searching,
@@ -145,15 +151,26 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   const layout = useRouteLoaderData("layouts/app") as { userId?: string } | undefined;
   const [announced, setAnnounced] = useState<string | null | undefined>(undefined);
   useEffect(() => listenSession(setAnnounced), []);
-  const owner = loaderData.mode === "crew" ? loaderData.userId : null;
+  // `userId` est dans tous les résultats du chargeur (sans crew, les invitations de `/me/crew-requests` sont aussi privées).
+  const owner = loaderData.userId;
   const foreign =
-    owner !== null &&
-    ((layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner));
+    (layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner);
+  foreignNow = foreign;
   const revalidator = useRevalidator();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le passage à « autre compte » relance la lecture
+  // Une relecture reprise par une navigation en cours peut ne pas relire le Crew : tant que la discordance dure et qu'aucune relecture
+  // n'est en cours, on relit de nouveau (trois fois au plus, sans boucle).
+  const tries = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seuls la discordance et la fin d'une relecture comptent
   useEffect(() => {
-    if (foreign) void revalidator.revalidate();
-  }, [foreign]);
+    if (!foreign) {
+      tries.current = 0;
+      return;
+    }
+    if (revalidator.state === "idle" && tries.current < 3) {
+      tries.current += 1;
+      void revalidator.revalidate();
+    }
+  }, [foreign, revalidator.state]);
   if (foreign) {
     return (
       <p className="s-muted" role="status" data-testid="crew-refreshing">

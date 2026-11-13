@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { SEED_PASSWORD } from "./helpers";
+import { r5Crew } from "./lotr5c2-setup";
 import { landscape, who } from "./lotr7f3-setup";
 import { RELAIS } from "./relais";
 
@@ -275,5 +276,134 @@ test("le compte change après la réussite : l'écran de réussite reste, son me
   await page.waitForTimeout(1_500);
   await expect(page.getByTestId("story-done")).toBeVisible();
   await expect(page.getByTestId("story-stale")).toHaveCount(0);
+  await ctx.close();
+});
+
+// Tour 3 : le verrou est définitif (A → B → A compris), l'issue incertaine survit à la requête, un refus net ou un envoi encore au dépôt
+// de la photo valent « pas partie », et le public de la réussite est figé avec le résultat.
+function hold() {
+  let release: () => void = () => undefined;
+  let arrive: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const arrived = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  return { held, arrived, release: () => release(), arrive: () => arrive() };
+}
+
+test("A → B → A pendant l'envoi : l'écran reste verrouillé, la story peut exister (« peut-être publiée »)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const author = await who("StB1Aba");
+  const { ctx, page } = await open(browser, author.email);
+  const h = hold();
+  await page.route(/\/api\/me\/stories$/, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    h.arrive();
+    await h.held;
+    return route.abort("failed");
+  });
+  await toPreview(page);
+  await page.getByTestId("story-publish").click();
+  await h.arrived;
+  await switchAccountUnderneath(page, OTHER);
+  await expect(page.getByTestId("story-stale")).toBeVisible({ timeout: 15_000 });
+  // Le premier compte revient avant la fin de l'envoi.
+  await page.unroute(/\/api\/me$/);
+  await refresh(page);
+  await page.waitForTimeout(1_000);
+  h.release();
+  await expect(page.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 60_000 });
+  await expect(page.getByTestId("story-publish")).toHaveCount(0);
+  await expect(page.getByTestId("story-to-preview")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("réponse perdue (A toujours connecté), puis changement de compte : « peut-être publiée », jamais « pas partie »", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const author = await who("StB1Perdue");
+  const { ctx, page } = await open(browser, author.email);
+  await page.route(/\/api\/me\/stories$/, (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+  await toPreview(page);
+  await page.getByTestId("story-publish").click();
+  // L'écran reste là avec son erreur réseau (rien n'est verrouillé).
+  await expect(page.getByTestId("story-publish")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId("story-stale")).toHaveCount(0);
+  await switchAccountUnderneath(page, OTHER);
+  await expect(page.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 15_000 });
+  await expect(page.getByTestId("story-stale")).not.toContainText("n'est pas partie");
+  await ctx.close();
+});
+
+test("un refus net de l'API après le changement, ou un envoi encore au dépôt de la photo : « pas partie »", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  // (1) Refus net : la création est partie, l'API répond 403 après le changement de compte.
+  const a = await who("StB1Refus");
+  const refused = await open(browser, a.email);
+  const h = hold();
+  await refused.page.route(/\/api\/me\/stories$/, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    h.arrive();
+    await h.held;
+    return route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "forbidden", message: "Accès refusé" } }),
+    });
+  });
+  await toPreview(refused.page);
+  await refused.page.getByTestId("story-publish").click();
+  await h.arrived;
+  await switchAccountUnderneath(refused.page, OTHER);
+  h.release();
+  await expect(refused.page.getByTestId("story-stale")).toContainText("n'est pas partie", { timeout: 60_000 });
+  await refused.ctx.close();
+
+  // (2) Dépôt de la photo : la création n'est pas partie, donc jamais « peut-être publiée ».
+  const b = await who("StB1Depot");
+  const upload = await open(browser, b.email);
+  const hu = hold();
+  await upload.page.route(/\/api\/me\/uploads$/, async (route) => {
+    hu.arrive();
+    await hu.held;
+    return route.continue();
+  });
+  await toPreview(upload.page);
+  await upload.page.getByTestId("story-publish").click();
+  await hu.arrived;
+  await switchAccountUnderneath(upload.page, OTHER);
+  hu.release();
+  await expect(upload.page.getByTestId("story-stale")).toContainText("n'est pas partie", { timeout: 60_000 });
+  await expect(upload.page.getByTestId("story-stale")).not.toContainText("peut-être");
+  await upload.ctx.close();
+});
+
+test("le public annoncé après la réussite est figé : une story de crew reste « Ton crew » après le changement de compte", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const crew = await r5Crew(`B1${Date.now().toString(36)}`);
+  const { ctx, page } = await open(browser, crew.chef.email);
+  await toPlate(page);
+  await validatePlate(page);
+  await page.getByTestId("story-audience-crew").click();
+  await page.getByTestId("story-to-preview").click();
+  await expect(page.getByTestId("story-preview-canvas")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId("story-done")).toContainText("Ton crew");
+  await switchAccountUnderneath(page, OTHER);
+  await page.waitForTimeout(2_000);
+  await expect(page.getByTestId("story-done")).toContainText("Ton crew");
+  await expect(page.getByTestId("story-done")).not.toContainText("Tes abonnés");
   await ctx.close();
 });

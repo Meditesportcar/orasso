@@ -187,6 +187,8 @@ export function PublishForm({
   // Un autre onglet connecte un autre compte : cet écran (la page, le brouillon de A) est périmé. Il se masque, verrouillé jusqu'au
   // rechargement ; l'envoi porte de plus le compte attendu (409 `account_changed` si la session n'est plus la sienne).
   const [sessionStale, setSessionStale] = useState(false);
+  // Un envoi est parti sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être ; un refus net (4xx) le lève.
+  const [maybePosted, setMaybePosted] = useState(false);
   useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
   // Lot R7g : la vidéo choisie (jamais en même temps qu'une photo), ses clés d'envoi gardées pour une reprise.
@@ -411,6 +413,7 @@ export function PublishForm({
       () => open.current,
       async () => undefined,
       async () => {
+        setMaybePosted(true);
         const post = () =>
           apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
@@ -426,6 +429,7 @@ export function PublishForm({
       clipKeys.current = null;
       return setDone(res.data);
     }
+    if (res.status >= 400 && res.status < 500) setMaybePosted(false);
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.status >= 400 && res.status < 500) clipKeys.current = null;
     setError(res.error.message);
@@ -472,6 +476,7 @@ export function PublishForm({
       () => open.current,
       async () => undefined,
       async () => {
+        setMaybePosted(true);
         const post = () =>
           apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
@@ -487,6 +492,7 @@ export function PublishForm({
       uploaded.current = null;
       return setDone(res.data);
     }
+    if (res.status >= 400 && res.status < 500) setMaybePosted(false);
     if (res.status === 429) return setError(L.tooManyRequests);
     // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
     if (res.status === 400) uploaded.current = null;
@@ -494,12 +500,13 @@ export function PublishForm({
   }
 
   // Une story déjà publiée garde son écran de réussite (le message reste vrai) même si la session change ensuite.
-  if (sessionStale && !done) {
+  // Pendant l'envoi, le formulaire (verrouillé) reste : on ne dit rien tant qu'on ne sait pas.
+  if (sessionStale && !done && !busy) {
     return (
       <div className="fil" data-testid="story-stale">
         <FicheBar title={L.title} back={back} />
         <p className="o-t-body" role="alert">
-          {feedPublishLabels.accountChanged}
+          {maybePosted ? L.accountChangedUncertain : feedPublishLabels.accountChanged}
         </p>
         <Button icon="undo" onClick={() => window.location.reload()} data-testid="story-stale-reload">
           Recharger la page

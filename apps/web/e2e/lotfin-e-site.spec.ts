@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
-import { expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, setTheme, unique } from "./helpers";
+import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
 import { postText } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
@@ -397,6 +397,92 @@ test.describe("partie B1, tour 2 : le compte change pendant le retrait de `publi
         { timeout: 30_000 },
       )
       .toBe("none");
+    await expect(a.getByTestId("crew-outings")).toHaveCount(0);
+    await ctx.close();
+  });
+});
+
+/** B se connecte (dans un autre contexte), puis ses cookies remplacent ceux de A d'un coup ; un onglet de B annonce alors le compte à A. */
+async function signInOther(browser: Browser, ctx: BrowserContext, email: string) {
+  const other = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await loginInBrowser(await other.newPage(), email, undefined, "/app/fil");
+  const cookies = await other.cookies();
+  await other.close();
+  await ctx.clearCookies();
+  await ctx.addCookies(cookies);
+  const b = await ctx.newPage();
+  await b.goto("/app/fil");
+}
+
+test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const loadedUser = (page: Page) =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __reactRouterDataRouter: { state: { loaderData: Record<string, { userId?: string }> } };
+          }
+        ).__reactRouterDataRouter.state.loaderData["routes/app-crew"]?.userId ?? null,
+    );
+
+  test("sans crew : les invitations de A ne restent pas affichées sous B (annonce d'un autre onglet)", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    expect(
+      (await apiCall(crew.chef.cookie, "POST", `/crews/${crew.id}/invitations`, { pseudo: crew.sarah.pseudo })).status,
+    ).toBe(201);
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await loginInBrowser(a, crew.sarah.email, undefined, "/app/crew");
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
+    // B se connecte dans un autre onglet : l'annonce de session arrive à A.
+    await signInOther(browser, ctx, crew.paul.email);
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0, { timeout: 30_000 });
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("l'annonce de B arrive pendant le retrait de `publier` : la page se relit sous B, jamais « Mise à jour… » à vie", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parentRead: () => void = () => undefined;
+    const parentReading = new Promise<void>((resolve) => {
+      parentRead = resolve;
+    });
+    let armed = false;
+    await a.route(/\/app\/crew\.data/, async (route) => {
+      const routes = new URL(route.request().url()).searchParams.get("_routes");
+      if (armed && routes !== null && !routes.split(",").includes("routes/app-crew")) {
+        armed = false;
+        parentRead();
+        await held;
+      }
+      return route.continue();
+    });
+    await setTheme(a, "beton");
+    await loginInBrowser(a, crew.chef.email, undefined, "/app/fil");
+    armed = true;
+    await a.goto(`/app/crew?crew=${crew.slug}&publier=1`);
+    await parentReading;
+    // L'annonce de B arrive PENDANT cette navigation (les annonces ne sont pas neutralisées).
+    await signInOther(browser, ctx, crew.paul.email);
+    release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0, { timeout: 30_000 });
     await expect(a.getByTestId("crew-outings")).toHaveCount(0);
     await ctx.close();
   });

@@ -16,6 +16,7 @@ import {
   partnershipLabels,
   resolveStoryAuthor,
   type StoryAccountOutcome,
+  type StoryAudience,
   type StoryAudienceOption,
   type StoryAuthor,
   type StoryCreated,
@@ -177,7 +178,12 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // Ce qu'on sait de l'envoi quand le compte a changé : empêché (rien n'est parti), incertain (la création était partie, la réponse
   // n'a pas été appliquée) ou confirmé (l'API a accepté la story avant le changement). `null` : pas (encore) tranché.
   const [staleKind, setStaleKind] = useState<StoryAccountOutcome | null>(null);
-  const stale = staleKind !== null || storyAccountStale(frozen.current?.account ?? null, me?.user.id ?? null);
+  // Verrou **définitif** posé dès que le compte connecté n'est plus celui du brouillon (A → B → A compris), séparé de l'issue de l'envoi.
+  const accountMismatch = storyAccountStale(frozen.current?.account ?? null, me?.user.id ?? null);
+  const [locked, setLocked] = useState(false);
+  const stale = locked || staleKind !== null || accountMismatch;
+  // La création est partie sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être, jusqu'à la réponse ou un refus net.
+  const [maybeSent, setMaybeSent] = useState(false);
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
   const kindKey = asPerson ? "me" : (frozen.current?.key ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
@@ -192,6 +198,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<StoryCreated | null>(null);
+  // Le public de la story publiée, figé avec le résultat (un changement de compte purge les crews : le texte ne doit pas changer).
+  const [createdAudience, setCreatedAudience] = useState<StoryAudience | null>(null);
   // Lot R7g : la vidéo choisie ou filmée (jamais en même temps qu'une photo), la phase de préparation, la progression d'envoi.
   const [video, setVideo] = useState<PickedVideo | null>(null);
   const [stage, setStage] = useState<{ stage: VideoStage; ratio: number } | null>(null);
@@ -283,6 +291,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
 
   // Compte changé : le brouillon d'avant est abandonné (envois annulés, JPEG non floutés effacés), l'écran reste verrouillé.
   useEffect(() => {
+    if (accountMismatch) setLocked(true);
+  }, [accountMismatch]);
+  useEffect(() => {
     if (!stale) return;
     generation.current++;
     uploadAbort.current?.abort();
@@ -291,8 +302,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
 
   // Sans envoi en cours, le changement de compte vaut « empêché » ; avec un envoi en cours, c'est l'envoi qui dit l'issue en finissant.
   useEffect(() => {
-    if (stale && !busy) setStaleKind((k) => k ?? "prevented");
-  }, [stale, busy]);
+    if (stale && !busy) setStaleKind((k) => k ?? (maybeSent ? "uncertain" : "prevented"));
+  }, [stale, busy, maybeSent]);
 
   const goBack = useCallback(() => {
     const before = video ? videoStepBefore(step) : stepBefore(step, draft?.plate.photo ?? null);
@@ -505,6 +516,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
         },
         async () => {
           creating = true;
+          setMaybeSent(true);
           const send = () =>
             api.createStory({ ...body(videoKeys.current.video ?? "", videoKeys.current.poster ?? ""), expectedUserId });
           try {
@@ -521,12 +533,18 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       videoKeys.current = {};
       markStoryPublished(result.value);
       discardTempPhotos();
+      setMaybeSent(false);
+      setCreatedAudience(chosen?.audience ?? "followers");
       setCreated(result.value);
       setStep("done");
     } catch (e) {
       // Annulé parce que l'écran a été quitté : rien à dire à personne.
       if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
-      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: creating, answered: false }));
+      // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
+      const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
+      if (refused) setMaybeSent(false);
+      if (!guard.current())
+        return setStaleKind(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false }));
       if (isUploadCancelled(e)) return;
       if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
       else if (isUploadTimeout(e)) setError(V.uploadTimeout);
@@ -585,6 +603,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
         // on refait la requête une fois avec la même clé (elle retrouve la story) avant d'oublier la clé.
         async () => {
           creating = true;
+          setMaybeSent(true);
           const send = () => api.createStory({ ...body(keys.current[draft.upload.uri] ?? ""), expectedUserId });
           try {
             return await send();
@@ -601,11 +620,17 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       keys.current = {};
       markStoryPublished(story);
       discardTempPhotos();
+      setMaybeSent(false);
+      setCreatedAudience(chosen?.audience ?? "followers");
       setCreated(story);
       setStep("done");
     } catch (e) {
       if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
-      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: creating, answered: false }));
+      // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
+      const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
+      if (refused) setMaybeSent(false);
+      if (!guard.current())
+        return setStaleKind(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false }));
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(L.offline);
       else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
@@ -627,7 +652,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // réussite (le message reste vrai) ; sinon le message dit ce qu'on sait : rien n'est parti, peut-être partie, ou publiée.
   if (stale && !created) {
     // Pendant un envoi dont l'issue n'est pas encore connue, on ne dit pas « pas partie ».
-    const kind = staleKind ?? (busy ? "uncertain" : "prevented");
+    const kind = staleKind ?? (maybeSent ? "uncertain" : "prevented");
     return (
       <FlowScreen title={L.title} onClose={close}>
         <View style={styles.lost} testID="story-stale">
@@ -684,7 +709,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   };
 
   if (step === "done" && created) {
-    const who = L.doneAudience[chosen?.audience ?? "followers"];
+    const who = L.doneAudience[createdAudience ?? chosen?.audience ?? "followers"];
     return (
       <FlowScreen title={L.title} onClose={close}>
         <View style={[styles.done, { backgroundColor: c.surface }]} testID="story-done">
