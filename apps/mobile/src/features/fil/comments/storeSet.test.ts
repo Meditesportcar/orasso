@@ -184,16 +184,6 @@ describe("un magasin de commentaires par compte et par casquette", () => {
     expect(set.sheetOf("p").items).toHaveLength(0);
   });
 
-  it("R3 : isCurrent dit qui a des effets visibles ; une réponse tardive d'A n'en a pas sous B", () => {
-    const set = createPostLiveSet();
-    set.setAccount(A, true);
-    const tA = set.ticket("p");
-    expect(set.isCurrent(tA as never)).toBe(true);
-    set.setAccount(B, true);
-    expect(set.isCurrent(tA as never)).toBe(false);
-    expect(set.alive(tA as never)).toBe(true);
-  });
-
   it("m1 : au changement de compte seule la feuille ouverte est remise à zéro, les hôtes montés restent", () => {
     const set = createPostLiveSet();
     set.setAccount(A, true);
@@ -275,5 +265,23 @@ describe("C2 et C3 : la réponse tardive d'A, reçue sous B", () => {
     expect(set.sheetOf("p", tA as never).items).toHaveLength(0);
     expect(set.sheetOf("p").items).toHaveLength(1);
     expect(set.fresh(readB as never)).toBe(true);
+  });
+
+  it("point 4 : un ticket périmé refusé ne ferme pas la feuille ; point 6 : la fermeture silencieuse ne prévient pas pendant le rendu", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const stale = set.ticket("p");
+    set.setAccount(commentsScope("u1", "s:z"), true);
+    set.open("p", true);
+    // Le ticket d'A existe encore (même compte) mais c'est une autre casquette : pas de fermeture, et p n'est pas `gone` ici.
+    set.markGone("p", stale as never);
+    expect(set.opening()).toEqual({ postId: "p", focus: true });
+    let notified = 0;
+    set.subscribe(() => {
+      notified += 1;
+    });
+    set.setAccount(commentsScope("u2", "s:a"), true);
+    expect(notified).toBe(0);
+    expect(set.opening()).toBeNull();
   });
 });

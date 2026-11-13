@@ -39,6 +39,8 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { useActor } from "@/lib/useActor";
+import { createFlameRouter, flameKey } from "./flameRouter";
+import { dropRemoved as lateDropRemoved, emitPost as lateEmitPost, parentGone as lateParentGone } from "./lateResponse";
 import { postLive } from "./live";
 import { replyParentOf } from "./replyParent";
 import { forgetSender, rememberSender, senderOf } from "./sendActors";
@@ -46,7 +48,7 @@ import { forgetSender, rememberSender, senderOf } from "./sendActors";
 const statusOf = (e: unknown) => (e instanceof ApiRequestError ? e.status : -1);
 
 /** Les flammes de tous les commentaires : une mutation à la fois par commentaire. */
-const flames = createFlameGate();
+const flames = createFlameRouter(createFlameGate());
 
 export type CommentsController = {
   sheet: SheetState;
@@ -107,11 +109,14 @@ export function useComments(
   );
   /** Une réponse de l'API d'un autre compte n'écrit ni la feuille ni la carte. */
   const emitPost = useCallback((change: (post: FeedPostView) => FeedPostView, ticket: LiveTicket) => {
-    if (!postLive.alive(ticket)) return;
-    // R1/R3 : la carte affichée est celle de la casquette active ; pour une autre, la modification est calculée depuis ses données et
-    // écrite dans son magasin (elle la retrouve à son retour), sans toucher à la carte affichée (C3).
-    if (isCurrent(ticket)) onPostRef.current(change(postRef.current));
-    else postLive.changePost(postRef.current.id, ticket as never, change);
+    lateEmitPost(
+      postLive,
+      ticket as never,
+      postRef.current,
+      change,
+      (next) => onPostRef.current(next),
+      () => mounted.current,
+    );
   }, []);
   /**
    * 404 d'une **route de la publication** (première page, couper, envoi sans `parentId`) : la publication n'est plus lisible, tout ce qu'on
@@ -272,26 +277,15 @@ export function useComments(
   );
 
   const dropRemoved = useCallback(
-    (commentId: string, t: LiveTicket) => {
-      // R2 : l'état à retirer est celui du magasin du ticket, lu dans le rappel (jamais celui de la casquette active).
-      let removedIds: ReturnType<typeof sheetRemoveComment>["removed"] | null = null;
-      const state = update((s) => {
-        const r = sheetRemoveComment(s, commentId);
-        removedIds = r.removed;
-        return r.state;
-      }, t);
-      const removed = removedIds;
-      if (removed) emitPost((post) => postWithCommentRemoved(post, commentId, removed, state), t);
-    },
-    [update, emitPost],
+    (commentId: string, t: LiveTicket) =>
+      lateDropRemoved(postLive, id, commentId, t as never, (change) => emitPost(change, t)),
+    [id, emitPost],
   );
 
   parentGoneRef.current = (parentId: string, t: LiveTicket) => {
-    // R1 : les lectures du fil de réponses sont rendues périmées dans le magasin du ticket ; R2 : le parent se cherche dans ce magasin.
-    postLive.dropReads(id, `r:${parentId}`, t as never);
-    if (!postLive.sheetOf(id, t as never).items.some((c) => c.id === parentId)) return;
-    dropRemoved(parentId, t);
-    if (isCurrent(t)) void loadTop();
+    // R1 à R3 : voir `lateResponse.ts` (le ticket d'origine, le magasin du ticket, la relecture seulement pour la casquette active).
+    const next = lateParentGone(postLive, id, parentId, t as never, (change) => emitPost(change, t));
+    if (next === "reload") void loadTop();
   };
 
   const remove = useCallback(
@@ -341,7 +335,7 @@ export function useComments(
       const t = postLive.ticket(id);
       const current = sheetFind(postLive.sheetOf(id), comment.id) ?? comment;
       void flames.fire(
-        `${t.g}|${t.p}|${(t as { s?: string | null }).s ?? ""}|${(t as { i?: number }).i ?? 0}|${id}|${comment.id}`,
+        flameKey((t as { s?: string | null }).s, id, comment.id),
         { reactionsCount: current.reactionsCount, reactedByMe: current.reactedByMe },
         {
           send: (on) => api.fireFeedComment(comment.id, on),
