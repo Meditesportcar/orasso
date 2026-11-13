@@ -36,6 +36,7 @@ import {
 } from "@orasso/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { useActor } from "../../lib/actor";
 import { apiFetch } from "../../lib/api.client";
 import { parentOfReply, parentToReread } from "./commentParent";
 import { onAccountChange, postLive } from "./commentsLive";
@@ -50,7 +51,7 @@ class CallError extends Error {
   }
 }
 
-async function call<T>(path: string, init?: { method?: string; json?: unknown }): Promise<T> {
+async function call<T>(path: string, init?: { method?: string; json?: unknown; actor?: string | null }): Promise<T> {
   const res = await apiFetch<T>(path, init);
   if (!res.ok) throw new CallError(res.status, res.error.code, res.error.message);
   return res.data;
@@ -87,6 +88,12 @@ export function useComments(
   active: boolean,
   onPost: (next: FeedPostView) => void,
 ): CommentsController {
+  // Lot R9h (T49) : dans un espace de casquette, lire et commenter se font au nom de la page (`x-orasso-actor`, seulement sur ces deux
+  // appels : la liste blanche). Passer d'un espace à l'autre est un chargement complet de la page : le magasin ne traverse jamais deux
+  // acteurs. Hors espace de casquette, l'acteur est nul et rien ne change.
+  const actor = useActor();
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
   const version = useSyncExternalStore(postLive.subscribe, postLive.version, postLive.version);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` relit le magasin.
   const sheet = useMemo(() => postLive.sheetOf(post.id), [post.id, version]);
@@ -134,7 +141,9 @@ export function useComments(
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
       const since = repliesMark(postLive.sheetOf(id), parentId);
       try {
-        const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`);
+        const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`, {
+          actor: actorRef.current,
+        });
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
         if (!postLive.fresh(t)) return;
         update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from, since), t);
@@ -160,7 +169,9 @@ export function useComments(
       // La marque se prend au départ de **chaque** lecture, pagination comprise.
       const since = sheetMark(postLive.sheetOf(id));
       try {
-        const page = await call<FeedCommentPage>(`/feed-posts/${id}/comments${cursorQs(from)}`);
+        const page = await call<FeedCommentPage>(`/feed-posts/${id}/comments${cursorQs(from)}`, {
+          actor: actorRef.current,
+        });
         if (!postLive.fresh(t)) return;
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
@@ -207,6 +218,7 @@ export function useComments(
         const created = await call<FeedCommentCreated>(`/feed-posts/${id}/comments`, {
           method: "POST",
           json: { text: p.text.trim(), parentId: p.parentId, clientId },
+          actor: actorRef.current,
         });
         if (!postLive.alive(t)) return;
         let counted = 1;
@@ -388,6 +400,8 @@ export function useComments(
 export function useMentionSuggestions(postId: string, draft: MentionDraft | null): MentionSuggestion[] {
   const [items, setItems] = useState<MentionSuggestion[]>([]);
   const query = draft ? draft.query : null;
+  // Lot R9h (tour 1) : sous une casquette, les suggestions suivent les droits de la page (jamais le réseau de la personne).
+  const actor = useActor();
   // Un autre compte : la liste du précédent s'en va.
   useEffect(() => onAccountChange(() => setItems([])), []);
   useEffect(() => {
@@ -399,6 +413,7 @@ export function useMentionSuggestions(postId: string, draft: MentionDraft | null
     const timer = setTimeout(() => {
       call<MentionSuggestion[]>(
         `/feed-posts/${postId}/mention-suggestions${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+        { actor },
       )
         .then((list) => {
           if (alive) setItems(list);
@@ -411,6 +426,6 @@ export function useMentionSuggestions(postId: string, draft: MentionDraft | null
       alive = false;
       clearTimeout(timer);
     };
-  }, [postId, query]);
+  }, [postId, query, actor]);
   return query === null ? [] : items;
 }

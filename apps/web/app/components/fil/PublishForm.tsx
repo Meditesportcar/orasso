@@ -9,6 +9,7 @@ import {
   type AttachableEventItem,
   acceptEvents,
   accountCheckOf,
+  actorKeyOfPublishAuthor,
   attachableQuery,
   attachDateLabel,
   attachLeadOf,
@@ -17,6 +18,7 @@ import {
   type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
+  casquettesLabels,
   chooseAuthor,
   chooseEvent,
   clearUncertain,
@@ -56,17 +58,20 @@ import {
   type PublishChoice,
   partnershipLabels,
   publicationErrors,
+  publicationHiddenTitle,
   publishAuthors,
   publishIssueR8,
   publishSays,
   publishStartChoice,
   publishStartOffer,
+  resolvePublishAuthor,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
   feedPublishLabels as T,
   type UploadResult,
+  uncertainCheckOutcome,
   vehicleWizardLabels as V,
   vehicleAllowed,
   withImportantLeft,
@@ -83,6 +88,7 @@ import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
 import { latchStale } from "../../lib/sessionGuard";
+import { PublishKind } from "../casquette/PublishKind";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
@@ -146,6 +152,7 @@ export function PublishForm({
   vehicles,
   optionsFailed,
   start,
+  back = "/app/fil",
 }: {
   userId: string;
   pseudo: string;
@@ -154,7 +161,16 @@ export function PublishForm({
   vehicles: { id: string; label: string }[];
   optionsFailed: boolean;
   /** Lot R8d : « Publier pour cet événement » (`?structure=&evenement=`) pose la structure et l'événement de départ. */
-  start?: { structure?: string | null; evenement?: string | null; fiche?: string | null; etiquette?: string | null };
+  start?: {
+    structure?: string | null;
+    evenement?: string | null;
+    fiche?: string | null;
+    etiquette?: string | null;
+    /** Lot R9h (T18, T51) : `?auteur=<clé>` depuis le Fil d'une casquette (`s:`, `p:`, `v:`, `m:` ou `me`). */
+    auteur?: string | null;
+  };
+  /** Où mènent ✕ et « Retour au Fil » : le Fil de la casquette quand on vient de lui (R9h). */
+  back?: string;
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
@@ -179,7 +195,11 @@ export function PublishForm({
   // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
   const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
   const [doneOffer, setDoneOffer] = useState<string | null>(null);
-  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  // Les noms des auteurs vus : si la casquette choisie disparaît pendant la rédaction (suspension), son nom reste dans le message.
+  const authorNames = useRef(new Map<string, string>());
+  for (const a of authors) authorNames.current.set(a.key, a.name);
+  // Jamais de repli silencieux sur « Moi » (R9h, tour 2) : un auteur perdu bloque l'envoi, avec un choix explicite.
+  const { author, lost: authorLost } = resolvePublishAuthor(authors, choice.authorKey, authorNames.current);
   const fan = vehicleAllowed(author);
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
   const [reloadEvents, setReloadEvents] = useState(0);
@@ -238,6 +258,8 @@ export function PublishForm({
   // « Recadrer » : la clé de la photo qu'on recadre au doigt.
   const [cropping, setCropping] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // La publication existe mais reste masquée (page suspendue, 409 `post_unavailable`) : un état distinct du succès (R9h, tour 5).
+  const [hidden, setHidden] = useState(false);
   const [preparing, setPreparing] = useState(false);
   // Pendant l'envoi comme pendant un recadrage, rien de ce qui part ne bouge : l'écran montre exactement ce qui est envoyé.
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
@@ -450,6 +472,7 @@ export function PublishForm({
   const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
+      authorLost,
       photos: items,
       caption,
       preparing,
@@ -473,8 +496,10 @@ export function PublishForm({
    * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
+  const uncertainOutcome = useRef<"freed" | "found" | "kept">("kept");
   async function abandonUncertain() {
     if (!uncertain || running.current) return;
+    uncertainOutcome.current = "kept";
     running.current = "check";
     setChecking(true);
     setError(null);
@@ -487,11 +512,22 @@ export function PublishForm({
       if (after !== "same") return setError(stopMessage(after));
       if (res.ok) {
         rememberPublished(userId, res.data);
+        uncertainOutcome.current = "found";
         setUncertain(null);
         setFound(true);
         return setDone(true);
       }
+      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4) ni un succès visible (tour 5) :
+      // état « masquée » distinct, message vrai, sans la mémoriser (aucun contenu rendu) ; l'envoi n'est jamais renouvelé (pas de doublon).
+      if (uncertainCheckOutcome({ ok: false, status: res.status, code: res.error.code }) === "hidden") {
+        uncertainOutcome.current = "found";
+        setUncertain(null);
+        setFound(true);
+        setHidden(true);
+        return setDone(true);
+      }
       if (res.status === 404) {
+        uncertainOutcome.current = "freed";
         setUncertain(null);
         setClientId(crypto.randomUUID());
         keys.current = {};
@@ -502,6 +538,20 @@ export function PublishForm({
       running.current = null;
       setChecking(false);
     }
+  }
+
+  /**
+   * « Publier en mon nom » quand la casquette choisie a disparu (R9h, tour 3) : jamais un « Moi » affiché alors que la requête
+   * rejouée porte encore la page. Avec un envoi incertain, le changement passe par la vérification de « Modifier ma publication » :
+   * retrouvée → confirmation (rien ne change) ; absence confirmée → nouvel auteur, nouvel identifiant ; inconnu → verrou maintenu.
+   */
+  async function chooseMeAfterLoss() {
+    if (busy || checking || running.current) return;
+    if (uncertain) {
+      await abandonUncertain();
+      if (uncertainOutcome.current !== "freed") return;
+    }
+    setChoice((c) => chooseAuthor(c, authors, "me"));
   }
 
   async function publish() {
@@ -640,7 +690,7 @@ export function PublishForm({
   if (sessionStale) {
     return (
       <div className="fil" data-testid="fil-publish-stale">
-        <FicheBar title={L.publishTitle} back="/app/fil" />
+        <FicheBar title={L.publishTitle} back={back} />
         <p className="o-t-body" role="alert">
           {T.accountChanged}
         </p>
@@ -654,8 +704,14 @@ export function PublishForm({
   if (done) {
     return (
       <div className="fil" data-testid="fil-publish-done">
-        <FicheBar title={L.published} back="/app/fil" />
-        <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        <FicheBar title={hidden ? publicationHiddenTitle : L.published} back={back} />
+        {hidden ? (
+          <p className="o-t-body" data-testid="fil-publish-hidden">
+            {publicationErrors.post_unavailable}
+          </p>
+        ) : (
+          <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        )}
         {doneOffer ? (
           <p className="o-t-body" data-testid="fil-publish-done-offer">
             <strong>{doneOffer}</strong>
@@ -666,7 +722,7 @@ export function PublishForm({
             {CO.sent(invitedName)}
           </p>
         ) : null}
-        <a className="fil-publish" href="/app/fil" data-testid="fil-publish-back">
+        <a className="fil-publish" href={back} data-testid="fil-publish-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
         {fan ? (
@@ -688,7 +744,13 @@ export function PublishForm({
         void publish();
       }}
     >
-      <FicheBar title={L.publishTitle} facts={L.publishSubtitle} back="/app/fil" />
+      <FicheBar title={L.publishTitle} facts={L.publishSubtitle} back={back} />
+      {/* Lot R9h (T18) : un seul geste « Publier » ; « Story » ouvre le composeur de story au nom de la même casquette. */}
+      <PublishKind
+        current="post"
+        auteur={actorKeyOfPublishAuthor(choice.authorKey)}
+        dirty={items.length > 0 || caption.trim() !== ""}
+      />
       {cropTarget ? (
         <SquareCrop
           key={cropTarget.key}
@@ -920,8 +982,8 @@ export function PublishForm({
               <button
                 key={a.key}
                 type="button"
-                aria-pressed={a.key === author.key}
-                className={a.key === author.key ? "fp-opt is-on" : "fp-opt"}
+                aria-pressed={!authorLost && a.key === author.key}
+                className={!authorLost && a.key === author.key ? "fp-opt is-on" : "fp-opt"}
                 disabled={frozen}
                 onClick={() => setChoice((c) => chooseAuthor(c, authors, a.key))}
                 data-testid={`fil-publish-as-${a.key}`}
@@ -1071,6 +1133,17 @@ export function PublishForm({
           {issue}
         </p>
       ) : null}
+      {authorLost ? (
+        <Button
+          variant="secondary"
+          icon="profile"
+          disabled={busy || checking}
+          onClick={() => void chooseMeAfterLoss()}
+          data-testid="fil-publish-author-lost-me"
+        >
+          {casquettesLabels.authorLostChoice}
+        </Button>
+      ) : null}
       {loaded.forbidden && eventBlock ? (
         <p className="s-error" role="alert" data-testid="fil-publish-forbidden">
           {loaded.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore}
@@ -1107,7 +1180,7 @@ export function PublishForm({
       >
         {uncertain ? T.uncertainRetry : L.publish}
       </Button>
-      <a className="fil-link" href="/app/fil">
+      <a className="fil-link" href={back}>
         <Icon name="close" size={16} /> Annuler
       </a>
     </form>

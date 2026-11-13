@@ -4,8 +4,17 @@
 // libellé (« Événements · 7 ») ; défilement horizontal si la rangée déborde ; `spread` répartit les onglets sur la
 // largeur (Explorer). Le libellé est plafonné à ×1,12 de police et ne se coupe jamais au milieu d'un mot.
 // Le collant (rangée qui reste en haut au défilement) n'est pas ici : c'est l'écran hôte qui colle la rangée.
-import { archivoAt, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { useEffect, useRef } from "react";
+import {
+  archivoAt,
+  GradientFill,
+  Icon,
+  type IconName,
+  Text,
+  tokens,
+  useTheme,
+  withAlpha,
+} from "@orasso/design-system/native";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { underTabLabel } from "./underTabLabel";
@@ -28,6 +37,7 @@ export function UnderTabs<T extends string>({
   testID,
   itemTestID,
   spread = false,
+  fade = false,
 }: {
   value: T;
   onChange: (id: T) => void;
@@ -36,6 +46,8 @@ export function UnderTabs<T extends string>({
   testID: string;
   itemTestID?: (id: T) => string;
   spread?: boolean;
+  /** Rangée qui défile : son bord droit s'efface tant qu'il reste des onglets à découvrir (haut du crew, police agrandie). */
+  fade?: boolean;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -59,6 +71,10 @@ export function UnderTabs<T extends string>({
     pending.current = true;
     settle();
   }, [value]);
+  const contentW = useRef(0);
+  const [more, setMore] = useState(false);
+  const checkMore = () =>
+    fade && setMore(contentW.current > rowW.current + 8 && scrollX.current + rowW.current < contentW.current - 1);
   const tabs = items.map((it) => {
     const on = it.id === value;
     const text = underTabLabel(it.label, it.count);
@@ -99,15 +115,21 @@ export function UnderTabs<T extends string>({
       </View>
     );
   }
-  return (
+  const row = (
     <ScrollView
       ref={scroll}
       onLayout={(e) => {
         rowW.current = e.nativeEvent.layout.width;
         settle();
+        checkMore();
+      }}
+      onContentSizeChange={(w) => {
+        contentW.current = w;
+        checkMore();
       }}
       onScroll={(e) => {
         scrollX.current = e.nativeEvent.contentOffset.x;
+        checkMore();
       }}
       scrollEventThrottle={32}
       horizontal
@@ -121,9 +143,22 @@ export function UnderTabs<T extends string>({
       {tabs}
     </ScrollView>
   );
+  if (!fade) return row;
+  return (
+    <View style={styles.fadeBox}>
+      {row}
+      {more ? (
+        <View style={styles.fade} pointerEvents="none">
+          <GradientFill css={`linear-gradient(90deg, ${withAlpha(c.ground, 0)} 0%, ${c.ground} 100%)`} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  fadeBox: { minWidth: 0 },
+  fade: { position: "absolute", top: 0, bottom: LINE, right: 0, width: 28 },
   scroll: { flexGrow: 0 },
   row: { flexDirection: "row", borderBottomWidth: LINE, alignItems: "stretch" },
   // Rangée qui défile : elle remplit la largeur (`.r8tabs button{flex:1 0 auto}`), le trait va jusqu'au bout.

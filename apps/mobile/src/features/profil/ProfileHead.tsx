@@ -59,61 +59,73 @@ export function SideIcon({
  * pas de ligne. « plus » n'apparaît que si la bio est vraiment coupée : une copie invisible du texte, sans limite de
  * lignes, est mesurée contre la ligne affichée (même mesure sur le web et sur le téléphone).
  */
-export function ProfileBio({ text, testID }: { text: string | null | undefined; testID?: string }) {
+export function ProfileBio({
+  text,
+  testID,
+  extra,
+}: {
+  text: string | null | undefined;
+  testID?: string;
+  /** Ce que « plus » dévoile sous la bio (l'Instagram du crew) : avec lui, « plus » est toujours là. */
+  extra?: ReactNode;
+}) {
   const { t } = useTheme();
   const [open, setOpen] = useState(false);
   const [one, setOne] = useState(0);
   const [full, setFull] = useState(0);
   if (!text) return null;
   const cut = one > 0 && full > one + 2;
-  const showToggle = cut || open;
+  const showToggle = cut || open || Boolean(extra);
   return (
-    <View style={styles.bio}>
-      <View style={styles.bioText}>
-        <Text
-          variant="body"
-          color={t.color.inkMuted}
-          numberOfLines={open ? undefined : 1}
-          style={styles.bioLine}
-          onLayout={(e) => {
-            if (!open) setOne(e.nativeEvent.layout.height);
-          }}
-          testID={testID}
-        >
-          {text}
-        </Text>
-        {/* Copie de mesure : invisible, hors flux, cachée aux lecteurs d'écran. */}
-        <Text
-          variant="body"
-          style={[styles.bioLine, styles.measure]}
-          pointerEvents="none"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          aria-hidden
-          onLayout={(e) => setFull(e.nativeEvent.layout.height)}
-        >
-          {text}
-        </Text>
-      </View>
-      {showToggle ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={open ? PT.bioLess : PT.bioMore}
-          accessibilityState={{ expanded: open }}
-          onPress={() => setOpen((v) => !v)}
-          hitSlop={8}
-          testID={testID ? `${testID}-toggle` : undefined}
-          style={styles.plus}
-        >
-          <Text variant="bodyStrong" color={t.color.accentText} style={styles.plusText}>
-            {open ? PT.bioLess : PT.bioMore}
+    <>
+      <View style={styles.bio}>
+        <View style={styles.bioText}>
+          <Text
+            variant="body"
+            color={t.color.inkMuted}
+            numberOfLines={open ? undefined : 1}
+            style={styles.bioLine}
+            onLayout={(e) => {
+              if (!open) setOne(e.nativeEvent.layout.height);
+            }}
+            testID={testID}
+          >
+            {text}
           </Text>
-          <View style={open ? styles.flip : undefined}>
-            <Icon name="down" size={14} color={t.color.accentText} />
-          </View>
-        </Pressable>
-      ) : null}
-    </View>
+          {/* Copie de mesure : invisible, hors flux, cachée aux lecteurs d'écran. */}
+          <Text
+            variant="body"
+            style={[styles.bioLine, styles.measure]}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            aria-hidden
+            onLayout={(e) => setFull(e.nativeEvent.layout.height)}
+          >
+            {text}
+          </Text>
+        </View>
+        {showToggle ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={open ? PT.bioLess : PT.bioMore}
+            accessibilityState={{ expanded: open }}
+            onPress={() => setOpen((v) => !v)}
+            hitSlop={8}
+            testID={testID ? `${testID}-toggle` : undefined}
+            style={styles.plus}
+          >
+            <Text variant="bodyStrong" color={t.color.accentText} style={styles.plusText}>
+              {open ? PT.bioLess : PT.bioMore}
+            </Text>
+            <View style={open ? styles.flip : undefined}>
+              <Icon name="down" size={14} color={t.color.accentText} />
+            </View>
+          </Pressable>
+        ) : null}
+      </View>
+      {open && extra ? <View style={styles.extra}>{extra}</View> : null}
+    </>
   );
 }
 
@@ -262,6 +274,7 @@ const styles = StyleSheet.create({
   bioText: { flex: 1, minWidth: 0, position: "relative" },
   bioLine: { fontSize: 13.5, lineHeight: 19 },
   measure: { position: "absolute", left: 0, right: 0, top: 0, opacity: 0 },
+  extra: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2, paddingTop: 2 },
   plus: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 24 },
   plusText: { fontSize: 12.5, lineHeight: 16 },
   flip: { transform: [{ rotate: "180deg" }] },

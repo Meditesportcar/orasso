@@ -11,6 +11,7 @@ import {
   directKey,
   type Frame,
   pageFollowErrors,
+  publicationErrors,
   STORY_LIVE_MAX,
   STORY_TAGS_MAX,
   STORY_VIEWERS_MAX,
@@ -357,6 +358,11 @@ export function storyIdFor(userId: string, uploadKey: string): string {
 export const storiesService = {
   async create(v: Viewer, input: StoryCreate): Promise<StoryCreated> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
+    // Lot R9h (tour 1) : le compte attendu par le composeur, avant toute lecture ou écriture (une session changée dans un autre onglet :
+    // le brouillon d'une page ne part jamais sous la page d'un autre compte).
+    if (input.expectedUserId && input.expectedUserId !== v.user.id) {
+      throw new AppError(409, "account_changed", publicationErrors.account_changed);
+    }
     // Reprise : cette publication existe déjà (la réponse s'est perdue) → la même story, sans doublon ni erreur.
     // Une carte liée (R7f4) n'a pas de fichier envoyé : l'identifiant de l'appareil (`clientId`) tient lieu de clé d'envoi.
     const sendKey = input.uploadKey ?? `linked:${input.clientId}`;

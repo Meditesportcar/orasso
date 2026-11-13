@@ -1,16 +1,13 @@
-// Onglet Crew (lot R7b2, D38, maquette R7.11) : le sélecteur de crew (« Roussillon Drift ▾ » quand j'en ai plusieurs ; le
-// dernier ouvert revient, rangé par compte), puis le crew affiché (`CrewSpace` : Fil · Sorties · Membres · Spots et la
-// Discussion) ; sans crew, « Rejoindre un crew » ou « Créer un crew » (`NoCrew`). Mode A : bande ORASSO et barre d'onglets.
+// Onglet Crew (lot R7b2, D38, maquette R7.11) : le crew affiché (`CrewSpace` : le haut compact, puis Fil · Sorties · Membres ·
+// Spots ; le nom ▾ ouvre « Mes crews » quand j'en ai plusieurs ; le dernier ouvert revient, rangé par compte) ; sans crew, « Rejoindre un crew » ou « Créer un crew » (`NoCrew`). Mode A : bande ORASSO et barre d'onglets.
 // Un lien peut cibler un crew et un onglet (`/crew?crew=<adresse>&onglet=sorties`) : la page d'un crew dont je suis membre
 // y renvoie. Reçu alors que l'onglet est déjà monté, un lien l'emporte sur le choix manuel (et le lien est consommé : les
 // paramètres sont retirés, l'adresse redevient `/crew`, pour qu'un même lien relu agisse encore) ; le crew d'un lien qui n'est pas le mien mène à
 // sa vitrine.
-import { tokens, useTheme } from "@orasso/design-system/native";
 import { crewTabLabels as T } from "@orasso/shared";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { ScrollView } from "react-native";
 
 import type { CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
 import { api } from "@/lib/api";
@@ -20,19 +17,12 @@ import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { TabStage } from "@/ui/Screens";
-import { CrewSelector } from "./CrewSelector";
+import { CrewScroll } from "./CrewScroll";
 import { CrewSpace } from "./CrewSpace";
 import { crewLastKey, pickCrew } from "./crewTabModel";
 import { NoCrew } from "./NoCrew";
 
-const { space3, space4 } = tokens.spacing;
-
-/** Place laissée sous le contenu d'un onglet (comme `TabScreen`) : la barre d'onglets flottante passe par-dessus. */
-const TAB_BODY_BOTTOM = 150;
-
 export function CrewTab() {
-  const { t } = useTheme();
-  const insets = useSafeAreaInsets();
   const { me } = useSession();
   const userId = me?.user.id ?? null;
   const router = useRouter();
@@ -49,9 +39,7 @@ export function CrewTab() {
     value: params.onglet ?? null,
     n: params.onglet ? 1 : 0,
   });
-  const [unread, setUnread] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     setLast(undefined);
     setChosen(null);
@@ -94,7 +82,6 @@ export function CrewTab() {
     if (!wanted || !list) return;
     if (list.some((c) => c.slug === wanted)) {
       setChosen(wanted);
-      setUnread(0);
       setWanted(null);
       return;
     }
@@ -106,7 +93,6 @@ export function CrewTab() {
       if (!fresh) return;
       if (fresh.some((c) => c.slug === wanted)) {
         setChosen(wanted);
-        setUnread(0);
       } else if (shown.current()) router.push(`/crew/${encodeURIComponent(wanted)}`);
     });
   }, [wanted, list, reloadCrews, router]);
@@ -124,7 +110,6 @@ export function CrewTab() {
     setChosen(next);
     setWanted(null);
     setTabLink((l) => ({ value: null, n: l.n }));
-    setUnread(0);
   }, []);
 
   // Pour le fil : la zone qui défile est la mienne (la pastille « nouvelle publication » y remonte au haut du fil).
@@ -138,60 +123,42 @@ export function CrewTab() {
     [],
   );
 
+  // Tirer pour recharger : la liste de mes crews, puis le crew affiché.
+  const onRefresh = async () => {
+    await crews.reload();
+    setRefreshKey((n) => n + 1);
+  };
+  const scroll = { scrollRef, scrollY, onRefresh };
+
   return (
     <TabStage>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.fill}
-        contentContainerStyle={[styles.content, { paddingBottom: TAB_BODY_BOTTOM + insets.bottom }]}
-        keyboardShouldPersistTaps="handled"
-        scrollEventThrottle={32}
-        onScroll={(e) => {
-          scrollY.current = e.nativeEvent.contentOffset.y;
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            tintColor={t.color.accent}
-            onRefresh={async () => {
-              setRefreshing(true);
-              try {
-                await crews.reload();
-                setRefreshKey((n) => n + 1);
-              } finally {
-                setRefreshing(false);
-              }
-            }}
-          />
-        }
-        testID="crew-tab"
-      >
-        {!list && crews.error ? (
-          <LoadError message={crews.error.message || T.loadError} onRetry={() => void crews.reload()} />
-        ) : null}
-        {!list && !crews.error ? <Muted variant="body">Chargement…</Muted> : null}
-        {list && list.length === 0 ? <NoCrew /> : null}
-        {list && current ? (
-          <View style={styles.col}>
-            <CrewSelector crews={list} current={current} unread={unread} onChoose={choose} />
-            <CrewSpace
-              key={current.slug}
-              slug={current.slug}
-              linkTab={tabLink}
-              scroller={scroller}
-              refreshKey={refreshKey}
-              onLost={async () => (await crews.reload()) !== null}
-              onLoaded={(view) => setUnread(view.space?.unreadCount ?? 0)}
-            />
-          </View>
-        ) : null}
-      </ScrollView>
+      {list && current ? (
+        <CrewSpace
+          key={current.slug}
+          slug={current.slug}
+          crews={list}
+          onChoose={choose}
+          linkTab={tabLink}
+          scroller={scroller}
+          scroll={scroll}
+          refreshKey={refreshKey}
+          onLost={async () => (await crews.reload()) !== null}
+        />
+      ) : (
+        <CrewScroll {...scroll}>
+          {[
+            !list && crews.error ? (
+              <LoadError key="error" message={crews.error.message || T.loadError} onRetry={() => void crews.reload()} />
+            ) : null,
+            !list && !crews.error ? (
+              <Muted key="loading" variant="body">
+                Chargement…
+              </Muted>
+            ) : null,
+            list && list.length === 0 ? <NoCrew key="none" /> : null,
+          ].filter((n) => n !== null)}
+        </CrewScroll>
+      )}
     </TabStage>
   );
 }
-
-const styles = StyleSheet.create({
-  fill: { flex: 1 },
-  content: { paddingHorizontal: space4, paddingTop: space3, gap: space3 },
-  col: { gap: space3 },
-});

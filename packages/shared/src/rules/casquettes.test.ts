@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { casquetteRows, isPageCasquette, resolveStoryAuthor, storyAuthorAllowed } from "./casquettes";
+import { actorKeyOfSpace, casquetteRows, isPageCasquette, resolveStoryAuthor, storyAuthorAllowed } from "./casquettes";
 import { storyBody } from "./storyPublish";
 
 const kindLabel = (kind: string) =>
@@ -173,5 +173,25 @@ describe("suspension pendant la rédaction d'une story (R9n, tour 3)", () => {
     } as never);
     expect(body.persona).toBe("fan");
     expect(body).not.toHaveProperty("structureId");
+  });
+});
+
+describe("actorKeyOfSpace : la casquette que porte un espace du site (R9h, T48)", () => {
+  it("une clé d'auteur par espace : s: p: m: v:", () => {
+    expect(actorKeyOfSpace({ space: "organizer", id: "s1" })).toBe("s:s1");
+    expect(actorKeyOfSpace({ space: "pro", id: "p1" })).toBe("p:p1");
+    expect(actorKeyOfSpace({ space: "media", id: "m1" })).toBe("m:m1");
+    expect(actorKeyOfSpace({ space: "provider", id: "v1" })).toBe("v:v1");
+  });
+  it("nulle hors d'un espace de casquette ou sans identifiant", () => {
+    expect(actorKeyOfSpace({ space: null, id: "s1" })).toBeNull();
+    expect(actorKeyOfSpace({ space: undefined, id: undefined })).toBeNull();
+    expect(actorKeyOfSpace({ space: "organizer", id: null })).toBeNull();
+    expect(actorKeyOfSpace({ space: "organizer", id: "" })).toBeNull();
+  });
+  it("nulle en mode assistance et pour une page suspendue : on n'agit jamais au nom d'une page survolée ou suspendue", () => {
+    expect(actorKeyOfSpace({ space: "organizer", id: "s1", assisted: true })).toBeNull();
+    expect(actorKeyOfSpace({ space: "organizer", id: "s1", suspended: true })).toBeNull();
+    expect(actorKeyOfSpace({ space: "organizer", id: "s1", assisted: false, suspended: false })).toBe("s:s1");
   });
 });

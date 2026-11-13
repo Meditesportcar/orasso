@@ -68,7 +68,16 @@ export function SideIcon({
  * La bio sur une seule ligne : « plus » (avec un chevron bas) la déroule en entier, « moins » la replie. « plus » n'apparaît que
  * si la bio est vraiment coupée (mesuré dans le navigateur) ; sans bio, pas de ligne.
  */
-export function ProfileBio({ text, testId }: { text: string | null | undefined; testId?: string }) {
+export function ProfileBio({
+  text,
+  testId,
+  extra,
+}: {
+  text: string | null | undefined;
+  testId?: string;
+  /** Ce que « plus » dévoile sous la bio (l'Instagram du crew) : avec lui, « plus » est toujours là. */
+  extra?: ReactNode;
+}) {
   const line = useRef<HTMLParagraphElement>(null);
   const [open, setOpen] = useState(false);
   const [cut, setCut] = useState(false);
@@ -83,23 +92,26 @@ export function ProfileBio({ text, testId }: { text: string | null | undefined; 
   }, [open]);
   if (!text) return null;
   return (
-    <div className={open ? "pt-bio pt-bio--open" : "pt-bio"}>
-      <p ref={line} data-testid={testId}>
-        {text}
-      </p>
-      {cut || open ? (
-        <button
-          type="button"
-          className="pt-bio__more"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          data-testid={testId ? `${testId}-toggle` : undefined}
-        >
-          {open ? PT.bioLess : PT.bioMore}
-          <Icon name="down" size={14} />
-        </button>
-      ) : null}
-    </div>
+    <>
+      <div className={open ? "pt-bio pt-bio--open" : "pt-bio"}>
+        <p ref={line} data-testid={testId}>
+          {text}
+        </p>
+        {cut || open || extra ? (
+          <button
+            type="button"
+            className="pt-bio__more"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            data-testid={testId ? `${testId}-toggle` : undefined}
+          >
+            {open ? PT.bioLess : PT.bioMore}
+            <Icon name="down" size={14} />
+          </button>
+        ) : null}
+      </div>
+      {open && extra ? <div className="pt-bio__extra">{extra}</div> : null}
+    </>
   );
 }
 

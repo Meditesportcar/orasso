@@ -3,6 +3,7 @@ import { type StoryBar, storyChain, storyViewerLabels } from "@orasso/shared";
 import { ficheHandle } from "../components/FicheBar";
 import { Viewer } from "../components/stories/Viewer";
 import { api, requireMe } from "../lib/api.server";
+import { filHrefOfAuthor, heldBarKey } from "../lib/casquetteFil";
 import type { Route } from "./+types/app-story";
 
 // La visionneuse de stories (lot R7f2, maquette R7.7) : une superposition plein écran, la story en 9:16 centrée. Le chargeur
@@ -14,13 +15,21 @@ import type { Route } from "./+types/app-story";
 // Mode B : ni bande ORASSO ni barre d'onglets sous la superposition.
 export const handle = ficheHandle;
 
+// Lot R9h (tour 1) : `?barre=<clé de la page>` = la barre d'origine est celle d'une casquette (Fil d'une page). La clé n'est jamais crue :
+// elle doit être une page que le compte tient, puis la barre est relue avec l'acteur (l'API revérifie, 403 sinon : l'auteur seul). La chaîne
+// et la clé `mine` sont celles de **cette** barre, jamais celles du réseau personnel ; ✕ revient au Fil de la page.
 export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  if (new URL(request.url).searchParams.get("suite") !== "barre") return { userId: me.user.id, chain: null };
+  const search = new URL(request.url).searchParams;
+  const barKey = heldBarKey(search.get("barre"), me);
+  const back = filHrefOfAuthor(barKey, me);
+  if (search.get("suite") !== "barre") return { userId: me.user.id, chain: null, barKey, back };
   const key = decodeURIComponent(params.authorKey);
-  const bar = await api<StoryBar>(request, "/stories/bar");
-  const chain = bar.ok ? storyChain(bar.data.authors, key, bar.data.mine ? `u:${me.user.id}` : null) : [key];
-  return { userId: me.user.id, chain };
+  const bar = await api<StoryBar>(request, "/stories/bar", { actor: barKey });
+  const chain = bar.ok
+    ? storyChain(bar.data.authors, key, bar.data.mine ? (barKey ?? `u:${me.user.id}`) : null)
+    : [key];
+  return { userId: me.user.id, chain, barKey, back };
 }
 
 export function meta() {
@@ -37,6 +46,8 @@ export default function AppStory({ loaderData, params }: Route.ComponentProps) {
       authorKey={authorKey}
       userId={loaderData.userId}
       chain={loaderData.chain ?? undefined}
+      barKey={loaderData.barKey}
+      back={loaderData.back}
     />
   );
 }

@@ -10,10 +10,12 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   addTag,
+  casquettesLabels as C,
   type CommercialDraft,
   commercialField,
   commercialIssue,
   eventsWithPlace,
+  feedPublishLabels,
   fillFrame,
   fitDefault,
   frameState,
@@ -31,12 +33,14 @@ import {
   STORY_VIDEO_UPLOAD_PATH,
   STORY_VIDEO_UPLOAD_TIMEOUT_MS,
   type StoryAudienceOption,
+  type StoryAuthor,
   type StoryCreated,
   type StoryTagPick,
   storyVideoLabels as SV,
   sendIfAlive,
   storyAudienceOptions,
   storyBody,
+  storyEffectiveVisibility,
   storyEventSticker,
   storyPlateDecided,
   storyPublishIssue,
@@ -55,6 +59,9 @@ import "../../styles/fil.css";
 import "../../styles/garage.css";
 import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
+import { latchStale } from "../../lib/sessionGuard";
+import { PublishKind } from "../casquette/PublishKind";
 import { FicheBar } from "../FicheBar";
 import { PREPARE_FAILED } from "../fil/prepare";
 import { PlateFrame } from "../PlateFrame";
@@ -64,12 +71,23 @@ import { prepareStoryPhoto, type StoryPhoto } from "./prepare";
 import { ClipRefused, prepareStoryClip, releaseClip, type StoryClip } from "./prepareVideo";
 
 export type PublishFormProps = {
+  /** Lot R9h (tour 1) : le compte du formulaire ; une session devenue celle d'un autre bloque l'envoi (jamais sous la page d'un autre compte). */
+  userId: string;
   /** Mon réglage de compte : « public » ou « privé » (sous-titre de « Mes abonnés », autocollant d'événement). */
   visibility: "public" | "private";
   crews: { id: string; name: string; membersCount: number }[];
   vehicles: { id: string; label: string }[];
   applications: { status: string; event: { id: string; title: string; startsAt: string; status: string } }[];
   optionsFailed: boolean;
+  /**
+   * Lot R9h (T18, T51) : l'auteur de la story, résolu par l'écran contre les casquettes du compte (`?auteur=`, `resolveStoryAuthor`) : la
+   * personne (défaut) ou une page tenue (organisateur, pro, prestataire, média : « Public » seul, jamais un crew).
+   */
+  author?: StoryAuthor;
+  /** La clé d'auteur de l'adresse (`me` ou `s:`, `p:`, `v:`, `m:`) : le segment « Publication | Story » la garde. */
+  authorKey?: string;
+  /** Où mènent ✕ et « Retour au Fil » : le Fil de la casquette quand on vient de lui. */
+  back?: string;
 };
 
 async function upload(file: File): Promise<{ ok: true; key: string } | { ok: false; message: string }> {
@@ -150,7 +168,26 @@ function uploadWithProgress(
   });
 }
 
-export function PublishForm({ visibility, crews, vehicles, applications, optionsFailed }: PublishFormProps) {
+const PERSON: StoryAuthor = { persona: "fan" };
+
+export function PublishForm({
+  userId: openedAs,
+  visibility,
+  crews,
+  vehicles,
+  applications,
+  optionsFailed,
+  author = PERSON,
+  authorKey = "me",
+  back = "/app/fil",
+}: PublishFormProps) {
+  // L'identité du brouillon est celle de son ouverture : jamais remplacée par une revalidation (la route remonte le formulaire par
+  // `key` = le compte, et cette valeur ne change pas pendant la vie du composant). Le compte attendu de l'envoi est celui-là.
+  const [userId] = useState(openedAs);
+  // Un autre onglet connecte un autre compte : cet écran (la page, le brouillon de A) est périmé. Il se masque, verrouillé jusqu'au
+  // rechargement ; l'envoi porte de plus le compte attendu (409 `account_changed` si la session n'est plus la sienne).
+  const [sessionStale, setSessionStale] = useState(false);
+  useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
   // Lot R7g : la vidéo choisie (jamais en même temps qu'une photo), ses clés d'envoi gardées pour une reprise.
   const [clip, setClip] = useState<StoryClip | null>(null);
@@ -167,7 +204,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
   const [panel, setPanel] = useState<"tag" | "event" | "place" | "vehicle" | null>(null);
-  const [audienceKey, setAudienceKey] = useState("followers");
+  const [audienceKey, setAudienceKey] = useState(author.persona === "fan" ? "followers" : "public");
   const [dropped, setDropped] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -183,16 +220,15 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
 
   const events = eventsWithPlace(applications);
   const options: StoryAudienceOption[] = storyAudienceOptions(
-    { persona: "fan" },
+    author,
     visibility,
-    crews.map((c) => ({ id: c.id, name: c.name, members: c.membersCount })),
+    (author.persona === "fan" ? crews : []).map((c) => ({ id: c.id, name: c.name, members: c.membersCount })),
   );
   // Le public choisi n'existe plus (crew quitté ou supprimé) : il reste invalide, rien ne part avant un nouveau choix.
   const chosen = options.find((o) => o.key === audienceKey);
   const lost = !chosen;
   const audience = chosen?.audience ?? "followers";
-  const sticker = storyEventSticker(visibility, audience);
-  const author = { persona: "fan" as const };
+  const sticker = storyEventSticker(storyEffectiveVisibility(author, visibility), audience);
 
   // Pendant l'envoi, la page ne se quitte pas (✕, « Annuler », lien, retour du navigateur) : rien ne part après coup. Un
   // changement de page dans l'appli est bloqué ; un lien classique est neutralisé ; fermer l'onglet est signalé.
@@ -318,7 +354,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
 
   /** Vidéo : envoi avec progression, vignette, création (même reprise sans doublon que la photo). */
   async function publishClip(video: StoryClip) {
-    if (busy || issue) return;
+    if (busy || issue || sessionStale) return;
     setBusy(true);
     setError(null);
     const keys = clipKeys.current?.url === video.url ? clipKeys.current : { url: video.url };
@@ -375,7 +411,8 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       () => open.current,
       async () => undefined,
       async () => {
-        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const post = () =>
+          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code === "validation_error") return post();
         return first;
@@ -396,7 +433,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
 
   async function publish() {
     if (clip) return publishClip(clip);
-    if (!photo || busy || issue) return;
+    if (!photo || busy || issue || sessionStale) return;
     setBusy(true);
     setError(null);
     let key = uploaded.current?.url === photo.url ? uploaded.current.key : null;
@@ -435,7 +472,8 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       () => open.current,
       async () => undefined,
       async () => {
-        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const post = () =>
+          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code !== "plate_decision_required") return post();
         return first;
@@ -455,10 +493,24 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
     setError(res.error.message);
   }
 
+  if (sessionStale) {
+    return (
+      <div className="fil" data-testid="story-stale">
+        <FicheBar title={L.title} back={back} />
+        <p className="o-t-body" role="alert">
+          {feedPublishLabels.accountChanged}
+        </p>
+        <Button icon="undo" onClick={() => window.location.reload()} data-testid="story-stale-reload">
+          Recharger la page
+        </Button>
+      </div>
+    );
+  }
+
   if (done) {
     return (
       <div className="fil" data-testid="story-done">
-        <FicheBar title={L.done} back="/app/fil" />
+        <FicheBar title={L.done} back={back} />
         <div className="story-done">
           <p className="o-t-body">
             {clip ? SV.doneText(L.doneAudience[audience]) : L.doneText(L.doneAudience[audience])}
@@ -469,7 +521,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
             <p className="o-t-caption">{L.doneSkipped}</p>
           ) : null}
         </div>
-        <a className="fil-publish" href="/app/fil" data-testid="story-done-back">
+        <a className="fil-publish" href={back} data-testid="story-done-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
       </div>
@@ -516,7 +568,13 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
         void publish();
       }}
     >
-      <FicheBar title={L.title} facts={L.subtitle} back="/app/fil" />
+      <FicheBar
+        title={L.title}
+        facts={author.persona === "fan" ? L.subtitle : C.publishAs(author.name ?? "")}
+        back={back}
+      />
+      {/* Lot R9h (T18) : un seul geste « Publier » ; « Publication » ouvre l'écran de publication au nom de la même casquette. */}
+      <PublishKind current="story" auteur={authorKey} dirty={Boolean(photo || clip || caption.trim())} />
 
       <section className="s-stack s-stack--tight">
         <h2 className="o-t-label">1 · Photo ou vidéo</h2>
@@ -787,8 +845,8 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
             <TagSearch
               tags={tags}
               onTags={setTags}
-              taggable={taggableQuery({ audience, crewId: chosen?.crewId ?? null, persona: "fan" })}
-              hint={taggableHint(audience, visibility, "fan")}
+              taggable={taggableQuery({ audience, crewId: chosen?.crewId ?? null, persona: author.persona })}
+              hint={taggableHint(audience, visibility, author.persona)}
               disabled={locked}
             />
           ) : null}
@@ -954,7 +1012,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
           <Icon name="close" size={16} /> Annuler
         </span>
       ) : (
-        <a className="fil-link" href="/app/fil" data-testid="story-cancel">
+        <a className="fil-link" href={back} data-testid="story-cancel">
           <Icon name="close" size={16} /> Annuler
         </a>
       )}

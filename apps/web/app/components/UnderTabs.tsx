@@ -20,6 +20,7 @@ export function UnderTabs<T extends string>({
   label,
   testId,
   itemTestId,
+  itemClass,
   spread = false,
   sticky = false,
 }: {
@@ -28,6 +29,8 @@ export function UnderTabs<T extends string>({
   label: string;
   testId: string;
   itemTestId?: (id: T) => string;
+  /** Une classe de plus pour un onglet (ex. le masquer à une largeur) ; absente : rien ne change. */
+  itemClass?: (id: T) => string | undefined;
   spread?: boolean;
   sticky?: boolean;
 }) {
@@ -52,7 +55,7 @@ export function UnderTabs<T extends string>({
             role="tab"
             aria-selected={on}
             aria-current={on ? "page" : undefined}
-            className="utabs__tab"
+            className={["utabs__tab", itemClass?.(it.id)].filter(Boolean).join(" ")}
             data-on={on ? "true" : undefined}
             data-testid={itemTestId ? itemTestId(it.id) : `${testId}-${it.id}`}
           >

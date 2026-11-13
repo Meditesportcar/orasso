@@ -10,6 +10,8 @@ export const errorCodes = [
   "conflict",
   // Lot R8k1 : commentaires coupés sur une publication (409).
   "comments_off",
+  // Lot R9h (tour 4) : l'envoi existe (identifiant connu de son auteur) mais la publication n'est pas visible (page suspendue).
+  "post_unavailable",
   "invalid_transition",
   "event_full",
   "plate_taken",

@@ -11,6 +11,11 @@ const optional = z
   .optional()
   .transform((v) => (v ? v : undefined));
 
+/** Les vraies sources de « Pratique » et de l'Accueil (le seed ne pose de faux lieux en cache que si l'une d'elles est remplacée ou coupée). */
+export const DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+export const DEFAULT_FUEL_API_URL =
+  "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records";
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(3001),
@@ -107,12 +112,8 @@ const schema = z.object({
    * département et par semaine) et prix des carburants (données ouvertes de l'État). `off` désactive la source ; le widget
    * disparaît alors sans erreur. Instance propre ou autre URL : changer la valeur et redémarrer l'API.
    */
-  OVERPASS_URL: z.string().default("https://overpass-api.de/api/interpreter"),
-  FUEL_API_URL: z
-    .string()
-    .default(
-      "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records",
-    ),
+  OVERPASS_URL: z.string().default(DEFAULT_OVERPASS_URL),
+  FUEL_API_URL: z.string().default(DEFAULT_FUEL_API_URL),
   /** `User-Agent` envoyé à ces sources (nom de l'appli + contact, exigé par la politique d'usage d'Overpass). */
   EXTERNAL_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
   /**
