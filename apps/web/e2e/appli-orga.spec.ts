@@ -134,13 +134,26 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(page.getByText("Nouvelle annonce")).toHaveCount(0);
   await expect(page.getByTestId("orga-announcement-new")).toHaveCount(0);
   await expect(page.getByTestId("orga-write-registered")).toBeVisible();
-  const salonFeed = (await apiCall<{ items: unknown[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`)).data.items;
+  // Rejouable le même jour : le quota d'« Info importante » du Salon (par jour et par semaine) est remis à zéro, comme les relances plus bas.
+  const quota = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await quota.connect();
+  await quota.query(
+    "UPDATE feed_posts SET important_sent_at = important_sent_at - interval '8 days' WHERE event_id = $1 AND important_sent_at IS NOT NULL",
+    [salon?.id],
+  );
+  const salonSlug = (await quota.query<{ slug: string }>("SELECT slug FROM events WHERE id = $1", [salon?.id])).rows[0]
+    ?.slug;
+  await quota.end();
+  expect(salonSlug).toBeTruthy();
   await page.getByTestId("orga-publish-for-event").click();
   await expect(page).toHaveURL(/fil\/publier/);
   // L'événement est déjà posé : sans photo, son affiche fait le visuel (avec une légende).
   await expect(page.getByText("Sans photo : l'affiche de l'événement sera le visuel.")).toBeVisible({
     timeout: 30_000,
   });
+  const salonFeedIds = (
+    await apiCall<{ items: { id: string }[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`)
+  ).data.items.map((i) => i.id);
   const announcement = `Parking B ouvert dès 7 h ${Date.now()}`;
   await page.getByTestId("fil-publish-caption").fill(announcement);
   await page.getByTestId("fil-publish-important-toggle").click();
@@ -149,23 +162,37 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await shot(page, "06-publication-info-importante-beton");
   await page.getByTestId("fil-publish-send").click();
   await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
-  // La publication est dans le journal de l'événement (c'est là que l'ancien fil des annonces a été repris).
+  // La publication est dans le journal de l'événement (c'est là que l'ancien fil des annonces a été repris) : son identifiant
+  // est en tête de la liste, marquée importante avec son motif.
+  type Post = { id: string; caption: string | null; important?: unknown; importantReason?: string | null };
+  let published: Post | undefined;
   await expect
     .poll(
       async () => {
-        const feed = await apiCall<{ items: { caption: string | null }[] }>(
-          damien,
-          "GET",
-          `/events/${salon?.id}/feed-posts`,
-        );
-        return feed.data.items.some((i) => i.caption === announcement);
+        const feed = await apiCall<{ items: Post[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`);
+        published = feed.data.items.find((i) => i.caption === announcement);
+        return published ? feed.data.items.findIndex((i) => i.id === published?.id) : -1;
       },
       { timeout: 30_000 },
     )
-    .toBe(true);
-  expect(
-    (await apiCall<{ items: unknown[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`)).data.items.length,
-  ).toBe(salonFeed.length + 1);
+    .toBeGreaterThanOrEqual(0);
+  const head = await apiCall<{ items: Post[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`);
+  const ids = head.data.items.map((i) => i.id);
+  // Le journal met l'épinglée en tête : la nouvelle publication est donc au rang 0 ou 1, et ne faisait pas partie des anciennes.
+  expect(salonFeedIds).not.toContain(published?.id);
+  expect(ids.indexOf(published?.id ?? "")).toBeGreaterThanOrEqual(0);
+  expect(ids.indexOf(published?.id ?? "")).toBeLessThanOrEqual(1);
+  expect(JSON.stringify(published)).toMatch(/important/i);
+  // Et à l'écran : la légende est dans le journal de la fiche de l'événement (autre onglet, même session).
+  const fiche = await a.ctx.newPage();
+  await fiche.goto(`/e/${salonSlug}`);
+  const journal = fiche.getByTestId("event-journal");
+  await expect(journal).toBeVisible({ timeout: 60_000 });
+  await fiche.getByRole("button", { name: "Une par une" }).click();
+  await expect(journal.getByTestId("feed-post-caption").filter({ hasText: announcement })).toBeVisible({
+    timeout: 30_000,
+  });
+  await fiche.close();
   await page.getByTestId("fil-publish-back").click();
   await expect(page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
 
@@ -195,10 +222,11 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await page.getByRole("button", { name: "Fermer" }).first().click();
   // Les recettes de l'horloge (avancée puis remise à zéro) laissent des relances datées dans le futur : sans correction,
   // aucun bouton « Relancer » (une relance de moins d'une heure est refusée). On les ramène à la veille.
+  // Rejouable le même jour : la relance faite par la recette précédente (moins de 24 h) est ramenée à la veille elle aussi.
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
   await db.query(
-    "UPDATE event_staff SET last_reminded_at = now() - interval '1 day' WHERE event_id = $1 AND last_reminded_at > now()",
+    "UPDATE event_staff SET last_reminded_at = now() - interval '1 day' WHERE event_id = $1 AND last_reminded_at > now() - interval '1 day'",
     [nocturne?.id],
   );
   await db.end();
@@ -332,11 +360,30 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
   await expect(gate).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("orga-direct-event")).toHaveCount(0);
   await page.screenshot({ path: `${DIR}/40-garde-2fa-direct-sable.png` });
-  // Lot R9n : les onglets de la barre sont Direct, Événements, Tri et Page (l'ancien « Staff » et la « Boîte » n'en sont plus).
-  for (const name of ["Événements", "Tri", "Page"]) {
+  // Lot R9n : les onglets de la barre sont Direct, Événements, Tri et Page ; la Boîte et l'Équipe n'en sont plus, mais restent
+  // des zones gardées. Chaque écran est attendu à son adresse : la garde de l'écran précédent ne doit pas suffire.
+  const visibleGate = () => page.locator('[data-testid="orga-two-factor"]:visible').first();
+  for (const [name, url] of [
+    ["Événements", /\/evenements/],
+    ["Tri", /\/tri/],
+    ["Page", /\/page/],
+  ] as const) {
     await tab(page, name).click();
-    await expect(page.locator('[data-testid="orga-two-factor"]:visible').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveURL(url, { timeout: 20_000 });
+    await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   }
-  await page.screenshot({ path: `${DIR}/41-garde-2fa-staff-sable.png` });
+  await page.screenshot({ path: `${DIR}/41-garde-2fa-page-sable.png` });
+  // L'Équipe (ligne de la Page).
+  await page.getByTestId("page-row-team").click();
+  await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
+  await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("team-bubble")).toHaveCount(0);
+  await page.screenshot({ path: `${DIR}/42-garde-2fa-equipe-sable.png` });
+  // La Boîte (bouton du haut).
+  await tab(page, "Direct").click();
+  await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/messages\/orga/, { timeout: 20_000 });
+  await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
+  await page.screenshot({ path: `${DIR}/43-garde-2fa-boite-sable.png` });
   await ctx.close();
 });
