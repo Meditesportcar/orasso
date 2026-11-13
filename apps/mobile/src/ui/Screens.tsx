@@ -344,7 +344,11 @@ export function FlowScreen({
           </KeyboardSafe>
           <SheetBoundary>{overlays}</SheetBoundary>
           <OverlaySlot />
-          {inInbox ? <JournalSheet visible={journal} onClose={() => setJournal(false)} /> : null}
+          {inInbox ? (
+            <SheetBoundary>
+              <JournalSheet visible={journal} onClose={() => setJournal(false)} />
+            </SheetBoundary>
+          ) : null}
         </Ground>
       </OverlayProvider>
     </OliveActivityProvider>

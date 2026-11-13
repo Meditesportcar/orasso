@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Locator, type Page, test } from "@playwright/test";
 import { SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
@@ -48,6 +48,19 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
+/** La boîte d’une feuille est dans la fenêtre, collée au bas : mesurée une fois la montée finie (poll). */
+async function expectBoxAtBottom(sheet: Locator) {
+  await expect
+    .poll(
+      async () => {
+        const box = await sheet.boundingBox();
+        return !!box && box.y >= 0 && Math.abs(box.y + box.height - HEIGHT) < 40 && Math.abs(box.width - 384) < 40;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+}
+
 /** La feuille de partage couvre l'écran : sa boîte est dans la fenêtre, collée au bas ; elle se ferme. */
 async function expectSheetAtBottom(page: Page, name: string, author?: string) {
   const card = page
@@ -59,11 +72,7 @@ async function expectSheetAtBottom(page: Page, name: string, author?: string) {
   const sheet = page.getByTestId("share-sheet");
   await expect(sheet).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("share-dest-external")).toBeVisible();
-  const box = await sheet.boundingBox();
-  expect(box).toBeTruthy();
-  expect((box?.y ?? -1) >= 0).toBe(true);
-  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) - HEIGHT)).toBeLessThan(40);
-  expect(Math.abs((box?.width ?? 0) - 384)).toBeLessThan(40);
+  await expectBoxAtBottom(sheet);
   await shot(page, name);
   await page.getByTestId("share-close").click();
   await expect(sheet).toHaveCount(0, { timeout: 10_000 });
@@ -103,9 +112,7 @@ for (const theme of ["beton", "sable"] as const) {
 async function expectBottomSheet(page: Page, name: string) {
   const sheet = page.getByTestId("share-sheet");
   await expect(sheet).toBeVisible({ timeout: 15_000 });
-  const box = await sheet.boundingBox();
-  expect((box?.y ?? -1) >= 0).toBe(true);
-  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) - HEIGHT)).toBeLessThan(40);
+  await expectBoxAtBottom(sheet);
   await shot(page, name);
   await page.getByTestId("share-close").click();
   await expect(sheet).toHaveCount(0, { timeout: 10_000 });
@@ -120,6 +127,7 @@ test("Partager depuis la Page (Garage du Port › Publications)", async ({ brows
   await page.waitForURL((u) => !/\/(moi|profil)(\?|$)/.test(u.pathname), { timeout: 30_000 });
   await page.getByTestId("persona-tabbar").getByRole("tab", { name: "Page", exact: true }).click();
   await page.getByTestId("page-tab-publications").first().click();
+  await page.getByRole("button", { name: "Une par une" }).click();
   const share = page.getByTestId("feed-post-share").first();
   await expect(share).toBeVisible({ timeout: 30_000 });
   await share.scrollIntoViewIfNeeded();
@@ -144,9 +152,10 @@ test("Tri (feuille dans un Modal natif) : un motif de refus s'ouvre, se coche et
   await page.getByTestId("triage-refuse").click();
   await expect(page.getByTestId("triage-refusal-confirm")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("checkbox", { name: /Hors thème/ }).click();
-  await expect(page.getByRole("checkbox", { name: /Hors thème/ })).toBeChecked();
   await shot(page, "tri-motifs");
-  await page.getByRole("button", { name: "Annuler" }).last().click();
-  await expect(page.getByTestId("triage-refusal-confirm")).toHaveCount(0, { timeout: 10_000 });
+  await page.getByTestId("triage-refusal-confirm").click();
+  await expect(page.getByTestId("triage-armed")).toContainText("Refusée", { timeout: 10_000 });
+  await page.getByTestId("triage-undo").click();
+  await expect(page.getByTestId("triage-armed")).toHaveCount(0);
   await ctx.close();
 });
