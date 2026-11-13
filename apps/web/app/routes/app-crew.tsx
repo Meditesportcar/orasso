@@ -150,16 +150,34 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   // autre (la mise en page parent relue, ou l'annonce d'un autre onglet) : rien n'en est affiché, et la page se relit.
   const layout = useRouteLoaderData("layouts/app") as { userId?: string } | undefined;
   const [announced, setAnnounced] = useState<string | null | undefined>(undefined);
-  useEffect(() => listenSession(setAnnounced), []);
+  // Génération d'annonce : incrémentée à chaque annonce reçue. Une relecture ne réconcilie que si elle a commencé APRÈS la dernière annonce.
+  const announceGen = useRef(0);
+  const loggedOutGen = useRef(0);
+  const trustedGen = useRef(0);
+  useEffect(
+    () =>
+      listenSession((id) => {
+        announceGen.current += 1;
+        // Une déconnexion annoncée reste « en suspens » tant qu'une relecture commencée après elle n'a pas rendu de données : la mise en
+        // page qui rend de nouveau un compte annonce ce compte, ce qui ne doit pas effacer la déconnexion.
+        if (id === null) loggedOutGen.current = announceGen.current;
+        setAnnounced(id);
+      }),
+    [],
+  );
   // `userId` est dans tous les résultats du chargeur (sans crew, les invitations de `/me/crew-requests` sont aussi privées).
   const owner = loaderData.userId;
   const foreign =
-    (layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner);
+    (layout?.userId !== undefined && layout.userId !== owner) ||
+    (announced !== undefined && announced !== owner) ||
+    loggedOutGen.current > trustedGen.current;
   foreignNow = foreign;
   const revalidator = useRevalidator();
   // Une relecture reprise par une navigation en cours peut ne pas relire le Crew : tant que la discordance dure et qu'aucune relecture
   // n'est en cours, on relit de nouveau (trois fois au plus, sans boucle).
   const tries = useRef(0);
+  // La relecture en cours : la génération d'annonce et la référence des données à son départ.
+  const started = useRef<{ gen: number; data: unknown } | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: seuls la discordance et la fin d'une relecture comptent
   useEffect(() => {
@@ -171,13 +189,25 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
     if (revalidator.state !== "idle") return;
     // Une relecture authentifiée vient de finir et la mise en page dit le même compte que les données : seule l'annonce est périmée
     // (un autre onglet l'a faite puis est revenu au compte de la page). Elle est réconciliée, pas obéie.
-    if (tries.current >= 1 && layout?.userId === owner) {
+    // Seulement si cette relecture a commencé après la dernière annonce (une déconnexion ou un autre compte annoncé pendant elle ne
+    // s'efface pas) ET que les chargeurs ont réellement rendu de nouvelles données (un retour à « idle » sans relecture ne prouve rien).
+    const run = started.current;
+    if (
+      tries.current >= 1 &&
+      layout?.userId === owner &&
+      run !== null &&
+      run.gen === announceGen.current &&
+      run.data !== loaderData
+    ) {
       tries.current = 0;
+      trustedGen.current = run.gen;
+      started.current = null;
       setAnnounced(undefined);
       return;
     }
     if (tries.current < 3) {
       tries.current += 1;
+      started.current = { gen: announceGen.current, data: loaderData };
       void revalidator.revalidate();
     } else {
       setGaveUp(true);

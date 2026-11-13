@@ -438,6 +438,9 @@ export function PublishForm({
       return setDone(res.data);
     }
     settlePost(res);
+    // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
+    // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
+    if (res.error.code === "account_changed") return setSessionStale(true);
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.status >= 400 && res.status < 500) clipKeys.current = null;
     setError(res.error.message);
@@ -501,6 +504,9 @@ export function PublishForm({
       return setDone(res.data);
     }
     settlePost(res);
+    // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
+    // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
+    if (res.error.code === "account_changed") return setSessionStale(true);
     if (res.status === 429) return setError(L.tooManyRequests);
     // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
     if (res.status === 400) uploaded.current = null;

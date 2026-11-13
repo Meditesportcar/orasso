@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { SEED_PASSWORD } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
-import { landscape, who } from "./lotr7f3-setup";
+import { landscape, storiesOf, who } from "./lotr7f3-setup";
 import { RELAIS } from "./relais";
 
 // Petit lot de fin, partie B1, côté appli (version web compilée de recette, `APP_URL`) : le composeur de story ne publie jamais au
@@ -254,6 +254,10 @@ test("le compte change pendant l'envoi : réponse reçue après = « publiée »
     await switchAccountUnderneath(page, OTHER);
     await expect(page.getByTestId("story-stale")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("story-stale")).not.toContainText("n'est pas partie");
+    // Pendant le POST retenu : rien du brouillon de A (légende, aperçu, bouton) n'est affiché.
+    await expect(page.getByTestId("story-caption")).toHaveCount(0);
+    await expect(page.getByTestId("story-preview-canvas")).toHaveCount(0);
+    await expect(page.getByTestId("story-publish")).toHaveCount(0);
     release();
     if (answer === "confirmed") {
       await expect(page.getByTestId("story-stale")).toContainText("Ta story a été publiée", { timeout: 60_000 });
@@ -415,12 +419,17 @@ test("un envoi enregistré dont la réponse se perd, puis un refus net, puis le 
   const author = await who("StB1Garde");
   const { ctx, page } = await open(browser, author.email);
   let calls = 0;
+  let created: { status: number; id: string | null } = { status: 0, id: null };
   await page.route(/\/api\/me\/stories$/, async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     calls += 1;
     if (calls === 1) {
-      // La création est réellement enregistrée, la réponse se perd.
-      await route.fetch();
+      // La création est réellement enregistrée (201 et identifiant vérifiés plus bas), la réponse se perd.
+      const real = await route.fetch();
+      created = {
+        status: real.status(),
+        id: ((await real.json().catch(() => null)) as { id?: string } | null)?.id ?? null,
+      };
       return route.abort("failed");
     }
     return route.fulfill({
@@ -438,5 +447,9 @@ test("un envoi enregistré dont la réponse se perd, puis un refus net, puis le 
   await switchAccountUnderneath(page, OTHER);
   await expect(page.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 15_000 });
   await expect(page.getByTestId("story-stale")).not.toContainText("n'est pas partie");
+  // La première création était bien enregistrée (201, identifiant) : la story existe, une seule.
+  expect(created.status).toBe(201);
+  expect(created.id).toBeTruthy();
+  expect((await storiesOf(author, author.id)).map((x) => x.id)).toEqual([created.id]);
   await ctx.close();
 });
