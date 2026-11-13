@@ -590,7 +590,7 @@ test("retirer une photo d'un album publié depuis la visionneuse : confirmation 
 // --- Tour 4 (simplification : un retrait est une opération serveur synchrone, qui demande du réseau) -----------------------------------
 
 const CANCEL_ROUTE = "**/api/me/albums/*/photos/by-client/*";
-const DELETE_ROUTE = "**/api/me/albums/*/photos/*";
+const DELETE_ROUTE = "**/api/me/albums/*/photos/**";
 
 /** Une photo ajoutée à l'album (étape 3), puis retour à l'étape 2 : sa tuile montre la version du serveur et se retire par « Retirer ». */
 async function oneAddedPhoto(page: Page, name = "car-golf-gti.jpg") {

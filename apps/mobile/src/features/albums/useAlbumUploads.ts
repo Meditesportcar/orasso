@@ -206,7 +206,9 @@ export function useAlbumUploads(albumId: string | null) {
       if (!gone) return true;
       if (gone.attempted || gone.photoId) {
         if (!(await removeServer({ clientId: gone.clientId, photoId: gone.photoId }))) return false;
-      } else if (gone.upload) retireUpload(gone.upload);
+      }
+      // L'envoi resté sans ajout (réponse perdue avant validation) n'est plus utile : suppression au mieux, un essai (le serveur purge à 24 h).
+      if (gone.upload) retireUpload(gone.upload);
       update((list) => list.filter((i) => i.clientId !== clientId));
       return true;
     },
