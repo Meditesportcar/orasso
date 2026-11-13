@@ -4,10 +4,11 @@
 // connecté (les photos viennent d'une route protégée). Média : modifier le titre, autoriser l'enregistrement, supprimer ; autre membre :
 // signaler. Aucun nom de véhicule ni pseudo en R9e.
 import { Button, Chip } from "@orasso/design-system/web";
-import { type AlbumView, albumLabels as L } from "@orasso/shared";
+import { type AlbumView, type EventPublic, albumLabels as L } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { AlbumCover } from "../components/albums/AlbumCover";
+import { OrganizerActions } from "../components/albums/OrganizerActions";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
@@ -24,9 +25,17 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
-  await requireMe(request);
+  const me = await requireMe(request);
   const album = await apiOrThrow<AlbumView>(request, `/albums/${encodeURIComponent(params.id)}`);
-  return { back, album };
+  // Lot R9g : l'organisateur de l'événement (une de ses structures) a les actions « Reprendre dans le journal » et « officiel ».
+  const event =
+    album.mine || album.status !== "published"
+      ? null
+      : await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(album.event.slug)}`);
+  const organizer = Boolean(
+    event?.ok && me.personas?.some((p) => p.kind === "organizer" && p.id === event.data.structure.id),
+  );
+  return { back, album, organizer };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -150,8 +159,12 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
                   )}
                 </>
               ) : (
-                // Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée.
-                <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
+                <>
+                  {/* Lot R9g : l'organisateur de l'événement reprend la photo dans son journal, ou choisit l'album « officiel ». */}
+                  {loaderData.organizer && <OrganizerActions key={`org-${photo.key}`} album={a} photo={photo} />}
+                  {/* Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée. */}
+                  <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
+                </>
               )
             }
           />

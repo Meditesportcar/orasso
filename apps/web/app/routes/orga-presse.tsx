@@ -6,6 +6,7 @@
 import { Button, CheckboxField, Chip, ChipRow, TextField } from "@orasso/design-system/web";
 import {
   type AccreditationForOrganizer,
+  type AlbumsList,
   applicationStatusLabels,
   type EventOrganizer,
   orgaPressLabels as L,
@@ -17,6 +18,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
+import { PhotosSection } from "../components/event/PhotosSection";
 import { TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { fromInput, toInput } from "../lib/datetime";
@@ -35,15 +37,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Réservé à l'organisation de l'événement.", { status: 403 });
   }
   const id = encodeURIComponent(params.eventId);
-  const [event, settings, requests] = await Promise.all([
+  const [event, settings, requests, albums] = await Promise.all([
     apiOrThrow<EventOrganizer>(request, `/events/${id}`),
     apiOrThrow<PressSettingsView>(request, `/events/${id}/press-settings`),
     apiOrThrow<AccreditationForOrganizer[]>(request, `/events/${id}/accreditations`),
+    // Lot R9g : les albums de l'événement (« Photos »), avec l'album officiel.
+    api<AlbumsList>(request, `/events/${id}/albums?limit=50`),
   ]);
   return {
     event: { id: event.id, title: event.title, startsAt: event.startsAt, endsAt: event.endsAt },
     settings,
     requests,
+    albums: albums.ok ? albums.data.items : [],
   };
 }
 
@@ -103,7 +108,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaPresse({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, settings: s, requests } = loaderData;
+  const { event, settings: s, requests, albums } = loaderData;
   const busy = useNavigation().state !== "idle";
   const pending = requests.filter((r) => r.status === "pending");
   const decided = requests.filter((r) => r.status !== "pending");
@@ -294,6 +299,8 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
           </article>
         ))}
       </section>
+      {/* Lot R9g : les albums des médias accrédités, l'album « officiel » à choisir (la fiche de l'événement montre la section). */}
+      <PhotosSection albums={albums} manager />
     </>
   );
 }
