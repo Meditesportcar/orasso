@@ -190,7 +190,7 @@ export function PublishForm({
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
   const [panel, setPanel] = useState<"tag" | "event" | "place" | "vehicle" | null>(null);
-  const [audienceKey, setAudienceKey] = useState("followers");
+  const [audienceKey, setAudienceKey] = useState(author.persona === "fan" ? "followers" : "public");
   const [dropped, setDropped] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);

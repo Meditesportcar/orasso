@@ -66,7 +66,6 @@ export function CasquetteTabs({ space, casquette }: { space: CasquetteTabsSpace;
         label={C.siteNav(casquette.name)}
         testId="casquette-tabs"
         itemTestId={(id) => `casquette-tab-${id}`}
-        spread
         sticky
       />
     </div>

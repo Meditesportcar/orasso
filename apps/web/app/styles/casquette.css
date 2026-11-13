@@ -129,3 +129,12 @@
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }
+
+/* Dans un espace à barre latérale, les liens du contenu sont moutarde (`.orga__content a`) : le bouton « Publier » du Fil et le
+   choix d'une publication gardent leur encre, comme dans l'espace connecté (`.app__body`). */
+.orga__content a.fil-publish {
+  color: var(--accent-ink);
+}
+.orga__content a.fil-choose__option {
+  color: var(--ink);
+}

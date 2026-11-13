@@ -8,13 +8,13 @@ import type { Casquette } from "../../lib/actor";
 
 export function ActorLine({ casquette }: { casquette: Casquette }) {
   return (
-    <div className="cas-line" data-testid="actor-line">
+    <div className="cas-line" data-testid="fil-actor">
       <span className="cas-line__logo" aria-hidden="true">
         {casquette.logoUrl ? <img src={casquette.logoUrl} alt="" /> : <span>{initialsOf(casquette.name)}</span>}
       </span>
       <p className="cas-line__text">
         <small className="o-t-credit">{C.readingAs}</small>
-        <strong className="cas-line__name" data-testid="actor-line-name">
+        <strong className="cas-line__name" data-testid="fil-actor-name">
           {casquette.name}
         </strong>
       </p>
@@ -23,7 +23,7 @@ export function ActorLine({ casquette }: { casquette: Casquette }) {
         icon="sort"
         href="/app/moi"
         aria-label={C.changeHint}
-        data-testid="actor-line-change"
+        data-testid="fil-actor-change"
         className="cas-line__change"
       >
         {C.change}
