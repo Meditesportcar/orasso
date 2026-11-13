@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { type FeedPostView, importantReasonLabels } from "@orasso/shared";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import pg from "pg";
 import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
@@ -157,14 +158,17 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const announcement = `Parking B ouvert dès 7 h ${Date.now()}`;
   await page.getByTestId("fil-publish-caption").fill(announcement);
   await page.getByTestId("fil-publish-important-toggle").click();
-  await page.getByTestId("fil-publish-important-reasons").getByRole("radio").first().click();
+  await page
+    .getByTestId("fil-publish-important-reasons")
+    .getByRole("radio", { name: importantReasonLabels.schedule })
+    .click();
   await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
   await shot(page, "06-publication-info-importante-beton");
   await page.getByTestId("fil-publish-send").click();
   await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
   // La publication est dans le journal de l'événement (c'est là que l'ancien fil des annonces a été repris) : son identifiant
   // est en tête de la liste, marquée importante avec son motif.
-  type Post = { id: string; caption: string | null; important?: unknown; importantReason?: string | null };
+  type Post = FeedPostView;
   let published: Post | undefined;
   await expect
     .poll(
@@ -182,7 +186,9 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   expect(salonFeedIds).not.toContain(published?.id);
   expect(ids.indexOf(published?.id ?? "")).toBeGreaterThanOrEqual(0);
   expect(ids.indexOf(published?.id ?? "")).toBeLessThanOrEqual(1);
-  expect(JSON.stringify(published)).toMatch(/important/i);
+  // Marquée « Info importante » avec le motif choisi (Horaires) et une heure d'envoi aux inscrits valide.
+  expect(published?.important?.reason).toBe("schedule");
+  expect(Number.isNaN(Date.parse(published?.important?.sentAt ?? ""))).toBe(false);
   // Et à l'écran : la légende est dans le journal de la fiche de l'événement (autre onglet, même session).
   const fiche = await a.ctx.newPage();
   await fiche.goto(`/e/${salonSlug}`);
