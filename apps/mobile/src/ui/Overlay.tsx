@@ -7,6 +7,8 @@ import { createContext, Fragment, type ReactNode, useContext, useEffect, useId, 
 type Setter = (id: string, node: ReactNode | null) => void;
 const SetterContext = createContext<Setter | null>(null);
 const NodesContext = createContext<Record<string, ReactNode>>({});
+// Vrai pour tout ce qui est rendu dans la zone des feuilles : une feuille y est déjà à sa place, elle ne repart pas ailleurs.
+const InSlotContext = createContext(false);
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
   const [nodes, setNodes] = useState<Record<string, ReactNode>>({});
@@ -33,11 +35,11 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
 export function OverlaySlot() {
   const nodes = useContext(NodesContext);
   return (
-    <>
+    <InSlotContext.Provider value>
       {Object.entries(nodes).map(([id, node]) => (
         <Fragment key={id}>{node}</Fragment>
       ))}
-    </>
+    </InSlotContext.Provider>
   );
 }
 
@@ -50,4 +52,15 @@ export function Overlay({ children }: { children: ReactNode }) {
   });
   useEffect(() => () => set?.(id, null), [id, set]);
   return null;
+}
+
+/**
+ * Une feuille couvre toujours l’écran, où qu’elle soit écrite : sous un `OverlayProvider` et hors de la zone des feuilles,
+ * les enfants partent dans cette zone (comme `<Overlay>`) ; sans zone, ou déjà dedans, ils restent sur place.
+ */
+export function SheetPortal({ children }: { children: ReactNode }) {
+  const inSlot = useContext(InSlotContext);
+  const set = useContext(SetterContext);
+  if (inSlot || !set) return <>{children}</>;
+  return <Overlay>{children}</Overlay>;
 }
