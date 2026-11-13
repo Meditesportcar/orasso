@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
+import { SheetBoundary } from "@/ui/Overlay";
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
 
@@ -82,30 +83,32 @@ export function Gallery({ item, onClose }: { item: MediaContentView | null; onCl
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={item !== null} animationType="fade" onRequestClose={onClose} transparent={false}>
-      <View
-        style={[styles.gallery, { backgroundColor: t.color.night, paddingTop: insets.top + space2 }]}
-        testID="media-gallery"
-      >
-        <View style={styles.galleryHead}>
-          <Text variant="bodyStrong" color={t.color.nightInk} style={styles.text}>
-            {item ? `${item.title} · ${L.by(item.media.name)}` : ""}
-          </Text>
-          <Button variant="close" label={L.eventGalleryClose} onPress={onClose} />
+      <SheetBoundary>
+        <View
+          style={[styles.gallery, { backgroundColor: t.color.night, paddingTop: insets.top + space2 }]}
+          testID="media-gallery"
+        >
+          <View style={styles.galleryHead}>
+            <Text variant="bodyStrong" color={t.color.nightInk} style={styles.text}>
+              {item ? `${item.title} · ${L.by(item.media.name)}` : ""}
+            </Text>
+            <Button variant="close" label={L.eventGalleryClose} onPress={onClose} />
+          </View>
+          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.pages}>
+            {(item?.photos ?? []).map((p, i, all) => (
+              <View key={p.key} style={{ width, height: height * 0.7, justifyContent: "center" }}>
+                <Image
+                  source={{ uri: p.url }}
+                  style={styles.photo}
+                  resizeMode="contain"
+                  accessibilityIgnoresInvertColors
+                  accessibilityLabel={`${item?.title ?? ""} ${i + 1} sur ${all.length}`}
+                />
+              </View>
+            ))}
+          </ScrollView>
         </View>
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.pages}>
-          {(item?.photos ?? []).map((p, i, all) => (
-            <View key={p.key} style={{ width, height: height * 0.7, justifyContent: "center" }}>
-              <Image
-                source={{ uri: p.url }}
-                style={styles.photo}
-                resizeMode="contain"
-                accessibilityIgnoresInvertColors
-                accessibilityLabel={`${item?.title ?? ""} ${i + 1} sur ${all.length}`}
-              />
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+      </SheetBoundary>
     </Modal>
   );
 }

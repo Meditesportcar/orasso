@@ -145,9 +145,13 @@ export const iconShapes = {
   edit: [p("M4 20h4L19 9l-4-4L4 16zM14 6l4 4")], // modifier (crayon)
   lock: [r(5, 11, 14, 10, 2), p("M8 11V8a4 4 0 0 1 8 0v3")], // sécurité, cadenas
   shield: [p("M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"), p("M9 12l2 2 4-4")], // confidentialité
+  // Roue dentée (13/11, petit lot de fin C) : six dents et un trou central. L'ancien dessin (un cercle et huit rayons)
+  // se lisait comme un soleil, le même que `weatherClear`.
   gear: [
+    p(
+      "M9.5 5.5L9.9 2.7h4.2l.4 2.8 1.9 1.1 2.5-1.1 2.2 3.7-2.2 1.7v2.2l2.2 1.7-2.2 3.7-2.5-1.1-1.9 1.1-.4 2.8H9.9l-.4-2.8-1.9-1.1-2.5 1.1-2.2-3.7 2.2-1.7v-2.2L2.9 9.2l2.2-3.7 2.5 1.1z",
+    ),
     c(12, 12, 3),
-    p("M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"),
   ], // réglages
   help: [c(12, 12, 9), p("M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01")], // aide
   logout: [p("M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h10")], // se déconnecter

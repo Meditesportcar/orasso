@@ -24,12 +24,13 @@ import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { events, eventVotes, feedPostPhotos, profiles, vehiclePhotos } from "../../db/schema";
+import { events, eventVotes, feedPostPhotos, feedPosts, profiles, vehiclePhotos } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { attachEventsByIds, eventVisualKey } from "../feed/attach";
 import { loadPostViews } from "../feed/posts";
 import { canSeeEvent } from "../invitations/access";
 import { memoriesService } from "../memories/service";
@@ -92,6 +93,18 @@ const withoutPrefix = (url: string | null): string | null =>
 async function eventImage(e: { posterPhotoKey: string | null; posterKey: string | null }) {
   const key = e.posterPhotoKey ?? e.posterKey;
   return { key, data: key ? await storage.get(key) : null };
+}
+
+/**
+ * Le visuel d’une publication sans photo propre (annonce reprise sans image) : l’affiche de l’événement rattaché, comme le Fil
+ * (`eventVisualKey`). `null` sans événement visible ou sans affiche : la publication n’est alors pas partageable.
+ */
+export async function postEventVisual(postId: string): Promise<Buffer | null> {
+  const [row] = await db.select({ eventId: feedPosts.eventId }).from(feedPosts).where(eq(feedPosts.id, postId));
+  if (!row?.eventId) return null;
+  const event = (await attachEventsByIds(db, [row.eventId])).get(row.eventId);
+  const key = event ? eventVisualKey(event) : null;
+  return key ? storage.get(key) : null;
 }
 
 function eventDetail(
@@ -244,8 +257,9 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
       .where(eq(feedPostPhotos.postId, id))
       .orderBy(asc(feedPostPhotos.position))
       .limit(1);
-    if (!first) return refuse(404, "not_found", shareLabels.errors.notFound);
-    const firstData = await storage.get(first.storageKey);
+    // Sans photo propre : l’affiche de l’événement en fond flouté, comme le Fil.
+    const firstData = first ? await storage.get(first.storageKey) : await postEventVisual(id);
+    if (!firstData) return refuse(404, "not_found", shareLabels.errors.notFound);
     const excerpt = post.caption
       ? post.caption.length > 72
         ? `${post.caption.slice(0, 71).trimEnd()}…`
@@ -262,10 +276,10 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
         badge: null,
         stats: [],
         stripe: false,
-        image: firstData,
+        image: first ? firstData : null,
         ground: firstData,
         imageUrl: null,
-        plate: first.plateBlurred ? "blurred" : "none_confirmed",
+        plate: !first || first.plateBlurred ? "blurred" : "none_confirmed",
         url: `${origin()}/app/fil`,
         event: null,
         mine: post.mine,

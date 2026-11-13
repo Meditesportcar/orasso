@@ -30,6 +30,7 @@ import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { SheetBoundary } from "@/ui/Overlay";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
 
@@ -433,18 +434,20 @@ export function ConversationScreen({
       </AppSheet>
 
       <Modal visible={viewer !== null} animationType="fade" statusBarTranslucent onRequestClose={() => setViewer(null)}>
-        <View style={[styles.viewer, { backgroundColor: t.color.groundDeep }]}>
-          {viewer?.image ? (
-            <PrivateImage
-              url={viewer.image.url}
-              style={{ width, height: height * 0.8 }}
-              accessibilityLabel={messagingLabels.photo}
-            />
-          ) : null}
-          <View style={[styles.viewerBar, { top: insets.top + space3 }]}>
-            <Button variant="close" label={messagingLabels.closeImage} onPhoto onPress={() => setViewer(null)} />
+        <SheetBoundary>
+          <View style={[styles.viewer, { backgroundColor: t.color.groundDeep }]}>
+            {viewer?.image ? (
+              <PrivateImage
+                url={viewer.image.url}
+                style={{ width, height: height * 0.8 }}
+                accessibilityLabel={messagingLabels.photo}
+              />
+            ) : null}
+            <View style={[styles.viewerBar, { top: insets.top + space3 }]}>
+              <Button variant="close" label={messagingLabels.closeImage} onPhoto onPress={() => setViewer(null)} />
+            </View>
           </View>
-        </View>
+        </SheetBoundary>
       </Modal>
     </Ground>
   );

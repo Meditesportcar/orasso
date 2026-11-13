@@ -320,6 +320,33 @@ test("suite : une première panne puis le retour en ligne : le bloc reparaît sa
   await second.ctx.close();
 });
 
+// Petit lot de fin, partie A : « Réessayer » à l'écran. Il est visible quand la lecture échoue, désactivé tant que la relecture est en
+// vol (tenue ici par une route), puis il disparaît avec le résultat.
+test("« Réessayer » : visible quand la lecture échoue, désactivé pendant la relecture, absent après le résultat", async ({
+  browser,
+}) => {
+  const { ctx, page } = await openHome(browser, { offline: true });
+  await page.goto("/app/pratique");
+  const retry = page.getByTestId("practical-retry");
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  await expect(retry).toBeEnabled();
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await ctx.unroute(/\/api\/practical/);
+  await ctx.route(/\/api\/practical/, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await retry.click();
+  await expect(retry).toBeDisabled();
+  release();
+  await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
+  await expect(retry).toHaveCount(0);
+  await ctx.close();
+});
+
 test("suite, tour 2 : panne, onglet masqué, réseau rétabli, retour sur l'onglet : la lecture est relancée", async ({
   browser,
 }) => {
