@@ -168,24 +168,32 @@ describe("livraison et signaux", () => {
       notifyStructure(tx, structureId, "staff_request", { title: "Demande", body: "B", after }),
     );
     const original = realtime.publish;
+    const { push } = await import("../../lib/push");
+    const originalTokens = push.tokensOf;
     const sent: string[] = [];
+    let removal: Promise<unknown> = Promise.resolve();
     realtime.publish = ((channel: string, type: string) => {
       if (type !== "notification") return;
       sent.push(channel);
       // Au premier envoi de la passe, l'autre responsable est retiré : son envoi (le suivant) ne doit pas partir.
       if (sent.length === 1) {
         const other = channel === `user:${damien.id}` ? lea : damien;
-        void db
+        removal = db
           .update(structureMembers)
           .set({ status: "removed" })
           .where(and(eq(structureMembers.structureId, structureId), eq(structureMembers.userId, other.id)));
       }
     }) as never;
+    // Le retrait est validé avant la suite de la livraison du premier envoi, donc avant la vérification du second.
+    push.tokensOf = (async (...args: Parameters<typeof originalTokens>) => {
+      await removal;
+      return originalTokens.apply(push, args);
+    }) as never;
     try {
       await notificationsService.deliverDue();
-      // Laisse la mise à jour lancée dans le crochet se terminer avant la lecture suivante de la passe.
     } finally {
       realtime.publish = original;
+      push.tokensOf = originalTokens;
     }
     expect(sent).toHaveLength(1);
   });
