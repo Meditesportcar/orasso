@@ -114,6 +114,20 @@ for (const theme of ["beton", "sable"] as const) {
     await page.getByTestId("new-message-group").click();
     await expect(page.getByTestId("orga-group-send")).toBeVisible({ timeout: 20_000 });
     await shot(page, `message-groupe-${theme}-384`);
+    // Le message groupé part : sa ligne « Message groupé · … » ouvre en tête de la liste, le texte entier se lit en la touchant.
+    const pick = async (label: string, option: RegExp) => {
+      await page.getByRole("combobox", { name: label }).click();
+      await page.getByRole("menuitem", { name: option }).first().click();
+    };
+    await pick("Événement", /Salon Argelès/);
+    await pick("Destinataires", /Retenus/);
+    const text = `Rendez-vous à l'entrée B ${Date.now()}`;
+    await page.getByTestId("orga-group-body").fill(text);
+    await expect(page.getByTestId("orga-group-preview")).toContainText(/destinataire/, { timeout: 20_000 });
+    await page.getByTestId("orga-group-send").click();
+    await expect(page.getByTestId("orga-group-row").first()).toContainText(text, { timeout: 30_000 });
+    await expect(page.getByTestId("orga-group-row").first()).toContainText("Message groupé · ");
+    await shot(page, `messages-apres-envoi-${theme}-384`);
 
     // L'ancienne adresse de la Boîte renvoie vers « Messages ».
     await page.goto("/boite/orga");
