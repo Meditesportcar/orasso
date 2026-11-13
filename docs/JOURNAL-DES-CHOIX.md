@@ -6501,6 +6501,16 @@ Le haut de l'onglet Crew devient compact, « Comme le Profil » (maquette `maque
 - **Libellés** : `crewTabLabels.coverA11y` (« Voir la couverture et la description du crew ») et `publishA11y` (« Publier dans le crew »). Réglages garde l'icône `gear` du kit (la partie C la redessine). `crewFeedLabels.composerHint` n'est plus lu (laissé en place).
 - **Recettes existantes** : voir le rapport du lot (celles qui visaient « Signaler » au bas de l'espace du crew, ou le composeur, s'adaptent).
 
+### Tour 1 (corrections des relectures Codex et Opus, 13/11)
+- **Couches (site)** : la liste « Mes crews » passe à `z-index: 20`, au-dessus de la rangée collée (12) ; aucune échelle de couches n'existe dans le kit, on garde les valeurs du fichier.
+- **Changer d'onglet après avoir défilé (appli)** : si la zone a défilé au-delà du haut du crew, le début du nouvel onglet revient sous la rangée collée (position mesurée : bloc du haut + `space3`) ; sinon on ne bouge pas. Sur le site, le changement d'onglet est une navigation : le début de l'onglet est sous la rangée (recette).
+- **Erreur de chargement (appli)** : le nom du crew et « Mes crews » (`CrewSwitchOnly`) restent affichés au-dessus de l'erreur, à partir de la liste de mes crews déjà chargée.
+- **Pastille « nouvelle publication »** : appli, le haut du fil se pose sous la barre du haut et la rangée d'onglets, par leur bas réel mesuré dans la fenêtre (`barBottom`), pour le retour au fil et pour le calcul « au haut du fil » ; site, `scroll-margin-top` du fil et calcul `atTop` sur le bas de la rangée collée.
+- **Un seul bouton principal** : « Proposer une sortie » est toujours secondaire (appli et site) ; « Publier » est le principal.
+- **Mineurs** : pastille des non-lus de Discussion sur le coin du bouton à ≥ 1 000 px ; `publier` quitte l'adresse par la navigation du routeur dès que la fenêtre est ouverte (un F5 ne la rouvre pas) ; `UnderTabs` du site reçoit `itemClass` (facultatif) pour masquer « Sorties » sur grand écran au lieu d'une règle sur le `data-testid` ; le fondu du bord droit des onglets de l'appli n'apparaît que si la rangée déborde de plus de 8 px (à ×1,3, 384 px, les quatre onglets tiennent juste : pas de fondu sur « Spots »).
+- **Écart daté** : le nom à 19 px est inscrit dans `docs/design-system/README.md` (« Ce qui a changé depuis le gel »).
+- **Captures R5c2 et R6a** : mes recettes avaient réécrit certaines captures « après » de `lot-r5c2-captures` et `lot-r6a-captures` ; aucune copie n'existe, elles ne peuvent pas être restaurées (elles se régénèrent en relançant ces recettes dans leur propre dossier). Les recettes existantes relancées écrivent désormais dans `lot-fin-e-captures/apres/recettes-existantes/`.
+
 ### À revoir avec Damien
 - Le chevron du nom (plusieurs crews) se range à droite du nom quand celui-ci passe sur deux lignes (le texte prend toute la largeur) ; dans la maquette il le suit de près. Rien de bloquant.
 
