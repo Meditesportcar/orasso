@@ -14,7 +14,7 @@ import {
   explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { data, redirect } from "react-router";
+import { data, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
@@ -31,6 +31,30 @@ import type { Route } from "./+types/app-crew";
 // sortie, demande acceptée, invitation, départ) arrivent ici.
 export function meta() {
   return [{ title: `${navLabels.crewTab.title} · Orasso` }, { name: "robots", content: "noindex" }];
+}
+
+/**
+ * Retirer `publier` de l'adresse (la fenêtre de publication est ouverte, un F5 ne doit pas la rouvrir : `CrewSpaceView`) est une
+ * navigation du routeur : sans ceci, elle relancerait les quatre lectures de la page (mes crews, le crew, ses membres, ses demandes)
+ * pour rien, et une panne à cet instant ferait basculer la page sur la limite d'erreur. Rien d'autre ne change : la page ne se relit pas.
+ */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
+  const without = (url: URL) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("publier");
+    return `${url.pathname}?${p.toString()}`;
+  };
+  const droppedPublier =
+    currentUrl.searchParams.has("publier") &&
+    !nextUrl.searchParams.has("publier") &&
+    without(currentUrl) === without(nextUrl);
+  return droppedPublier ? false : defaultShouldRevalidate;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
