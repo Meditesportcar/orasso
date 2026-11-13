@@ -162,6 +162,8 @@ export const errorCodes = [
   "tag_declined",
   "plate_unknown",
   "save_not_allowed",
+  // Lot R9g : la reprise d'une photo d'album dans le journal de l'événement.
+  "already_reposted",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

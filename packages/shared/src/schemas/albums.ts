@@ -85,6 +85,20 @@ export const albumsListQuery = z.object({
 });
 export type AlbumsListQuery = z.infer<typeof albumsListQuery>;
 
+/**
+ * `POST /events/:id/albums/:albumId/photos/:photoId/repost` (lot R9g, T44) : la légende de la publication du journal. Absente ou vide : la
+ * légende par défaut « Photo : <média> » est posée par l'API.
+ */
+export const albumRepostSchema = z.object({
+  caption: z
+    .string()
+    .trim()
+    .max(2000)
+    .nullish()
+    .transform((v) => (v ? v : null)),
+});
+export type AlbumRepost = z.infer<typeof albumRepostSchema>;
+
 // --- Vues -------------------------------------------------------------------------------------------------------------
 
 /** Une photo d'album. `width` et `height` sont nuls pour une photo reprise d'une ancienne galerie (dimensions inconnues). */
