@@ -112,6 +112,11 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   async function toDetails() {
     if (!album) return;
     setError(null);
+    // Les retraits en attente du réseau sont confirmés d'abord : une photo retirée ne doit pas finir dans l'album publié.
+    if (!(await uploads.flush())) {
+      setError(L.pendingRemovals);
+      return;
+    }
     if (uploads.pending > 0 && !(await uploads.send())) return;
     try {
       refresh(await api.album(album.id));
@@ -126,6 +131,10 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     setBusy(true);
     setError(null);
     try {
+      if (!(await uploads.flush())) {
+        setError(L.pendingRemovals);
+        return;
+      }
       await api.patchAlbum(album.id, { title: title.trim(), allowSave });
       const done = await api.publishAlbum(album.id);
       void drafts.reload();

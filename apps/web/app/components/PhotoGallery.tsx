@@ -4,7 +4,7 @@
 // Avec `contentId` (fiche événement), l'ouverture compte une consultation du contenu, comme l'appli.
 import { Button } from "@orasso/design-system/web";
 import { mediaAppLabels as L } from "@orasso/shared";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "../styles/media.css";
 
@@ -61,7 +61,13 @@ export function PhotoGallery({
     if (e.key === "ArrowLeft") go(-1);
     else if (e.key === "ArrowRight") go(1);
   };
-  const current = index === null ? null : photos[index];
+  // Une photo retirée raccourcit la suite : la visionneuse passe à la photo voisine (l'index revient dans la plage) ; quand il n'en reste
+  // plus, elle se ferme (jamais une fenêtre ouverte et vide, sans « Fermer »).
+  const shownIndex = index === null || total === 0 ? null : Math.min(index, total - 1);
+  const current = shownIndex === null ? null : photos[shownIndex];
+  useEffect(() => {
+    if (index !== null && total === 0) ref.current?.close();
+  }, [index, total]);
   return (
     <>
       <ul className="md-thumbs" data-testid="media-gallery">
@@ -103,7 +109,7 @@ export function PhotoGallery({
             )}
             {actions && (
               <div className="md-viewer__actions" data-testid="media-gallery-actions">
-                {actions(current, index ?? 0)}
+                {actions(current, shownIndex ?? 0)}
               </div>
             )}
             <div className="md-viewer__bar">
@@ -111,7 +117,7 @@ export function PhotoGallery({
                 {L.galleryPrev}
               </Button>
               <span className="o-t-caption" aria-live="polite" data-testid="media-gallery-position">
-                {L.galleryPosition((index ?? 0) + 1, total)}
+                {L.galleryPosition((shownIndex ?? 0) + 1, total)}
               </span>
               <Button type="button" variant="secondary" icon="next" onClick={() => go(1)} disabled={total < 2}>
                 {L.galleryNext}

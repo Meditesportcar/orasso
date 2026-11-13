@@ -5,8 +5,8 @@
 import { Button, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { type AlbumPhotoView, type AlbumView, albumLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { Pressable, Share, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { InteractionManager, Pressable, Share, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
@@ -62,10 +62,23 @@ export function AlbumScreen({ id }: { id: string }) {
       counted.current = false;
     });
   }
-  /** Signaler la photo affichée : la visionneuse (un `Modal` natif) se ferme avant que la feuille de signalement ne s'ouvre. */
+  // Ce qui s'ouvre **après** la fermeture de la visionneuse (un `Modal` natif resterait devant une feuille ouverte trop tôt) : pas une attente
+  // fixe, l'événement de fermeture. iOS : `onDismiss` du `Modal` ; partout : le rendu où la visionneuse est fermée, puis la fin des animations.
+  const afterClose = useRef<(() => void) | null>(null);
+  const runAfterClose = useCallback(() => {
+    const fn = afterClose.current;
+    afterClose.current = null;
+    fn?.();
+  }, []);
+  useEffect(() => {
+    if (viewer !== null || !afterClose.current) return;
+    const task = InteractionManager.runAfterInteractions(runAfterClose);
+    return () => task.cancel();
+  }, [viewer, runAfterClose]);
+  /** Signaler la photo affichée : la visionneuse se ferme, puis la feuille de signalement s'ouvre. */
   function reportPhoto(photo: AlbumPhotoView) {
+    afterClose.current = () => openReport({ type: "album_photo", id: photo.id });
     setViewer(null);
-    setTimeout(() => openReport({ type: "album_photo", id: photo.id }), 350);
   }
   async function removePhoto() {
     const photo = removing;
@@ -214,11 +227,12 @@ export function AlbumScreen({ id }: { id: string }) {
               index={viewer}
               role={role}
               onClose={() => setViewer(null)}
+              onDismiss={runAfterClose}
               onReport={reportPhoto}
               onRemove={(photo) => {
-                // Comme « Signaler » : un Modal natif resterait devant la confirmation.
+                // Comme « Signaler » : un Modal natif resterait devant la confirmation, qui s'ouvre à la fermeture de la visionneuse.
+                afterClose.current = () => setRemoving(photo);
                 setViewer(null);
-                setTimeout(() => setRemoving(photo), 350);
               }}
             />
           ) : null}

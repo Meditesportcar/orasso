@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRemovalQueue, type QueuedUpload, type RemovalStore } from "./removalQueue";
+import { cancelOp, createRemovalQueue, type QueuedUpload, type RemovalStore } from "./removalQueue";
 
 const up = (n: number): QueuedUpload => ({ id: `u${n}`, key: `private/album-uploads/u${n}.webp` });
 
@@ -108,5 +108,78 @@ describe("file des envois à supprimer", () => {
     gate();
     await Promise.all([first, second]);
     expect(calls).toEqual(["start u1", "end u1"]);
+  });
+});
+
+describe("file des opérations, tour 2", () => {
+  it("stockage indisponible + panne réseau : les suppressions non confirmées restent en mémoire, `replay()` les rejoue dans la même page", async () => {
+    let online = false;
+    const calls: string[] = [];
+    const q = createRemovalQueue({
+      remove: async (u) => {
+        calls.push(u.id);
+        if (!online) throw new TypeError("réseau");
+      },
+      // Le stockage refuse tout (navigation privée, quota, panne).
+      store: {
+        read: async () => {
+          throw new Error("stockage indisponible");
+        },
+        write: async () => {
+          throw new Error("stockage indisponible");
+        },
+      },
+      stops: (e) => e instanceof TypeError,
+    });
+    q.retire(up(1));
+    q.retire(cancelOp("A", "c1"));
+    await q.release();
+    expect(q.hasPending()).toBe(true);
+    online = true;
+    await q.replay();
+    // L'annulation passe avant la suppression de l'envoi ; les deux sont confirmées.
+    expect(calls.slice(-2)).toEqual(["cancel:A:c1", "u1"]);
+    expect(q.hasPending()).toBe(false);
+  });
+
+  it("un refus définitif sort de la file avec une trace et n'est plus rejoué ; une panne passagère reste", async () => {
+    const dropped: string[] = [];
+    const calls: string[] = [];
+    const mem = memoryStore();
+    const refusal = Object.assign(new Error("403"), { status: 403 });
+    const q = createRemovalQueue({
+      remove: async (u) => {
+        calls.push(u.id);
+        if (u.id === "u1") throw refusal;
+        if (u.id === "u2") throw new TypeError("réseau");
+      },
+      store: mem.store,
+      stops: (e) => e instanceof TypeError,
+      final: (e) => (e as { status?: number }).status === 403,
+      onDrop: (u) => dropped.push(u.id),
+    });
+    q.retire(up(1));
+    q.retire(up(2));
+    await q.release();
+    expect(dropped).toEqual(["u1"]);
+    // Le refus (u1) n'est plus dans la liste ; la panne réseau (u2) y est restée.
+    expect(mem.list()).toEqual(["u2"]);
+    await q.replay();
+    expect(calls.filter((c) => c === "u1")).toHaveLength(1);
+    expect(mem.list()).toEqual(["u2"]);
+  });
+
+  it("les annulations d'ajout passent avant les suppressions d'envois (une photo non confirmée absente ne perd pas son envoi)", async () => {
+    const calls: string[] = [];
+    const q = createRemovalQueue({
+      remove: async (u) => {
+        calls.push(u.id);
+      },
+      store: memoryStore().store,
+    });
+    q.retire(up(1));
+    q.retire(cancelOp("A", "c1"));
+    await q.release();
+    expect(calls).toEqual(["cancel:A:c1", "u1"]);
   });
 });

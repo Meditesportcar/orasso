@@ -21,9 +21,11 @@ import {
   PICK_PER_OPEN,
   type PlateRect,
   pickLimit,
+  pickNotice,
   platedCount,
-  reconcile,
+  type QueuedOp,
   remaining,
+  removeAlbumItem,
   reopenDecisions,
   sendAlbumPhotos,
 } from "@orasso/shared";
@@ -54,11 +56,25 @@ function choicesOf(list: readonly MediaAccreditationView[]): Choice[] {
   return [...pick("accepted", "accredited"), ...pick("pending", "pending")];
 }
 
+/** Une réponse de l'API qui refuse : son statut décide si l'opération est rejouée (passagère) ou abandonnée (définitive). */
+class HttpStatusError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 async function json<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as (T & { error?: { message?: string } }) | null;
-  if (!res.ok) throw new Error(body?.error?.message ?? "Une erreur est survenue. Réessaie.");
+  if (!res.ok) throw new HttpStatusError(res.status, body?.error?.message ?? "Une erreur est survenue. Réessaie.");
   return body as T;
 }
+
+/** Panne passagère : réseau (fetch rejeté), 5xx, 408, 429. Elle reste à rejouer ; tout autre refus est définitif. */
+const isTransient = (e: unknown) =>
+  !(e instanceof HttpStatusError) || e.status >= 500 || e.status === 408 || e.status === 429;
 
 const call = (path: string, init: RequestInit = {}) =>
   fetch(`/api${path}`, {
@@ -75,12 +91,12 @@ function removalStore(accountId: string) {
   return {
     read: async () => {
       try {
-        return JSON.parse(localStorage.getItem(key) ?? "[]") as { id: string; key: string }[];
+        return JSON.parse(localStorage.getItem(key) ?? "[]") as QueuedOp[];
       } catch {
         return [];
       }
     },
-    write: async (list: { id: string; key: string }[]) => {
+    write: async (list: QueuedOp[]) => {
       try {
         if (list.length === 0) localStorage.removeItem(key);
         else localStorage.setItem(key, JSON.stringify(list));
@@ -91,14 +107,27 @@ function removalStore(accountId: string) {
   };
 }
 
-/** Suppression d'un envoi : un fichier déjà parti (404) est une suppression réussie. */
-async function removeUpload(upload: { id: string }): Promise<void> {
-  const res = await fetch(`/api/me/uploads/${encodeURIComponent(upload.id)}`, {
+/**
+ * Une opération de la file : l'annulation de l'ajout d'une photo (`clientId` : l'API la confirme par un 204, jamais un 404 seul) ou la
+ * suppression d'un envoi (un fichier déjà parti, 404, est une suppression réussie : c'est un envoi, pas une photo).
+ */
+async function runOp(op: QueuedOp): Promise<void> {
+  if (op.clientId && op.albumId) {
+    await json(
+      await call(`/me/albums/${op.albumId}/photos/by-client/${op.clientId}`, { method: "DELETE" }).then(noBody),
+    );
+    return;
+  }
+  const res = await fetch(`/api/me/uploads/${encodeURIComponent(op.id)}`, {
     method: "DELETE",
     credentials: "same-origin",
   });
-  if (!res.ok && res.status !== 404) throw new Error(`Suppression refusée (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new HttpStatusError(res.status, `Suppression refusée (${res.status})`);
 }
+
+/** Une réponse 204 n'a pas de corps : `json()` la lit comme vide. */
+const noBody = (res: Response) =>
+  res.status === 204 ? new Response("null", { status: 200, headers: { "content-type": "application/json" } }) : res;
 
 export function NewAlbumForm({
   accountId,
@@ -138,10 +167,13 @@ export function NewAlbumForm({
   const queue = useMemo(
     () =>
       createRemovalQueue({
-        remove: removeUpload,
+        remove: runOp,
         store: removalStore(accountId),
-        // Une panne réseau (fetch rejeté) arrête la série ; un refus de l'API laisse l'envoi dans la liste sans bloquer les suivants.
+        // Une panne réseau (fetch rejeté) arrête la série ; un refus définitif de l'API sort de la liste avec une trace (jamais rejoué sans fin).
         stops: (e) => e instanceof TypeError,
+        final: (e) => !isTransient(e),
+        onDrop: (op, e) =>
+          console.warn("Opération d'album abandonnée (refus définitif) :", op.id, (e as Error).message),
       }),
     [accountId],
   );
@@ -149,9 +181,12 @@ export function NewAlbumForm({
   // « interrompu » dès le départ.
   useEffect(() => {
     stopped.current = false;
-    // Les suppressions restées en échec (hors ligne) sont rejouées à l'ouverture.
+    // Les opérations non confirmées (hors ligne) sont rejouées à l'ouverture et **au retour du réseau**, pas seulement à la réouverture.
     void queue.replay();
+    const online = () => void queue.replay();
+    window.addEventListener("online", online);
     return () => {
+      window.removeEventListener("online", online);
       stopped.current = true;
       for (const i of latest.current) URL.revokeObjectURL(i.preview);
     };
@@ -163,6 +198,13 @@ export function NewAlbumForm({
   };
   const patch = (clientId: string, p: Partial<Local>) =>
     update((list) => list.map((i) => (i.clientId === clientId ? { ...i, ...p } : i)));
+  // L'envoi fige tout : pendant qu'il tourne, ni les cadres, ni la décision, ni le bloc ne changent (l'état aussi, pas seulement les boutons).
+  const frozen = useRef(false);
+  const mutate = (fn: (list: Local[]) => Local[]) => {
+    if (!frozen.current) update(fn);
+  };
+  const patchFrame = (clientId: string, p: Partial<Local>) =>
+    mutate((list) => list.map((i) => (i.clientId === clientId ? { ...i, ...p } : i)));
 
   async function createDraft() {
     if (!chosen) return;
@@ -188,7 +230,7 @@ export function NewAlbumForm({
     if (!files) return;
     const room = Math.min(pickLimit(base + latest.current.length, 0), PICK_PER_OPEN);
     // Le plafond coupe la sélection : on le dit (30 photos par ouverture, 200 par album).
-    setNotice(files.length > room ? L.pickCut(room, files.length) : null);
+    setNotice(pickNotice(room, files.length));
     const fresh: Local[] = [...files].slice(0, room).map((file) => ({
       clientId: uuid(),
       uri: URL.createObjectURL(file),
@@ -206,30 +248,31 @@ export function NewAlbumForm({
   }
 
   /**
-   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajoutée : `DELETE /me/albums/:id/photos/:photoId`. Ajout
-   * demandé sans réponse : on la retrouve dans l'album par son `clientId` (aucune photo fantôme). Une erreur laisse la photo en place.
+   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajout parti (même sans réponse) : **annulation par
+   * `clientId`**, atomique côté API (un ajout encore en route est refusé, un ajout fini est retiré), confirmée par un 204 ; hors ligne, elle
+   * reste en file (mémoire et persistante) et la photo part de l'écran ; un refus définitif la laisse en place avec son message.
    */
   async function removeItem(clientId: string) {
     const gone = latest.current.find((i) => i.clientId === clientId);
-    if (!gone) return;
+    if (!gone || frozen.current) return;
     setError(null);
     try {
-      if (album && gone.attempted && !gone.photoId) {
-        const view = await json<AlbumView>(await call(`/albums/${album.id}`));
-        const [found] = reconcile([gone], view.photos);
-        if (found?.photoId)
-          await json(await call(`/me/albums/${album.id}/photos/${found.photoId}`, { method: "DELETE" }));
-      } else if (album && gone.photoId) {
-        await json(await call(`/me/albums/${album.id}/photos/${gone.photoId}`, { method: "DELETE" }));
-      }
+      if (album) {
+        await removeAlbumItem(gone, {
+          albumId: album.id,
+          cancel: async (id) => {
+            await json(await call(`/me/albums/${album.id}/photos/by-client/${id}`, { method: "DELETE" }).then(noBody));
+          },
+          queue,
+          isTransient,
+        });
+      } else if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
     } catch (e) {
       setError((e as Error).message);
       return;
     }
-    if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
     URL.revokeObjectURL(gone.preview);
     update((list) => list.filter((i) => i.clientId !== clientId));
-    void queue.release();
   }
 
   /** Retire une photo du brouillon repris (d'avant cette séance). */
@@ -248,8 +291,11 @@ export function NewAlbumForm({
   async function send(): Promise<boolean> {
     if (!album) return false;
     setBusy(true);
+    frozen.current = true;
     setError(null);
     try {
+      // Les opérations non confirmées (retraits hors ligne) passent avant tout envoi.
+      await queue.release();
       await sendAlbumPhotos(latest.current, {
         upload: async (item, rects) => {
           const local = latest.current.find((i) => i.clientId === item.clientId);
@@ -278,6 +324,7 @@ export function NewAlbumForm({
       setError((e as Error).message);
       return false;
     } finally {
+      frozen.current = false;
       setBusy(false);
       // Ce qui a été retiré pendant l'envoi est supprimé sans bloquer la suite (la liste persistante garde ce qui échoue).
       void queue.release();
@@ -286,6 +333,12 @@ export function NewAlbumForm({
 
   async function toDetails() {
     if (!album) return;
+    // Les retraits en attente du réseau sont confirmés d'abord : une photo retirée ne doit pas finir dans l'album publié.
+    await queue.release();
+    if (queue.hasPending()) {
+      setError(L.pendingRemovals);
+      return;
+    }
     if (remaining(latest.current).length > 0 && !(await send())) return;
     try {
       setAlbum(await json<AlbumView>(await call(`/albums/${album.id}`)));
@@ -300,6 +353,12 @@ export function NewAlbumForm({
     setBusy(true);
     setError(null);
     try {
+      await queue.release();
+      if (queue.hasPending()) {
+        setError(L.pendingRemovals);
+        setBusy(false);
+        return;
+      }
       await json(
         await call(`/me/albums/${album.id}`, {
           method: "PATCH",
@@ -461,7 +520,7 @@ export function NewAlbumForm({
                   <Button
                     variant="secondary"
                     icon="plate"
-                    onClick={() => update((list) => decideAll(list, "blurred"))}
+                    onClick={() => mutate((list) => decideAll(list, "blurred"))}
                     data-testid="album-blur"
                   >
                     {L.blurAndAdd}
@@ -469,7 +528,7 @@ export function NewAlbumForm({
                   <Button
                     variant="secondary"
                     icon="upload"
-                    onClick={() => update((list) => decideAll(list, "kept"))}
+                    onClick={() => mutate((list) => decideAll(list, "kept"))}
                     data-testid="album-keep"
                   >
                     {L.sendAsIs}
@@ -483,7 +542,7 @@ export function NewAlbumForm({
                     variant="secondary"
                     icon="undo"
                     disabled={busy}
-                    onClick={() => update((list) => reopenDecisions(list))}
+                    onClick={() => mutate((list) => reopenDecisions(list))}
                     data-testid="album-change"
                   >
                     {L.change}
@@ -532,8 +591,8 @@ export function NewAlbumForm({
                           disabled={busy}
                           onClick={() =>
                             i.marking
-                              ? patch(i.clientId, { marking: false })
-                              : patch(i.clientId, {
+                              ? patchFrame(i.clientId, { marking: false })
+                              : patchFrame(i.clientId, {
                                   marking: true,
                                   edited: true,
                                   rects: i.rects.length ? i.rects : [DEFAULT_PLATE_FRAME],
@@ -568,14 +627,16 @@ export function NewAlbumForm({
                         alt={L.chosenPhoto}
                         name={`plate-${i.clientId}`}
                         initial={i.rects}
-                        onChange={(rects: PlateRect[]) => patch(i.clientId, { rects, edited: true })}
+                        onChange={(rects: PlateRect[]) => patchFrame(i.clientId, { rects, edited: true })}
+                        readOnly={busy}
                         testId="album-plate-editor"
                       />
                       <Button
                         variant="secondary"
                         type="button"
                         icon="close"
-                        onClick={() => patch(i.clientId, { rects: [], marking: false, edited: true })}
+                        disabled={busy}
+                        onClick={() => patchFrame(i.clientId, { rects: [], marking: false, edited: true })}
                         data-testid="album-unmark"
                       >
                         {L.frameRemove}

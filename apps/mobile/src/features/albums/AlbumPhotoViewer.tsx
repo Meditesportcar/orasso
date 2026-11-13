@@ -17,6 +17,7 @@ export function AlbumPhotoViewer({
   index,
   role,
   onClose,
+  onDismiss,
   onReport,
   onRemove,
   actions,
@@ -26,6 +27,8 @@ export function AlbumPhotoViewer({
   index: number | null;
   role: AlbumViewerRole;
   onClose: () => void;
+  /** La visionneuse est fermée (iOS : `Modal.onDismiss`) : l'écran ouvre alors la feuille suivante. */
+  onDismiss?: () => void;
   /** Signaler la photo **affichée** (l'écran ferme d'abord la visionneuse : un `Modal` natif resterait devant la feuille de signalement). */
   onReport?: (photo: AlbumPhotoView) => void;
   /** Retirer la photo affichée (le média seulement). */
@@ -49,7 +52,13 @@ export function AlbumPhotoViewer({
   const current = index === null ? null : (photos[Math.min(at, photos.length - 1)] ?? null);
   const registered = actionsFor(role);
   return (
-    <Modal visible={index !== null} animationType="fade" onRequestClose={onClose} transparent={false}>
+    <Modal
+      visible={index !== null}
+      animationType="fade"
+      onRequestClose={onClose}
+      onDismiss={onDismiss}
+      transparent={false}
+    >
       <View
         style={[styles.root, { backgroundColor: t.color.night, paddingTop: insets.top + space2 }]}
         testID="album-viewer"

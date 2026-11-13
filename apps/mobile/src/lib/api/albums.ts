@@ -24,6 +24,9 @@ export const albumsApi = {
   deleteAlbum: (id: string) => request<null>(`/api/me/albums/${id}`, { method: "DELETE" }),
   addAlbumPhoto: (id: string, body: AlbumPhotoAdd) =>
     request<AlbumPhotoView>(`/api/me/albums/${id}/photos`, { method: "POST", body, timeout: 60_000 }),
+  /** Annule l'ajout d'une tentative (`clientId`) : atomique et idempotent côté API, 204 = la photo n'est pas dans l'album et n'y entrera pas. */
+  cancelAlbumPhoto: (id: string, clientId: string) =>
+    request<null>(`/api/me/albums/${id}/photos/by-client/${clientId}`, { method: "DELETE" }),
   deleteAlbumPhoto: (id: string, photoId: string) =>
     request<null>(`/api/me/albums/${id}/photos/${photoId}`, { method: "DELETE" }),
   publishAlbum: (id: string) => request<AlbumView>(`/api/me/albums/${id}/publish`, { method: "POST" }),

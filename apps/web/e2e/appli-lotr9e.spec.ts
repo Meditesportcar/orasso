@@ -178,9 +178,11 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("page-count-accreditations")).toHaveCount(0);
 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), l'album sans gestion, la Page de Sud Cars.
-    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : la passe repart d'un Fil neuf.
-    await sql("delete from feed_seen");
-    await sql("delete from feed_seen_floor");
+    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : son Fil repart de neuf (lui seul : les autres comptes ne sont pas touchés).
+    await sql(`delete from feed_seen where user_id = (select id from "user" where email = 'damien@orasso.local')`);
+    await sql(
+      `delete from feed_seen_floor where user_id = (select id from "user" where email = 'damien@orasso.local')`,
+    );
     const damien = await open(browser, DAMIEN);
     const d = damien.page;
     await go(d, "/fil");
@@ -475,5 +477,124 @@ test("« Signaler » vise la photo affichée (la visionneuse se ferme avant la f
   await d.getByTestId("report-close").click();
   await d.getByTestId("album-photo").nth(3).click();
   expect(views).toHaveLength(1);
+  await damien.ctx.close();
+});
+
+// --- Tour 2 (opérations idempotentes par clientId, succès prouvé) ------------------------------------------------------------------
+
+const LIVE_PHOTOS =
+  "select count(*)::int n from event_album_photos p join event_albums a on a.id = p.album_id join events e on e.id = a.event_id where e.slug = 'beziers-night-2026' and a.status = 'draft' and p.deleted_at is null";
+
+test("retirer AVANT la validation tardive de l'ajout : l'annulation par clientId est gardée côté API, l'ajout tardif est refusé, aucune photo ne reste", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    let held: { url: string; body: string } | null = null;
+    await page.route("**/api/me/albums/*/photos", async (route) => {
+      if (route.request().method() === "POST" && held === null) {
+        held = { url: route.request().url(), body: route.request().postData() ?? "" };
+        await route.abort();
+      } else await route.continue();
+    });
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+    // « Retirer » depuis la feuille de la photo (son ajout est parti) : l'annulation est confirmée par l'API.
+    const cancelled = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await page.getByTestId("album-tile").first().click();
+    await page.getByTestId("album-photo-remove").click();
+    expect((await cancelled).status()).toBe(204);
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    // La validation tardive arrive : refusée (409).
+    const sent = held as { url: string; body: string } | null;
+    expect(sent).not.toBeNull();
+    const path = new URL((sent as { url: string }).url).pathname.replace(/^\/api/, "");
+    const late = await apiCall(await login(LEO), "POST", path, JSON.parse((sent as { body: string }).body));
+    expect(late.status).toBe(409);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("réponse de suppression perdue APRÈS la suppression effective : la tuile part, le compteur suit, l'annulation est rejouée avant l'envoi suivant", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
+    await page.getByTestId("album-line-photos").click();
+    await expect(page.getByTestId("album-count")).toContainText("1");
+    let lost = 0;
+    await page.route("**/api/me/albums/*/photos/by-client/*", async (route) => {
+      if (route.request().method() === "DELETE" && lost++ === 0) {
+        await route.fetch();
+        await route.abort();
+      } else await route.continue();
+    });
+    await page.getByTestId("album-tile").first().click();
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("album-count")).toContainText("0");
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+    // Le prochain envoi rejoue d'abord l'annulation (204), puis part : l'album a la nouvelle photo, rien d'autre.
+    await pickPhotos(page, ["car-mx5.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+    expect(lost).toBeGreaterThanOrEqual(2);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("deux signalements successifs : le second formulaire est neuf (pas de « Signalement envoyé » hérité) et vise l'autre photo", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const published = await mine("published");
+  const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
+  const view = await apiCall<{ photos: { id: string }[] }>(await login(DAMIEN), "GET", `/albums/${rassemblement?.id}`);
+  const [first, second] = [view.data.photos[0]?.id, view.data.photos[3]?.id];
+  const damien = await open(browser, DAMIEN);
+  const d = damien.page;
+  const targets: string[] = [];
+  await d.route("**/api/reports", async (route) => {
+    targets.push(route.request().postDataJSON().targetId);
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ id: crypto.randomUUID() }),
+    });
+  });
+  await go(d, `/album/${rassemblement?.id}`);
+  await expect(d.getByTestId("album-photo")).toHaveCount(12, { timeout: 30_000 });
+  await d.getByTestId("album-photo").first().click();
+  await d.getByTestId("album-viewer-report").click();
+  await d.locator("[data-testid^=report-reason-]").first().click();
+  await d.getByTestId("report-send").click();
+  await expect(d.getByTestId("report-done")).toBeVisible();
+  await d.getByTestId("report-close").click();
+  await d.getByTestId("album-photo").nth(3).click();
+  await d.getByTestId("album-viewer-report").click();
+  await expect(d.getByTestId("report-done")).toHaveCount(0);
+  await d.locator("[data-testid^=report-reason-]").first().click();
+  await d.getByTestId("report-send").click();
+  await expect.poll(() => targets.length).toBe(2);
+  expect(targets).toEqual([first, second]);
   await damien.ctx.close();
 });

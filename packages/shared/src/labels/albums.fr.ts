@@ -83,6 +83,8 @@ export const albumLabels = {
   plateSheetDone: "Terminé",
   pickCut: (kept: number, asked: number) =>
     `Seules ${kept === 1 ? "la première photo a été gardée" : `les ${kept} premières photos ont été gardées`} sur ${asked} (30 par ouverture, 200 par album).`,
+  pickFull: (max: number) => `L'album compte déjà ${max} photos : aucune photo n'a été ajoutée.`,
+  pendingRemovals: "Des retraits attendent le retour du réseau. Réessaie dans un instant.",
   frameSet: "Cadre posé",
   framePlace: "Poser un cadre de plaque",
   frameRemove: "Retirer le cadre",

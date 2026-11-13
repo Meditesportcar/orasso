@@ -148,8 +148,10 @@ test("captures de l'appli : trois étapes, album ouvert, onglet Albums, carte du
           await apiCall(album.cookie, "DELETE", `/me/albums/${d.id}`);
 
         // Damien : la carte « album » du Fil (les cartes déjà vues d'une passe précédente sont oubliées : sinon « Déjà vu »).
-        await sql("delete from feed_seen");
-        await sql("delete from feed_seen_floor");
+        await sql(`delete from feed_seen where user_id = (select id from "user" where email = 'damien@orasso.local')`);
+        await sql(
+          `delete from feed_seen_floor where user_id = (select id from "user" where email = 'damien@orasso.local')`,
+        );
         const damien = await openApp(browser, "damien@orasso.local", theme, cfg.width, cfg.scale);
         await damien.page.goto("/fil");
         await afterOpening(damien.page);

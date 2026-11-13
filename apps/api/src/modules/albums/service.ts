@@ -25,7 +25,16 @@ import { dropStoriesOfAlbumPhotos } from "../stories/share";
 import { removeOrRetry } from "../vehicles/photos-blur";
 import { assertAccredited, assertWritable, isUniqueViolation, lockOwnAlbum, mediaOfUser, requireMedia } from "./guards";
 import { tagsByPhoto } from "./tag-visibility";
-import { type AlbumJoin, albumBase, albumPhotos, albumVisibleSql, loadAlbum, photoView, summariesOf } from "./view";
+import {
+  type AlbumJoin,
+  albumBase,
+  albumPhotoKey,
+  albumPhotos,
+  albumVisibleSql,
+  loadAlbum,
+  photoView,
+  summariesOf,
+} from "./view";
 
 /** L'album ouvert : le résumé et toutes ses photos. */
 export async function albumViewOf(join: AlbumJoin, v: Viewer): Promise<AlbumView> {
@@ -53,6 +62,27 @@ export async function albumViewOf(join: AlbumJoin, v: Viewer): Promise<AlbumView
       ? { blurredCount: photos.filter((p) => p.plateState === "blurred").length }
       : {}),
   };
+}
+
+/** Retire une photo (sous le verrou de l'album) : positions, compteur, stories reprises ; rend la clé du fichier à effacer (`null` : gardé pour un signalement). */
+async function dropPhoto(
+  tx: Tx,
+  album: { id: string; status: string; photosCount: number },
+  photo: { id: string; position: number; storageKey: string },
+): Promise<{ key: string | null; dropped: string[] }> {
+  // Un album publié garde au moins une photo : pour tout retirer, on supprime l'album.
+  if (album.status === "published" && album.photosCount <= 1) {
+    throw conflict("album_empty", albumLabels.emptyAlbum);
+  }
+  await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
+  // Lot R9f : les stories reprises de cette photo (« En story ») tombent avec elle.
+  const dropped = await dropStoriesOfAlbumPhotos(tx, [photo.id]);
+  await shiftPositions(tx, album.id, photo.position);
+  await tx
+    .update(eventAlbums)
+    .set({ photosCount: sql`greatest(${eventAlbums.photosCount} - 1, 0)` })
+    .where(eq(eventAlbums.id, album.id));
+  return { key: (await photosHeldByReport(tx, [photo.id])).has(photo.id) ? null : photo.storageKey, dropped };
 }
 
 /** Les fichiers à effacer après la validation de la transaction (jamais avant : un retour en arrière les laisserait orphelins de leur ligne). */
@@ -207,7 +237,11 @@ export const albumsService = {
     if (dropped.length) await purgeStoryFiles(dropped).catch(() => undefined);
   },
 
-  /** `DELETE /me/albums/:id/photos/:photoId` : retire une photo et repositionne les suivantes. */
+  /**
+   * `DELETE /me/albums/:id/photos/:photoId` : retire une photo et repositionne les suivantes. **Idempotent** : une photo de cet album déjà
+   * retirée rend le même succès (204), c'est la preuve qu'elle n'y est plus (le client ne prend jamais un 404 pour un succès) ; un
+   * identifiant qui n'est pas une photo de cet album : 404.
+   */
   async removePhoto(v: Viewer, id: string, photoId: string): Promise<void> {
     assertWritable(v);
     let dropped: string[] = [];
@@ -217,27 +251,52 @@ export const albumsService = {
       const [photo] = await tx
         .select()
         .from(eventAlbumPhotos)
-        .where(
-          and(
-            eq(eventAlbumPhotos.id, photoId),
-            eq(eventAlbumPhotos.albumId, album.id),
-            isNull(eventAlbumPhotos.deletedAt),
-          ),
-        );
+        .where(and(eq(eventAlbumPhotos.id, photoId), eq(eventAlbumPhotos.albumId, album.id)));
       if (!photo) throw notFound(albumLabels.photoNotFound);
-      // Un album publié garde au moins une photo : pour tout retirer, on supprime l'album.
-      if (album.status === "published" && album.photosCount <= 1) {
-        throw conflict("album_empty", albumLabels.emptyAlbum);
+      if (photo.deletedAt) return null;
+      const removed = await dropPhoto(tx, album, photo);
+      dropped = removed.dropped;
+      return removed.key;
+    });
+    if (key) await removeFiles([key]);
+    if (dropped.length) await purgeStoryFiles(dropped).catch(() => undefined);
+  },
+
+  /**
+   * `DELETE /me/albums/:id/photos/by-client/:clientId` : **annule l'ajout d'une tentative**, atomiquement, sous le verrou de l'ajout
+   * (le même que `addPhoto`). Trois cas, un seul résultat (204) : la photo est là (elle est retirée) ; elle est déjà retirée (rien à
+   * faire) ; elle n'est pas encore là (un ajout encore en route finira après nous : on garde une **pierre tombale**, une ligne retirée
+   * portant ce `clientId`, et l'ajout qui arrive ensuite est refusé, 409, sans consommer son envoi). Le client garde l'annulation
+   * jusqu'à ce 204 : c'est la preuve que la photo n'est pas dans l'album et n'y entrera pas.
+   */
+  async cancelPhoto(v: Viewer, id: string, clientId: string): Promise<void> {
+    assertWritable(v);
+    let dropped: string[] = [];
+    const key = await withTx(async (tx) => {
+      const profile = await requireMedia(tx, v);
+      const album = await lockOwnAlbum(tx, id, profile.id);
+      const [photo] = await tx
+        .select()
+        .from(eventAlbumPhotos)
+        .where(and(eq(eventAlbumPhotos.albumId, album.id), eq(eventAlbumPhotos.clientId, clientId)));
+      if (photo?.deletedAt) return null;
+      if (photo) {
+        const removed = await dropPhoto(tx, album, photo);
+        dropped = removed.dropped;
+        return removed.key;
       }
-      await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
-      // Lot R9f : les stories reprises de cette photo (« En story ») tombent avec elle.
-      dropped = await dropStoriesOfAlbumPhotos(tx, [photo.id]);
-      await shiftPositions(tx, album.id, photo.position);
-      await tx
-        .update(eventAlbums)
-        .set({ photosCount: sql`greatest(${eventAlbums.photosCount} - 1, 0)` })
-        .where(eq(eventAlbums.id, album.id));
-      return (await photosHeldByReport(tx, [photo.id])).has(photo.id) ? null : photo.storageKey;
+      await tx.insert(eventAlbumPhotos).values({
+        albumId: album.id,
+        storageKey: albumPhotoKey(album.id, `cancelled-${clientId}`),
+        width: null,
+        height: null,
+        position: 0,
+        plateState: "unknown",
+        plateRects: null,
+        clientId,
+        deletedAt: now(),
+      });
+      return null;
     });
     if (key) await removeFiles([key]);
     if (dropped.length) await purgeStoryFiles(dropped).catch(() => undefined);

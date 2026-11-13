@@ -11,9 +11,11 @@
 //   signature : photo + décision + cadres). Une photo dont la décision ou les cadres ont changé avant l'ajout voit son envoi retiré
 //   (`retire`, puis `release` libère la place avant le remplacement) et repart.
 // - Un échec arrête la série à cette photo ; les photos faites restent faites, « Reprendre l'envoi » repart de la première restante.
+import { albumLabels } from "../labels/albums.fr";
 import type { AlbumPhotoView, AlbumPlateDecision } from "../schemas/albums";
 import { ALBUM_MAX_PHOTOS } from "../schemas/media";
 import type { PlateRect } from "../schemas/vehicle";
+import { cancelOp, type RemovalQueue } from "./removalQueue";
 
 /** Photos au plus par ouverture du sélecteur du système (limite du système, fiche R9e). */
 export const PICK_PER_OPEN = 30;
@@ -21,6 +23,12 @@ export const PICK_PER_OPEN = 30;
 /** Combien de photos on peut encore demander au sélecteur : 30 au plus par ouverture, jamais au-delà du plafond de l'album. */
 export const pickLimit = (alreadyInAlbum: number, pending: number): number =>
   Math.max(0, Math.min(PICK_PER_OPEN, ALBUM_MAX_PHOTOS - alreadyInAlbum - pending));
+
+/** Ce que dit le sélecteur quand le plafond coupe la sélection (`null` : rien à dire) ; l'album plein ne dit pas « 0 photos gardées ». */
+export function pickNotice(room: number, asked: number): string | null {
+  if (asked <= room) return null;
+  return room === 0 ? albumLabels.pickFull(ALBUM_MAX_PHOTOS) : albumLabels.pickCut(room, asked);
+}
 
 /** Le choix pour une photo à plaque repérée. */
 export type BatchChoice = "blurred" | "kept";
@@ -173,9 +181,10 @@ export async function sendAlbumPhotos(items: readonly AlbumItem[], deps: SendDep
       deps.retire({ id: upload.id, key: upload.key });
       deps.onItem(item.clientId, { upload: undefined });
       upload = undefined;
-      await deps.release?.();
     }
     if (!upload) {
+      // Tout nouvel envoi attend derrière le nettoyage requis (retraits, annulations non confirmées) : la place du quota est libérée d'abord.
+      await deps.release?.();
       const sent = await deps.upload(item, decision === "blurred" ? item.rects : null);
       upload = { ...sent, signature };
       deps.onItem(item.clientId, { upload });
@@ -197,4 +206,36 @@ export async function sendAlbumPhotos(items: readonly AlbumItem[], deps: SendDep
     done++;
   }
   return done;
+}
+
+export type RemoveItemDeps = {
+  albumId: string;
+  /** Annule l'ajout par `clientId` (API idempotente : 204 = la photo n'est pas dans l'album et n'y entrera pas). */
+  cancel: (clientId: string) => Promise<void>;
+  queue: Pick<RemovalQueue, "retire" | "release">;
+  /** Panne passagère (réseau, 5xx) : l'annulation reste en file, la photo part de l'écran. Tout autre refus remonte, la photo reste. */
+  isTransient: (error: unknown) => boolean;
+};
+
+/**
+ * Retire une photo de la séance. Une photo dont l'ajout est parti (même sans réponse) est **annulée par son `clientId`**, côté API et
+ * sous le verrou de l'ajout : un ajout encore en route finira refusé, un ajout fini sera retiré. La réussite n'est déclarée que sur la
+ * réponse de l'API, jamais sur un 404 seul. Panne passagère : l'annulation reste en file (mémoire et persistante) jusqu'à confirmation et
+ * la photo part de l'écran (`"queued"`). Refus définitif : l'erreur remonte, la photo reste. L'envoi de la photo, s'il en reste un, est
+ * supprimé après (la file passe les annulations avant les envois).
+ */
+export async function removeAlbumItem(item: AlbumItem, deps: RemoveItemDeps): Promise<"removed" | "queued"> {
+  let outcome: "removed" | "queued" = "removed";
+  if (item.attempted || item.photoId) {
+    try {
+      await deps.cancel(item.clientId);
+    } catch (e) {
+      if (!deps.isTransient(e)) throw e;
+      deps.queue.retire(cancelOp(deps.albumId, item.clientId));
+      outcome = "queued";
+    }
+  }
+  if (item.upload) deps.queue.retire({ id: item.upload.id, key: item.upload.key });
+  void deps.queue.release();
+  return outcome;
 }

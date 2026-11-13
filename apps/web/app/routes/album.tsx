@@ -115,21 +115,37 @@ export default function AlbumPage({ loaderData, actionData }: Route.ComponentPro
             // R9f et R9g y posent les leurs.
             actions={(photo) =>
               a.mine ? (
-                <Form method="post" data-testid="album-photo-remove-form">
-                  <input type="hidden" name="intent" value="photo-delete" />
-                  <input type="hidden" name="photoId" value={photo.key} />
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    icon="trash"
-                    disabled={busy}
-                    data-testid="album-photo-remove"
+                <>
+                  {/* Même confirmation que l'appli : retirer une photo d'un album publié l'enlève pour tout le monde. */}
+                  <Form
+                    method="post"
+                    data-testid="album-photo-remove-form"
+                    onSubmit={(e) => {
+                      if (!window.confirm(`${L.photoRemove}\n${L.photoRemoveConfirm}`)) e.preventDefault();
+                    }}
                   >
-                    {L.photoRemove}
-                  </Button>
-                </Form>
+                    <input type="hidden" name="intent" value="photo-delete" />
+                    <input type="hidden" name="photoId" value={photo.key} />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      icon="trash"
+                      disabled={busy}
+                      data-testid="album-photo-remove"
+                    >
+                      {L.photoRemove}
+                    </Button>
+                  </Form>
+                  {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
+                  {actionData?.error && (
+                    <p role="alert" className="s-error" data-testid="album-photo-remove-error">
+                      {actionData.error}
+                    </p>
+                  )}
+                </>
               ) : (
-                <ReportDialog targetType="album_photo" targetId={photo.key} />
+                // Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée.
+                <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
               )
             }
           />

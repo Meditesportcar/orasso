@@ -131,9 +131,11 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), puis la fiche sans gestion.
     const damien = await browser.newContext({ viewport: { width: 390, height: 900 } });
     const dpage = await damien.newPage();
-    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : la passe repart d'un Fil neuf.
-    await sql("delete from feed_seen");
-    await sql("delete from feed_seen_floor");
+    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : son Fil repart de neuf (lui seul : les autres comptes ne sont pas touchés).
+    await sql(`delete from feed_seen where user_id = (select id from "user" where email = 'damien@orasso.local')`);
+    await sql(
+      `delete from feed_seen_floor where user_id = (select id from "user" where email = 'damien@orasso.local')`,
+    );
     await loginInBrowser(dpage, DAMIEN, undefined, "/app/fil");
     await expect(dpage.getByTestId("fil-list")).toBeVisible({ timeout: 30_000 });
     const card = dpage.getByTestId("feed-card-album").filter({ hasText: title });
@@ -387,4 +389,242 @@ test("« Signaler » vise la photo affichée dans la visionneuse ; la consultati
   await expect(dialog.getByTestId("album-photo-remove")).toHaveCount(0);
   await expect(page.getByTestId("album-report")).toHaveCount(0);
   expect(views).toHaveLength(1);
+});
+
+// --- Tour 2 (opérations idempotentes par clientId, succès prouvé) ------------------------------------------------------------------
+
+const SITE_ORIGIN = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+
+/** Publie par l'API un album de `n` photos du seed (sans plaque) sur Béziers Night ; rend son identifiant. */
+async function publishByApi(n: number, title: string): Promise<string> {
+  const cookie = await login(LEO);
+  const api = `http://localhost:${process.env.API_PORT ?? 3001}`;
+  const event = await apiCall<{ id: string }>(null, "GET", "/events/by-slug/beziers-night-2026");
+  const draft = await apiCall<{ id: string }>(cookie, "POST", "/me/albums", { eventId: event.data.id, title: null });
+  for (const name of ["car-golf-gti.jpg", "car-mx5.jpg", "car-supra.jpg"].slice(0, n)) {
+    const form = new FormData();
+    const f = photo(name);
+    form.append("purpose", "album_photo");
+    form.append("file", new Blob([new Uint8Array(f.buffer)], { type: f.mimeType }), f.name);
+    const up = await fetch(`${api}/api/me/uploads`, {
+      method: "POST",
+      headers: { origin: SITE_ORIGIN, cookie },
+      body: form,
+    });
+    expect(up.status).toBe(201);
+    const key = ((await up.json()) as { key: string }).key;
+    const add = await apiCall(cookie, "POST", `/me/albums/${draft.data.id}/photos`, {
+      uploadKey: key,
+      plateDecision: "none",
+      clientId: crypto.randomUUID(),
+    });
+    expect(add.status).toBe(201);
+  }
+  await apiCall(cookie, "PATCH", `/me/albums/${draft.data.id}`, { title });
+  expect((await apiCall(cookie, "POST", `/me/albums/${draft.data.id}/publish`)).status).toBe(200);
+  return draft.data.id;
+}
+
+const LIVE_PHOTOS =
+  "select count(*)::int n from event_album_photos p join event_albums a on a.id = p.album_id join events e on e.id = a.event_id where e.slug = 'beziers-night-2026' and a.status = 'draft' and p.deleted_at is null";
+
+test("retirer AVANT la validation tardive de l'ajout : l'annulation par clientId est gardée côté API, l'ajout qui arrive ensuite est refusé, aucune photo ne reste", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    // L'ajout ne reçoit jamais de réponse (la page abandonne) ; le serveur, lui, le validerait plus tard.
+    let held: { url: string; body: string } | null = null;
+    await page.route("**/api/me/albums/*/photos", async (route) => {
+      if (route.request().method() === "POST" && held === null) {
+        held = { url: route.request().url(), body: route.request().postData() ?? "" };
+        await route.abort();
+      } else await route.continue();
+    });
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+    // « Retirer » : rien n'est encore dans l'album, la tuile part, l'annulation est confirmée par l'API (204).
+    const cancelled = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await page.getByTestId("album-remove").click();
+    expect((await cancelled).status()).toBe(204);
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    // La validation tardive arrive : refusée (409), l'album reste vide.
+    const sent = held as { url: string; body: string } | null;
+    expect(sent).not.toBeNull();
+    const late = await page.evaluate(
+      async ({ url, body }) =>
+        (
+          await fetch(url, {
+            method: "POST",
+            body,
+            headers: { "content-type": "application/json" },
+            credentials: "same-origin",
+          })
+        ).status,
+      sent as { url: string; body: string },
+    );
+    expect(late).toBe(409);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("cadres et décision figés pendant l'envoi : retirer le cadre est impossible ; réponse perdue puis reprise : même décision, pas de 409", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.route("**/api/me/uploads", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      await route.continue();
+    });
+    let lost = 0;
+    await page.route("**/api/me/albums/*/photos", async (route) => {
+      if (route.request().method() === "POST" && lost++ === 0) {
+        await route.fetch();
+        await route.abort();
+      } else await route.continue();
+    });
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-mark").click();
+    await expect(page.getByTestId("album-plate-editor")).toBeVisible();
+    await page.getByTestId("album-blur").click();
+    await page.getByTestId("album-step2-continue").click();
+    // Pendant l'envoi retardé : « Retirer le cadre » et « Cadre posé » sont bloqués, « Changer » et le bloc ne bougent plus.
+    await expect(page.getByTestId("album-progress")).toBeVisible();
+    await expect(page.getByTestId("album-unmark")).toBeDisabled();
+    await expect(page.getByTestId("album-mark")).toBeDisabled();
+    await expect(page.getByTestId("album-plate-editor")).toBeVisible();
+    // La réponse de l'ajout se perd après validation : la photo est figée « floutée », la reprise rejoue la même décision (pas de 409).
+    await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("album-change")).toHaveCount(0);
+    await page.unroute("**/api/me/uploads");
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    const rows = await sql<{ plate_state: string }>(
+      "select p.plate_state from event_album_photos p join event_albums a on a.id = p.album_id join events e on e.id = a.event_id where e.slug = 'beziers-night-2026' and a.status = 'draft' and p.deleted_at is null",
+    );
+    expect(rows.map((r) => r.plate_state)).toEqual(["blurred"]);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("réponse de suppression perdue APRÈS la suppression effective : la tuile part, le compteur suit, l'annulation reste en file puis est confirmée avant l'envoi suivant", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    await page.getByTestId("album-line-photos").click();
+    await expect(page.getByTestId("album-count")).toContainText("1");
+    let lost = 0;
+    await page.route("**/api/me/albums/*/photos/by-client/*", async (route) => {
+      if (route.request().method() === "DELETE" && lost++ === 0) {
+        await route.fetch();
+        await route.abort();
+      } else await route.continue();
+    });
+    await page.getByTestId("album-remove").click();
+    // Le serveur a retiré la photo, la réponse s'est perdue : la tuile part quand même, le compteur suit.
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    await expect(page.getByTestId("album-count")).toContainText("0");
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+    // L'annulation est restée en file (liste persistante du compte) ; le prochain envoi la rejoue d'abord (204) puis part.
+    const stored = await page.evaluate(() =>
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("orasso.album-removals."))
+        .map((k) => localStorage.getItem(k)),
+    );
+    expect(stored.join("")).toContain("cancel:");
+    await page.getByTestId("album-pick").setInputFiles([photo("car-mx5.jpg")]);
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+    const left = await page.evaluate(() =>
+      Object.keys(localStorage).filter((k) => k.startsWith("orasso.album-removals.")),
+    );
+    expect(left).toEqual([]);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("deux signalements successifs sans fermer la visionneuse : le second formulaire est neuf et vise la seconde photo", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const published = await leoAlbums("published");
+  const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
+  const view = await apiCall<{ photos: { id: string }[] }>(await login(DAMIEN), "GET", `/albums/${rassemblement?.id}`);
+  const [first, second] = [view.data.photos[0]?.id, view.data.photos[1]?.id];
+  const targets: string[] = [];
+  await page.route("**/api/reports", async (route) => {
+    targets.push(route.request().postDataJSON().targetId);
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ id: crypto.randomUUID() }),
+    });
+  });
+  await loginInBrowser(page, DAMIEN, undefined, `/albums/${rassemblement?.id}`);
+  await page.getByTestId("media-gallery-photo").first().click();
+  const dialog = page.getByTestId("media-gallery-viewer");
+  await dialog.getByTestId("report-open").click();
+  await page.getByTestId("report-dialog").locator("input[type=radio]").first().check();
+  await page.getByTestId("report-send").click();
+  await expect(page.getByTestId("report-done")).toBeVisible();
+  await page.keyboard.press("Escape");
+  // Photo suivante, la visionneuse reste ouverte : le formulaire n'affiche pas le succès précédent et signale cette photo.
+  await dialog.getByRole("button", { name: "Suivante" }).click();
+  await dialog.getByTestId("report-open").click();
+  await expect(page.getByTestId("report-done")).toHaveCount(0);
+  await page.getByTestId("report-dialog").locator("input[type=radio]").first().check();
+  await page.getByTestId("report-send").click();
+  await expect.poll(() => targets.length).toBe(2);
+  expect(targets).toEqual([first, second]);
+});
+
+test("retirer une photo d'un album publié depuis la visionneuse : confirmation (annulable), dernière photo de la suite → la visionneuse passe à la voisine, refus de l'API visible dans la fenêtre", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const many = await publishByApi(3, `Retrait R9e ${unique()}`);
+  const solo = await publishByApi(1, `Retrait seul R9e ${unique()}`);
+  try {
+    await loginInBrowser(page, LEO, undefined, `/albums/${many}`);
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(3);
+    // 1. La confirmation s'annule : rien n'est retiré.
+    await page.getByTestId("media-gallery-photo").nth(2).click();
+    page.once("dialog", (d) => void d.dismiss());
+    await page.getByTestId("album-photo-remove").click();
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(3);
+    // 2. Dernière photo de la suite, confirmée : la visionneuse montre la photo voisine (ou se ferme), jamais une fenêtre vide.
+    page.once("dialog", (d) => void d.accept());
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(2);
+    await expect(page.getByTestId("media-gallery-position")).toHaveText("2 / 2");
+    await expect(page.getByTestId("media-gallery-current")).toBeVisible();
+    // 3. Album publié à une photo : le refus de l'API s'affiche dans la fenêtre.
+    await page.goto(`/albums/${solo}`);
+    await page.getByTestId("media-gallery-photo").first().click();
+    page.once("dialog", (d) => void d.accept());
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("media-gallery-viewer").getByTestId("album-photo-remove-error")).toBeVisible();
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(1);
+  } finally {
+    const cookie = await login(LEO);
+    await apiCall(cookie, "DELETE", `/me/albums/${many}`);
+    await apiCall(cookie, "DELETE", `/me/albums/${solo}`);
+  }
 });

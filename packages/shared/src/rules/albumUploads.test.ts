@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import {
   type AlbumItem,
   AlbumSendStopped,
@@ -12,14 +11,17 @@ import {
   isPhotoLocked,
   PICK_PER_OPEN,
   pickLimit,
+  pickNotice,
   platedCount,
   reconcile,
   remaining,
+  removeAlbumItem,
   reopenDecisions,
   type SendDeps,
   sendAlbumPhotos,
   signatureOf,
 } from "./albumUploads";
+import { createRemovalQueue, type QueuedOp } from "./removalQueue";
 
 const RECT = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
 const item = (n: number, rects = [] as (typeof RECT)[], over: Partial<AlbumItem> = {}): AlbumItem => ({
@@ -39,6 +41,8 @@ function fake(items: AlbumItem[], opts: { failAddAt?: number; failUploadAt?: num
   let uploads = 0;
   let adds = 0;
   const retired: string[] = [];
+  let toRelease = false;
+  let releases = 0;
   const deps: SendDeps = {
     upload: async (it, rects) => {
       uploads++;
@@ -52,13 +56,25 @@ function fake(items: AlbumItem[], opts: { failAddAt?: number; failUploadAt?: num
       log.push(`add ${body.clientId} ${body.plateDecision}`);
       return { id: `p-${it.clientId}`, url: `/api/albums/a/photos/${it.clientId}.webp` };
     },
-    retire: (u) => retired.push(u.id),
+    retire: (u) => {
+      retired.push(u.id);
+      toRelease = true;
+    },
     release: async () => {
-      log.push("release");
+      releases++;
+      if (toRelease) log.push("release");
+      toRelease = false;
     },
     onItem: (id, patch) => state.set(id, { ...(state.get(id) as AlbumItem), ...patch }),
   };
-  return { deps, log, retired, current: () => [...state.values()], counts: () => ({ uploads, adds }) };
+  return {
+    deps,
+    log,
+    retired,
+    current: () => [...state.values()],
+    counts: () => ({ uploads, adds }),
+    releases: () => releases,
+  };
 }
 
 describe("décision de plaque, par photo", () => {
@@ -260,5 +276,178 @@ describe("sendAlbumPhotos : une photo à la fois", () => {
     await expect(sendAlbumPhotos([item(2)], { ...api.deps, stopped: () => true })).rejects.toBeInstanceOf(
       AlbumSendStopped,
     );
+  });
+});
+
+describe("le plafond coupe la sélection", () => {
+  it("dit combien de photos sont gardées, ne dit rien quand tout passe, et ne dit jamais « 0 premières » (album plein)", () => {
+    expect(pickNotice(30, 12)).toBeNull();
+    expect(pickNotice(30, 30)).toBeNull();
+    expect(pickNotice(7, 12)).toBe(
+      "Seules les 7 premières photos ont été gardées sur 12 (30 par ouverture, 200 par album).",
+    );
+    expect(pickNotice(1, 3)).toContain("la première photo a été gardée sur 3");
+    const full = pickNotice(0, 3);
+    expect(full).toBe("L'album compte déjà 200 photos : aucune photo n'a été ajoutée.");
+    expect(full).not.toContain("0 premières");
+  });
+});
+
+describe("tout nouvel envoi attend derrière le nettoyage requis (retrait lent → remplacement, quota plein)", () => {
+  it("un retrait lent : l'envoi de la remplaçante ne part qu'après la suppression ; quota plein, il n'est jamais refusé", async () => {
+    const order: string[] = [];
+    let quota = 40; // envois en attente : plein
+    let finishRemoval!: () => void;
+    const slow = new Promise<void>((r) => {
+      finishRemoval = r;
+    });
+    const queue = createRemovalQueue({
+      remove: async (u) => {
+        order.push(`suppression ${u.id} commence`);
+        await slow;
+        quota -= 1;
+        order.push(`suppression ${u.id} finie`);
+      },
+      store: { read: async () => [], write: async () => undefined },
+    });
+    // « Retirer » : l'envoi retiré part en file, sans attendre (l'écran reste réactif).
+    queue.retire({ id: "u1", key: "k1" });
+    const first = queue.release();
+    // La remplaçante est envoyée tout de suite : son envoi attend la fin du nettoyage.
+    const items = [item(1)];
+    const deps: SendDeps = {
+      upload: async () => {
+        if (quota >= 40) throw new Error("quota d'envois en attente plein");
+        order.push("envoi remplaçante");
+        return { id: "u2", key: "private/album-uploads/u2.webp" };
+      },
+      add: async (it) => ({ id: `p-${it.clientId}` }),
+      retire: () => undefined,
+      release: () => queue.release(),
+      onItem: () => undefined,
+    };
+    const sending = sendAlbumPhotos(items, deps);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(order).toEqual(["suppression u1 commence"]);
+    finishRemoval();
+    await Promise.all([first, sending]);
+    expect(order).toEqual(["suppression u1 commence", "suppression u1 finie", "envoi remplaçante"]);
+  });
+
+  it("le nettoyage est attendu avant chaque envoi, pas seulement avant un remplacement", async () => {
+    const items = [item(1), item(2)];
+    const api = fake(items);
+    await sendAlbumPhotos(items, api.deps);
+    expect(api.releases()).toBe(2);
+  });
+});
+
+describe("retirer une photo (annulation par clientId, jamais un 404 pour un succès)", () => {
+  const memoryQueue = (remove: (op: QueuedOp) => Promise<unknown>) =>
+    createRemovalQueue({ remove, store: { read: async () => [], write: async () => undefined } });
+  const net = new TypeError("réseau coupé");
+
+  it("ajout parti (réponse perdue après validation) : l'annulation est confirmée par l'API (204), la tuile part, l'envoi est supprimé après", async () => {
+    const calls: string[] = [];
+    const queue = memoryQueue(async (op) => {
+      calls.push(`file ${op.id}`);
+    });
+    const lost = item(1, [], { attempted: true, upload: { id: "u1", key: "k1", signature: "s" } });
+    const result = await removeAlbumItem(lost, {
+      albumId: "A",
+      cancel: async (id) => {
+        calls.push(`annule ${id}`);
+      },
+      queue,
+      isTransient: (e) => e === net,
+    });
+    expect(result).toBe("removed");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls).toEqual([`annule ${lost.clientId}`, "file u1"]);
+  });
+
+  it("retrait avant la validation tardive de l'ajout : l'annulation part sans photo à trouver ; l'ajout qui arrive ensuite est refusé (la pierre tombale est côté API)", async () => {
+    const cancelled = new Set<string>();
+    const lateAdd = (clientId: string) => (cancelled.has(clientId) ? 409 : 201);
+    const slowAdd = item(1, [], { attempted: true });
+    const result = await removeAlbumItem(slowAdd, {
+      albumId: "A",
+      cancel: async (id) => {
+        cancelled.add(id);
+      },
+      queue: memoryQueue(async () => undefined),
+      isTransient: () => false,
+    });
+    expect(result).toBe("removed");
+    expect(lateAdd(slowAdd.clientId)).toBe(409);
+  });
+
+  it("hors ligne : l'annulation reste en file (mémoire et liste persistante), la tuile part ; rejouée au retour du réseau, jamais perdue", async () => {
+    let online = false;
+    const done: string[] = [];
+    let stored: QueuedOp[] = [];
+    const queue = createRemovalQueue({
+      remove: async (op) => {
+        if (!online) throw net;
+        done.push(op.id);
+      },
+      store: {
+        read: async () => [...stored],
+        write: async (l) => {
+          stored = [...l];
+        },
+      },
+      stops: (e) => e === net,
+    });
+    const it1 = item(1, [], { attempted: true, photoId: "p1" });
+    const result = await removeAlbumItem(it1, {
+      albumId: "A",
+      cancel: async () => {
+        throw net;
+      },
+      queue,
+      isTransient: (e) => e === net,
+    });
+    expect(result).toBe("queued");
+    await queue.release();
+    expect(queue.hasPending()).toBe(true);
+    expect(stored.map((o) => o.id)).toEqual([`cancel:A:${it1.clientId}`]);
+    online = true;
+    await queue.replay();
+    expect(done).toEqual([`cancel:A:${it1.clientId}`]);
+    expect(queue.hasPending()).toBe(false);
+    expect(stored).toEqual([]);
+  });
+
+  it("refus définitif (409 : dernière photo d'un album publié) : l'erreur remonte, la photo reste, rien n'est mis en file", async () => {
+    const refused = new Error("409");
+    const retired: string[] = [];
+    await expect(
+      removeAlbumItem(item(1, [], { attempted: true, photoId: "p1", upload: { id: "u1", key: "k", signature: "s" } }), {
+        albumId: "A",
+        cancel: async () => {
+          throw refused;
+        },
+        queue: { retire: (o) => retired.push(o.id), release: async () => undefined },
+        isTransient: () => false,
+      }),
+    ).rejects.toBe(refused);
+    expect(retired).toEqual([]);
+  });
+
+  it("photo dont l'ajout n'est pas parti : aucune annulation côté serveur, seulement son envoi retiré", async () => {
+    const cancel: string[] = [];
+    const retired: string[] = [];
+    const result = await removeAlbumItem(item(1, [], { upload: { id: "u9", key: "k9", signature: "s" } }), {
+      albumId: "A",
+      cancel: async (id) => {
+        cancel.push(id);
+      },
+      queue: { retire: (o) => retired.push(o.id), release: async () => undefined },
+      isTransient: () => false,
+    });
+    expect(result).toBe("removed");
+    expect(cancel).toEqual([]);
+    expect(retired).toEqual(["u9"]);
   });
 });

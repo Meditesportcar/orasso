@@ -256,6 +256,86 @@ describe("POST /me/albums/:id/photos : une photo à la fois", () => {
     expect(same.json.id).toBe(first.json.id);
   });
 
+  it("annulation par clientId (tour 2) : avant l'ajout, la pierre tombale refuse l'ajout tardif (409) sans consommer son envoi", async () => {
+    const album = await draftOf(leo, eventId);
+    const clientId = crypto.randomUUID();
+    // « Retirer » part avant que l'ajout (encore en route) ne soit validé : rien à retirer, l'annulation est gardée.
+    const cancel = await call(leo, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`);
+    expect(cancel.status).toBe(204);
+    const sent = await sendUpload(leo, "album_photo");
+    const late = await call(leo, "POST", `/me/albums/${album.id}/photos`, {
+      uploadKey: sent.key,
+      plateDecision: "none",
+      clientId,
+    });
+    expect(late.status).toBe(409);
+    // L'envoi n'est pas consommé (le client le supprime ensuite) et l'album n'a pas de photo.
+    expect((await db.select().from(uploads).where(eq(uploads.key, sent.key))).length).toBe(1);
+    expect((await albumRow(album.id))?.photosCount).toBe(0);
+    expect((await photoRows(album.id)).filter((p) => p.deletedAt === null)).toHaveLength(0);
+    // Idempotent : la même annulation rend le même succès.
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`)).status).toBe(204);
+  });
+
+  it("annulation par clientId : après l'ajout, la photo est retirée (compteur, positions) ; un rejeu de l'ajout est refusé ; idempotent", async () => {
+    const album = await draftOf(leo, eventId);
+    const keep = await addPhoto(leo, album.id);
+    const clientId = crypto.randomUUID();
+    const added = await addPhoto(leo, album.id, { clientId });
+    expect(added.status).toBe(201);
+    expect((await albumRow(album.id))?.photosCount).toBe(2);
+    const cancel = await call(leo, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`);
+    expect(cancel.status).toBe(204);
+    expect((await albumRow(album.id))?.photosCount).toBe(1);
+    expect((await photoRows(album.id)).filter((p) => p.deletedAt === null).map((p) => p.id)).toEqual([keep.json.id]);
+    const replay = await call(leo, "POST", `/me/albums/${album.id}/photos`, {
+      uploadKey: added.sent.key,
+      plateDecision: "none",
+      clientId,
+    });
+    expect(replay.status).toBe(409);
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`)).status).toBe(204);
+    expect((await albumRow(album.id))?.photosCount).toBe(1);
+  });
+
+  it("annulation et ajout simultanés (même clientId) : quel que soit l'ordre, aucune photo ne reste dans l'album", async () => {
+    for (let round = 0; round < 4; round++) {
+      const album = await draftOf(leo, eventId);
+      const clientId = crypto.randomUUID();
+      const sent = await sendUpload(leo, "album_photo");
+      const [add, cancel] = await Promise.all([
+        call(leo, "POST", `/me/albums/${album.id}/photos`, { uploadKey: sent.key, plateDecision: "none", clientId }),
+        call(leo, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`),
+      ]);
+      expect(cancel.status).toBe(204);
+      expect([201, 409]).toContain(add.status);
+      expect((await photoRows(album.id)).filter((p) => p.deletedAt === null)).toHaveLength(0);
+      expect((await albumRow(album.id))?.photosCount).toBe(0);
+    }
+  });
+
+  it("retrait par identifiant idempotent : déjà retiré = 204 (preuve), identifiant inconnu = 404 ; la dernière photo d'un album publié ne s'annule pas", async () => {
+    const album = await draftOf(leo, eventId);
+    const a = await addPhoto(leo, album.id);
+    await addPhoto(leo, album.id);
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${a.json.id}`)).status).toBe(204);
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${a.json.id}`)).status).toBe(204);
+    expect((await albumRow(album.id))?.photosCount).toBe(1);
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${crypto.randomUUID()}`)).status).toBe(404);
+    // Un autre média ne touche pas à cet album.
+    const kenji = await signUp("Kenji_Cancel");
+    expect((await call(kenji, "DELETE", `/me/albums/${album.id}/photos/by-client/${crypto.randomUUID()}`)).status).toBe(
+      404,
+    );
+  });
+
+  it("annulation d'une photo : la dernière d'un album publié ne s'annule pas (409), l'album la garde", async () => {
+    const solo = await publishedAlbum(leo, eventId, 1);
+    const [only] = (await photoRows(solo.id)).filter((p) => p.deletedAt === null);
+    expect(only?.clientId).toBeTruthy();
+    expect((await call(leo, "DELETE", `/me/albums/${solo.id}/photos/by-client/${only?.clientId}`)).status).toBe(409);
+  });
+
   it("le titulaire retrouve ses ajouts par clientId et le nombre de plaques floutées ; personne d'autre", async () => {
     const album = await draftOf(leo, eventId);
     const a = crypto.randomUUID();

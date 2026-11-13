@@ -75,6 +75,10 @@ export const albumsRoutes = new Hono<AppEnv>()
     const { photo, created } = await addPhoto(v, uuidParam(c, "id"), parse(albumPhotoAddSchema, raw));
     return c.json(photo, created ? 201 : 200);
   })
+  .delete("/me/albums/:id/photos/by-client/:clientId", async (c) => {
+    await albumsService.cancelPhoto(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "clientId"));
+    return c.body(null, 204);
+  })
   .delete("/me/albums/:id/photos/:photoId", async (c) => {
     await albumsService.removePhoto(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "photoId"));
     return c.body(null, 204);
