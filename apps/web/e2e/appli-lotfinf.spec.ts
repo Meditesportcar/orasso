@@ -133,9 +133,13 @@ test.afterAll(async () => {
 test("ouverture : la liste et le compteur disent la zone (8 km), la ville, aucun appel de zone", async ({
   browser,
 }) => {
-  const { ctx, page, zoneCalls } = await open(browser);
+  const { ctx, page, zoneCalls, allCalls } = await open(browser);
+  const accueil = allCalls();
   await page.goto("/pratique");
   await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
+  // Une seule paire de lectures à l'ouverture de l'écran (ville et sortie) : jamais montée deux fois.
+  await page.waitForTimeout(2_000);
+  expect(allCalls() - accueil).toBeLessThanOrEqual(2);
   await expect(page.getByTestId("practical-count")).toContainText(
     /\d+ stations? · \d+ lavages? dans la zone|\d+ stations? dans la zone|\d+ lavages? dans la zone/,
   );

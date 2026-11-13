@@ -11,7 +11,9 @@ import { RELAIS } from "./relais";
 test.use({ actionTimeout: 30_000 });
 test.describe.configure({ mode: "serial" });
 
-const EMAIL = "pilote103@orasso.local";
+// Un compte par test (tournante) : la limite de débit de l'API (40 lectures par minute et par compte) est isolée entre les tests, sans la relever.
+const POOL = ["pilote103@orasso.local", "pilote105@orasso.local", "pilote111@orasso.local", "pilote114@orasso.local"];
+let turn = 0;
 const STUB = `http://127.0.0.1:${process.env.METEO_STUB_PORT ?? 4748}`;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-fin-f-captures/apres`;
 const SHOTS = Boolean(process.env.CAPTURES);
@@ -27,13 +29,15 @@ async function clearPlacesCache() {
 const cookies: Record<string, string> = {};
 test.beforeAll(async () => {
   await clearPlacesCache();
-  cookies[EMAIL] = await login(EMAIL);
-  await apiCall(cookies[EMAIL] ?? null, "PUT", "/me/weather/places", { places: [] });
+  for (const email of POOL) {
+    cookies[email] = await login(email);
+    await apiCall(cookies[email] ?? null, "PUT", "/me/weather/places", { places: [] });
+  }
   const up = await fetch(`${STUB}/__stub?down=0&slow=0&reset=1`).catch(() => null);
   expect(up?.ok, "les faux services locaux doivent tourner (.run-fin-f/stub.mjs)").toBe(true);
 });
 test.afterAll(async () => {
-  await apiCall(cookies[EMAIL] ?? null, "PUT", "/me/weather/places", { places: [] });
+  for (const email of POOL) await apiCall(cookies[email] ?? null, "PUT", "/me/weather/places", { places: [] });
   await fetch(`${STUB}/__stub?down=0&slow=0`).catch(() => null);
 });
 
@@ -52,7 +56,8 @@ async function open(browser: Browser, opts: { width?: number; theme?: string } =
       if (body.near === "zone") zone.push(body);
     }
   });
-  await loginInBrowser(page, EMAIL, undefined, "/app");
+  const email = POOL[turn++ % POOL.length] as string;
+  await loginInBrowser(page, email, undefined, "/app");
   return { ctx, page, zoneCalls: () => zone, allCalls: () => all };
 }
 
@@ -98,8 +103,11 @@ async function zoomInSlightly(page: Page) {
 test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, le champ, la ville", async ({
   browser,
 }) => {
-  const { ctx, page, zoneCalls } = await open(browser, { width: 1280 });
+  const { ctx, page, zoneCalls, allCalls } = await open(browser, { width: 1280 });
   await openPage(page, 1280);
+  // Une seule paire de lectures à l'ouverture (ville et sortie) : l'écran n'est monté qu'une fois, la session annoncée ne le remonte pas.
+  await page.waitForTimeout(2_000);
+  expect(allCalls()).toBe(2);
   await shot(page, "site-ouverture-beton-1280");
   await expect(page.getByTestId("map-toggle")).toHaveCount(0);
   await expect(page.getByTestId("practical-list")).toBeVisible();
@@ -235,17 +243,8 @@ test("1280 px : hors ligne, le filtre local marche, « Réessayer » et la phras
   await page.waitForTimeout(4_000);
   expect(zoneCalls().length).toBe(n);
   await ctx.setOffline(false);
-  // Le réseau met un instant à revenir : « Réessayer » est rejoué (un appui à la fois) jusqu'au succès, jamais plus de trois fois.
-  const retry = page.getByTestId("practical-retry");
-  for (let i = 0; i < 3 && (await retry.count()) > 0; i++) {
-    await page.waitForTimeout(1_000);
-    await retry.first().click();
-    await retry
-      .first()
-      .waitFor({ state: "detached", timeout: 10_000 })
-      .catch(() => undefined);
-  }
-  await expect(retry).toHaveCount(0, { timeout: 10_000 });
+  await page.getByTestId("practical-retry").click();
+  await expect(page.getByTestId("practical-retry")).toHaveCount(0, { timeout: 30_000 });
   await ctx.close();
 });
 
