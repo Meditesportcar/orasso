@@ -194,7 +194,7 @@ export function PracticalMap({
           e.stopPropagation();
           if (stacked) group(g.items.map((p) => p.id));
           else {
-            const target = fitView(g.items, w, h, { maxZoom: GROUP_MAX_ZOOM, top: 48, bottom: 48 });
+            const target = fitView(g.items, w, h, { maxZoom: GROUP_MAX_ZOOM });
             map.flyTo({
               center: [target.lng, target.lat],
               zoom: target.zoom,

@@ -158,7 +158,7 @@ export function PracticalMap({
   const open = (g: (typeof groups)[number]) => () => {
     if (isStacked(g, zoom)) onGroup(g.items.map((p) => p.id));
     else {
-      const target = fitView(g.items, size.w || 352, size.h || 400, { maxZoom: GROUP_MAX_ZOOM, top: 48, bottom: 48 });
+      const target = fitView(g.items, size.w || 352, size.h || 400, { maxZoom: GROUP_MAX_ZOOM });
       camera.current?.flyTo({ center: [target.lng, target.lat], zoom: target.zoom, duration });
     }
   };

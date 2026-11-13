@@ -172,7 +172,7 @@ export function PracticalMap({
           e.stopPropagation();
           if (stacked) group(g.items.map((p) => p.id));
           else {
-            const t = fitView(g.items, w, height, { maxZoom: GROUP_MAX_ZOOM, top: 48, bottom: 48 });
+            const t = fitView(g.items, w, height, { maxZoom: GROUP_MAX_ZOOM });
             map.flyTo({ center: [t.lng, t.lat], zoom: t.zoom, duration: reduce ? 0 : 420 });
           }
         });
