@@ -12,6 +12,7 @@ import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
+import { albumContact } from "./contact";
 import { albumDownload } from "./download";
 import { myPhotosService } from "./my-photos";
 import { shareToStory } from "./share-to-story";
@@ -57,6 +58,12 @@ export const albumTagsRoutes = new Hono<AppEnv>()
     const raw: unknown = await c.req.json().catch(() => ({}));
     const done = await shareToStory(v, uuidParam(c, "id"), parse(shareToStorySchema, raw ?? {}));
     return c.json({ id: done.id, expiresAt: done.expiresAt }, done.replayed ? 200 : 201);
+  })
+  // « Contacter <média> » : la conversation avec le titulaire de la page, jamais son compte dans la réponse.
+  .post("/albums/:id/contact", async (c) => {
+    const v = await requireUser(c);
+    const result = await albumContact.openWithMedia(v, uuidParam(c, "id"));
+    return c.json(result, result.created ? 201 : 200);
   })
   .get("/album-photos/:id/download", async (c) => {
     const v = await requireUser(c);
