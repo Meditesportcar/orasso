@@ -154,9 +154,10 @@ export function VisitedPage({ kind }: { kind: VisitedKind }) {
     setBusy(true);
     setNote(null);
     try {
-      if (p.isFollowing) await api.unfollowPage(key, actor);
-      else await api.followPage(key, actor);
-      await page.reload();
+      const done = p.isFollowing ? await api.unfollowPage(key, actor) : await api.followPage(key, actor);
+      // La réponse de l'écriture est appliquée tout de suite ; la relecture se fait en arrière-plan (sa panne ne défait rien).
+      page.setData({ ...p, isFollowing: done.following, followersCount: done.followersCount });
+      void page.reload().catch(() => undefined);
     } catch (e) {
       setNote(errorMessage(e));
     } finally {

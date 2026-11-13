@@ -322,3 +322,57 @@ test("une carte du Fil d'un média ouvre sa page (`/m/<id>`)", async ({ browser 
   await expect(page.getByTestId("page-name")).toContainText("Sud Cars", { timeout: 30_000 });
   await ctx.close();
 });
+
+test("tour 3 : `/me/pro` en échec → l'erreur et « Réessayer » ; le réessai réussit", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const c = CAS.pro;
+  const { ctx, page } = await open(browser, c.email);
+  await ctx.route("**/api/me/pro", (route) => route.abort());
+  await wear(page, c.testId);
+  await pageTab(page).click();
+  await expect(page.getByTestId("page-retry")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("page-name")).toHaveCount(0);
+  await ctx.unroute("**/api/me/pro");
+  await page.getByTestId("page-retry").click();
+  await expect(page.getByTestId("page-name").first()).toContainText(c.label, { timeout: 60_000 });
+  await ctx.close();
+});
+
+test("tour 3 : A → B réseau coupé, rien de A sous B ; « Suivre » appliqué malgré une relecture en échec", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "sarah@orasso.local");
+  await wear(page, "casquette-organizer", "Roues Libres 66");
+  await pageTab(page).click();
+  await expect(page.getByTestId("page-name").first()).toContainText("Roues Libres 66", { timeout: 60_000 });
+  // Réseau coupé, puis passage à l'autre structure par la feuille « Mes casquettes ».
+  await ctx.setOffline(true);
+  await page.getByTestId("page-row-casquettes").first().scrollIntoViewIfNeeded();
+  await page.getByTestId("page-row-casquettes").first().click();
+  await page.getByTestId("casquettes-organizer").filter({ hasText: "MéditeSportCar" }).first().click();
+  await page.waitForTimeout(3000);
+  // Rien de Roues Libres 66 : ni son nom, ni son QR, ni « Publier » à son nom.
+  await expect(page.getByText("Roues Libres 66")).toHaveCount(0);
+  await expect(page.getByTestId("page-qr-open")).toHaveCount(0);
+  await expect(page.getByTestId("publications-publish")).toHaveCount(0);
+  await ctx.setOffline(false);
+  await ctx.close();
+
+  // « Suivre » : la réponse de l'écriture s'applique même si la relecture échoue.
+  const leo = await login("leo@orasso.local");
+  const sud = (await apiCall<{ personas: { kind: string; id: string }[] }>(leo, "GET", "/me")).data.personas.find(
+    (p) => p.kind === "media",
+  );
+  const s = unique();
+  await signUpApi(`FolR9b_${s}`);
+  const v = await open(browser, `${`FolR9b_${s}`.toLowerCase()}@e2e.orasso.test`);
+  await go(v.page, `/m/${sud?.id}`);
+  await expect(v.page.getByTestId("follow-media")).toBeVisible({ timeout: 30_000 });
+  const before = await counter(v.page, "followers");
+  await v.ctx.route(`**/api/media/${sud?.id}`, (route) => route.abort());
+  await v.page.getByTestId("follow-media").click();
+  await expect(v.page.getByTestId("follow-media")).toContainText("Suivi", { timeout: 30_000 });
+  await expect.poll(() => counter(v.page, "followers"), { timeout: 30_000 }).toBe(before + 1);
+  await v.ctx.close();
+});

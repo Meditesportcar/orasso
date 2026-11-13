@@ -43,6 +43,7 @@ import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PageFooterProvider } from "@/ui/pageFooter";
@@ -78,7 +79,9 @@ type Loaded =
   | { kind: "media"; page: WithPageExtras<MediaPage> };
 
 export function OwnerPage({ kind }: { kind: OwnerKind }) {
-  const body = <OwnerPageBody kind={kind} />;
+  // Une clé par casquette : changer de casquette repart d'un état neuf (jamais des listes ni des feuilles d'une autre page).
+  const { active } = usePersona();
+  const body = <OwnerPageBody key={`${kind}:${active.id}`} kind={kind} />;
   return (
     <PageFooterProvider footer={<MyCasquettesRow />}>
       {/* L'organisateur passe par sa garde (double authentification), comme tout écran de son espace. */}
@@ -109,7 +112,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
   const id = active.kind === kind ? active.id : null;
 
   // --- La page : sa fiche publique, lue comme la lirait un membre (anneau, abonnés, compteurs) ---------------------------------
-  const slug = useOwnerSlug(kind, id);
+  const owner = useOwnerSlug(kind, id);
+  const slug = owner.slug;
   const loaded = useApi<Loaded | null>(
     async () => {
       if (!id) return null;
@@ -130,7 +134,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       cacheKey: `owner-page-${kind}-${id}`,
     },
   );
-  const data = loaded.data;
+  // Jamais les données d'une autre casquette : l'identifiant de la page lue doit être celui de la casquette active.
+  const data = loaded.data && loaded.data.page.id === id ? loaded.data : null;
   const organizer = data?.kind === "organizer" ? data.page : null;
 
   // Les listes de l'onglet « Événements » de la structure (comme sa page publique) ; `null` tant qu'elles ne sont pas lues.
@@ -184,7 +189,11 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
   const reloadAll = async () => {
     bumpReload();
     // Les listes de la structure ne se relisent que pour l'organisateur (sinon `reload` lirait les événements de tous).
-    await Promise.all([loaded.reload(), ...(organizer ? [upcoming.reload(), past.reload(), partners.reload()] : [])]);
+    await Promise.all([
+      owner.reload(),
+      loaded.reload(),
+      ...(organizer ? [upcoming.reload(), past.reload(), partners.reload()] : []),
+    ]);
   };
 
   // --- L'en-tête -------------------------------------------------------------------------------------------------------------
@@ -234,8 +243,13 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       }
     >
       {!data || !head || !key ? (
-        loaded.error && !data ? (
-          <Notice tone="error">{loaded.error.message}</Notice>
+        (loaded.error ?? owner.error) && !data ? (
+          <>
+            <Notice tone="error">{(loaded.error ?? owner.error)?.message}</Notice>
+            <SmButton kind="s" icon="undo" onPress={() => void reloadAll()} testID="page-retry">
+              {L.mentionsRetry}
+            </SmButton>
+          </>
         ) : (
           <Muted variant="body" testID="page-loading">
             Chargement…
@@ -335,13 +349,31 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
   );
 }
 
-/** Le slug de la structure (par ses adhésions) ou de la fiche pro (par `GET /me/pro`) : l'adresse de sa page publique. */
-function useOwnerSlug(kind: OwnerKind, id: string | null): string | null {
+/**
+ * Le slug de la structure (par ses adhésions ; sinon, en survol d'assistance, par `GET /structures/:id`, autorisé au super
+ * administrateur) ou de la fiche pro (par `GET /me/pro`) : l'adresse de sa page publique. L'erreur est exposée et `reload` relance la
+ * lecture (« Réessayer », tirer pour actualiser).
+ */
+function useOwnerSlug(kind: OwnerKind, id: string | null) {
   const { me } = useSession();
   const myPro = useApi(() => api.myPro(), [kind], { enabled: kind === "pro", cacheKey: "my-pro" });
-  if (kind === "organizer") return me?.memberships.find((m) => m.structureId === id)?.structureSlug ?? null;
-  if (kind === "pro") return (myPro.data as ProOwner | null)?.slug ?? null;
-  return null;
+  const member = kind === "organizer" ? me?.memberships.find((m) => m.structureId === id) : undefined;
+  const surveyed = useApi(async () => (await api.orgStructure(id ?? "")).slug, [id], {
+    enabled: kind === "organizer" && Boolean(id) && Boolean(me) && !member,
+  });
+  if (kind === "organizer")
+    return {
+      slug: member?.structureSlug ?? surveyed.data ?? null,
+      error: member ? null : surveyed.error,
+      reload: async () => void (member ? null : await surveyed.reload()),
+    };
+  if (kind === "pro")
+    return {
+      slug: (myPro.data as ProOwner | null)?.slug ?? null,
+      error: myPro.error,
+      reload: async () => void (await myPro.reload()),
+    };
+  return { slug: null, error: null, reload: async () => undefined };
 }
 
 function headOf(data: Loaded): {

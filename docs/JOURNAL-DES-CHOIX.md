@@ -6189,6 +6189,13 @@ Maquette R9.3 `n-page` ; décisions § 1, § 6, § 10 ; T6, T8, T22 à T25. L'on
 - **Mineurs** : segment de la fiche relu à chaque prise de focus ; `pageHrefOf` sur l'auteur d'une mention ; `partners` dépend du `slug` ; `encodeURIComponent(id)` ; la story d'une page n'est jamais « non vue » pour son titulaire (`storiesBar.summary`, testé) ; média non vérifié : « Vérification en attente » dans l'en-tête de sa Page ; jetons dans `PageGest` et `PageQrSheet`, « Fermer » dans `pagesLabels` ; exemption de la bio cherchée dans la même bio (lot54, parite) ; `Promise.all` dans les deux routes décorées.
 - **À prévoir (vague suivante, migration)** : index sur `applications (media_profile_id)` et `(provider_profile_id)` pour les compteurs de missions et d'accréditations (aucune migration dans ce lot).
 
+### Lot R9b, tour 3 (13/11/2026) : relecture Codex
+- **Jamais les données d'une autre casquette** : `OwnerPageBody` est monté avec une clé par casquette (état neuf à chaque changement) et n'affiche que la page dont l'identifiant est celui de la casquette active ; sinon « Chargement… » ou l'erreur.
+- **Survol en assistance** : sans adhésion, le slug de la structure vient de `GET /structures/:id` (route autorisée au super administrateur) ; pas de recette (aucun compte d'assistance dans le seed de recette), le chemin est couvert par la lecture de l'erreur et de « Réessayer ».
+- **`/me/pro` en échec** : message d'erreur + « Réessayer » (icône) ; « tirer pour actualiser » relance aussi cette lecture.
+- **« Suivre »** : la réponse de l'écriture (`following`, `followersCount`) est appliquée tout de suite (`setData`) ; la relecture se fait en arrière-plan.
+- **Pour R9e-2 (`PageContents` → `PageAlbums`)** : après l'échec d'une actualisation d'une liste remplie, « Réessayer » rejoue une **actualisation** (`read(true)`), jamais une suite fusionnée.
+
 ### À revoir avec Damien (lot R9b)
 - **« Abonnement » du pro reste une consultation** : aucun paiement dans l'appli (règle Stripe en mode présentation) ; le chip ouvre le bloc existant. À décider avec le site.
 - **Cartes `s:` et `p:` du Fil** : l'auteur d'une carte n'a pas de `slug` ; il faudrait l'ajouter à `FeedAuthorView` (API du Fil) pour que la carte d'une structure ou d'un pro ouvre sa page.
