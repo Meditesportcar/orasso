@@ -15,6 +15,7 @@ import {
   pgTable,
   smallint,
   text,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -98,15 +99,20 @@ export const eventAlbumPhotos = pgTable(
     plateState: albumPlateStateEnum("plate_state").notNull(),
     plateRects: jsonb("plate_rects").$type<StoredPlateRect[]>(),
     clientId: uuid("client_id"),
+    /**
+     * La clé de l'**original** (`media-contents/<uuid>.webp`, publique) d'une photo copiée sous une clé privée quand une galerie est publiée par
+     * l'ancien chemin (APK en ligne). C'est la preuve **durable** que cet original ne doit plus être servi par `/api/files`, même si son
+     * effacement a échoué : elle survit à la suppression de l'album, de la photo (la ligne est gardée avec `deleted_at`) et du compte.
+     */
+    legacySourceKey: text("legacy_source_key"),
     deletedAt: tstz("deleted_at"),
     ...timestamps,
   },
   (t) => [
+    unique("event_album_photos_legacy_source_key_key").on(t.legacySourceKey),
     uniqueIndex("event_album_photos_position_key").on(t.albumId, t.position).where(sql`${t.deletedAt} is null`),
     uniqueIndex("event_album_photos_client_key").on(t.albumId, t.clientId),
     index("event_album_photos_album_idx").on(t.albumId),
-    // Trace de la copie d'un envoi (galerie publiée par l'ancien chemin) : `/api/files` la cherche par `client_id` seul, photos retirées comprises.
-    index("event_album_photos_client_trace_idx").on(t.clientId).where(sql`${t.clientId} is not null`),
     // Floutée ou gardée telle quelle : les cadres sont conservés ; aucune plaque ou photo reprise : pas de cadre.
     check(
       "event_album_photos_rects_check",

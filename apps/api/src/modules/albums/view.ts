@@ -6,7 +6,6 @@
 // l'événement (règle V6, gardée dans la durée), sur un événement non brouillon et pas sur invitation, et si le compte du média
 // n'est ni suspendu ni banni ni supprimé.
 
-import { createHash } from "node:crypto";
 import { ALBUM_COVER_PHOTOS, type AlbumPhotoView, type AlbumSummary, albumTitle, authorKeyOf } from "@orasso/shared";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 
@@ -59,15 +58,6 @@ export const isLegacyGalleryKey = (key: string) => {
   return LEGACY_GALLERY_PREFIXES.some((p) => lower.startsWith(p));
 };
 
-/**
- * Le `client_id` de la photo copiée sous un album quand une galerie est publiée par l'ancien chemin : un identifiant **déterministe** tiré
- * de la clé d'envoi (`media-contents/<uuid>.webp`). Il sert à reconnaître une tentative rejouée avec les mêmes clés et la trace de la copie.
- */
-export const uploadIdOf = (key: string): string => {
-  const h = createHash("sha256").update(key).digest("hex");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-};
-
 // --- Qui voit quoi ------------------------------------------------------------------------------------------------------
 
 /** Le média est accrédité (`accepted`) à l'événement de l'album, maintenant. */
@@ -99,18 +89,15 @@ export async function legacyFileState(key: string, at: Date): Promise<"visible" 
     .where(eq(eventAlbumPhotos.storageKey, key))
     .limit(1);
   if (row) return row.visible ? "visible" : "hidden";
-  // Un envoi `media_content` **consommé puis copié** sous un album (publication par l'ancien chemin) n'est plus servi : l'original public
-  // devait être effacé ; s'il est encore là (effacement en échec), la base le dit — la copie porte son identifiant déterministe. La
-  // recherche part de l'envoi (clé primaire de `uploads` : une clé inventée s'arrête là), n'en tient compte que s'il est consommé et de
-  // la même personne que l'auteur de l'album (un `clientId` fourni par un autre ne masque pas l'image d'un tiers), puis suit l'index
-  // partiel sur `client_id`.
-  const traced = await db.execute<{ id: string }>(sql`
-    select p.id from uploads u
-    join event_album_photos p on p.client_id = ${uploadIdOf(key)}::uuid
-    join event_albums a on a.id = p.album_id and a.author_id = u.user_id
-    where u.key = ${key} and u.purpose = 'media_content' and u.consumed_at is not null
-    limit 1`);
-  return traced.rows.length ? "hidden" : "unknown";
+  // Un envoi `media_content` **copié** sous un album (publication par l'ancien chemin) n'est plus servi : l'original public devait être
+  // effacé ; s'il est encore là (effacement en échec, compte supprimé depuis), la colonne `legacy_source_key` (unique, gardée quel que soit
+  // l'état de la photo, de l'album ou du compte) le dit. Une lecture par index unique : ni `uploads`, ni autre colonne.
+  const [copied] = await db
+    .select({ id: eventAlbumPhotos.id })
+    .from(eventAlbumPhotos)
+    .where(eq(eventAlbumPhotos.legacySourceKey, key))
+    .limit(1);
+  return copied ? "hidden" : "unknown";
 }
 
 /** La base de toute lecture d'album : l'album, son événement, son média. */

@@ -1,5 +1,5 @@
 {
-  "id": "cbc8269c-6982-4b0b-acb3-7cf3b911c591",
+  "id": "961ec445-aae7-4be2-a5b4-2ef20bea0f81",
   "prevId": "304257da-c20a-456c-a8dd-06ea3a86af59",
   "version": "7",
   "dialect": "postgresql",
@@ -902,6 +902,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "legacy_source_key": {
+          "name": "legacy_source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "deleted_at": {
           "name": "deleted_at",
           "type": "timestamp with time zone",
@@ -981,22 +987,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "event_album_photos_client_trace_idx": {
-          "name": "event_album_photos_client_trace_idx",
-          "columns": [
-            {
-              "expression": "client_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"event_album_photos\".\"client_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1021,6 +1011,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "storage_key"
+          ]
+        },
+        "event_album_photos_legacy_source_key_key": {
+          "name": "event_album_photos_legacy_source_key_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "legacy_source_key"
           ]
         }
       },

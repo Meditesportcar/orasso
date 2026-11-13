@@ -38,7 +38,6 @@ import {
   albumVisibleSql,
   isPrivateAlbumKey,
   loadFirstPhotos,
-  uploadIdOf,
 } from "./view";
 
 /** Un album en `MediaContentView`, avec la forme d'avant au champ près. */
@@ -121,19 +120,17 @@ async function contentById(id: string): Promise<MediaContentView> {
 }
 
 /**
- * Album déjà publié par ce média sur cet événement avec exactement ces envois (tentative rejouée). Les photos ont été copiées sous des
- * clés d'album : on reconnaît les envois d'origine par leur identifiant, gardé dans `client_id`.
+ * Album déjà publié par ce média sur cet événement avec exactement ces envois (tentative rejouée). Les photos copiées gardent la clé de leur
+ * original (`legacy_source_key`) ; celles d'une galerie reprise par la migration ou publiée avant le correctif ont gardé cette clé comme
+ * `storage_key`.
  */
 async function sameGallery(mediaProfileId: string, input: MediaContentCreate): Promise<string | null> {
   if (!input.photoKeys.length) return null;
-  const ids = input.photoKeys.map(uploadIdOf);
-  // Deux façons de reconnaître la même galerie : les identifiants des envois (copie faite par ce code) ou, pour une galerie publiée avant
-  // le correctif ou reprise par la migration (photos sans `client_id`, clés d'origine gardées sur place), les clés d'envoi elles-mêmes.
   const res = await db.execute<{ id: string }>(sql`
     select a.id from event_albums a
     where a.media_profile_id = ${mediaProfileId} and a.event_id = ${input.eventId} and a.deleted_at is null
-      and (select array_agg(coalesce(p.client_id::text, p.storage_key) order by p.position) from event_album_photos p
-           where p.album_id = a.id and p.deleted_at is null) in (${sql.param(ids)}::text[], ${sql.param(input.photoKeys)}::text[])
+      and (select array_agg(coalesce(p.legacy_source_key, p.storage_key) order by p.position) from event_album_photos p
+           where p.album_id = a.id and p.deleted_at is null) = ${sql.param(input.photoKeys)}::text[]
     limit 1`);
   return res.rows[0]?.id ?? null;
 }
@@ -233,7 +230,7 @@ export const albumsLegacy = {
         // d'origine (public) est effacé après la validation. L'identifiant de l'envoi sert de `client_id` : c'est ce qui permet de
         // reconnaître une tentative rejouée avec les mêmes clés (`sameGallery`).
         const albumId = randomUUID();
-        const uploaded: { key: string; width: number | null; height: number | null; clientId: string }[] = [];
+        const uploaded: { key: string; width: number | null; height: number | null; sourceKey: string }[] = [];
         for (const key of input.photoKeys) {
           const up = await uploadsService.consume(tx, v.user.id, key, "media_content");
           if (!up) throw validation(mediaLabels.imageUnknown);
@@ -244,7 +241,7 @@ export const albumsLegacy = {
           await storage.put(target, data);
           written.push(target);
           sources.push(up.key);
-          uploaded.push({ key: target, width: up.width, height: up.height, clientId: uploadIdOf(up.key) });
+          uploaded.push({ key: target, width: up.width, height: up.height, sourceKey: up.key });
         }
         const [album] = await tx
           .insert(eventAlbums)
@@ -267,7 +264,7 @@ export const albumsLegacy = {
             width: up.width,
             height: up.height,
             position,
-            clientId: up.clientId,
+            legacySourceKey: up.sourceKey,
             // Cette galerie vient du chemin d'avant : on ne sait pas si l'envoi a été flouté (l'état est « inconnu »).
             plateState: "unknown" as const,
           })),

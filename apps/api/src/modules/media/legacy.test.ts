@@ -18,6 +18,7 @@ import {
 } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { accountService } from "../account/service";
 import {
   accredit,
   mediaUser,
@@ -28,7 +29,7 @@ import {
   sendUpload,
 } from "../albums/albums-test-helpers";
 import { adoptLegacyGalleries } from "../albums/reprise";
-import { uploadIdOf } from "../albums/view";
+import { retryRemove } from "../vehicles/photos-blur";
 import { anonymizeMediaForDeletedAccount } from "./anonymize";
 import { contentView } from "./serializers";
 import { resetMediaViews } from "./service";
@@ -37,6 +38,7 @@ afterAll(async () => {
   await pool.end();
 });
 
+let clock: ReturnType<typeof useClock>;
 let orga: TestUser;
 let leo: TestUser;
 let leoMedia: string;
@@ -47,7 +49,7 @@ let eventSlug: string;
 beforeEach(async () => {
   await resetDb();
   resetMediaViews();
-  useClock(paris(11, 12, 12));
+  clock = useClock(paris(11, 12, 12));
   const scenario = await organizerEvent();
   orga = scenario.orga;
   eventId = scenario.event.id;
@@ -389,43 +391,59 @@ describe("tour 3 : finition", () => {
     expect((await app.request(`/api/files/${a.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(404);
   });
 
-  it("la trace de copie ne vaut que pour un envoi consommé de l'auteur de l'album : un clientId fourni par un autre ne masque rien", async () => {
-    const key = `media-contents/${crypto.randomUUID()}.webp`;
-    await storage.put(key, Buffer.from("photo de Léo"));
-    await db.insert(uploads).values({
-      key,
-      userId: leo.id,
-      purpose: "media_content",
-      width: 10,
-      height: 10,
-      bytes: 10,
-      consumedAt: new Date(),
+  it("de bout en bout : effacement de l'original en échec, puis suppression du compte : l'ancienne URL reste 404 jusqu'à la reprise de l'effacement", async () => {
+    const sent = await sendUpload(leo, "media_content");
+    // 1. La galerie est publiée par l'ancien chemin ; l'effacement de l'original échoue (disque occupé).
+    vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("disque occupé"));
+    const res = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: [sent.key],
     });
-    const other = await mediaUser("Marc_Photo", "Marc Photo");
-    await accredit(other.user, other.mediaId, eventId);
-    const trace = (albumId: string, name: string) =>
-      db.insert(eventAlbumPhotos).values({
-        albumId,
-        storageKey: `private/albums/${albumId}/${name}.webp`,
-        position: 0,
-        plateState: "none",
-        clientId: uploadIdOf(key),
-      });
-    // La trace est posée en base (le schéma d'ajout n'accepte pas cet identifiant : il n'est pas un UUID de version 4).
-    const draft = await call(other.user, "POST", "/me/albums", { eventId });
-    await trace(draft.json.id, "a".repeat(32));
-    // Marc a posé la trace d'un envoi de Léo : l'image de Léo reste servie.
+    vi.restoreAllMocks();
+    expect(res.status).toBe(201);
+    expect(await storage.get(sent.key)).not.toBeNull();
+    expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
+    // La preuve est dans la photo d'album, pas dans `uploads`.
+    const [photo] = await photoRows(res.json.id);
+    expect(photo?.legacySourceKey).toBe(sent.key);
+    // 2. Le compte est supprimé (anonymisation complète) ; l'effacement échoue encore.
+    vi.spyOn(storage, "remove").mockRejectedValue(new Error("disque toujours occupé"));
+    await accountService.anonymize(leo.id, null);
+    vi.restoreAllMocks();
+    expect(await db.select().from(uploads).where(eq(uploads.userId, leo.id))).toHaveLength(0); // la preuve ne dépendait pas d'elle
+    expect(await storage.get(sent.key)).not.toBeNull();
+    expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
+    expect((await app.request(`/api/files/${sent.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(
+      404,
+    );
+    // L'effacement de l'original est programmé (tâche persistante, rejouable).
+    expect(clock.jobs.jobs.some((j) => j.name === "storage.remove" && j.data.key === sent.key)).toBe(true);
+    // 3. La reprise l'efface ; la ligne de preuve est gardée.
+    await retryRemove(sent.key);
+    expect(await storage.get(sent.key)).toBeNull();
+    expect((await app.request(`/api/files/${sent.key}`)).status).toBe(404);
+    expect((await photoRows(res.json.id))[0]?.legacySourceKey).toBe(sent.key);
+  });
+
+  it("une clé d'ancienne galerie qui n'est la source d'aucune photo reste servie ; la colonne est unique", async () => {
+    const key = `media-contents/${crypto.randomUUID()}.webp`;
+    await storage.put(key, Buffer.from("fichier d'un lien ou d'une galerie non reprise"));
     expect((await app.request(`/api/files/${key}`)).status).toBe(200);
-    // Une clé inventée (aucun envoi) : jamais masquée, et sans recherche sur les photos.
     expect((await app.request(`/api/files/media-contents/${crypto.randomUUID()}.webp`)).status).toBe(404);
-    // La trace laissée par l'auteur lui-même (sa galerie publiée par l'ancien chemin) masque l'original.
-    const mine = await call(leo, "POST", "/me/albums", { eventId });
-    await db.delete(eventAlbumPhotos);
-    await trace(mine.json.id, "b".repeat(32));
+    const album = await call(leo, "POST", "/me/albums", { eventId });
+    const mk = (name: string) =>
+      db.insert(eventAlbumPhotos).values({
+        albumId: album.json.id,
+        storageKey: `private/albums/${album.json.id}/${name}.webp`,
+        position: name === "a".repeat(32) ? 0 : 1,
+        plateState: "none",
+        legacySourceKey: key,
+      });
+    await mk("a".repeat(32));
+    await expect(mk("b".repeat(32))).rejects.toThrow();
     expect((await app.request(`/api/files/${key}`)).status).toBe(404);
-    // Un envoi non consommé n'est jamais masqué, même avec une trace de son auteur.
-    await db.update(uploads).set({ consumedAt: null }).where(eq(uploads.key, key));
-    expect((await app.request(`/api/files/${key}`)).status).toBe(200);
   });
 
   it("le rejeu exact du POST d'une galerie publiée avant le correctif (album repris, photos sans client_id) rend le contenu existant", async () => {

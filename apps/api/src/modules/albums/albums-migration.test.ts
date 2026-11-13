@@ -41,10 +41,10 @@ describe("le SQL de reprise est celui de la migration", () => {
     expect(file).toMatch(/ALTER TYPE "public"\."upload_purpose" ADD VALUE 'album_photo'/);
     expect(file).toMatch(/ALTER TYPE "public"\."report_target" ADD VALUE 'album_photo'/);
     expect(file).not.toMatch(/ALTER TABLE "media_contents"/);
-    // Index de la trace de copie (`/api/files`) : sur `client_id`, partiel, photos retirées comprises.
-    expect(file).toMatch(
-      /CREATE INDEX "event_album_photos_client_trace_idx" ON "event_album_photos" USING btree \("client_id"\) WHERE .*"client_id" is not null/,
-    );
+    // Preuve durable de la copie d'un original : colonne `legacy_source_key` unique, sans index de trace sur `client_id`.
+    expect(file).toContain('"legacy_source_key" text');
+    expect(file).toContain('CONSTRAINT "event_album_photos_legacy_source_key_key" UNIQUE("legacy_source_key")');
+    expect(file).not.toContain("client_trace_idx");
   });
 });
 
