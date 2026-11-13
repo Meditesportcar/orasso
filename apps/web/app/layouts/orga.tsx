@@ -4,11 +4,14 @@ import {
   afterEventLabels,
   assistanceTexts,
   badgeDaysLeft,
+  type OrganizerInboxSummary,
   orgaNeedsLabels,
   orgaPressLabels,
   type StructureOrganizer,
   type StructurePublic,
   type StructureSuspensionReason,
+  structureActivityLabels,
+  structureTopBarCounts,
 } from "@orasso/shared";
 import { Form, Outlet, useLocation, useMatches, useParams } from "react-router";
 import { isFiche } from "../components/FicheBar";
@@ -20,6 +23,7 @@ import { useAnnounceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/orga";
 import "../styles/admin.css";
 import "../styles/after-event.css";
+import "../styles/orga-activity.css";
 
 // Espace organisateur : Sable imposé (docs/03), barre latérale, réservé aux membres de la structure.
 // Lot M7 (deux modes d'affichage) : la barre latérale est la navigation de l'espace ; un parcours (création ou
@@ -48,6 +52,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       }
     }
   }
+  // Lot R9d : les pastilles de la cloche (Activité de la structure) et de la bulle (Messages), comme la barre de l'appli.
+  let counts = { activity: 0, messages: 0 };
+  if (membership.role !== "staff") {
+    const summary = await api<OrganizerInboxSummary>(request, `/structures/${structure.id}/inbox/summary`);
+    if (summary.ok) counts = structureTopBarCounts(summary.data);
+  }
   // Lot 33 (S41) : super admin en survol → bandeau « lecture seule » ou « intervention en cours (demande du …) ».
   let assistance: { mode: "read_only" | "intervention"; since: string | null } | null = null;
   if (membership.assisted) {
@@ -69,6 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       membership.role !== "staff" || membership.staffRoles.some((r) => r === "scan" || r === "super_staff"),
     twoFactorHint: me.twoFactorHint,
     pseudo: me.profile.pseudo,
+    counts,
   };
 }
 
@@ -76,16 +87,32 @@ export function meta() {
   return [{ title: "Espace organisateur · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
-function SideLink({ href, children, on }: { href: string; children: string; on: boolean }) {
+function SideLink({
+  href,
+  children,
+  on,
+  count,
+}: {
+  href: string;
+  children: string;
+  on: boolean;
+  /** Pastille (lot R9d) : la cloche et la bulle de l'organisateur. */
+  count?: number;
+}) {
   return (
     <a className={on ? "orga__link is-on" : "orga__link"} href={href} aria-current={on ? "page" : undefined}>
       {children}
+      {count ? (
+        <span className="orga__count o-t-credit" data-testid="orga-count" role="img" aria-label={`${count} à voir`}>
+          {count}
+        </span>
+      ) : null}
     </a>
   );
 }
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
-  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge, assistance } = loaderData;
+  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge, assistance, counts } = loaderData;
   useAnnounceSession(loaderData.userId);
   const { pathname } = useLocation();
   const { eventId } = useParams();
@@ -141,8 +168,17 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
               Billets
             </SideLink>
           )}
-          <SideLink href={`${base}/communication`} on={pathname.startsWith(`${base}/communication`)}>
-            Communication
+          {isOrganizer && (
+            <SideLink href={`${base}/activite`} on={pathname.startsWith(`${base}/activite`)} count={counts.activity}>
+              {structureActivityLabels.title}
+            </SideLink>
+          )}
+          <SideLink
+            href={`${base}/communication`}
+            on={pathname.startsWith(`${base}/communication`)}
+            count={isOrganizer ? counts.messages : undefined}
+          >
+            {structureActivityLabels.messagesTitle}
           </SideLink>
           {isOrganizer && (
             <SideLink href={`${base}/staff`} on={pathname.startsWith(`${base}/staff`)}>

@@ -523,6 +523,14 @@ describe("inscription en crew", () => {
       expect(triage.json.items[0].crew.members).toHaveLength(1);
       const counters = await req(s.orga, "GET", `/events/${s.event.id}/counters`, undefined, mode);
       expect(counters.json).toMatchObject({ pending: 1, remaining: 2 });
+      // Lot R9d : la candidature du chef arrive « à trier » (une ligne par responsable) ; celles des membres, à leur confirmation.
+      const toSort = () =>
+        db
+          .select()
+          .from(notifications)
+          .where(and(eq(notifications.userId, s.orga.id), eq(notifications.type, "application_received")));
+      expect(((await toSort())[0]?.data as { count?: number } | undefined)?.count ?? 1).toBe(1);
+      expect(await toSort()).toHaveLength(1);
       const leaApp = rows.find((r) => r.userId === s.lea.id);
       expect((await req(s.orga, "GET", `/applications/${leaApp?.id}`, undefined, mode)).status).toBe(404);
       // Le membre voit sa carte Accès, la Boîte compte sa venue à confirmer.
@@ -557,6 +565,14 @@ describe("inscription en crew", () => {
       );
       expect(confirmed.status).toBe(200);
       expect(confirmed.json.status).toBe("pending");
+      // La confirmation du membre s'ajoute à la même ligne (même événement), jamais au membre lui-même.
+      expect(((await toSort())[0]?.data as { count?: number } | undefined)?.count).toBe(2);
+      expect(
+        await db
+          .select()
+          .from(notifications)
+          .where(and(eq(notifications.userId, s.lea.id), eq(notifications.type, "application_received"))),
+      ).toHaveLength(0);
       const after = await req(s.orga, "GET", `/events/${s.event.id}/applications?crewId=${s.crew.id}`, undefined, mode);
       expect(after.json.items).toHaveLength(2);
       expect(after.json.items[0].crew.confirmed).toBe(2);

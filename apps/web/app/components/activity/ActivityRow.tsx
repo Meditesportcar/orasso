@@ -83,8 +83,11 @@ export function ActivityRow({
   day,
   onOpen,
   organizerIds,
+  target,
 }: {
   item: ActivityItem;
+  /** Lot R9d : une cible explicite, prioritaire sur le lien lu dans la notification (l'Activité d'une structure). */
+  target?: string | null;
   day: ActivityDay;
   onOpen: () => Promise<void> | void;
   /** Les structures que je gère (lot R7h) : seules celles-là offrent « Ajouter à ma story ». */
@@ -92,7 +95,7 @@ export function ActivityRow({
 }) {
   const { names, rest } = groupedTitle(item.title, item.actors, item.count);
   const when = activityWhen(new Date(item.latestAt), now(), day);
-  const path = pathOfItem(item);
+  const path = target ?? pathOfItem(item);
   const content = (
     <>
       <Avatars item={item} />

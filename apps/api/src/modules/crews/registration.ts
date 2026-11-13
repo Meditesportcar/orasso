@@ -41,6 +41,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { notifyApplicationReceived } from "../applications/received";
 import { type ApplicationRow, applicationsService } from "../applications/service";
 import { arrivalAnswer } from "../events/arrivals";
 import { daysRepo } from "../events/days";
@@ -376,7 +377,16 @@ export const crewRegistrationService = {
             at: t,
           });
           if (isLeader) {
-            created.push(event.admission === "open" ? await applicationsService.admitOpen(tx, event, row) : row);
+            const admitted = event.admission === "open" ? await applicationsService.admitOpen(tx, event, row) : row;
+            created.push(admitted);
+            // Lot R9d : la candidature du chef arrive à trier (les membres, à leur confirmation).
+            if (admitted.status === "pending") {
+              await notifyApplicationReceived(tx, after, event, {
+                id: admitted.id,
+                kind: "vehicle",
+                authorId: v.user.id,
+              });
+            }
             continue;
           }
           created.push(row);
@@ -526,6 +536,10 @@ export const crewRegistrationService = {
           .onConflictDoNothing();
       }
       if (event.admission === "open") row = await applicationsService.admitOpen(tx, event, row);
+      // Lot R9d : la candidature d'un membre arrive à trier quand il confirme sa venue.
+      if (row.status === "pending") {
+        await notifyApplicationReceived(tx, after, event, { id: row.id, kind: "vehicle", authorId: row.userId });
+      }
       await closeConfirmNotification(tx, app);
       await notifyLeader(tx, row, event, "crew_member_confirmed");
       applicationsService.broadcast(after, event, [row]);

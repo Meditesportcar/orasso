@@ -54,11 +54,12 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
-import { organizerIds } from "../after-event/helpers";
 import { albumsLegacy, mergeContents } from "../albums/legacy";
+import { notifyApplicationReceived } from "../applications/received";
 import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { uploadsService } from "../uploads/service";
 import { assertPressQuota } from "./quota";
 import { contentView, type MediaContentRow, type MediaProfileRow, ownerView, publicView } from "./serializers";
@@ -429,22 +430,33 @@ export const mediaService = {
           actorUserId: v.user.id,
           at: t,
         });
+        // Lot R9d : la ligne « À trier » de l'Activité de la structure (genre média).
+        await notifyApplicationReceived(tx, after, event, {
+          id: row.id,
+          kind: "media",
+          applicantName: profile.name,
+          authorId: v.user.id,
+        });
         // L'organisation est prévenue (famille `staff`) : une demande à trancher.
         const structure = await tx.query.structures.findFirst({ where: eq(structures.id, event.structureId) });
-        for (const userId of await organizerIds(event.structureId, tx)) {
-          await notificationsService.notify(tx, userId, "accreditation_requested", {
+        // Lot R9d : une ligne par responsable, marquée de la structure (jamais dans la cloche personnelle, push gardé),
+        // jamais à la personne qui demande.
+        await notifyStructure(
+          tx,
+          event.structureId,
+          "accreditation_requested",
+          {
             title: mediaLabels.requestedTitle,
             body: mediaLabels.requestedBody(profile.name, event.title),
             eventId: event.id,
             eventStartsAt: event.startsAt,
             data: { eventId: event.id, applicationId: row.id, screen: "press" },
             link: mediaLabels.linkTriage(structure?.slug ?? "", event.id),
-          });
-        }
-        after(() => {
-          announce(event.id, row);
-          notificationsService.kick();
-        });
+            after,
+          },
+          { exclude: [v.user.id] },
+        );
+        after(() => announce(event.id, row));
         return row;
       });
       return (await this.mineAccreditations(v, "all")).find((a) => a.id === created.id) as MediaAccreditationView;

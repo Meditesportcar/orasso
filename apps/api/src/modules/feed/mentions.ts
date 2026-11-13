@@ -27,8 +27,10 @@ import { now } from "../../lib/deps";
 import { forbidden, notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { structureManagers } from "../../lib/structureManagers";
 import { type Executor, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { proShown } from "../partnerships/shown";
 import { factsOf, postWithAuthor, profileOkSql, relationOf } from "./access";
 import { loadPageInfo, pageKeyOf } from "./authors";
@@ -98,7 +100,7 @@ async function citedCanSee(ex: Executor, citedUserId: string, postId: string, at
 export async function materializeMentions(
   tx: Executor,
   postId: string,
-  opts: { notify?: boolean } = {},
+  opts: { notify?: boolean; after?: (cb: () => unknown) => void } = {},
 ): Promise<number> {
   const row = await postWithAuthor(postId, tx);
   if (!row || row.post.deletedAt) return 0;
@@ -132,8 +134,36 @@ export async function materializeMentions(
     const page = pageKeyOf(post) ? (await loadPageInfo(tx, [post])).get(authorKey)?.view : undefined;
     const name = page ? page.name : row.author.pseudo;
     const avatarUrl = page ? page.avatarUrl : storage.url(row.author.avatarKey);
+    const isPersonal = !pageKeyOf(post);
     for (const m of inserted) {
-      if (m.kind !== "user" || m.source !== "caption" || m.id === post.authorId) continue;
+      if (m.source !== "caption") continue;
+      // Lot R9d : une structure citée prévient ses responsables (une ligne chacun, Activité de la structure), un pro son
+      // titulaire (une seule personne : la cloche personnelle suffit, sans `structure_id`). Jamais pour la publication d'un
+      // compte privé : sa mention n'existe pas sur la fiche (invariant R8) ; jamais à la personne qui a publié.
+      if (m.kind === "structure" || m.kind === "pro") {
+        if (isPersonal && row.author.visibility === "private") continue;
+        const content = {
+          title: feedMentionLabels.notificationTitle(name),
+          body: feedMentionLabels.notificationBody(name),
+          data: { actor: { pseudo: name, avatarUrl }, postId, link: "/app/fil" },
+        };
+        if (m.kind === "structure") {
+          const managers = await structureManagers(tx, m.id);
+          const blocked: string[] = [post.authorId];
+          for (const id of managers) if (!(await citedCanSee(tx, id, postId, at))) blocked.push(id);
+          await notifyStructure(tx, m.id, "feed_post_mention", { ...content, after: opts.after }, { exclude: blocked });
+        } else {
+          const [pro] = await tx
+            .select({ owner: proProfiles.ownerUserId })
+            .from(proProfiles)
+            .where(eq(proProfiles.id, m.id));
+          if (pro && pro.owner !== post.authorId && (await citedCanSee(tx, pro.owner, postId, at))) {
+            await notificationsService.notify(tx, pro.owner, "feed_post_mention", content);
+          }
+        }
+        continue;
+      }
+      if (m.kind !== "user" || m.id === post.authorId) continue;
       if (!(await citedCanSee(tx, m.id, postId, at))) continue;
       const who = name;
       await notificationsService.notify(tx, m.id, "feed_post_mention", {

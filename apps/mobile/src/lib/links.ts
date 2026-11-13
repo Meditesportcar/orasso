@@ -82,3 +82,18 @@ export function teamRequestTarget(data: unknown): string | null {
   if (screen !== "staff-requests") return null;
   return typeof structureId === "string" && /^[0-9a-f-]{36}$/i.test(structureId) ? structureId : null;
 }
+
+/**
+ * Lot R9d : le toucher d'une notification « invitation à publier » adressée à une structure (`data.screen =
+ * "structure-requests"` avec `data.structureId`, le même pour le bandeau de l'appli ouverte et le push) ouvre l'Activité de cette
+ * structure sur ses demandes. Repli pour un push reçu (ou enregistré) avant la mise à jour, sans `screen` : `notificationType` (ou
+ * `type`) `coauthor_invited` avec `structureId`. Sans identifiant valide, ou pour une invitation personnelle : `null`.
+ */
+export function structureRequestsTarget(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const { screen, structureId, notificationType, type } = data as Record<string, unknown>;
+  const current = screen === "structure-requests";
+  const legacy = screen === undefined && (notificationType ?? type) === "coauthor_invited";
+  if (!current && !legacy) return null;
+  return typeof structureId === "string" && /^[0-9a-f-]{36}$/i.test(structureId) ? structureId : null;
+}

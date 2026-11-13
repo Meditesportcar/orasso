@@ -20,31 +20,18 @@ import { AppError, conflict, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { structureManagers } from "../../lib/structureManagers";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
 import { inboxService, registerInboxCounter } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { structureById } from "../structures/service";
 
 type MemberRow = typeof structureMembers.$inferSelect;
 
 const lockStructureStaff = (tx: Tx, structureId: string) =>
   tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`staff-requests:${structureId}`}, 0))`);
-
-/** Propriétaire et co-organisateurs actifs (ceux qui reçoivent les demandes). */
-async function organizersOf(ex: Executor, structureId: string): Promise<string[]> {
-  const rows = await ex
-    .select({ userId: structureMembers.userId })
-    .from(structureMembers)
-    .where(
-      and(
-        eq(structureMembers.structureId, structureId),
-        eq(structureMembers.status, "active"),
-        inArray(structureMembers.role, ["owner", "co_organizer"]),
-      ),
-    );
-  return rows.map((r) => r.userId);
-}
 
 /** Demandes et invitations en attente d'une structure. */
 async function pendingTotal(ex: Executor, structureId: string): Promise<number> {
@@ -158,20 +145,21 @@ export const staffRequestsService = {
       };
       if (existing) await tx.update(structureMembers).set(values).where(eq(structureMembers.id, existing.id));
       else await tx.insert(structureMembers).values({ structureId, userId: v.user.id, ...values });
-      const organizers = await organizersOf(tx, structureId);
       const note = message?.trim();
-      for (const userId of organizers) {
-        await notificationsService.notify(tx, userId, "staff_request", {
+      // Lot R9d : une ligne par responsable, marquée de la structure (Activité de la structure), `inbox.changed` pour chacun.
+      await notifyStructure(
+        tx,
+        structureId,
+        "staff_request",
+        {
           title: "Demande pour rejoindre le staff",
           body: `${v.profile.pseudo} voudrait rejoindre le staff de « ${structure.name} »${note ? ` : « ${note} »` : "."}`,
-          data: { structureId, screen: "staff-requests" },
+          data: { screen: "staff-requests" },
           link: { label: "Répondre", path: `/orga/${structure.slug}/staff` },
-        });
-      }
-      after(() => {
-        for (const userId of organizers) inboxService.publish(userId);
-        notificationsService.kick();
-      });
+          after,
+        },
+        { exclude: [v.user.id] },
+      );
     });
     return { status: "requested" };
   },
@@ -213,8 +201,11 @@ export const staffRequestsService = {
         data: { structureId, screen: "acces" },
         link: { label: "Ouvrir mon accès", path: "/app/sorties" },
       });
+      // Lot R9d : la cloche de chaque responsable relit son compte (la demande n'attend plus).
+      const managers = await structureManagers(tx, structureId, { includeSuspended: true });
       after(() => {
         inboxService.publish(userId);
+        for (const id of managers) inboxService.publish(id);
         notificationsService.kick();
       });
     });
@@ -225,7 +216,7 @@ export const staffRequestsService = {
   /** `POST /structures/:id/members/:userId/decline` : l'organisation refuse (la ligne est conservée pour le délai). */
   async decline(v: Viewer, structureId: string, userId: string): Promise<void> {
     await requireOrganizer(v, structureId);
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       await lockStructureStaff(tx, structureId);
       const [row] = await tx
         .update(structureMembers)
@@ -241,6 +232,11 @@ export const staffRequestsService = {
         )
         .returning();
       if (!row) throw notFound("Demande introuvable");
+      // Lot R9d : la cloche de chaque responsable relit son compte.
+      const managers = await structureManagers(tx, structureId, { includeSuspended: true });
+      after(() => {
+        for (const id of managers) inboxService.publish(id);
+      });
     });
   },
 

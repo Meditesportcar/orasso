@@ -1,5 +1,5 @@
 import { fromWallTime, HOUR } from "@orasso/shared";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -210,7 +210,11 @@ describe("tri", () => {
     const refused = await decide(e.id, rc.id, "refuse", { reasons: ["off_theme", "full"] });
     expect(refused.refusalReasons).toEqual(["off_theme", "full"]);
 
-    const notes = await db.select().from(notifications).where(eq(notifications.eventId, e.id));
+    // Les notifications des candidats (les lignes de l'Activité de la structure, `application_received`, sont testées à part).
+    const notes = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.eventId, e.id), isNull(notifications.structureId)));
     expect(notes.map((n) => n.type).sort()).toEqual([
       "application_accepted",
       "application_refused",

@@ -107,6 +107,8 @@ export const structureMembers = pgTable(
     status: memberStatusEnum("status").notNull(),
     invitedBy: text("invited_by").references(() => user.id, { onDelete: "set null" }),
     joinedAt: timestamp("joined_at", { withTimezone: true }),
+    /** Lot R9d : « vu » de l'Activité de la structure, par membre (deux co-organisateurs ont chacun le leur). */
+    activitySeenAt: timestamp("activity_seen_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

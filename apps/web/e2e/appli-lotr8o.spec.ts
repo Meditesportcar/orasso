@@ -258,7 +258,12 @@ test("l'invitation de l'Activité : une page que Damien gère reçoit sa demande
 }) => {
   test.setTimeout(180_000);
   const d = await open(browser, "damien@orasso.local");
-  await go(d.page, "/activite/demandes");
+  // Lot R9d : une invitation adressée à une structure se traite dans les demandes de la structure (casquette organisateur,
+  // Activité de la structure), plus dans la liste personnelle.
+  await go(d.page, "/moi");
+  await d.page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
+  await d.page.waitForURL(/\/direct/, { timeout: 20_000 });
+  await go(d.page, "/activite/orga?vue=demandes");
   const request = d.page.getByTestId("request-coauthor").filter({ hasText: "avec MéditeSportCar" });
   await expect(request).toBeVisible({ timeout: 30_000 });
   await expect(request).toContainText("Kenji_66 te propose de publier avec MéditeSportCar");

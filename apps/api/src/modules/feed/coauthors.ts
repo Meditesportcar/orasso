@@ -40,7 +40,6 @@ import {
   profiles,
   proProfiles,
   structureFollows,
-  structureMembers,
   structures,
   userFollows,
 } from "../../db/schema";
@@ -50,9 +49,12 @@ import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { structureManagers } from "../../lib/structureManagers";
 import { anyColumnContains, fold, searchTokens } from "../../lib/text-search";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { activePartnerCandidates } from "../partnerships/commercial";
 import { proShown } from "../partnerships/shown";
 import { requireVisiblePost, unavailable } from "./access";
@@ -79,19 +81,7 @@ const personaOf = (kind: CoauthorKind | "provider"): StoryPersona =>
 /** Les comptes à prévenir et à qui revient la réponse pour une cible. */
 async function recipientsOf(ex: Executor, kind: CoauthorKind | "provider", id: string): Promise<string[]> {
   if (kind === "user") return [id];
-  if (kind === "structure") {
-    const rows = await ex
-      .select({ userId: structureMembers.userId })
-      .from(structureMembers)
-      .where(
-        and(
-          eq(structureMembers.structureId, id),
-          eq(structureMembers.status, "active"),
-          inArray(structureMembers.role, ["owner", "co_organizer"]),
-        ),
-      );
-    return rows.map((r) => r.userId);
-  }
+  if (kind === "structure") return structureManagers(ex, id);
   if (kind === "pro") {
     const [r] = await ex.select({ u: proProfiles.ownerUserId }).from(proProfiles).where(eq(proProfiles.id, id));
     return r ? [r.u] : [];
@@ -247,6 +237,8 @@ export async function writeInvite(
     /** Le nom et la photo de l'auteur d'origine (la page, ou la personne) pour la notification. */
     author: { name: string; avatarUrl: string | null };
     at: Date;
+    /** Le `after` de la transaction (R9d) : `inbox.changed` des responsables après la validation. */
+    after?: (cb: () => unknown) => void;
   },
 ): Promise<void> {
   await tx.insert(feedCoauthorInviteLog).values({ invitedBy: input.inviterId, invitedAt: input.at });
@@ -259,6 +251,35 @@ export async function writeInvite(
     invitedAt: input.at,
   });
   const content = r8DefaultContent("coauthor_invited", input.author.name);
+  const data = {
+    actor: { pseudo: input.author.name, avatarUrl: input.author.avatarUrl },
+    postId: input.postId,
+    link: "/app/activite/demandes",
+  };
+  // Lot R9d : une invitation à une structure est une ligne de l'Activité de la structure, une par responsable.
+  if (input.invite.kind === "structure") {
+    // Elle se traite dans les demandes de la structure (site : `?vue=demandes`), pas dans la liste personnelle.
+    const [target] = await tx
+      .select({ slug: structures.slug })
+      .from(structures)
+      .where(eq(structures.id, input.invite.id));
+    const { link: _personal, ...rest } = data;
+    await notifyStructure(
+      tx,
+      input.invite.id,
+      "coauthor_invited",
+      {
+        title: content.title,
+        body: content.body,
+        // `screen` + `structureId` (posé par `notifyStructure`) : le bandeau (appli ouverte) et le push mènent au même endroit.
+        data: { ...rest, screen: "structure-requests" },
+        link: { label: "Répondre", path: `/orga/${target?.slug ?? ""}/activite?vue=demandes` },
+        after: input.after,
+      },
+      { exclude: [input.inviterId] },
+    );
+    return;
+  }
   for (const userId of input.invite.recipients) {
     if (userId === input.inviterId) continue;
     await notificationsService.notify(tx, userId, "coauthor_invited", {
@@ -473,7 +494,7 @@ export const coauthorsService = {
    */
   async respond(v: Viewer, postId: string, answer: "accept" | "decline"): Promise<{ status: CoauthorStatus }> {
     rateLimit("feedWrite", v.user.id);
-    return withTx(async (tx) => {
+    return withTx(async (tx, after) => {
       const { post, row } = await lockPost(tx, postId);
       await actAs(v, row, tx);
       // Il faut pouvoir voir la publication (l'auteur est peut-être passé en compte privé depuis l'invitation).
@@ -491,6 +512,13 @@ export const coauthorsService = {
       }
       // L'invitation est close : la notification d'invitation n'a plus d'objet.
       await dropCoauthorNotifications(tx, postId, ["coauthor_invited"]);
+      // Lot R9d : une invitation à une structure close : la cloche de chacun de ses responsables relit son compte.
+      if (row.coauthorKind === "structure") {
+        const managers = await structureManagers(tx, row.coauthorId, { includeSuspended: true });
+        after(() => {
+          for (const id of managers) inboxService.publish(id);
+        });
+      }
       return { status: target };
     });
   },
@@ -677,8 +705,13 @@ export async function pendingCoauthorCount(userId: string, ex: Executor): Promis
  * Demandes et la pastille s'appuient sur cette même lecture. Une publication que je ne peux plus voir (auteur passé en compte
  * privé que je ne suis pas) n'y est pas.
  */
-export async function pendingCoauthorRequests(userId: string, ex: Executor, at: Date) {
-  const pending = await pendingCoauthorPostIds(userId, ex);
+export async function pendingCoauthorRequests(
+  userId: string,
+  ex: Executor,
+  at: Date,
+  scope: CoauthorScope = "personal",
+) {
+  const pending = await pendingCoauthorPostIds(userId, ex, scope);
   if (!pending.length) return [];
   const views = new Map(
     (
@@ -703,13 +736,20 @@ export async function pendingCoauthorRequests(userId: string, ex: Executor, at: 
 }
 
 /** Les publications dont l'invitation m'attend (moi, ou une page que je gère), les plus récentes d'abord. */
+/**
+ * Lot R9d : `personal` (la cloche personnelle : moi et mes pages hors structures) ou `all` (avec les structures que je gère : la
+ * cloche d'une structure). Une invitation adressée à une structure ne compte que dans la cloche de la structure.
+ */
+export type CoauthorScope = "personal" | "all";
+
 export async function pendingCoauthorPostIds(
   userId: string,
   ex: Executor,
+  scope: CoauthorScope = "personal",
 ): Promise<{ postId: string; forKey: string; invitedAt: Date }[]> {
   const keys = [authorKeyOf("user", userId), ...(await managedPageKeys(userId, ex))]
     .map((k) => parseAuthorKey(k))
-    .filter((k): k is NonNullable<typeof k> => k !== null);
+    .filter((k): k is NonNullable<typeof k> => k !== null && (scope === "all" || k.kind !== "structure"));
   const byKind = new Map<string, string[]>();
   for (const k of keys) byKind.set(k.kind, [...(byKind.get(k.kind) ?? []), k.id]);
   const rows = await ex

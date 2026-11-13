@@ -13,15 +13,19 @@ import {
   feedCommentLabels,
   parseAuthorKey,
   r8NotificationTable,
+  structureCommentTemplate,
+  structureNotificationTexts,
 } from "@orasso/shared";
 import { and, desc, eq, inArray, isNull, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
-import { feedPostComments, feedPosts, notifications, profiles } from "../../../db/schema";
+import { feedPostComments, feedPosts, notifications, profiles, structures } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
+import { structureManagers } from "../../../lib/structureManagers";
 import { type Executor, type Tx, withTx } from "../../../lib/tx";
 import { fillTemplate } from "../../notifications/grouped";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
+import { notifyStructure } from "../../notifications/structure";
 import { postWithAuthor } from "../access";
 import { commentReaders, readableBatch, stillReadable } from "./readers";
 import { anyOf } from "./sqlany";
@@ -56,6 +60,11 @@ export type NewCommentContext = {
   postPageKey?: string | null;
 };
 
+async function structureNameOf(ex: Executor, structureId: string): Promise<string> {
+  const [s] = await ex.select({ name: structures.name }).from(structures).where(eq(structures.id, structureId));
+  return s?.name ?? "";
+}
+
 /** Une ligne non lue de cette clé existe-t-elle déjà (la prochaine occurrence s'y ajoutera) ? */
 async function hasOpenLine(tx: Tx, userId: string, groupKey: string): Promise<boolean> {
   const [open] = await tx
@@ -86,9 +95,22 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
   const pageData = page ? { page: { key: page.key, name: page.name, avatarUrl: page.avatarUrl } } : {};
   const groupSuffix = page ? `:page:${page.key}` : "";
   const quote = feedCommentLabels.quote(commentExcerpt(ctx.text));
-  const candidates = [...new Set([...ctx.mentioned, ctx.repliedTo?.authorId, ctx.postAuthorId])].filter(
-    (id): id is string => !!id,
-  );
+  // Lot R9d : une publication ou un commentaire **de structure** prévient ses responsables (une ligne chacun, Activité de la
+  // structure), à la place de la seule personne qui a publié ou écrit.
+  const postStructureId = post.post.persona === "organizer" ? post.post.structureId : null;
+  let repliedStructureId: string | null = null;
+  if (ctx.repliedTo) {
+    const [target] = await tx
+      .select({ persona: feedPostComments.persona, structureId: feedPostComments.structureId })
+      .from(feedPostComments)
+      .where(eq(feedPostComments.id, ctx.repliedTo.id));
+    repliedStructureId = target?.persona === "organizer" ? target.structureId : null;
+  }
+  const postManagers = postStructureId ? await structureManagers(tx, postStructureId) : [];
+  const repliedManagers = repliedStructureId ? await structureManagers(tx, repliedStructureId) : [];
+  const candidates = [
+    ...new Set([...ctx.mentioned, ctx.repliedTo?.authorId, ctx.postAuthorId, ...postManagers, ...repliedManagers]),
+  ].filter((id): id is string => !!id);
   const top = ctx.rootId ? await commentRow(ctx.rootId, tx) : null;
   const topState = top ? authorStateOf(top.c, top.p, at) : null;
   const root =
@@ -121,7 +143,45 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
 
   // 2. Réponse : l'auteur du commentaire auquel on répond ; les réponses de la journée se regroupent (sans extrait).
   const replied = ctx.repliedTo;
-  if (replied && !notified.has(replied.authorId) && readers.has(replied.authorId)) {
+  /** Une ligne par responsable lisible (jamais deux fois la même personne, jamais celui qui écrit), au nom de la structure. */
+  const toManagers = async (
+    structureId: string,
+    managers: string[],
+    type: "feed_comment" | "feed_comment_reply",
+    rawGroupKey: string,
+    title: string,
+    extraData: Record<string, unknown> = {},
+  ) => {
+    const targets = managers.filter((id) => !notified.has(id) && readers.has(id));
+    for (const userId of targets) {
+      const merge = await hasOpenLine(tx, userId, `s:${structureId}:${rawGroupKey}`);
+      await notifyStructure(
+        tx,
+        structureId,
+        type,
+        {
+          title: fill(title),
+          body: merge ? fill(title) : quote,
+          data: data(extraData),
+          groupKey: rawGroupKey,
+          ...(actor ? { actor } : {}),
+          after: ctx.after,
+        },
+        { exclude: managers.filter((id) => id !== userId) },
+      );
+    }
+    for (const id of managers) notified.add(id);
+  };
+  if (replied && repliedStructureId) {
+    await toManagers(
+      repliedStructureId,
+      repliedManagers,
+      "feed_comment_reply",
+      `feed_comment_reply:${replied.id}${groupSuffix}`,
+      structureNotificationTexts.repliedComment(await structureNameOf(tx, repliedStructureId)),
+      { parentId: replied.id },
+    );
+  } else if (replied && !notified.has(replied.authorId) && readers.has(replied.authorId)) {
     notified.add(replied.authorId);
     const groupKey = `feed_comment_reply:${replied.id}${groupSuffix}`;
     const merge = await hasOpenLine(tx, replied.authorId, groupKey);
@@ -138,7 +198,17 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
   // 3. L'auteur de la publication : une ligne non lue par publication, les personnes s'ajoutent à la même ligne.
   // Une page qui commente sa propre publication ne prévient personne (lot R9a).
   const ownPage = page !== null && ctx.postPageKey === page.key;
-  if (!ownPage && !notified.has(ctx.postAuthorId) && readers.has(ctx.postAuthorId)) {
+  if (postStructureId) {
+    if (!ownPage) {
+      await toManagers(
+        postStructureId,
+        postManagers,
+        "feed_comment",
+        `feed_comment:${ctx.postId}${groupSuffix}`,
+        structureNotificationTexts.commentedPost(await structureNameOf(tx, postStructureId)),
+      );
+    }
+  } else if (!ownPage && !notified.has(ctx.postAuthorId) && readers.has(ctx.postAuthorId)) {
     notified.add(ctx.postAuthorId);
     const groupKey = `feed_comment:${ctx.postId}${groupSuffix}`;
     const merge = await hasOpenLine(tx, ctx.postAuthorId, groupKey);
@@ -375,6 +445,12 @@ export async function pageLineReadable(
   return newest ? { newest, count, pageName: typeof data.page?.name === "string" ? data.page.name : "" } : null;
 }
 
+/** Titre et corps génériques d'une ligne de commentaire : ceux du type, ou ceux de la structure (lot R9d). */
+function specOf(n: typeof notifications.$inferSelect, type: "feed_comment" | "feed_comment_reply") {
+  const own = structureCommentTemplate(type, n.data as { structureName?: unknown }, n.structureId);
+  return own ? { title: own, body: own } : r8NotificationTable[type];
+}
+
 async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
   if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return true;
   const data = n.data as {
@@ -389,7 +465,7 @@ async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
     // Ligne d'une page : elle reste tant qu'un commentaire de cette page se lit ; sinon elle disparaît (lot R9a, tour 2).
     const left = await pageLineReadable(tx, n.userId, n);
     if (!left) return false;
-    const spec = r8NotificationTable[n.type];
+    const spec = specOf(n, n.type);
     const body = left.count === 1 ? feedCommentLabels.quote(commentExcerpt(left.newest.text)) : spec.body;
     const [updated] = await tx
       .update(notifications)
@@ -423,7 +499,7 @@ async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
   });
   const first = byId.get(newest.authorId);
   if (!first) return false;
-  const spec = r8NotificationTable[n.type];
+  const spec = specOf(n, n.type);
   const bodyTemplate = readable.length === 1 ? feedCommentLabels.quote(commentExcerpt(newest.text)) : spec.body;
   const [updated] = await tx
     .update(notifications)
