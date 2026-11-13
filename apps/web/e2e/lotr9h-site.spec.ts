@@ -185,7 +185,9 @@ test("« Publier » et la story : une clé inconnue est ignorée, la personne pu
   await ctx.close();
 });
 
-test("Pro : /pro/<slug>/fil, la barre latérale et la barre du haut avec la cloche de la personne", async ({ browser }) => {
+test("Pro : /pro/<slug>/fil, la barre latérale et la barre du haut avec la cloche de la personne", async ({
+  browser,
+}) => {
   test.setTimeout(180_000);
   const pro = (await meOf("garage@orasso.local")).pro;
   expect(pro, "le compte garage@ a une fiche pro (seed)").not.toBeNull();
@@ -253,7 +255,9 @@ for (const space of [
   });
 }
 
-test("Passionné : /app/fil inchangé, aucun en-tête d'acteur, aucune sous-navigation ni pastille", async ({ browser }) => {
+test("Passionné : /app/fil inchangé, aucun en-tête d'acteur, aucune sous-navigation ni pastille", async ({
+  browser,
+}) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
@@ -277,7 +281,9 @@ test("Passionné : /app/fil inchangé, aucun en-tête d'acteur, aucune sous-navi
 
 test("Casquette périmée : retour à « Moi » avec l'avis, et une page suspendue n'a pas de Fil", async ({ browser }) => {
   test.setTimeout(240_000);
-  const before = (await sql("select verification, suspended_reason from structures where slug = 'roues-libres-66'")) as {
+  const before = (await sql(
+    "select verification, suspended_reason from structures where slug = 'roues-libres-66'",
+  )) as {
     verification: string;
     suspended_reason: string | null;
   }[];
@@ -287,7 +293,9 @@ test("Casquette périmée : retour à « Moi » avec l'avis, et une page suspend
     await open(page, "sarah@orasso.local", "/orga/roues-libres-66/fil");
     await expect(page.getByTestId("fil-actor")).toBeVisible();
     // La structure est suspendue pendant que la page est ouverte : la lecture suivante est refusée (403 `persona_forbidden`).
-    await sql("update structures set verification = 'suspended', suspended_reason = 'moderation' where slug = 'roues-libres-66'");
+    await sql(
+      "update structures set verification = 'suspended', suspended_reason = 'moderation' where slug = 'roues-libres-66'",
+    );
     await page.getByTestId("fil-filters-following").click();
     await page.waitForURL(/\/app\/moi\?casquette=indisponible/, { timeout: 30_000 });
     await expect(page.getByTestId("casquette-gone")).toContainText("Cette casquette n'est plus disponible");
