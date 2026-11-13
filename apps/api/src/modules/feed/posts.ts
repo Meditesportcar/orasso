@@ -99,7 +99,7 @@ export const FEED_PHOTO_NAME_RE = /^[0-9a-f]{32}\.webp$/;
  * média (`m:<id>`), son nom, l'album d'origine — `null` quand cet album n'est plus visible (retiré, accréditation tombée) : l'écran
  * cache alors « Voir l'album ». Jamais le compte derrière le média.
  */
-async function loadPhotoCredits(
+export async function loadPhotoCredits(
   ex: Executor,
   photos: readonly { id: string; creditMediaId: string | null; sourceAlbumPhotoId: string | null }[],
   at: Date,

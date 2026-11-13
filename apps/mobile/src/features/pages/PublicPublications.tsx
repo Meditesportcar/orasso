@@ -4,6 +4,7 @@
 import { Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   appendUnique,
+  creditLine,
   feedPublishLabels as FP,
   importantReasonLabels,
   publicationsLabels as PL,
@@ -130,6 +131,11 @@ export function PublicPublications({
               <Text variant="bodyStrong" color={t.color.ink}>
                 {PL.tileLabel(meta.date, meta.place)}
               </Text>
+              {creditLine(post.photos[0]?.credit) ? (
+                <Muted variant="caption" testID="public-publication-credit">
+                  {creditLine(post.photos[0]?.credit)}
+                </Muted>
+              ) : null}
               {post.caption ? (
                 <Text variant="body" color={t.color.ink}>
                   {post.caption}

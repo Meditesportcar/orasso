@@ -2,7 +2,7 @@
 // sa légende **entière** (une annonce reprise en publication ne se lit que là), sa date et son lieu, avec ses étiquettes ; ni flamme,
 // ni commentaires, ni menu, ni lien (la page d'une publication seule exige une session).
 import { Icon } from "@orasso/design-system/web";
-import { type FeedPostView, publicationsLabels as L, tileMeta } from "@orasso/shared";
+import { creditLine, type FeedPostView, publicationsLabels as L, tileMeta } from "@orasso/shared";
 
 import { JournalBadges } from "./JournalBadges";
 
@@ -31,6 +31,12 @@ export function PublicJournalList({ posts }: { posts: readonly FeedPostView[] })
                   {" · "}
                   <Icon name="place" size={12} />
                   {meta.place}
+                </>
+              ) : null}
+              {creditLine(photo?.credit) ? (
+                <>
+                  {" · "}
+                  <span data-testid="journal-public-credit">{creditLine(photo?.credit)}</span>
                 </>
               ) : null}
             </small>
