@@ -18,6 +18,7 @@ import {
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { albumCreditsOf } from "../albums/share-to-story";
 import { canSeeEvent } from "../invitations/access";
 import { commercialViews } from "../partnerships/commercial";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -115,6 +116,10 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     db,
     rows.map((r) => r.story.commercialPartnerId),
   );
+  // Lot R9f : le crédit d'une story reprise d'une photo d'album (« Photos : <média> »), non retirable.
+  const credits = await albumCreditsOf(
+    rows.map((r) => ({ id: r.story.id, sourceAlbumPhotoId: r.story.sourceAlbumPhotoId })),
+  );
   const seenIds = new Set(seen.map((r) => r.id));
   const likedIds = new Set(liked.map((r) => r.id));
 
@@ -190,6 +195,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       crewName: s.audience === "crew" ? r.crewName : null,
       // Le crédit d'une copie : l'identité PUBLIQUE de l'originale selon sa casquette (lot R7h, tour 2).
       sharedFrom: creditOf(r, storage.url),
+      credit: credits.get(s.id) ?? null,
       sharing: sharing.get(s.id) ?? null,
       // Même règle que `exportService.story` : auteur seul, ni crew, ni copie, prête, et un contenu lié encore sortable.
       exportable:

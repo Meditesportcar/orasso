@@ -11,6 +11,7 @@ import { notFound } from "../../../lib/errors";
 import { storage } from "../../../lib/storage";
 import { photosHeldByReport, shiftPositions } from "../../albums/service";
 import { loadAlbum } from "../../albums/view";
+import { dropStoriesOfAlbumPhotos } from "../../stories/share";
 import { registerReportMedia, reportMediaUrl } from "../media";
 import { goneView, type TargetRules, UUID_RE } from "./types";
 
@@ -77,6 +78,8 @@ export const albumPhotoTarget: TargetRules = {
     // Déjà retirée par le média (fichier gardé pour la preuve) : la décision l'efface.
     if (photo.deletedAt) return [photo.storageKey];
     await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
+    // Lot R9f : les stories reprises de cette photo (« En story ») tombent ; leurs fichiers partent au balayage de `stories.expire`.
+    await dropStoriesOfAlbumPhotos(tx, [photo.id]);
     await shiftPositions(tx, photo.albumId, photo.position);
     const [album] = await tx
       .update(eventAlbums)
