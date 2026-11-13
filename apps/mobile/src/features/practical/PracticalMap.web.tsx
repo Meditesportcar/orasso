@@ -324,7 +324,7 @@ export function PracticalMap({
         ref={box}
         aria-label={L.mapLabel}
         data-testid="practical-map-canvas"
-        style={{ position: "absolute", inset: 0, ...(mapCssVars(theme) as Record<string, string>) }}
+        style={{ position: "absolute", inset: 0, overflow: "hidden", ...(mapCssVars(theme) as Record<string, string>) }}
       />
     </View>
   );

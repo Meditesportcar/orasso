@@ -235,8 +235,17 @@ test("1280 px : hors ligne, le filtre local marche, « Réessayer » et la phras
   await page.waitForTimeout(4_000);
   expect(zoneCalls().length).toBe(n);
   await ctx.setOffline(false);
-  await page.getByTestId("practical-retry").click();
-  await expect(page.getByTestId("practical-retry")).toHaveCount(0, { timeout: 30_000 });
+  // Le réseau met un instant à revenir : « Réessayer » est rejoué (un appui à la fois) jusqu'au succès, jamais plus de trois fois.
+  const retry = page.getByTestId("practical-retry");
+  for (let i = 0; i < 3 && (await retry.count()) > 0; i++) {
+    await page.waitForTimeout(1_000);
+    await retry.first().click();
+    await retry
+      .first()
+      .waitFor({ state: "detached", timeout: 10_000 })
+      .catch(() => undefined);
+  }
+  await expect(retry).toHaveCount(0, { timeout: 10_000 });
   await ctx.close();
 });
 

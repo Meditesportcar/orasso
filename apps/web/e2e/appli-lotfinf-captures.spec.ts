@@ -226,6 +226,14 @@ for (const { theme, width, scale } of COMBOS) {
     await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 60_000 });
     await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 30_000 });
     await page.waitForTimeout(600);
+    // « Chargée » : la zone de Banyuls (lue d'un appui, puis tout reste local) montre des épingles, comme la maquette.
+    await page.getByTestId("practical-search").fill("banyu");
+    await page.getByTestId("practical-suggest-city-0").click();
+    await expect(page.getByTestId("practical-hint")).toContainText("Banyuls-sur-Mer, la ville cherchée.", {
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 60_000 });
+    await page.waitForTimeout(1_000);
     await shot(page, `appli-chargee-${tag}`);
     // Trop dézoomée.
     const box = await page.getByTestId("practical-map-canvas").boundingBox();
