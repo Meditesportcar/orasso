@@ -105,13 +105,49 @@ for (const scale of [1, 1.3]) {
 
 // Le plancher d'un titre du rail est la plus petite taille des jetons (« credit », 9) ; le corps baisse de 1 px à la fois depuis 12,5 : il
 // ne descend donc jamais sous 9,5 ici. L'échelle de police simulée multiplie la taille lue : on compare à 9 × l'échelle.
+/**
+ * Un mot du libellé est-il coupé entre deux lignes ? (même mesure que `webLabelBreaksInsideWord` du système de design ; autonome : elle
+ * est envoyée à la page sous forme de texte.)
+ */
+function wordIsBroken(el: Element): boolean {
+  const range = document.createRange();
+  const lines = (r: Range) =>
+    new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size;
+  range.selectNodeContents(el);
+  if (lines(range) < 2) return false;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    for (const m of (n.textContent ?? "").matchAll(/[\p{L}\p{N}]+/gu)) {
+      range.setStart(n, m.index ?? 0);
+      range.setEnd(n, (m.index ?? 0) + m[0].length);
+      if (lines(range) > 1) return true;
+    }
+  }
+  return false;
+}
+const BROKEN_SRC = wordIsBroken.toString();
+
+test("la mesure « mot coupé » repère un mot coupé exprès et laisse un mot entier", async ({ browser }) => {
+  const page = await browser.newPage();
+  await page.setContent(
+    `<div id="cut" style="width:40px;word-break:break-all;font:16px sans-serif">Constitutionnelle</div><div id="whole" style="width:400px;font:16px sans-serif">Rassemblement des Pilotes</div><div id="wrapped" style="width:90px;font:16px sans-serif">Rassemblement des Pilotes</div>`,
+  );
+  const verdict = await page.evaluate((src) => {
+    const fn = new Function(`return (${src})`)() as (e: Element) => boolean;
+    const get = (id: string) => fn(document.getElementById(id) as Element);
+    return { cut: get("cut"), whole: get("whole"), wrapped: get("wrapped") };
+  }, BROKEN_SRC);
+  expect(verdict).toEqual({ cut: true, whole: false, wrapped: false });
+  await page.close();
+});
+
 const FLOOR = 9;
 const RAIL_TITLES = [
   // Un seul mot, trop long pour tenir même au plancher : le corps y arrive (c'est ce qui prouve le plancher).
   "Anticonstitutionnellement",
   // Un mot long qui tient après réduction : jamais coupé.
-  "Constitutionnelle",
-  "Rassemblement des Pilotes",
+  "Exposition",
+  "Expo des Pilotes Catalans",
 ];
 
 for (const scale of [1, 1.3]) {
@@ -124,39 +160,25 @@ for (const scale of [1, 1.3]) {
     await expect(rail).toBeVisible({ timeout: 30_000 });
     await expect(rail.getByTestId("home-rail-item").first()).toBeVisible();
     await page.waitForTimeout(1_500);
-    const titles = await rail.getByTestId("home-rail-item").evaluateAll((items) =>
-      items.map((item) => {
-        const title = item.getAttribute("aria-label") ?? "";
-        const el = [...item.querySelectorAll("*")].find(
-          (n) => n.children.length === 0 && (n.textContent ?? "").trim() === title,
-        );
-        const s = el ? getComputedStyle(el) : null;
-        // Un mot est coupé quand ses morceaux sont sur deux lignes (même mesure que `webLabelBreaksInsideWord` du système de design).
-        let broken = false;
-        if (el) {
-          const range = document.createRange();
-          const lines = (r: Range) =>
-            new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size;
-          range.selectNodeContents(el);
-          if (lines(range) > 1) {
-            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            for (let n = walker.nextNode(); n && !broken; n = walker.nextNode()) {
-              for (const m of (n.textContent ?? "").matchAll(/[p{L}p{N}]+/gu)) {
-                range.setStart(n, m.index ?? 0);
-                range.setEnd(n, (m.index ?? 0) + m[0].length);
-                if (lines(range) > 1) broken = true;
-              }
-            }
-          }
-        }
-        return {
-          title,
-          found: Boolean(el),
-          size: s ? Number.parseFloat(s.fontSize) : 0,
-          ellipsis: s ? s.textOverflow === "ellipsis" && (el?.scrollWidth ?? 0) > (el?.clientWidth ?? 0) : false,
-          broken,
-        };
-      }),
+    const titles = await rail.getByTestId("home-rail-item").evaluateAll(
+      (items, src) =>
+        items.map((item) => {
+          const title = item.getAttribute("aria-label") ?? "";
+          const el = [...item.querySelectorAll("*")].find(
+            (n) => n.children.length === 0 && (n.textContent ?? "").trim() === title,
+          );
+          const s = el ? getComputedStyle(el) : null;
+          // Un mot est coupé quand ses morceaux sont sur deux lignes (`wordIsBroken`, vérifiée plus bas sur un mot coupé exprès).
+          const broken = el ? (new Function(`return (${src})`)() as (e: Element) => boolean)(el) : false;
+          return {
+            title,
+            found: Boolean(el),
+            size: s ? Number.parseFloat(s.fontSize) : 0,
+            ellipsis: s ? s.textOverflow === "ellipsis" && (el?.scrollWidth ?? 0) > (el?.clientWidth ?? 0) : false,
+            broken,
+          };
+        }),
+      BROKEN_SRC,
     );
     expect(titles.length).toBeGreaterThan(0);
     const by = (t: string) => titles.find((x) => x.title === t);
