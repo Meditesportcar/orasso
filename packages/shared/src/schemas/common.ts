@@ -137,6 +137,9 @@ export const errorCodes = [
   "important_requires_event",
   "important_quota",
   "photo_required",
+  // Lot R9c : l'étiquette « Offre » (fiche pro, titre et jours).
+  "offer_requires_pro",
+  "offer_invalid",
   // Lot R8o : collaboration (co-auteur).
   "coauthor_self",
   "coauthor_important",

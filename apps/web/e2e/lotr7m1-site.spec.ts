@@ -95,7 +95,8 @@ for (const theme of ["beton", "sable"] as const) {
         const kp = await kenji.newPage();
         await setTheme(kp, theme);
         await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app");
-        await kp.goto("/p/garage-du-port");
+        // Vérification R8-V2 : depuis R8g, « Publications » s'ouvre par défaut ; les partenaires sont dans « Présentation ».
+        await kp.goto("/p/garage-du-port?onglet=presentation");
         await expect(kp.getByTestId("pro-member-partners")).toContainText(member.pseudo);
         await shot(kp, `pp_fiche-${tag}`);
         await kenji.close();

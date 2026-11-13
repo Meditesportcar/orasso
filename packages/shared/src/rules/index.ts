@@ -67,6 +67,7 @@ export * from "./practical";
 export * from "./practicalRetry";
 export * from "./presence";
 export * from "./pro";
+export * from "./proOffers";
 export * from "./proposedVehicle";
 export * from "./publicationsList";
 export * from "./publicPage";

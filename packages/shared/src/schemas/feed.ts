@@ -19,6 +19,7 @@ import {
 } from "../rules/feed";
 import type { FeedAttachPhase, FeedEventRole, ImportantReason } from "../rules/feedAttach";
 import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, importantReasons } from "../rules/feedAttach";
+import type { OfferView } from "../rules/proOffers";
 import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
 import { coAuthorInputSchema, type FeedCoAuthorInvite } from "./feedCoauthors";
@@ -95,6 +96,17 @@ export const feedPostCreateSchema = z
     important: z.object({ reason: z.enum(importantReasons) }).nullish(),
     /** Collaboration (R8o) : un seul co-auteur invité. Tant qu'il n'a pas accepté, la publication n'est que chez son auteur. */
     coAuthor: coAuthorInputSchema.nullish(),
+    /**
+     * Étiquette « Offre » (R9c) : fiche pro seulement. Le titre et les jours (`AAAA-MM-JJ`, début facultatif, fin obligatoire) sont
+     * contrôlés par l'API (`offerIssue`), pour rendre un message par cause.
+     */
+    offer: z
+      .object({
+        title: z.string().max(200),
+        startsOn: z.string().max(10).nullish(),
+        endsOn: z.string().max(10).nullish(),
+      })
+      .nullish(),
   })
   .refine((v) => !(v.photos.length > 0 && v.linked), {
     message: "Une carte partagée n'a pas de photo envoyée",
@@ -228,6 +240,8 @@ export type FeedPostView = {
   commentsOff: boolean;
   /** Les deux derniers commentaires (R8k1). */
   lastComments: FeedCommentPreview[];
+  /** Étiquette « Offre » (R9c) : titre, jours et état à la lecture ; `null` pour toute autre publication. */
+  offer: OfferView | null;
 };
 
 export type FeedPodiumEntry = {

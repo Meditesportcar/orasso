@@ -5,6 +5,7 @@
 // largeur (Explorer). Le libellé est plafonné à ×1,12 de police et ne se coupe jamais au milieu d'un mot.
 // Le collant (rangée qui reste en haut au défilement) n'est pas ici : c'est l'écran hôte qui colle la rangée.
 import { archivoAt, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { underTabLabel } from "./underTabLabel";
@@ -38,6 +39,26 @@ export function UnderTabs<T extends string>({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Une rangée qui déborde (4 onglets à police agrandie) : l'onglet choisi est ramené dans la vue, rien ne se coupe.
+  const scroll = useRef<ScrollView>(null);
+  const spots = useRef<Record<string, { x: number; w: number }>>({});
+  const rowW = useRef(0);
+  const scrollX = useRef(0);
+  // Recentrer seulement quand `value` change (ou à l'ouverture), et seulement si l'onglet choisi n'est pas entier dans la rangée :
+  // un nombre qui arrive (« Garage · 3 ») ou une rotation ne fait jamais sauter la rangée.
+  const pending = useRef(true);
+  const settle = () => {
+    const at = spots.current[value];
+    if (!pending.current || spread || !at || rowW.current <= 0) return;
+    pending.current = false;
+    const whole = at.x >= scrollX.current && at.x + at.w <= scrollX.current + rowW.current;
+    if (!whole) scroll.current?.scrollTo({ x: Math.max(0, at.x - (rowW.current - at.w) / 2), animated: false });
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un autre onglet choisi relance le recentrage
+  useEffect(() => {
+    pending.current = true;
+    settle();
+  }, [value]);
   const tabs = items.map((it) => {
     const on = it.id === value;
     const text = underTabLabel(it.label, it.count);
@@ -50,6 +71,10 @@ export function UnderTabs<T extends string>({
         accessibilityLabel={text}
         hitSlop={{ top: HIT, bottom: HIT }}
         onPress={() => onChange(it.id)}
+        onLayout={(e) => {
+          spots.current[it.id] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width };
+          if (it.id === value) settle();
+        }}
         style={[styles.tab, spread ? styles.tabSpread : styles.tabScroll]}
         testID={itemTestID ? itemTestID(it.id) : `${testID}-${it.id}`}
       >
@@ -76,6 +101,15 @@ export function UnderTabs<T extends string>({
   }
   return (
     <ScrollView
+      ref={scroll}
+      onLayout={(e) => {
+        rowW.current = e.nativeEvent.layout.width;
+        settle();
+      }}
+      onScroll={(e) => {
+        scrollX.current = e.nativeEvent.contentOffset.x;
+      }}
+      scrollEventThrottle={32}
       horizontal
       showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"

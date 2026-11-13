@@ -9,6 +9,7 @@ const ICON: Record<PageTab, IconName> = {
   events: "calendar",
   presentation: "briefcase",
   publications: "gallery",
+  offers: "ticket",
   mentions: "bubble",
 };
 

@@ -27,10 +27,11 @@ import { commercialViews } from "../partnerships/commercial";
 import type { Profile } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
-import { factsOf } from "./access";
+import { factsOf, maskedProIds } from "./access";
 import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
 import { loadPageInfo, pageKeyOf } from "./authors";
 import { dropCoauthorNotifications, loadCoAuthors } from "./coauthors";
+import { offerView } from "./offers";
 import { eventSummariesByIds } from "./summary";
 
 export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">): FeedPerson => ({
@@ -130,7 +131,15 @@ export async function loadPostViews(
         ).map((r) => r.id)
       : [],
   );
+  // Une fiche passée en « fiche de base » masque ses publications à qui n'en est pas le propriétaire (même règle que les listes).
+  const masked = await maskedProIds(
+    ex,
+    rows.map((r) => r.post),
+    viewerId,
+    at,
+  );
   const visible = rows.filter((r) => {
+    if (r.post.proId && masked.has(r.post.proId)) return false;
     const key = pageKeyOf(r.post);
     return canSeeFeedPost(
       { userId: viewerId },
@@ -241,6 +250,7 @@ export async function loadPostViews(
         commentsCount: r.post.commentsCount,
         commentsOff: r.post.commentsOff,
         lastComments: lastComments.get(r.post.id) ?? [],
+        offer: offerView(r.post, at),
       },
     ];
   });
