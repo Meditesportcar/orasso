@@ -108,6 +108,12 @@ test("Publier : la publication était partie et la structure reste suspendue : �
     await lost.click();
     expect((await check).status()).toBe(409);
     await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 30_000 });
+    // Un état distinct du succès (tour 5) : un message vrai (masquée tant que la page est suspendue), jamais « Publié » ni « en ligne ».
+    await expect(page.getByTestId("fil-publish-hidden")).toContainText(
+      "Publication enregistrée, mais masquée tant que la page est suspendue.",
+    );
+    await expect(page.getByText("Publié dans le Fil")).toHaveCount(0);
+    await expect(page.getByText("Ta publication est en ligne.")).toHaveCount(0);
     const rows = (await sql("select persona from feed_posts order by created_at desc limit 1")) as {
       persona: string;
     }[];

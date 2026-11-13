@@ -43,6 +43,7 @@ import {
   type PublishChoice,
   partnershipLabels,
   publicationErrors,
+  publicationHiddenTitle,
   publishAuthors,
   publishIssueR8,
   publishSays,
@@ -53,6 +54,7 @@ import {
   showEventBlock,
   startEventsLoad,
   feedPublishLabels as T,
+  uncertainCheckOutcome,
   vehicleWizardLabels as V,
   vehicleAllowed,
   withImportantLeft,
@@ -212,6 +214,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
   // jusqu'à la fin, une seule opération à la fois.
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
+  // La publication existe mais reste masquée (page suspendue, 409 `post_unavailable`) : un état distinct du succès (R9h, tour 5).
+  const [hidden, setHidden] = useState(false);
   const [invitedName, setInvitedName] = useState<string | null>(null);
   const [doneOffer, setDoneOffer] = useState<string | null>(null);
   const [clientId, setClientId] = useState(() => randomUUID());
@@ -595,11 +599,18 @@ function PublishForm({ start }: { start?: PublishStart }) {
     } catch (e) {
       if (!guard.current()) return;
       // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4) ; retrouvée, sans contenu.
-      if (e instanceof ApiRequestError && e.status === 409 && e.code === "post_unavailable") {
+      if (
+        uncertainCheckOutcome({
+          ok: false,
+          status: e instanceof ApiRequestError ? e.status : 0,
+          code: e instanceof ApiRequestError ? e.code : undefined,
+        }) === "hidden"
+      ) {
         uncertainOutcome.current = "found";
         if (mounted.current) discardTempPhotos();
         setUncertain(null);
         setFound(true);
+        setHidden(true);
         setDone(true);
       } else if (e instanceof ApiRequestError && e.status === 404) {
         uncertainOutcome.current = "freed";
@@ -654,10 +665,10 @@ function PublishForm({ start }: { start?: PublishStart }) {
         <View style={[styles.done, { backgroundColor: c.surface }]} testID="fil-publish-done">
           <Icon name="check" size={28} color={c.accentText} />
           <Text variant="posterM" color={c.ink}>
-            {L.published}
+            {hidden ? publicationHiddenTitle : L.published}
           </Text>
-          <Text variant="body" color={c.inkMuted}>
-            {found ? T.uncertainFound : L.publishedText}
+          <Text variant="body" color={c.inkMuted} testID={hidden ? "fil-publish-hidden" : undefined}>
+            {hidden ? publicationErrors.post_unavailable : found ? T.uncertainFound : L.publishedText}
           </Text>
           {doneOffer ? (
             <Text variant="bodyStrong" color={c.ink} testID="fil-publish-done-offer">

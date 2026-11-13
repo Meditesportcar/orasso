@@ -121,13 +121,16 @@ export const importantReasonLabels = {
   other: "Autre",
 } as const;
 
+/** Titre de l'écran quand la publication existe mais reste masquée (page suspendue, R9h tour 5) : jamais « Publié dans le Fil ». */
+export const publicationHiddenTitle = "Publication enregistrée";
+
 /** Messages des refus de la publication au nom d'une casquette (codes de `errorCodes`). */
 export const publicationErrors = {
   persona_forbidden: "Tu ne peux pas publier au nom de cette page.",
   event_not_attachable: "Tu ne peux pas rattacher ta publication à cet événement.",
   important_requires_event: "Une info importante se publie en tant qu'organisateur, pour un événement de ta structure.",
   account_changed: "Ta session a changé : recharge la page avant de publier.",
-  post_unavailable: "Ta publication existe, mais elle n'est pas visible pour le moment.",
+  post_unavailable: "Publication enregistrée, mais masquée tant que la page est suspendue.",
   important_quota: "Tu as atteint la limite d'infos importantes pour cet événement (une par jour, trois par semaine).",
   photo_required:
     "Ajoute une photo. Seule une publication rattachée à un événement qui a une affiche peut s'en passer.",

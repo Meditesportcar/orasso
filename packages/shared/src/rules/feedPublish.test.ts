@@ -38,6 +38,7 @@ import {
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
+  uncertainCheckOutcome,
   vehicleAllowed,
   withImportantLeft,
 } from "./feedPublish";
@@ -793,5 +794,18 @@ describe("auteur devenu indisponible pendant la rédaction (R9h, tour 2)", () =>
   });
   it("une page encore proposée : rien de perdu", () => {
     expect(resolvePublishAuthor(authors, "structure:s1").lost).toBeNull();
+  });
+});
+
+describe("uncertainCheckOutcome : la réponse de la vérification d'un envoi incertain (R9h, tours 4 et 5)", () => {
+  it("retrouvée, masquée (409 post_unavailable : jamais « Publié »), absente (404), tout le reste garde le verrou", () => {
+    expect(uncertainCheckOutcome({ ok: true })).toBe("found");
+    expect(uncertainCheckOutcome({ ok: false, status: 409, code: "post_unavailable" })).toBe("hidden");
+    expect(uncertainCheckOutcome({ ok: false, status: 404 })).toBe("freed");
+    // Un autre 409, un 403, un 5xx, le réseau : jamais « absente » ni « masquée ».
+    expect(uncertainCheckOutcome({ ok: false, status: 409, code: "account_changed" })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 403 })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 503 })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 0, code: "network" })).toBe("kept");
   });
 });

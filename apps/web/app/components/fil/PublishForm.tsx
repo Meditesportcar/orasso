@@ -58,6 +58,7 @@ import {
   type PublishChoice,
   partnershipLabels,
   publicationErrors,
+  publicationHiddenTitle,
   publishAuthors,
   publishIssueR8,
   publishSays,
@@ -70,6 +71,7 @@ import {
   startEventsLoad,
   feedPublishLabels as T,
   type UploadResult,
+  uncertainCheckOutcome,
   vehicleWizardLabels as V,
   vehicleAllowed,
   withImportantLeft,
@@ -256,6 +258,8 @@ export function PublishForm({
   // « Recadrer » : la clé de la photo qu'on recadre au doigt.
   const [cropping, setCropping] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // La publication existe mais reste masquée (page suspendue, 409 `post_unavailable`) : un état distinct du succès (R9h, tour 5).
+  const [hidden, setHidden] = useState(false);
   const [preparing, setPreparing] = useState(false);
   // Pendant l'envoi comme pendant un recadrage, rien de ce qui part ne bouge : l'écran montre exactement ce qui est envoyé.
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
@@ -513,12 +517,13 @@ export function PublishForm({
         setFound(true);
         return setDone(true);
       }
-      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4). On la tient pour retrouvée,
-      // sans la mémoriser (aucun contenu rendu) : l'envoi n'est jamais renouvelé, donc jamais de doublon.
-      if (res.status === 409 && res.error.code === "post_unavailable") {
+      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4) ni un succès visible (tour 5) :
+      // état « masquée » distinct, message vrai, sans la mémoriser (aucun contenu rendu) ; l'envoi n'est jamais renouvelé (pas de doublon).
+      if (uncertainCheckOutcome({ ok: false, status: res.status, code: res.error.code }) === "hidden") {
         uncertainOutcome.current = "found";
         setUncertain(null);
         setFound(true);
+        setHidden(true);
         return setDone(true);
       }
       if (res.status === 404) {
@@ -699,8 +704,14 @@ export function PublishForm({
   if (done) {
     return (
       <div className="fil" data-testid="fil-publish-done">
-        <FicheBar title={L.published} back={back} />
-        <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        <FicheBar title={hidden ? publicationHiddenTitle : L.published} back={back} />
+        {hidden ? (
+          <p className="o-t-body" data-testid="fil-publish-hidden">
+            {publicationErrors.post_unavailable}
+          </p>
+        ) : (
+          <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
+        )}
         {doneOffer ? (
           <p className="o-t-body" data-testid="fil-publish-done-offer">
             <strong>{doneOffer}</strong>

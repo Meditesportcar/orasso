@@ -225,6 +225,21 @@ export type PublishDraft = {
 };
 
 /**
+ * Le résultat de « Modifier ma publication » / « Publier en mon nom » après un envoi incertain, d'après la réponse de
+ * `GET /me/feed-posts/by-client/:id` (R9h, tours 4 et 5) : `found` (200 : publication retrouvée, visible), `hidden` (409
+ * `post_unavailable` : elle existe mais reste masquée, page suspendue : un état distinct, jamais « Publié dans le Fil »), `freed`
+ * (404 : absence confirmée, nouvel identifiant), `kept` (tout le reste : vérification impossible, le verrou est maintenu). Dans les trois
+ * premiers cas hors `freed`, l'envoi n'est jamais renouvelé.
+ */
+export function uncertainCheckOutcome(
+  res: { ok: true } | { ok: false; status: number; code?: string },
+): "found" | "hidden" | "freed" | "kept" {
+  if (res.ok) return "found";
+  if (res.status === 409 && res.code === "post_unavailable") return "hidden";
+  return res.status === 404 ? "freed" : "kept";
+}
+
+/**
  * L'auteur du brouillon : celui de la clé choisie, ou — s'il n'est plus proposé (suspension, perte de droits) — `lost` avec son nom (lu
  * dans `names`, les noms vus à l'affichage précédent) et `author` = « Moi » **pour l'affichage seulement** : l'envoi reste bloqué
  * jusqu'à un choix explicite (R9h, tour 2).
