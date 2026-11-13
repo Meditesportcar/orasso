@@ -39,6 +39,8 @@ test("site : page du crew, sorties, réglages, vitrine et demande avec message",
       const k = await open(browser, crew.chef, theme, width, base);
       await expect(k.getByTestId("crew")).toHaveAttribute("data-state", "leader");
       await expect(k.getByTestId("crew-feed")).toBeVisible();
+      // Petit lot de fin, partie E : l'Instagram est derrière « plus » (la description se déplie sur place).
+      await k.getByTestId("crew-description-toggle").click();
       await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
       if (width === 390) {
         await expect(k.getByTestId("crew-propose-outing")).toBeHidden();

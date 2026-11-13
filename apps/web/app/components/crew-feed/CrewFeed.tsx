@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/crew-feed.css";
 import { apiFetch } from "../../lib/api.client";
-import { PersonAvatar } from "../People";
 import { CommentsDialog } from "./CommentsDialog";
 import { useCrewLiveNeeds, useCrewLiveStale } from "./CrewLive";
 import { AutoCard, PostCard } from "./PostCard";
@@ -53,7 +52,17 @@ const mapAll = (s: CrewFeedState<CrewFeedItem>, fn: Mapper): CrewFeedState<CrewF
 /** Une lecture en direct en échec : rejetée, pour que le besoin reste et reparte. */
 class LiveReadError extends Error {}
 
-export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
+export function CrewFeed({
+  crew,
+  publishTick = 0,
+  autoPublish = false,
+}: {
+  crew: CrewFeedCrew;
+  /** Petit lot de fin, partie E : « Publier » est au bout des onglets du crew ; chaque appui (le numéro monte) ouvre la fenêtre. */
+  publishTick?: number;
+  /** Arrivé par « Publier » depuis un autre onglet (`?publier=1`) : la fenêtre s'ouvre à l'arrivée. */
+  autoPublish?: boolean;
+}) {
   const [feed, setFeed] = useState<CrewFeedState<CrewFeedItem> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -63,7 +72,10 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [comments, setComments] = useState<CrewPostView | null>(null);
-  const [publishing, setPublishing] = useState(false);
+  const [publishing, setPublishing] = useState(autoPublish);
+  useEffect(() => {
+    if (publishTick > 0) setPublishing(true);
+  }, [publishTick]);
   // Seule la dernière lecture complète compte (une relecture en direct partie avant elle est jetée).
   const seq = useRef(0);
   const feedRef = useRef(feed);
@@ -104,7 +116,11 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   };
 
   /** Le haut du fil est à l'écran (ou plus bas) : une nouvelle entrée s'insère sans faire sauter la liste. */
-  const atTop = () => (listRef.current?.getBoundingClientRect().top ?? 0) >= -8;
+  const atTop = () => {
+    // Le haut du fil visible est sous la rangée d'onglets collée (sa hauteur réelle), pas en haut de la fenêtre.
+    const bar = document.querySelector(".crw-tabsbar")?.getBoundingClientRect().bottom ?? 0;
+    return (listRef.current?.getBoundingClientRect().top ?? 0) >= bar - 8;
+  };
 
   /** Une publication relue ou changée sur place (`null` : retirée), partout où elle est (affichée, en attente). */
   const put = (id: string, next: CrewPostView | null | ((p: CrewPostView) => CrewPostView)) =>
@@ -270,15 +286,6 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
 
   return (
     <section className="cf" aria-label={crewFeedLabels.feed} data-testid="crew-feed">
-      {!crew.archived && (
-        <div className="cf-comp">
-          <PersonAvatar url={options?.me.avatarUrl ?? null} pseudo={options?.me.pseudo ?? "?"} size={38} />
-          <span className="o-t-caption s-muted">{crewFeedLabels.composerHint}</span>
-          <Button icon="camera" onClick={() => setPublishing(true)} data-testid="crew-feed-publish">
-            {crewFeedLabels.publish}
-          </Button>
-        </div>
-      )}
       {error && (
         <p className="s-error" role="alert">
           {error}

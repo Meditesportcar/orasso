@@ -220,7 +220,7 @@ describe("cache des sources externes", () => {
   it("réponse sans liste (message d'erreur en 200) : un échec, pas une liste vide mise en cache", async () => {
     sources({ wash: () => Response.json({ remark: "runtime error: Query timed out" }) });
     expect(await washNear("66")).toEqual([]);
-    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") })).toBeUndefined();
+    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") })).toBeUndefined();
   });
 
   it("département inconnu ou source désactivée : rien", async () => {
@@ -938,7 +938,7 @@ describe("corrections de la relecture", () => {
     const r = await req(u, "GET", "/me/home?lat=42.699&lng=2.895");
     expect(r.json.wash[0]).toMatchObject({ name: "Lavage Perpignan" });
     expect(r.json.wash[0].distanceKm).toBeLessThan(5);
-    const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") });
+    const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") });
     expect(((cached?.data ?? []) as unknown[]).length).toBe(41);
     expect(fetched).toHaveBeenCalledTimes(2);
   });
@@ -970,7 +970,7 @@ describe("corrections de la relecture", () => {
     const big = "x".repeat(3 * 1024 * 1024);
     sources({ wash: () => new Response(JSON.stringify({ elements: [], pad: big })) });
     expect(await washNear("66")).toEqual([]);
-    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") })).toBeUndefined();
+    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") })).toBeUndefined();
   });
 
   it("I2 : deux chargements simultanés du même compte comptent un seul affichage ; le plafond tient sous concurrence", async () => {
