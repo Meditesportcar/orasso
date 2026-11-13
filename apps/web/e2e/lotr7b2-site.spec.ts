@@ -102,6 +102,8 @@ test("tour 2 : Inviter dans la rangée Discussion, signaler, crew d'un lien qui 
   await loginInBrowser(lp, crew.lea.email, undefined, `/app/crew?crew=${crew.slug}`);
   await expect(lp.getByTestId("crew-tabs")).toBeVisible();
   await expect(lp.getByTestId("crew-invite")).toHaveCount(0);
+  // Petit lot de fin, partie E : « Signaler » est dans la feuille de la couverture (la vignette).
+  await lp.getByTestId("crew-cover-open").click();
   await lp.getByTestId("report-open").click();
   await expect(lp.getByTestId("report-dialog")).toBeVisible();
   // Tour 3 : « Quitter le crew » mène à « Pas encore de crew » (son seul crew), jamais à la vitrine du crew quitté.

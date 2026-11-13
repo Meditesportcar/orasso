@@ -293,6 +293,9 @@ test("tour 2 : signaler son crew depuis l'espace privé, sauf le chef", async ({
   const lea = await open(browser, crew.lea.email);
   await go(lea.page, `/crew?crew=${crew.slug}`);
   await expect(lea.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
+  // Petit lot de fin, partie E : « Signaler » est dans la feuille de la couverture (la vignette), plus au bas de l'espace.
+  await expect(lea.page.getByTestId("report-open-crew")).toHaveCount(0);
+  await lea.page.getByTestId("crew-cover-open").click();
   await expect(lea.page.getByTestId("report-open-crew")).toBeVisible();
   await lea.ctx.close();
   const chef = await open(browser, crew.chef.email);

@@ -73,9 +73,11 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await openCrew(k, crew.slug);
     await expect(k.getByTestId("crew-tabs")).toBeVisible();
     await expect(k.getByTestId("crew-feed")).toBeVisible();
+    // Petit lot de fin, partie E : l'Instagram est derrière « plus » (la description se déplie sur place) ; l'en-tête dit
+    // « N membres · tu es le chef » sous le nom (l'étiquette « Tu es le chef » est dans la feuille de la couverture).
+    await k.getByTestId("crew-description-toggle").click();
     await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
-    // Lot R7b2 : l'en-tête dit aussi « N membres · tu es le chef » ; on vise l'étiquette exacte.
-    await expect(k.getByText("Tu es le chef", { exact: true })).toBeVisible();
+    await expect(k.getByTestId("crew-sub")).toContainText("tu es le chef");
     await shot(k, `01-chef-fil-${theme}`);
     await k.getByTestId("crew-tab-outings").click();
     await expect(k.getByTestId("crew-propose-outing")).toBeVisible();
