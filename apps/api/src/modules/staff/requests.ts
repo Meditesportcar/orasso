@@ -20,6 +20,7 @@ import { AppError, conflict, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { structureManagers } from "../../lib/structureManagers";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
 import { inboxService, registerInboxCounter } from "../messaging/inbox";
@@ -200,8 +201,11 @@ export const staffRequestsService = {
         data: { structureId, screen: "acces" },
         link: { label: "Ouvrir mon accès", path: "/app/sorties" },
       });
+      // Lot R9d : la cloche de chaque responsable relit son compte (la demande n'attend plus).
+      const managers = await structureManagers(tx, structureId, { includeSuspended: true });
       after(() => {
         inboxService.publish(userId);
+        for (const id of managers) inboxService.publish(id);
         notificationsService.kick();
       });
     });
@@ -212,7 +216,7 @@ export const staffRequestsService = {
   /** `POST /structures/:id/members/:userId/decline` : l'organisation refuse (la ligne est conservée pour le délai). */
   async decline(v: Viewer, structureId: string, userId: string): Promise<void> {
     await requireOrganizer(v, structureId);
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       await lockStructureStaff(tx, structureId);
       const [row] = await tx
         .update(structureMembers)
@@ -228,6 +232,11 @@ export const staffRequestsService = {
         )
         .returning();
       if (!row) throw notFound("Demande introuvable");
+      // Lot R9d : la cloche de chaque responsable relit son compte.
+      const managers = await structureManagers(tx, structureId, { includeSuspended: true });
+      after(() => {
+        for (const id of managers) inboxService.publish(id);
+      });
     });
   },
 

@@ -43,7 +43,7 @@ const DAY_LABELS = { today: L.today, week: L.week, earlier: L.earlier } as const
 
 /** Où mène une ligne de l'Activité de la structure (la cible dépend du type, pas d'un lien stocké). */
 export type StructureTarget =
-  | { kind: "triage"; eventId: string }
+  | { kind: "triage"; eventId: string; segment: "vehicles" | "press" | "providers" }
   | { kind: "path"; path: string }
   | { kind: "team" }
   | { kind: "requests" }
@@ -52,7 +52,8 @@ export type StructureTarget =
 export function structureTargetOf(item: Pick<ActivityItem, "type" | "data">): StructureTarget {
   const d = item.data;
   if (item.type === "application_received" && typeof d.eventId === "string") {
-    return { kind: "triage", eventId: d.eventId };
+    const segment = d.kind === "media" ? "press" : d.kind === "provider" ? "providers" : "vehicles";
+    return { kind: "triage", eventId: d.eventId, segment };
   }
   if (item.type === "staff_request") return { kind: "team" };
   if (item.type === "coauthor_invited") return { kind: "requests" };
@@ -134,8 +135,12 @@ function Body() {
 
   const groups = mergeGroups(page?.groups ?? [], tail.items);
   const isRead = (i: ActivityItem) => i.read || i.ids.every((id) => readIds.has(id));
-  const requestsTotal = requests.data?.total ?? 0;
-  const empty = page && groups.length === 0 && requestsTotal === 0;
+  // Compteur inconnu ≠ zéro : si la liste des demandes ne répond pas, le résumé de la Boîte sert de secours ; sans lui non plus,
+  // la ligne reste avec « Réessayer » et l'écran ne dit jamais « Aucune nouveauté ».
+  const fallbackTotal = summary.data ? summary.data.staffRequests + (summary.data.coauthorRequests ?? 0) : null;
+  const requestsTotal: number | null = requests.data ? requests.data.total : requests.error ? fallbackTotal : 0;
+  const requestsUnknown = requests.error !== null && requests.data === null && fallbackTotal === null;
+  const empty = page && groups.length === 0 && requestsTotal === 0 && !requestsUnknown;
 
   async function open(item: ActivityItem) {
     if (!isRead(item)) {
@@ -147,7 +152,8 @@ function Body() {
     }
     const target = structureTargetOf(item);
     if (!target) return;
-    if (target.kind === "triage") router.push({ pathname: "/tri", params: { event: target.eventId } });
+    if (target.kind === "triage")
+      router.push({ pathname: "/tri", params: { event: target.eventId, segment: target.segment } });
     else if (target.kind === "team") router.navigate("/(orga)/equipe");
     else if (target.kind === "requests") setShowRequests(true);
     else router.push(target.path as never);
@@ -166,7 +172,13 @@ function Body() {
       {activity.error && !page ? <LoadError message={L.loadError} onRetry={() => void activity.reload()} /> : null}
       {activity.offline ? <Notice>Hors ligne : dernière liste connue.</Notice> : null}
 
-      {requestsTotal > 0 && filter === "all" ? (
+      {requestsUnknown ? (
+        <LoadError
+          message={L.requestsUnknown}
+          onRetry={() => void Promise.all([summary.reload(), requests.reload()])}
+        />
+      ) : null}
+      {requestsTotal !== null && requestsTotal > 0 ? (
         <>
           <Pressable
             onPress={() => setShowRequests((v) => !v)}

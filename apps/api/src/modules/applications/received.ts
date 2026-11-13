@@ -11,7 +11,8 @@ export async function notifyApplicationReceived(
   tx: Executor,
   after: (cb: () => unknown) => void,
   event: EventFacts,
-  application: { id: string; kind: "vehicle" | "media" | "provider"; applicantName?: string },
+  /** `authorId` : la personne dont la candidature arrive (jamais prévenue, même si elle est responsable de la structure). */
+  application: { id: string; kind: "vehicle" | "media" | "provider"; applicantName?: string; authorId: string },
 ): Promise<void> {
   const { kind } = application;
   const name = application.applicantName ?? "";
@@ -21,15 +22,21 @@ export async function notifyApplicationReceived(
       : kind === "provider"
         ? T.applicationProvider(name, event.title)
         : T.applicationVehicle(1, event.title);
-  await notifyStructure(tx, event.structureId, "application_received", {
-    title,
-    body: title,
-    data: { eventId: event.id, kind, eventName: event.title, screen: "triage" },
-    eventId: event.id,
-    eventStartsAt: event.startsAt,
-    eventEndsAt: event.endsAt,
-    groupKey:
-      kind === "vehicle" ? `applications:${event.id}:vehicle` : `applications:${event.id}:${kind}:${application.id}`,
-    after,
-  });
+  await notifyStructure(
+    tx,
+    event.structureId,
+    "application_received",
+    {
+      title,
+      body: title,
+      data: { eventId: event.id, kind, eventName: event.title, applicationId: application.id, screen: "triage" },
+      eventId: event.id,
+      eventStartsAt: event.startsAt,
+      eventEndsAt: event.endsAt,
+      groupKey:
+        kind === "vehicle" ? `applications:${event.id}:vehicle` : `applications:${event.id}:${kind}:${application.id}`,
+      after,
+    },
+    { exclude: [application.authorId] },
+  );
 }

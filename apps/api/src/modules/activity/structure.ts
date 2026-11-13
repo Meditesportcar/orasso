@@ -26,7 +26,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
 import { requireStructureReader } from "../communication/guards";
-import { pendingCoauthorPostIds, pendingCoauthorRequests } from "../feed/coauthors";
+import { pendingCoauthorRequests } from "../feed/coauthors";
 import { inboxService } from "../messaging/inbox";
 import { citedPeopleRemain } from "../notifications/grouped";
 import { journalGuardedTypes, journalVerdicts } from "../notifications/service";
@@ -67,27 +67,77 @@ async function requestedStaff(structureId: string, ex: Executor = db) {
     .orderBy(desc(structureMembers.updatedAt));
 }
 
+/** Le nombre de demandes de staff en attente (même filtre que la liste « Demandes »). */
+export async function requestedStaffCount(structureId: string): Promise<number> {
+  return (await requestedStaff(structureId)).length;
+}
+
 /** Les invitations à publier adressées à cette structure (pas à moi ni aux autres pages que je gère). */
 async function structureCoauthorPostIds(userId: string, structureId: string, ex: Executor = db) {
   const key = authorKeyOf("structure", structureId);
-  return (await pendingCoauthorPostIds(userId, ex)).filter((p) => p.forKey === key);
+  return (await pendingCoauthorRequests(userId, ex, now(), "all")).filter((p) => p.forKey === key);
 }
 
-/** Le texte d'une ligne « À trier » suit le compteur (le titre stocké est celui de la première candidature). */
-function withLiveTitles(page: ActivityPage): ActivityPage {
+type TriageData = { kind?: unknown; eventName?: unknown; eventId?: unknown; applicationId?: unknown };
+
+/**
+ * Ce qui reste à trier, en une seule requête : le nombre de candidatures de véhicule `pending` par événement, et les
+ * candidatures de média ou de prestataire encore `pending` (1 chacune). Clé : `e:<événement>` ou `a:<candidature>`.
+ */
+async function pendingLeft(items: readonly { data: Record<string, unknown> }[], ex: Executor = db) {
+  const events = new Set<string>();
+  const apps = new Set<string>();
+  for (const i of items) {
+    const d = i.data as TriageData;
+    if (d.kind === "vehicle" && typeof d.eventId === "string" && UUID.test(d.eventId)) events.add(d.eventId);
+    else if (typeof d.applicationId === "string" && UUID.test(d.applicationId)) apps.add(d.applicationId);
+  }
+  const left = new Map<string, number>();
+  if (!events.size && !apps.size) return left;
+  const list = (ids: Set<string>) =>
+    sql.join(
+      [...ids].map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
+  const res = await ex.execute<{ k: string; n: number }>(sql`
+    select 'e:' || event_id::text as k, count(*)::int as n from applications
+      where kind = 'vehicle' and status = 'pending' and event_id in (${events.size ? list(events) : sql`null`}) group by event_id
+    union all
+    select 'a:' || id::text as k, 1 as n from applications
+      where status = 'pending' and id in (${apps.size ? list(apps) : sql`null`})`);
+  for (const r of res.rows) left.set(r.k, Number(r.n));
+  return left;
+}
+
+/**
+ * Le texte d'une ligne « À trier » dit ce qui **reste** à trier (candidatures `pending` de l'événement), pas ce qui est
+ * arrivé : le compteur baisse avec le tri, une ligne relue puis une nouvelle arrivée ne s'additionnent pas. À zéro : « Tout est trié ».
+ */
+async function withLiveTitles(page: ActivityPage): Promise<ActivityPage> {
+  const left = await pendingLeft(page.groups.flatMap((g) => g.items.filter((i) => i.type === "application_received")));
   return {
     ...page,
     groups: page.groups.map((g) => ({
       ...g,
       items: g.items.map((i) => {
-        const d = i.data as { kind?: unknown; eventName?: unknown };
+        const d = i.data as TriageData;
         if (i.type !== "application_received" || d.kind !== "vehicle" || typeof d.eventName !== "string") return i;
-        const title = structureNotificationTexts.applicationVehicle(i.count, d.eventName);
-        return { ...i, title, body: title };
+        const n = left.get(`e:${d.eventId}`) ?? 0;
+        const title =
+          n === 0
+            ? structureNotificationTexts.applicationAllSorted(d.eventName)
+            : structureNotificationTexts.applicationVehicle(n, d.eventName);
+        return { ...i, count: n, title, body: title };
       }),
     })),
   };
 }
+
+/** Condition SQL : une ligne « À trier » dont plus rien n'attend n'est plus « nouvelle » (pastille). */
+const stillToSort = sql`(${notifications.type} <> 'application_received' or exists (
+  select 1 from applications a where a.status = 'pending' and (
+    (${notifications.data} ->> 'kind' = 'vehicle' and a.kind = 'vehicle' and a.event_id = ${notifications.eventId})
+    or (${notifications.data} ->> 'kind' <> 'vehicle' and a.id::text = ${notifications.data} ->> 'applicationId'))))`;
 
 export const structureActivityService = {
   /** `GET /structures/:id/activity?cursor=&filter=` : même forme que `GET /me/activity`, `highlighted` toujours vide. */
@@ -114,7 +164,7 @@ export const structureActivityService = {
       .limit(ACTIVITY_PAGE_SIZE + 1);
     const page = rows.slice(0, ACTIVITY_PAGE_SIZE);
     const last = page.at(-1);
-    return withLiveTitles({
+    return await withLiveTitles({
       groups: groupActivity(await toRows(page), now()),
       highlighted: [],
       nextCursor:
@@ -134,6 +184,7 @@ export const structureActivityService = {
       isNull(notifications.readAt),
       notInArray(notifications.type, [...structureRequestTypes]),
       gt(notifications.deliveredAt, since),
+      stillToSort,
     );
     const [row] = await ex.select({ n: sql<number>`count(*)::int` }).from(notifications).where(where);
     const types = journalGuardedTypes();
@@ -191,7 +242,7 @@ export const structureActivityService = {
       payload: { direction: "request", structureId, structureSlug: structure.slug, structureName: structure.name },
     }));
     const key = authorKeyOf("structure", structureId);
-    const coauthor: RequestItem[] = (await pendingCoauthorRequests(v.user.id, db, now()))
+    const coauthor: RequestItem[] = (await pendingCoauthorRequests(v.user.id, db, now(), "all"))
       .filter((r) => r.forKey === key)
       .map((r) => {
         const a = r.view.author;

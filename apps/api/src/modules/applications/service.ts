@@ -579,7 +579,11 @@ export const applicationsService = {
           created.push(admitted);
           // Lot R9d : une candidature à trier prévient les responsables (admission ouverte : rien à trier).
           if (admitted.status === "pending") {
-            await notifyApplicationReceived(tx, after, event, { id: admitted.id, kind: "vehicle" });
+            await notifyApplicationReceived(tx, after, event, {
+              id: admitted.id,
+              kind: "vehicle",
+              authorId: v.user.id,
+            });
           }
         }
         // « Suivre l'organisateur » (cochée d'office) et « Newsletter Orasso » (libre).

@@ -96,25 +96,34 @@ function GroupRow({ m }: { m: GroupMessageView }) {
   const { t } = useTheme();
   const c = t.color;
   const audience = `${messageSegmentLabels[m.segment]}${m.event ? ` · ${m.event.title}` : ""}`;
+  // Le texte entier se lit en touchant la carte (l'ancien écran l'affichait sans limite) ; refermée, trois lignes.
+  const [open, setOpen] = useState(false);
   return (
-    <Plate style={styles.block} testID="orga-group-row">
-      <Text variant="label" color={c.plateMuted}>
-        {L.groupedLine(audience)} · {formatDayHour(m.sentAt ?? m.createdAt)}
-      </Text>
-      {m.subject ? (
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {m.subject}
+    <Pressable
+      onPress={() => setOpen((v) => !v)}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={L.groupedLine(audience)}
+    >
+      <Plate style={styles.block} testID="orga-group-row">
+        <Text variant="label" color={c.plateMuted}>
+          {L.groupedLine(audience)} · {formatDayHour(m.sentAt ?? m.createdAt)}
         </Text>
-      ) : null}
-      <Text variant="body" color={c.plateInk} numberOfLines={3}>
-        {m.body}
-      </Text>
-      <Text variant="caption" color={c.plateMuted}>
-        {m.status === "sent"
-          ? `${communicationLabels.groupRecipients(m.recipientsCount)} · ${communicationLabels.groupRead(m.readCount)}`
-          : communicationLabels.groupSending}
-      </Text>
-    </Plate>
+        {m.subject ? (
+          <Text variant="bodyStrong" color={c.plateInk}>
+            {m.subject}
+          </Text>
+        ) : null}
+        <Text variant="body" color={c.plateInk} numberOfLines={open ? undefined : 3}>
+          {m.body}
+        </Text>
+        <Text variant="caption" color={c.plateMuted}>
+          {m.status === "sent"
+            ? `${communicationLabels.groupRecipients(m.recipientsCount)} · ${communicationLabels.groupRead(m.readCount)}`
+            : communicationLabels.groupSending}
+        </Text>
+      </Plate>
+    </Pressable>
   );
 }
 

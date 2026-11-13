@@ -13,6 +13,7 @@ export const structureActivityLabels = {
   messageChips: { all: "Tout", participants: "Participants", team: "Équipe" },
   requests: "Demandes",
   staffAsks: "voudrait rejoindre le staff",
+  requestsUnknown: "Le nombre de demandes n'a pas pu être lu.",
   newMessage: "Nouveau message",
   groupedMessage: "Message groupé",
   staffDiscussion: "Discussion de staff",
@@ -30,6 +31,7 @@ export const structureActivityLabels = {
 export const structureNotificationTexts = {
   applicationVehicle: (count: number, event: string) =>
     count === 1 ? `1 candidature à trier · ${event}` : `${count} candidatures à trier · ${event}`,
+  applicationAllSorted: (event: string) => `Tout est trié · ${event}`,
   applicationMedia: (media: string, event: string) => `${media} demande une accréditation pour ${event}`,
   applicationProvider: (provider: string, event: string) => `${provider} propose ses services pour ${event}`,
   commentedPost: (structure: string) => `{name} a commenté la publication de ${structure}`,

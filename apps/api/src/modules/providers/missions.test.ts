@@ -259,6 +259,13 @@ describe("candidature sur une mission", () => {
     expect(ok.status).toBe(201);
     expect(ok.json).toMatchObject({ status: "pending", need: { id: need.id, trade: "food_truck" }, spot: null });
     expect(await notifsOf(orga.id, "need_application_received")).toHaveLength(1);
+    // Lot R9d : la vraie candidature range l'ancien envoi dans la structure (hors cloche personnelle) et pose la ligne « À trier »
+    // (genre prestataire), jamais à la personne qui répond.
+    expect((await notifsOf(orga.id, "need_application_received"))[0]?.structureId).toBe(structureId);
+    const toSort = await notifsOf(orga.id, "application_received");
+    expect(toSort).toHaveLength(1);
+    expect(toSort[0]?.title).toContain("propose ses services");
+    expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
 
     // Comblée par Sofia : Léa ne peut plus y répondre.
     await call(orga, "POST", `/events/${nocturneId}/applications/${ok.json.id}/decide`, ACCEPT);

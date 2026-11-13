@@ -352,7 +352,7 @@ function InstructionsTab({
         <p className="s-muted">{eventJournalLabels.intro(event.structure.name, true)}</p>
         <div className="s-row">
           <Button
-            variant="primary"
+            variant="secondary"
             icon="camera"
             href={`/app/fil/publier?structure=${encodeURIComponent(event.structure.id)}&evenement=${encodeURIComponent(event.id)}`}
             data-testid="orga-publish-for-event"
@@ -551,7 +551,7 @@ function GroupTab({
           <div className="s-row">
             <Button
               type="submit"
-              variant="primary"
+              variant="secondary"
               icon="next"
               loading={busy}
               disabled={blocked || !body.trim() || preview?.recipientsCount === 0}
@@ -656,7 +656,7 @@ function TemplatesTab({ templates, base }: { templates: TemplateView[]; base: st
             help={communicationLabels.groupVariables}
           />
           <div className="s-row">
-            <Button type="submit" variant="primary" icon="add" loading={busy}>
+            <Button type="submit" variant="secondary" icon="add" loading={busy}>
               {communicationLabels.templateSave}
             </Button>
           </div>

@@ -103,7 +103,7 @@ function SideLink({
     <a className={on ? "orga__link is-on" : "orga__link"} href={href} aria-current={on ? "page" : undefined}>
       {children}
       {count ? (
-        <span className="orga__count" data-testid="orga-count" role="img" aria-label={`${count} à voir`}>
+        <span className="orga__count o-t-credit" data-testid="orga-count" role="img" aria-label={`${count} à voir`}>
           {count}
         </span>
       ) : null}

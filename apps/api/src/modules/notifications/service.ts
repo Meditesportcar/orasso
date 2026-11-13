@@ -29,6 +29,7 @@ import { type MailContent, mail, renderMail } from "../../lib/mail";
 import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
+import { structureManagers } from "../../lib/structureManagers";
 import { type Executor, withTx } from "../../lib/tx";
 import { hasPlace } from "../events/place";
 import { type CitedView, citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
@@ -467,6 +468,14 @@ export const notificationsService = {
       .returning();
     for (const n of due) {
       try {
+        // Lot R9d : une ligne de structure n'est livrée (temps réel, push, e-mail) qu'à une personne qui en est encore
+        // responsable. Retirée entre l'émission (heures calmes) et la livraison : la ligne reste en base, invisible, rien ne part.
+        if (
+          n.structureId &&
+          !(await structureManagers(db, n.structureId, { includeSuspended: true })).includes(n.userId)
+        ) {
+          continue;
+        }
         const guard = deliveryGuards.get(n.type);
         const verdict = guard ? await guard(n) : true;
         if (verdict === false) {

@@ -49,6 +49,8 @@ describe("publication de page : aucun privilège de gestion dans les gardes de n
       .where(and(eq(structureMembers.structureId, structure.id), eq(structureMembers.userId, coOrga.id)));
     await comment(priv, id, "Un commentaire d'un compte privé");
     expect(await lines(coOrga.id, "feed_comment")).toHaveLength(0);
+    // Lot R9d : l'intention du volet est gardée pour un responsable actuel (le propriétaire ne lit pas ce commentaire privé).
+    expect(await lines(owner.id, "feed_comment")).toHaveLength(0);
     await notificationsService.deliverDue();
     expect(JSON.stringify((await call(coOrga, "GET", "/me/activity")).json)).not.toContain("Prive_66");
     expect((await call(coOrga, "GET", "/me/activity/count")).json.unseen).toBe(0);

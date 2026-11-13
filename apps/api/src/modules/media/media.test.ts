@@ -255,6 +255,19 @@ describe("demande d'accréditation", () => {
     });
     expect(notif?.family).toBe("staff");
     expect(notif?.body).toContain("Sud Cars");
+    // Lot R9d : la vraie création pose aussi la ligne « À trier » (genre média) et range l'ancien envoi dans la structure :
+    // ni l'une ni l'autre dans la cloche personnelle de l'organisateur, jamais au média lui-même.
+    expect(notif?.structureId).toBe(structureId);
+    const received = await db.query.notifications.findMany({
+      where: and(eq(notifications.userId, orga.id), eq(notifications.type, "application_received")),
+    });
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ structureId });
+    expect(received[0]?.title).toBe("Sud Cars demande une accréditation pour Nocturne de Canet");
+    expect(JSON.stringify((await call(orga, "GET", "/me/notifications")).json)).not.toContain("Sud Cars");
+    expect(await db.query.notifications.findMany({ where: eq(notifications.userId, leo.id) })).not.toContainEqual(
+      expect.objectContaining({ type: "application_received" }),
+    );
 
     const twice = await request(leo, nocturneId);
     expect(twice.status).toBe(409);

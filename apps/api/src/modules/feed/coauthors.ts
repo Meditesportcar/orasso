@@ -52,6 +52,7 @@ import { storage } from "../../lib/storage";
 import { structureManagers } from "../../lib/structureManagers";
 import { anyColumnContains, fold, searchTokens } from "../../lib/text-search";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { notifyStructure } from "../notifications/structure";
 import { activePartnerCandidates } from "../partnerships/commercial";
@@ -480,7 +481,7 @@ export const coauthorsService = {
    */
   async respond(v: Viewer, postId: string, answer: "accept" | "decline"): Promise<{ status: CoauthorStatus }> {
     rateLimit("feedWrite", v.user.id);
-    return withTx(async (tx) => {
+    return withTx(async (tx, after) => {
       const { post, row } = await lockPost(tx, postId);
       await actAs(v, row, tx);
       // Il faut pouvoir voir la publication (l'auteur est peut-être passé en compte privé depuis l'invitation).
@@ -498,6 +499,13 @@ export const coauthorsService = {
       }
       // L'invitation est close : la notification d'invitation n'a plus d'objet.
       await dropCoauthorNotifications(tx, postId, ["coauthor_invited"]);
+      // Lot R9d : une invitation à une structure close : la cloche de chacun de ses responsables relit son compte.
+      if (row.coauthorKind === "structure") {
+        const managers = await structureManagers(tx, row.coauthorId, { includeSuspended: true });
+        after(() => {
+          for (const id of managers) inboxService.publish(id);
+        });
+      }
       return { status: target };
     });
   },
@@ -661,10 +669,14 @@ export const coauthorsService = {
 };
 
 /** Nombre de mes invitations en attente que je peux lire (pour les nouveaux clients : `pendingCoauthors` du résumé). */
-export async function pendingCoauthorCount(userId: string, ex: Executor): Promise<number> {
+export async function pendingCoauthorCount(
+  userId: string,
+  ex: Executor,
+  scope: CoauthorScope = "personal",
+): Promise<number> {
   // Un comptage, jamais les cartes (`GET /me` le lit à chaque fois) : les invitations en attente pour moi ou mes pages, puis les
   // mêmes contrôles de visibilité que la liste (publication servie, auteur en règle, compte privé suivi), en une requête.
-  const pending = await pendingCoauthorPostIds(userId, ex);
+  const pending = await pendingCoauthorPostIds(userId, ex, scope);
   if (!pending.length) return 0;
   const at = now();
   const res = await ex.execute<{ n: number }>(sql`select count(*)::int as n
@@ -684,8 +696,13 @@ export async function pendingCoauthorCount(userId: string, ex: Executor): Promis
  * Demandes et la pastille s'appuient sur cette même lecture. Une publication que je ne peux plus voir (auteur passé en compte
  * privé que je ne suis pas) n'y est pas.
  */
-export async function pendingCoauthorRequests(userId: string, ex: Executor, at: Date) {
-  const pending = await pendingCoauthorPostIds(userId, ex);
+export async function pendingCoauthorRequests(
+  userId: string,
+  ex: Executor,
+  at: Date,
+  scope: CoauthorScope = "personal",
+) {
+  const pending = await pendingCoauthorPostIds(userId, ex, scope);
   if (!pending.length) return [];
   const views = new Map(
     (
@@ -710,13 +727,20 @@ export async function pendingCoauthorRequests(userId: string, ex: Executor, at: 
 }
 
 /** Les publications dont l'invitation m'attend (moi, ou une page que je gère), les plus récentes d'abord. */
+/**
+ * Lot R9d : `personal` (la cloche personnelle : moi et mes pages hors structures) ou `all` (avec les structures que je gère : la
+ * cloche d'une structure). Une invitation adressée à une structure ne compte que dans la cloche de la structure.
+ */
+export type CoauthorScope = "personal" | "all";
+
 export async function pendingCoauthorPostIds(
   userId: string,
   ex: Executor,
+  scope: CoauthorScope = "personal",
 ): Promise<{ postId: string; forKey: string; invitedAt: Date }[]> {
   const keys = [authorKeyOf("user", userId), ...(await managedPageKeys(userId, ex))]
     .map((k) => parseAuthorKey(k))
-    .filter((k): k is NonNullable<typeof k> => k !== null);
+    .filter((k): k is NonNullable<typeof k> => k !== null && (scope === "all" || k.kind !== "structure"));
   const byKind = new Map<string, string[]>();
   for (const k of keys) byKind.set(k.kind, [...(byKind.get(k.kind) ?? []), k.id]);
   const rows = await ex

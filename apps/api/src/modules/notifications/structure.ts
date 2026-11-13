@@ -38,6 +38,9 @@ export async function notifyStructure(
   for (const userId of recipients) {
     await notificationsService.notify(ex, userId, type, {
       ...input,
+      // `notify` publie lui-même `inbox.changed` quand une occurrence rejoint une ligne déjà livrée : un seul signal par
+      // personne, celui de ce module (ci-dessous), donc le sien est ignoré.
+      after: () => undefined,
       structureId,
       data: { ...input.data, structureId, structureName: structure.name, structureSlug: structure.slug },
       groupKey: input.groupKey ? `s:${structureId}:${input.groupKey}` : undefined,

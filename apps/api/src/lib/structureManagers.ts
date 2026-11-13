@@ -36,6 +36,8 @@ export async function structureManagers(
         isNull(profiles.bannedAt),
         sql`(${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at.toISOString()}::timestamptz)`,
       ),
-    );
+    )
+    // Ordre stable : les verrous pris par responsable se prennent toujours dans le même ordre.
+    .orderBy(structureMembers.userId);
   return rows.map((r) => r.userId);
 }
