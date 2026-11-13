@@ -24,6 +24,8 @@ export const mediaPlatforms = ["youtube", "instagram", "website", "other"] as co
 export type MediaPlatform = (typeof mediaPlatforms)[number];
 
 export const MEDIA_GALLERY_MAX_PHOTOS = 30;
+/** Photos d'un album rattaché à un événement (lot R9e) ; la galerie d'avant s'arrête à 30 (façade et contrainte de `media_contents`). */
+export const ALBUM_MAX_PHOTOS = 200;
 
 const formatsSchema = z
   .array(z.enum(mediaFormats))

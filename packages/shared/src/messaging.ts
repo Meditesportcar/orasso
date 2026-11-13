@@ -46,6 +46,8 @@ export const uploadPurposes = [
   "story",
   "story_video",
   "story_poster",
+  // Lot R9e : une photo d'album d'un média (privée jusqu'à l'ajout à l'album, puis copiée sous une clé d'album).
+  "album_photo",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -67,6 +69,8 @@ export const privateUploadPurposes: readonly UploadPurpose[] = [
   "story",
   "story_video",
   "story_poster",
+  // Lot R9e : la photo envoyée attend, privée, d'être ajoutée à un album (floutage de plaque proposé).
+  "album_photo",
 ];
 
 /**
@@ -97,6 +101,8 @@ export const acceptedUploadPurposes = [
   "story",
   "story_video",
   "story_poster",
+  // Lot R9e : photo d'un album (`POST /me/albums/:id/photos`).
+  "album_photo",
 ] as const satisfies readonly UploadPurpose[];
 
 /**

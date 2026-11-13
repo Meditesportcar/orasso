@@ -10,6 +10,7 @@ export * from "./labels/account.fr";
 export * from "./labels/admin.fr";
 export * from "./labels/adminApp.fr";
 export * from "./labels/after-event.fr";
+export * from "./labels/albums.fr";
 export * from "./labels/arrival.fr";
 export * from "./labels/arrivee.fr";
 export * from "./labels/coauthors.fr";

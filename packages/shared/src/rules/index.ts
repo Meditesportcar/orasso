@@ -3,6 +3,7 @@ export * from "./activityLabels";
 export * from "./admin";
 export * from "./affinity";
 export * from "./afterEvent";
+export * from "./albums";
 export * from "./announcements";
 export * from "./applicationTransitions";
 export * from "./arrival";

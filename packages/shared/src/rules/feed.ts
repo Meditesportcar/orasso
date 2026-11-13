@@ -23,6 +23,8 @@ export const feedCardKinds = [
   "feed_post",
   "memory",
   "sponsored",
+  // Lot R9e : un album de photos d'un média accrédité (un genre à part, pas une publication : ni flamme ni commentaire).
+  "album",
 ] as const;
 export type FeedCardKind = (typeof feedCardKinds)[number];
 

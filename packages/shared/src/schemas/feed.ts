@@ -21,6 +21,7 @@ import type { FeedAttachPhase, FeedEventRole, ImportantReason } from "../rules/f
 import { FEED_CAPTION_PERSONA_MAX, FEED_PLACE_LABEL_MAX, importantReasons } from "../rules/feedAttach";
 import type { OfferView } from "../rules/proOffers";
 import type { AdvertiserKind } from "../rules/sponsored";
+import type { AlbumCardView } from "./albums";
 import { optionalText } from "./common";
 import { coAuthorInputSchema, type FeedCoAuthorInvite } from "./feedCoauthors";
 import type { MemoryCardPayload } from "./memories";
@@ -280,6 +281,8 @@ export type FeedPayloads = {
   feed_post: { post: FeedPostView };
   spot_meetup: SpotFeedPayload;
   memory: MemoryCardPayload;
+  /** Lot R9e : un album de photos d'un média (carte à part : lecture et « Voir l'album », ni flamme ni commentaire). */
+  album: { album: AlbumCardView };
   /**
    * Carte « Sponsorisé » (lot R7k1). `id` = l'emplacement (à envoyer à `POST /sponsored/:id/impression|click` avec
    * `{ surface: "feed" }`). `domain` : le domaine du lien, affiché pour un annonceur externe. `disclosure` : la mention
