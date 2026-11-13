@@ -131,9 +131,8 @@ for (const [theme, width, scale] of [
       expect(names.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase())).toEqual(
         spec.labels.map((l) => l.toLowerCase()),
       );
-      // Le centre (le O) : Direct pour l'organisateur, Accueil pour les trois autres, et il est actif à l'ouverture.
-      await expectActiveTab(page, spec.center);
-      await expect(page.getByTestId("tabbar-indicator")).toBeVisible();
+      // Le centre (le O) est le troisième onglet (l'ordre des libellés ci-dessus) ; il porte le O, pas l'indicateur incliné.
+      expect(names[2]?.toLowerCase()).toBe(spec.center.toLowerCase());
       // Police agrandie : aucun libellé de la barre (« Candidatures », « Événements ») n'est coupé ni rogné.
       for (const label of spec.labels) {
         const box = await tab(page, label).boundingBox();
@@ -159,6 +158,7 @@ for (const [theme, width, scale] of [
       // Le Fil en casquette : « Tu lis en tant que » + le nom, jamais tronqué.
       await tab(page, "Le Fil").click();
       await page.waitForURL(/\/fil/, { timeout: 15_000 });
+      await expectActiveTab(page, "Le Fil");
       await expect(page.getByTestId("fil-actor")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("fil-actor")).toContainText("Tu lis en tant que");
       if (spec.name) await expect(page.getByTestId("fil-actor-name")).toHaveText(spec.name);
