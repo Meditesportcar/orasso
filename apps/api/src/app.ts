@@ -33,6 +33,7 @@ import { activityRoutes } from "./modules/activity/routes";
 import { adminPublicRoutes, adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
+import { albumsPublicRoutes, albumsRoutes } from "./modules/albums/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
 import { audiencePrizeService } from "./modules/audience-prize/service";
@@ -53,6 +54,7 @@ import { feedRoutes } from "./modules/feed/routes";
 import { coauthorRoutes } from "./modules/feed/routes-coauthors";
 import { feedFilRoutes } from "./modules/feed/routes-fil";
 import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
+import { albumCardsMiddleware } from "./modules/feed/sources/albums";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -240,6 +242,10 @@ app.use("*", (c, next) =>
 );
 // Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, avant la session (aucun cookie dans une réponse en cache public).
 app.route("/", feedPublicPhotoRoutes);
+// Vague R9 (lot R9e) : photos publiques d'un album publié visible de tous (T34), avant la session (aucun cookie dans une réponse en cache public).
+app.route("/", albumsPublicRoutes);
+// Vague R9 (lot R9e) : `?cards=album` (le client sait dessiner la carte « album » du Fil) lu sur `/fil` et `/fil/*`.
+app.use("/fil/*", albumCardsMiddleware);
 // Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
 // Une route qui lit la session (`loadSession`) peut renouveler le cookie (`Set-Cookie`) : elle ne prend jamais un cache public.
 app.route("/", accessPublicRoutes);
@@ -255,6 +261,8 @@ app.route("/", vehiclesRoutes);
 app.route("/", garageRoutes);
 app.route("/", structuresRoutes);
 app.route("/", providersRoutes);
+// Vague R9 (lot R9e) : albums des médias ; avant `mediaRoutes` (il décore `GET /media/:id` de ses compteurs).
+app.route("/", albumsRoutes);
 app.route("/", mediaRoutes);
 app.route("/", eventsRoutes);
 // Lot R6c : « Qui y va », invitations entre passionnés, invitations coupées.

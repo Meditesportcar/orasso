@@ -5,6 +5,7 @@ import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
 import { accountService } from "./modules/account/service";
 import { assistanceService } from "./modules/admin/assistance";
+import { purgeDrafts } from "./modules/albums/publish";
 import { newsletterService } from "./modules/admin/newsletter";
 import { adminSettingsService } from "./modules/admin/settings";
 import { badgeService } from "./modules/after-event/badge";
@@ -111,6 +112,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "spot.purge": () => spotMeetupsPurge.run(),
   // Lot R8c1 : cartes vues du Fil de plus de 30 jours effacées (donnée de lecture privée).
   "feed.seen-purge": () => feedSeenService.purge(),
+  // Lot R9e : brouillons d'album sans activité depuis 7 jours effacés (lignes et fichiers).
+  "albums.draft-purge": () => purgeDrafts(),
 };
 
 /**
@@ -178,6 +181,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     });
     await boss.schedule("spot.purge", "*/5 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("feed.seen-purge", "30 4 * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("albums.draft-purge", "35 4 * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {
