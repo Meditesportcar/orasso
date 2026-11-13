@@ -302,7 +302,7 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
 
   const { ctx, page } = await openApp(browser, "damien@orasso.local", "sable");
   await chooseOrganizer(page, "MéditeSportCar");
-  await expect(page.getByTestId("orga-two-factor")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("orga-two-factor").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("orga-direct-event")).toHaveCount(0);
   await page.screenshot({ path: `${DIR}/40-garde-2fa-direct-sable.png` });
   for (const name of ["Événements", "Page"]) {
