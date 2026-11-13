@@ -4,10 +4,10 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { call, createEvent, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { eventAlbums, reports, uploads } from "../../db/schema";
+import { eventAlbums, events, reports, uploads } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { retryRemove } from "../vehicles/photos-blur";
 import {
@@ -37,6 +37,7 @@ let clock: ReturnType<typeof useClock>;
 let leo: TestUser;
 let leoMedia: string;
 let eventId: string;
+let eventSlug: string;
 let orga: TestUser;
 
 beforeEach(async () => {
@@ -45,6 +46,7 @@ beforeEach(async () => {
   const scenario = await organizerEvent();
   orga = scenario.orga;
   eventId = scenario.event.id;
+  eventSlug = scenario.event.slug;
   const media = await mediaUser("Leo_Media");
   leo = media.user;
   leoMedia = media.mediaId;
@@ -65,7 +67,7 @@ describe("POST /me/albums : le brouillon", () => {
       mine: true,
       media: { key: `m:${leoMedia}`, name: "Sud Cars" },
     });
-    expect(res.json.event).toMatchObject({ id: eventId, slug: "rassemblement-du-lydia" });
+    expect(res.json.event).toMatchObject({ id: eventId, slug: eventSlug });
   });
 
   it("un seul brouillon par événement et par média : le second appel rend le premier (200)", async () => {
@@ -322,11 +324,61 @@ describe("POST /me/albums/:id/photos : une photo à la fois", () => {
     expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${a.json.id}`)).status).toBe(204);
     expect((await albumRow(album.id))?.photosCount).toBe(1);
     expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${crypto.randomUUID()}`)).status).toBe(404);
-    // Un autre média ne touche pas à cet album.
+  });
+
+  it("droits de l'annulation : un AUTRE média accrédité (Marc) ne touche ni à la photo, ni à l'album de Léo (404, la photo reste), ni par identifiant déjà retiré (404, pas 204)", async () => {
+    const album = await draftOf(leo, eventId);
+    const clientId = crypto.randomUUID();
+    const added = await addPhoto(leo, album.id, { clientId });
+    await addPhoto(leo, album.id);
+    const marc = await mediaUser("Marc_Media", "Marc Média");
+    await accredit(marc.user, marc.mediaId, eventId);
+    // Par `clientId` réel de Léo : 404 (verrou de l'album de Marc, pas celui de Léo), la photo de Léo reste.
+    expect((await call(marc.user, "DELETE", `/me/albums/${album.id}/photos/by-client/${clientId}`)).status).toBe(404);
+    expect((await call(marc.user, "DELETE", `/me/albums/${album.id}/photos/${added.json.id}`)).status).toBe(404);
+    expect((await photoRows(album.id)).filter((p) => p.deletedAt === null)).toHaveLength(2);
+    // Une photo déjà retirée par Léo : Marc reçoit 404 (jamais le 204 d'idempotence du titulaire).
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${added.json.id}`)).status).toBe(204);
+    expect((await call(marc.user, "DELETE", `/me/albums/${album.id}/photos/${added.json.id}`)).status).toBe(404);
+    // Ni un compte sans profil média.
     const kenji = await signUp("Kenji_Cancel");
     expect((await call(kenji, "DELETE", `/me/albums/${album.id}/photos/by-client/${crypto.randomUUID()}`)).status).toBe(
       404,
     );
+  });
+
+  it("une pierre tombale n'empêche pas un ajout avec un AUTRE clientId (201, compteur juste) ; un clientId annulé sur un album ne touche pas l'autre", async () => {
+    const a = await draftOf(leo, eventId);
+    const cancelled = crypto.randomUUID();
+    expect((await call(leo, "DELETE", `/me/albums/${a.id}/photos/by-client/${cancelled}`)).status).toBe(204);
+    const other = await addPhoto(leo, a.id);
+    expect(other.status).toBe(201);
+    expect((await albumRow(a.id))?.photosCount).toBe(1);
+    // Le même clientId reste refusé (409) ; un autre album n'est pas concerné.
+    const sent = await sendUpload(leo, "album_photo");
+    expect(
+      (
+        await call(leo, "POST", `/me/albums/${a.id}/photos`, {
+          uploadKey: sent.key,
+          plateDecision: "none",
+          clientId: cancelled,
+        })
+      ).status,
+    ).toBe(409);
+    const [first] = await db.select({ structureId: events.structureId }).from(events).where(eq(events.id, eventId));
+    const second = await createEvent(first?.structureId ?? "", {
+      title: "Autre événement R9e",
+      startsAt: paris(11, 9, 11),
+      endsAt: paris(11, 9, 17),
+    });
+    await accredit(leo, leoMedia, second.id);
+    const b = await draftOf(leo, second.id);
+    const kept = crypto.randomUUID();
+    expect((await addPhoto(leo, b.id, { clientId: kept })).status).toBe(201);
+    // Annuler « kept » sur l'album A (où il n'existe pas) pose une pierre tombale dans A seulement : B garde sa photo.
+    expect((await call(leo, "DELETE", `/me/albums/${a.id}/photos/by-client/${kept}`)).status).toBe(204);
+    expect((await albumRow(b.id))?.photosCount).toBe(1);
+    expect((await photoRows(b.id)).filter((p) => p.deletedAt === null)).toHaveLength(1);
   });
 
   it("annulation d'une photo : la dernière d'un album publié ne s'annule pas (409), l'album la garde", async () => {

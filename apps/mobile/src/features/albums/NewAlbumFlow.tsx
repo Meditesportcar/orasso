@@ -2,9 +2,9 @@
 // photos (plaques : une décision pour le lot ; envoi une photo à la fois), 3. les détails et « Publier l'album ». Quitter en cours : le
 // brouillon reste (« Reprendre l'album » à la prochaine ouverture pour le même événement). Un refus de l'API s'affiche, le flux reste.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L, reappearedPhotos } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -76,8 +76,10 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   useEffect(() => {
     if (!resumeId) return;
     let live = true;
-    api
-      .album(resumeId)
+    // Le rejeu de la file (retraits non confirmés d'une séance précédente) passe d'abord : le brouillon affiché est celui d'après.
+    uploads
+      .ready()
+      .then(() => api.album(resumeId))
       .then((a) => {
         if (!live) return;
         if (a.status !== "draft" || !a.mine) {
@@ -92,13 +94,15 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     return () => {
       live = false;
     };
-  }, [resumeId, router, arrive]);
+  }, [resumeId, router, arrive, uploads.ready]);
 
   async function createDraft() {
     if (!eventId) return;
     setBusy(true);
     setError(null);
     try {
+      // Le rejeu de la file passe d'abord : les photos d'un brouillon déjà retirées côté serveur ne s'affichent pas.
+      await uploads.ready();
       const a = await api.createAlbum({ eventId, title: null });
       arrive(a);
       setStep(2);
@@ -109,30 +113,61 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     }
   }
 
-  async function toDetails() {
+  /** Les retraits refusés pour de bon (au rejeu) : l'album est relu, les photos concernées réapparaissent dans la grille avant toute publication. */
+  const reappear = useCallback(async () => {
     if (!album) return;
-    setError(null);
-    // Les retraits en attente du réseau sont confirmés d'abord : une photo retirée ne doit pas finir dans l'album publié.
-    if (!(await uploads.flush())) {
-      setError(L.pendingRemovals);
+    try {
+      const fresh = await api.album(album.id);
+      const extra = reappearedPhotos(fresh.photos, {
+        photoIds: [...basePhotos.map((p) => p.id), ...uploads.items.flatMap((i) => (i.photoId ? [i.photoId] : []))],
+        clientIds: [...uploads.items.map((i) => i.clientId), ...uploads.pendingClientIds()],
+      });
+      if (extra.length > 0) setBasePhotos((list) => [...list, ...extra]);
+      refresh(fresh);
+    } catch (e) {
+      setError(errorMessage(e));
       return;
     }
-    if (uploads.pending > 0 && !(await uploads.send())) return;
+    setError(L.removalRefused);
+  }, [album, basePhotos, uploads.items, uploads.pendingClientIds, refresh]);
+  const seenRefusals = useRef(0);
+  useEffect(() => {
+    if (uploads.refusals > seenRefusals.current) {
+      seenRefusals.current = uploads.refusals;
+      void reappear();
+    }
+  }, [uploads.refusals, reappear]);
+
+  async function toDetails() {
+    if (!album) return;
+    // Une seule opération à la fois : un second appui pendant le rejeu de la file ou l'envoi ne lance rien (pas d'envois orphelins).
+    if (!uploads.takeTurn()) return;
     try {
+      setError(null);
+      // Toute transition attend la file : une photo retirée ne doit pas finir dans l'album publié.
+      const settled = await uploads.flush();
+      if (settled !== "ok") {
+        if (settled === "pending") setError(L.pendingRemovals);
+        return;
+      }
+      if (uploads.pending > 0 && !(await uploads.send(true))) return;
       refresh(await api.album(album.id));
       setStep(3);
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      uploads.endTurn();
     }
   }
 
   async function publish() {
-    if (!album) return;
+    if (!album || !uploads.takeTurn()) return;
     setBusy(true);
     setError(null);
     try {
-      if (!(await uploads.flush())) {
-        setError(L.pendingRemovals);
+      const settled = await uploads.flush();
+      if (settled !== "ok") {
+        if (settled === "pending") setError(L.pendingRemovals);
         return;
       }
       await api.patchAlbum(album.id, { title: title.trim(), allowSave });
@@ -143,6 +178,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       setError(errorMessage(e));
     } finally {
       setBusy(false);
+      uploads.endTurn();
     }
   }
 

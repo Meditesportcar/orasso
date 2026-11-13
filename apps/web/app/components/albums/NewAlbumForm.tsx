@@ -15,6 +15,7 @@ import {
   DEFAULT_PLATE_FRAME,
   decideAll,
   decidedCounts,
+  isDefinitiveStatus,
   isPhotoLocked,
   albumLabels as L,
   type MediaAccreditationView,
@@ -24,6 +25,7 @@ import {
   pickNotice,
   platedCount,
   type QueuedOp,
+  reappearedPhotos,
   remaining,
   removeAlbumItem,
   reopenDecisions,
@@ -33,6 +35,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../../styles/albums.css";
 import "../../styles/garage.css";
+import { listenSession } from "../../lib/sessionChannel";
 import { AlbumCardBody } from "../fil/AlbumCard";
 import { PlateFrame } from "../PlateFrame";
 
@@ -72,9 +75,12 @@ async function json<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-/** Panne passagère : réseau (fetch rejeté), 5xx, 408, 429. Elle reste à rejouer ; tout autre refus est définitif. */
-const isTransient = (e: unknown) =>
-  !(e instanceof HttpStatusError) || e.status >= 500 || e.status === 408 || e.status === 429;
+/**
+ * Refus définitif : 400, 404, 409, 422 seulement. L'opération sort de la file **avec un état d'échec visible** (l'album est relu, les photos
+ * concernées réapparaissent). 401 et 403 (session expirée, droits en cours de rétablissement), le réseau, les 5xx, 408 et 429 **restent en
+ * file** : ils ne prouvent rien sur l'opération.
+ */
+const isFinal = (e: unknown) => e instanceof HttpStatusError && isDefinitiveStatus(e.status);
 
 const call = (path: string, init: RequestInit = {}) =>
   fetch(`/api${path}`, {
@@ -86,9 +92,11 @@ const call = (path: string, init: RequestInit = {}) =>
 const uuid = () => (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
 /** La file persistante des envois à supprimer, rangée sous le compte connecté (jamais les envois de A dans la liste de B). */
-function removalStore(accountId: string) {
+function removalStore(accountId: string, current: () => boolean) {
   const key = `orasso.album-removals.${accountId}`;
   return {
+    // Faux dès que la session a changé (autre compte, autre onglet) : la file ne lit, n'écrit et ne joue plus rien ; le stockage reste intact.
+    current,
     read: async () => {
       try {
         return JSON.parse(localStorage.getItem(key) ?? "[]") as QueuedOp[];
@@ -164,26 +172,100 @@ export function NewAlbumForm({
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopped = useRef(false);
+  // La file appartient à un compte **et à une session** : si un autre onglet connecte un autre compte, elle est invalidée pour de bon
+  // (jusqu'au rechargement), avant toute requête et toute écriture ; rien n'est effacé du stockage du compte quitté.
+  const sessionStale = useRef(false);
+  const [stale, setStale] = useState(false);
+  useEffect(
+    () =>
+      listenSession((announced) => {
+        if (announced !== accountId) {
+          sessionStale.current = true;
+          setStale(true);
+        }
+      }),
+    [accountId],
+  );
   const queue = useMemo(
     () =>
       createRemovalQueue({
         remove: runOp,
-        store: removalStore(accountId),
-        // Une panne réseau (fetch rejeté) arrête la série ; un refus définitif de l'API sort de la liste avec une trace (jamais rejoué sans fin).
-        stops: (e) => e instanceof TypeError,
-        final: (e) => !isTransient(e),
+        store: removalStore(accountId, () => !sessionStale.current),
+        // Tout ce qui n'est pas définitif arrête la série (réseau, 401, 403, 5xx…) : on ne martèle pas l'API, l'opération reste en file.
+        stops: (e) => !isFinal(e),
+        final: isFinal,
         onDrop: (op, e) =>
           console.warn("Opération d'album abandonnée (refus définitif) :", op.id, (e as Error).message),
       }),
     [accountId],
   );
+  // Une seule opération à la fois : un second appui pendant le rejeu de la file ou l'envoi ne lance rien (pas d'envois orphelins).
+  const turn = useRef(false);
+  const takeTurn = () => {
+    if (turn.current || sessionStale.current) return false;
+    turn.current = true;
+    return true;
+  };
+  // Les retraits refusés pour de bon (au rejeu) : l'album est relu, les photos concernées réapparaissent dans la grille avant toute publication.
+  const reappear = async () => {
+    if (!album) return;
+    try {
+      const fresh = await json<AlbumView>(await call(`/albums/${album.id}`));
+      const extra = reappearedPhotos(fresh.photos, {
+        photoIds: [...basePhotos.map((p) => p.id), ...latest.current.flatMap((i) => (i.photoId ? [i.photoId] : []))],
+        clientIds: [
+          ...latest.current.map((i) => i.clientId),
+          ...queue.pendingOps().flatMap((o) => (o.clientId ? [o.clientId] : [])),
+        ],
+      });
+      if (extra.length > 0) setBasePhotos((list) => [...list, ...extra]);
+      setAlbum(fresh);
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
+    setError(L.removalRefused);
+  };
+  const drainRef = useRef<() => Promise<number>>(async () => 0);
+  /** Joue la file ; un refus définitif fait relire l'album (les photos réapparaissent). Rend le nombre de refus. */
+  const drain = async (): Promise<number> => {
+    await queue.release();
+    const dropped = queue.takeDropped();
+    if (dropped.length > 0) await reappear();
+    return dropped.length;
+  };
+  drainRef.current = drain;
+  /** Toute transition attend la file : `ok` seulement quand plus rien n'attend. */
+  const flush = async (): Promise<"ok" | "pending" | "refused"> => {
+    if ((await drain()) > 0) return "refused";
+    return queue.hasPending() ? "pending" : "ok";
+  };
   // Le montage remet « arrêté » à faux : le mode strict de React démonte puis remonte aussitôt (en développement), sans cela un envoi serait
   // « interrompu » dès le départ.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: monté une fois par file ; le brouillon repris (`resume`) est celui de la page, il ne change pas sans nouveau chargement
   useEffect(() => {
     stopped.current = false;
-    // Les opérations non confirmées (hors ligne) sont rejouées à l'ouverture et **au retour du réseau**, pas seulement à la réouverture.
-    void queue.replay();
-    const online = () => void queue.replay();
+    // Les opérations non confirmées (hors ligne) sont rejouées à l'ouverture et **au retour du réseau**, pas seulement à la réouverture ;
+    // un brouillon repris est relu après ce rejeu (une annulation confirmée ici change ses photos).
+    const replayed = queue
+      .release()
+      .then(() => {
+        const dropped = queue.takeDropped();
+        return dropped.length;
+      })
+      .then(async (refused) => {
+        if (!resume) return;
+        const fresh = await json<AlbumView>(await call(`/albums/${resume.id}`)).catch(() => null);
+        if (!fresh || fresh.photos.length === resume.photos.length) {
+          if (refused > 0) setError(L.removalRefused);
+          return;
+        }
+        setBasePhotos(fresh.photos);
+        setAlbum(fresh);
+        if (refused > 0) setError(L.removalRefused);
+      });
+    void replayed;
+    const online = () => void drainRef.current();
     window.addEventListener("online", online);
     return () => {
       window.removeEventListener("online", online);
@@ -211,6 +293,8 @@ export function NewAlbumForm({
     setBusy(true);
     setError(null);
     try {
+      // Le rejeu de la file passe d'abord : les photos déjà retirées côté serveur ne s'affichent pas dans le brouillon.
+      await queue.release();
       const a = await json<AlbumView>(
         await call("/me/albums", { method: "POST", body: JSON.stringify({ eventId: chosen, title: null }) }),
       );
@@ -254,22 +338,24 @@ export function NewAlbumForm({
    */
   async function removeItem(clientId: string) {
     const gone = latest.current.find((i) => i.clientId === clientId);
-    if (!gone || frozen.current) return;
+    if (!gone || frozen.current || !takeTurn()) return;
     setError(null);
+    // Pendant l'appel (la file attend la réponse de l'API) : tout est bloqué (« Continuer », « Publier » attendent aussi la file).
+    setBusy(true);
     try {
       if (album) {
-        await removeAlbumItem(gone, {
-          albumId: album.id,
-          cancel: async (id) => {
-            await json(await call(`/me/albums/${album.id}/photos/by-client/${id}`, { method: "DELETE" }).then(noBody));
-          },
-          queue,
-          isTransient,
-        });
+        const result = await removeAlbumItem(gone, { albumId: album.id, queue });
+        if (result.status === "refused") {
+          setError((result.error as Error | undefined)?.message ?? L.removalRefused);
+          return;
+        }
       } else if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
     } catch (e) {
       setError((e as Error).message);
       return;
+    } finally {
+      turn.current = false;
+      setBusy(false);
     }
     URL.revokeObjectURL(gone.preview);
     update((list) => list.filter((i) => i.clientId !== clientId));
@@ -294,8 +380,9 @@ export function NewAlbumForm({
     frozen.current = true;
     setError(null);
     try {
-      // Les opérations non confirmées (retraits hors ligne) passent avant tout envoi.
-      await queue.release();
+      // Les opérations non confirmées (retraits hors ligne) passent avant tout envoi ; un refus définitif arrête l'envoi (les photos réapparaissent).
+      if ((await drain()) > 0) throw new Error(L.removalRefused);
+      if (queue.hasPending()) throw new Error(L.pendingRemovals);
       await sendAlbumPhotos(latest.current, {
         upload: async (item, rects) => {
           const local = latest.current.find((i) => i.clientId === item.clientId);
@@ -332,30 +419,36 @@ export function NewAlbumForm({
   }
 
   async function toDetails() {
-    if (!album) return;
-    // Les retraits en attente du réseau sont confirmés d'abord : une photo retirée ne doit pas finir dans l'album publié.
-    await queue.release();
-    if (queue.hasPending()) {
-      setError(L.pendingRemovals);
-      return;
-    }
-    if (remaining(latest.current).length > 0 && !(await send())) return;
+    if (!album || !takeTurn()) return;
     try {
+      // Toute transition attend la file : une photo retirée ne doit pas finir dans l'album publié.
+      setBusy(true);
+      const settled = await flush();
+      if (settled !== "ok") {
+        if (settled === "pending") setError(L.pendingRemovals);
+        return;
+      }
+      setBusy(false);
+      if (remaining(latest.current).length > 0 && !(await send())) return;
       setAlbum(await json<AlbumView>(await call(`/albums/${album.id}`)));
       setStep(3);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      turn.current = false;
+      setBusy(false);
     }
   }
 
   async function publish() {
-    if (!album) return;
+    if (!album || !takeTurn()) return;
     setBusy(true);
     setError(null);
     try {
-      await queue.release();
-      if (queue.hasPending()) {
-        setError(L.pendingRemovals);
+      const settled = await flush();
+      if (settled !== "ok") {
+        if (settled === "pending") setError(L.pendingRemovals);
+        turn.current = false;
         setBusy(false);
         return;
       }
@@ -369,6 +462,7 @@ export function NewAlbumForm({
       window.location.assign(`/albums/${done.id}`);
     } catch (e) {
       setError((e as Error).message);
+      turn.current = false;
       setBusy(false);
     }
   }
@@ -415,6 +509,11 @@ export function NewAlbumForm({
           <span key={n} data-on={n <= step} />
         ))}
       </div>
+      {stale && (
+        <p role="alert" className="s-error" data-testid="album-session-stale">
+          {L.sessionChanged}
+        </p>
+      )}
       <p className="o-t-caption s-muted" data-testid="album-step-label">
         {L.step(step)}
       </p>

@@ -6,7 +6,7 @@ import { Button, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-
 import { type AlbumPhotoView, type AlbumView, albumLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { InteractionManager, Pressable, Share, StyleSheet, View } from "react-native";
+import { InteractionManager, Platform, Pressable, Share, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
@@ -55,6 +55,8 @@ export function AlbumScreen({ id }: { id: string }) {
     }
   }
   function openViewer(i: number) {
+    // Rouverte avant la tâche différée : ce qui attendait la fermeture précédente est abandonné (jamais une feuille pour l'ancienne photo).
+    afterClose.current = null;
     setViewer(i);
     if (counted.current || !a) return;
     counted.current = true;
@@ -63,7 +65,8 @@ export function AlbumScreen({ id }: { id: string }) {
     });
   }
   // Ce qui s'ouvre **après** la fermeture de la visionneuse (un `Modal` natif resterait devant une feuille ouverte trop tôt) : pas une attente
-  // fixe, l'événement de fermeture. iOS : `onDismiss` du `Modal` ; partout : le rendu où la visionneuse est fermée, puis la fin des animations.
+  // fixe, l'événement de fermeture, **une seule voie par plateforme** : iOS, `onDismiss` du `Modal` ; ailleurs (Android, web), le rendu où la
+  // visionneuse est fermée, puis la fin des animations.
   const afterClose = useRef<(() => void) | null>(null);
   const runAfterClose = useCallback(() => {
     const fn = afterClose.current;
@@ -71,7 +74,7 @@ export function AlbumScreen({ id }: { id: string }) {
     fn?.();
   }, []);
   useEffect(() => {
-    if (viewer !== null || !afterClose.current) return;
+    if (Platform.OS === "ios" || viewer !== null || !afterClose.current) return;
     const task = InteractionManager.runAfterInteractions(runAfterClose);
     return () => task.cancel();
   }, [viewer, runAfterClose]);
@@ -227,7 +230,7 @@ export function AlbumScreen({ id }: { id: string }) {
               index={viewer}
               role={role}
               onClose={() => setViewer(null)}
-              onDismiss={runAfterClose}
+              onDismiss={Platform.OS === "ios" ? runAfterClose : undefined}
               onReport={reportPhoto}
               onRemove={(photo) => {
                 // Comme « Signaler » : un Modal natif resterait devant la confirmation, qui s'ouvre à la fermeture de la visionneuse.

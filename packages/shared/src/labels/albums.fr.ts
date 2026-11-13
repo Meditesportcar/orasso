@@ -84,6 +84,10 @@ export const albumLabels = {
   pickCut: (kept: number, asked: number) =>
     `Seules ${kept === 1 ? "la première photo a été gardée" : `les ${kept} premières photos ont été gardées`} sur ${asked} (30 par ouverture, 200 par album).`,
   pickFull: (max: number) => `L'album compte déjà ${max} photos : aucune photo n'a été ajoutée.`,
+  removalRefused:
+    "Un retrait a été refusé par le serveur : la photo est revenue dans la liste. Vérifie ton album avant de continuer.",
+  sessionChanged:
+    "Ta session a changé dans un autre onglet. Recharge la page pour reprendre ton album : tes retraits en attente sont gardés.",
   pendingRemovals: "Des retraits attendent le retour du réseau. Réessaie dans un instant.",
   frameSet: "Cadre posé",
   framePlace: "Poser un cadre de plaque",

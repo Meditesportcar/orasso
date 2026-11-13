@@ -14,6 +14,7 @@ export {
   pickLimit,
   pickNotice,
   platedCount,
+  reappearedPhotos,
   reconcile,
   remaining,
   removeAlbumItem,

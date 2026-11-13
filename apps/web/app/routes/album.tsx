@@ -39,7 +39,10 @@ export async function action({ request, params }: Route.ActionArgs) {
     const res = await api(request, `/me/albums/${id}/photos/${encodeURIComponent(String(form.get("photoId") ?? ""))}`, {
       method: "DELETE",
     });
-    return res.ok ? data({ error: null }) : data({ error: res.error.message }, { status: res.status });
+    const photoId = String(form.get("photoId") ?? "");
+    return res.ok
+      ? data({ error: null, intent, photoId })
+      : data({ error: res.error.message, intent, photoId }, { status: res.status });
   }
   if (intent === "delete") {
     const res = await api(request, `/me/albums/${id}`, { method: "DELETE" });
@@ -57,7 +60,9 @@ export async function action({ request, params }: Route.ActionArgs) {
   return res.ok ? data({ error: null }) : data({ error: res.error.message }, { status: res.status });
 }
 
-export default function AlbumPage({ loaderData, actionData }: Route.ComponentProps) {
+export default function AlbumPage({ loaderData, actionData: rawAction }: Route.ComponentProps) {
+  // Les retraits de photo disent leur `intent` et leur `photoId` : l'erreur ne s'affiche que sous la photo concernée.
+  const actionData = rawAction as { error: string | null; intent?: string; photoId?: string } | undefined;
   const a = loaderData.album;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
@@ -137,7 +142,8 @@ export default function AlbumPage({ loaderData, actionData }: Route.ComponentPro
                     </Button>
                   </Form>
                   {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
-                  {actionData?.error && (
+                  {/* Seulement pour la photo affichée : l'erreur d'un retrait refusé ne suit pas les autres photos. */}
+                  {actionData?.error && actionData.intent === "photo-delete" && actionData.photoId === photo.key && (
                     <p role="alert" className="s-error" data-testid="album-photo-remove-error">
                       {actionData.error}
                     </p>
@@ -150,7 +156,7 @@ export default function AlbumPage({ loaderData, actionData }: Route.ComponentPro
             }
           />
         )}
-        {actionData?.error && (
+        {actionData?.error && actionData.intent !== "photo-delete" && (
           <p role="alert" className="s-error">
             {actionData.error}
           </p>

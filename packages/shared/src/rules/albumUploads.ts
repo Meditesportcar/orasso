@@ -210,32 +210,47 @@ export async function sendAlbumPhotos(items: readonly AlbumItem[], deps: SendDep
 
 export type RemoveItemDeps = {
   albumId: string;
-  /** Annule l'ajout par `clientId` (API idempotente : 204 = la photo n'est pas dans l'album et n'y entrera pas). */
-  cancel: (clientId: string) => Promise<void>;
-  queue: Pick<RemovalQueue, "retire" | "release">;
-  /** Panne passagère (réseau, 5xx) : l'annulation reste en file, la photo part de l'écran. Tout autre refus remonte, la photo reste. */
-  isTransient: (error: unknown) => boolean;
+  /** La file : l'annulation y entre **avant** son premier appel réseau (mémoire et stockage) et n'en sort que sur la réponse de l'API. */
+  queue: Pick<RemovalQueue, "retire" | "release" | "enqueue" | "takeDropped">;
 };
+
+export type RemoveItemResult =
+  /** Confirmée par l'API (204) : la photo n'est pas dans l'album et n'y entrera pas. */
+  | { status: "removed" }
+  /** Pas encore confirmée (hors ligne, session expirée, 5xx…) : l'annulation reste en file, la photo part de l'écran, la publication attend. */
+  | { status: "queued" }
+  /** Refus définitif (400, 404, 409, 422) : la photo **reste** (jamais retirée à l'écran), avec l'erreur de l'API. */
+  | { status: "refused"; error: unknown };
 
 /**
  * Retire une photo de la séance. Une photo dont l'ajout est parti (même sans réponse) est **annulée par son `clientId`**, côté API et
- * sous le verrou de l'ajout : un ajout encore en route finira refusé, un ajout fini sera retiré. La réussite n'est déclarée que sur la
- * réponse de l'API, jamais sur un 404 seul. Panne passagère : l'annulation reste en file (mémoire et persistante) jusqu'à confirmation et
- * la photo part de l'écran (`"queued"`). Refus définitif : l'erreur remonte, la photo reste. L'envoi de la photo, s'il en reste un, est
- * supprimé après (la file passe les annulations avant les envois).
+ * sous le verrou de l'ajout : un ajout encore en route finira refusé, un ajout fini sera retiré. L'annulation **entre dans la file avant
+ * son premier appel réseau** : pendant l'attente, `hasPending()` est vrai et la publication ne peut pas passer devant elle. La réussite
+ * n'est déclarée que sur la réponse de l'API, jamais sur un 404 seul. L'envoi de la photo, s'il en reste un, est supprimé après (la file
+ * passe les annulations avant les envois).
  */
-export async function removeAlbumItem(item: AlbumItem, deps: RemoveItemDeps): Promise<"removed" | "queued"> {
-  let outcome: "removed" | "queued" = "removed";
+export async function removeAlbumItem(item: AlbumItem, deps: RemoveItemDeps): Promise<RemoveItemResult> {
+  let result: RemoveItemResult = { status: "removed" };
   if (item.attempted || item.photoId) {
-    try {
-      await deps.cancel(item.clientId);
-    } catch (e) {
-      if (!deps.isTransient(e)) throw e;
-      deps.queue.retire(cancelOp(deps.albumId, item.clientId));
-      outcome = "queued";
-    }
+    const op = cancelOp(deps.albumId, item.clientId);
+    const outcome = await deps.queue.enqueue(op);
+    if (outcome === "refused") return { status: "refused", error: deps.queue.takeDropped(op.id)[0]?.error };
+    if (outcome === "pending") result = { status: "queued" };
   }
   if (item.upload) deps.queue.retire({ id: item.upload.id, key: item.upload.key });
   void deps.queue.release();
-  return outcome;
+  return result;
+}
+
+/**
+ * Photos de l'album que l'écran ne montre plus : un retrait refusé pour de bon (après coup, au rejeu) les a laissées côté serveur. Elles
+ * **réapparaissent** dans la grille (version du serveur) avant toute publication ; les photos déjà montrées ne sont pas doublées.
+ */
+export function reappearedPhotos(
+  albumPhotos: readonly AlbumPhotoView[],
+  shown: { photoIds: readonly string[]; clientIds: readonly string[] },
+): AlbumPhotoView[] {
+  const ids = new Set(shown.photoIds);
+  const clients = new Set(shown.clientIds);
+  return albumPhotos.filter((p) => !ids.has(p.id) && !(p.clientId && clients.has(p.clientId)));
 }

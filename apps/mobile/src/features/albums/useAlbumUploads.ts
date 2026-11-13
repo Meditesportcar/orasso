@@ -2,8 +2,16 @@
 // par photo** et l'envoi une photo à la fois (`albumUploads.ts`, la logique testée). Une coupure laisse les photos faites ; « Reprendre l'envoi »
 // repart de la première restante (même `clientId`, l'API rejoue sans doublon). Les envois retirés passent par une file persistante par compte
 // (`removalQueue.ts` : place libérée avant un remplacement, suppression hors ligne rejouée à l'ouverture).
-import { createRemovalQueue, type PlateRect, type QueuedOp, type RemovalStore } from "@orasso/shared";
+import {
+  createRemovalQueue,
+  isDefinitiveStatus,
+  albumLabels as L,
+  type PlateRect,
+  type QueuedOp,
+  type RemovalStore,
+} from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
+import { useNetworkState } from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 
@@ -60,13 +68,14 @@ async function runOp(op: QueuedOp): Promise<void> {
   }
 }
 
-/** Une panne réseau arrête la série (les suivantes échoueraient aussi, 15 s chacune). */
-const stopsRemovals = (e: unknown) => !(e instanceof ApiRequestError) || e.isNetwork;
-/** Panne passagère : réseau, ou 5xx, 408, 429 ; elle reste à rejouer. */
-const isTransient = (e: unknown) =>
-  !(e instanceof ApiRequestError) || e.isNetwork || e.status >= 500 || e.status === 408 || e.status === 429;
-/** Refus définitif : tout autre 4xx sort de la file (avec une trace), il ne serait rejoué qu'à l'infini. */
-const isFinal = (e: unknown) => e instanceof ApiRequestError && !isTransient(e);
+/**
+ * Refus définitif : 400, 404, 409, 422 seulement. L'opération sort de la file **avec un état d'échec visible** (l'album est relu, les photos
+ * concernées réapparaissent). 401 et 403 (session expirée, droits en cours de rétablissement), le réseau, les 5xx, 408 et 429 **restent en
+ * file** : ils ne prouvent rien sur l'opération.
+ */
+const isFinal = (e: unknown) => e instanceof ApiRequestError && isDefinitiveStatus(e.status);
+/** Tout ce qui n'est pas définitif arrête la série (réseau, 401, 403, 5xx…) : on ne martèle pas l'API, l'opération reste. */
+const stopsRemovals = (e: unknown) => !isFinal(e);
 
 export function useAlbumUploads(albumId: string | null) {
   const [items, setItems] = useState<AlbumItem[]>([]);
@@ -75,6 +84,10 @@ export function useAlbumUploads(albumId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const stopped = useRef(false);
+  // Une seule opération à la fois : un second appui pendant un envoi, ou pendant que la file se rejoue, ne lance rien.
+  const busyRef = useRef(false);
+  // Les retraits refusés pour de bon (au rejeu) : l'écran relit l'album et les photos réapparaissent (compteur de signaux).
+  const [refusals, setRefusals] = useState(0);
   // L'envoi fige tout : pendant qu'il tourne, ni les cadres ni la décision ne changent (l'état aussi, pas seulement les boutons).
   const frozen = useRef(false);
 
@@ -107,22 +120,39 @@ export function useAlbumUploads(albumId: string | null) {
     [update],
   );
 
-  // Le montage remet « arrêté » à faux (démontage puis remontage du mode strict) et rejoue les suppressions restées en échec (hors ligne).
+  /** Joue la file ; les refus définitifs sont notés (l'écran relit l'album, les photos réapparaissent). Rend leur nombre. */
+  const drain = useCallback(async (): Promise<number> => {
+    await queue.release();
+    const dropped = queue.takeDropped();
+    if (dropped.length > 0) setRefusals((n) => n + dropped.length);
+    return dropped.length;
+  }, [queue]);
+  // Le rejeu du montage : l'écran l'attend (`ready`) avant d'afficher un brouillon repris (une annulation confirmée ici le change).
+  const initial = useRef<Promise<number> | null>(null);
+  const ready = useCallback(() => initial.current ?? Promise.resolve(0), []);
+
+  // Le montage remet « arrêté » à faux (démontage puis remontage du mode strict) et rejoue la file (opérations non confirmées d'une séance précédente).
   useEffect(() => {
     stopped.current = false;
-    void queue.replay();
-    // Retour au premier plan (le réseau est souvent revenu) : les opérations non confirmées sont rejouées, pas seulement à la réouverture.
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") void queue.replay();
+    initial.current = drain();
+    // Retour au premier plan : les opérations non confirmées sont rejouées.
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") void drain();
     });
-    const onlineWeb = () => void queue.replay();
-    if (Platform.OS === "web" && typeof window !== "undefined") window.addEventListener("online", onlineWeb);
     return () => {
       stopped.current = true;
       sub.remove();
-      if (Platform.OS === "web" && typeof window !== "undefined") window.removeEventListener("online", onlineWeb);
     };
-  }, [queue]);
+  }, [drain]);
+
+  // Retour du réseau (connectivité native, comme le Fil et les publications) : la file se rejoue **sans autre action** de la personne.
+  const network = useNetworkState();
+  const online = network.isConnected !== false && network.isInternetReachable !== false;
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnline.current) void drain();
+    wasOnline.current = online;
+  }, [online, drain]);
 
   /** Ouvre la photothèque (30 photos au plus par ouverture, jamais au-delà des 200 de l'album) et lance la détection des plaques. */
   const pick = useCallback(
@@ -178,8 +208,9 @@ export function useAlbumUploads(albumId: string | null) {
   }, [update]);
 
   /**
-   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajoutée : `DELETE /me/albums/:id/photos/:photoId`. Ajout
-   * demandé sans réponse : on la retrouve dans l'album par son `clientId` (aucune photo fantôme). Une erreur laisse la photo en place.
+   * Retire une photo de la séance. Pas encore ajoutée : son envoi est retiré (file). Ajout parti (même sans réponse) : **annulation par
+   * `clientId`**, qui entre dans la file (mémoire et persistance) **avant** son premier appel ; confirmée par un 204 de l'API. Hors ligne ou
+   * session expirée : elle reste en file, la photo part de l'écran, la publication attend. Refus définitif : la photo reste, avec l'erreur.
    */
   const remove = useCallback(
     async (clientId: string): Promise<boolean> => {
@@ -187,18 +218,13 @@ export function useAlbumUploads(albumId: string | null) {
       if (!gone) return true;
       setError(null);
       try {
-        // Annulation par `clientId` : atomique côté API (un ajout encore en route est refusé, un ajout fini est retiré) ; confirmée par un
-        // 204. Hors ligne, elle reste en file (mémoire et persistante) et la photo part de l'écran ; un refus définitif la laisse en place.
-        if (albumId)
-          await removeAlbumItem(gone, {
-            albumId,
-            cancel: async (id) => {
-              await api.cancelAlbumPhoto(albumId, id);
-            },
-            queue,
-            isTransient,
-          });
-        else if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
+        if (albumId) {
+          const result = await removeAlbumItem(gone, { albumId, queue });
+          if (result.status === "refused") {
+            setError(errorMessage(result.error));
+            return false;
+          }
+        } else if (gone.upload) queue.retire({ id: gone.upload.id, key: gone.upload.key });
       } catch (e) {
         setError(errorMessage(e));
         return false;
@@ -210,45 +236,76 @@ export function useAlbumUploads(albumId: string | null) {
   );
 
   /** Envoie les photos qui restent ; vrai quand tout est ajouté à l'album. */
-  const send = useCallback(async (): Promise<boolean> => {
-    if (!albumId) return false;
-    setSending(true);
-    frozen.current = true;
-    setError(null);
-    try {
-      // Les opérations non confirmées (retraits hors ligne) passent avant tout envoi.
-      await queue.release();
-      await sendAlbumPhotos(latest.current, {
-        upload: uploadFile,
-        add: (item, body) => api.addAlbumPhoto(albumId, body),
-        retire: (u) => queue.retire(u),
-        release: () => queue.release(),
-        onProgress: (current, total) => setProgress({ current, total }),
-        onItem: patch,
-        stopped: () => stopped.current,
-      });
-      setProgress(null);
-      return true;
-    } catch (e) {
-      setProgress(null);
-      if (!(e instanceof AlbumSendStopped)) setError(errorMessage(e));
-      return false;
-    } finally {
-      frozen.current = false;
-      setSending(false);
-      // Ce qui a été retiré pendant l'envoi est supprimé sans bloquer la suite (la liste persistante garde ce qui échoue).
-      void queue.release();
-    }
-  }, [albumId, patch, queue]);
+  const send = useCallback(
+    async (turnHeld = false): Promise<boolean> => {
+      if (!albumId) return false;
+      if (!turnHeld) {
+        if (busyRef.current) return false;
+        busyRef.current = true;
+      }
+      setSending(true);
+      frozen.current = true;
+      setError(null);
+      try {
+        // Les opérations non confirmées (retraits hors ligne) passent avant tout envoi ; un refus définitif arrête l'envoi (les photos réapparaissent).
+        if ((await drain()) > 0) throw new Error(L.removalRefused);
+        if (queue.hasPending()) throw new Error(L.pendingRemovals);
+        await sendAlbumPhotos(latest.current, {
+          upload: uploadFile,
+          add: (item, body) => api.addAlbumPhoto(albumId, body),
+          retire: (u) => queue.retire(u),
+          release: () => queue.release(),
+          onProgress: (current, total) => setProgress({ current, total }),
+          onItem: patch,
+          stopped: () => stopped.current,
+        });
+        setProgress(null);
+        return true;
+      } catch (e) {
+        setProgress(null);
+        if (!(e instanceof AlbumSendStopped)) setError(errorMessage(e));
+        return false;
+      } finally {
+        frozen.current = false;
+        busyRef.current = false;
+        setSending(false);
+        // Ce qui a été retiré pendant l'envoi est supprimé sans bloquer la suite (la liste persistante garde ce qui échoue).
+        void drain();
+      }
+    },
+    [albumId, drain, patch, queue],
+  );
 
   const counts = decidedCounts(items);
-  /** Confirme les opérations en attente avant de publier ; faux : des retraits attendent le retour du réseau (la publication attend). */
-  const flush = useCallback(async (): Promise<boolean> => {
-    await queue.release();
-    return !queue.hasPending();
-  }, [queue]);
+  /**
+   * Toute transition (« Continuer », « Publier ») attend la file : `ok` seulement quand plus rien n'attend ; `refused` : un retrait a été refusé
+   * pour de bon (l'album est relu, la photo réapparaît) ; sinon `pending` (réseau, session : le retrait reste en file).
+   */
+  const flush = useCallback(async (): Promise<"ok" | "pending" | "refused"> => {
+    if ((await drain()) > 0) return "refused";
+    return queue.hasPending() ? "pending" : "ok";
+  }, [drain, queue]);
+  /** Une opération à la fois : prend le tour, ou rend faux (un autre appui est déjà en cours). */
+  const takeTurn = useCallback((): boolean => {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    return true;
+  }, []);
+  const endTurn = useCallback(() => {
+    busyRef.current = false;
+  }, []);
+  /** Les identifiants de tentative dont l'annulation attend encore (ces photos ne se montrent pas de nouveau). */
+  const pendingClientIds = useCallback(
+    () => queue.pendingOps().flatMap((o) => (o.clientId ? [o.clientId] : [])),
+    [queue],
+  );
   return {
     flush,
+    ready,
+    refusals,
+    takeTurn,
+    endTurn,
+    pendingClientIds,
     items,
     pick,
     remove,

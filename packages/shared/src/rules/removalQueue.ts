@@ -1,19 +1,18 @@
-// File des opérations à confirmer (lot R9e, tours 1 et 2 ; mêmes règles que `galleryUploads.ts` de l'appli) : un envoi retiré (photo retirée,
+// File des opérations à confirmer (lot R9e, tours 1 à 3 ; mêmes règles que `galleryUploads.ts` de l'appli) : un envoi retiré (photo retirée,
 // décision ou cadres changés) occupe une place du quota d'envois en attente de l'API (40) tant qu'il n'est pas supprimé
 // (`DELETE /me/uploads/:id`) ; l'**annulation de l'ajout d'une photo** (`DELETE /me/albums/:id/photos/by-client/:clientId`, atomique côté
 // API) doit être confirmée par un 204 avant qu'on la tienne pour faite.
 //
-// - **Libérer avant de remplacer** : `release()` supprime tout de suite ce qui vient d'être retiré **et rejoue ce qui n'était pas confirmé**,
-//   avant que l'écran n'envoie quoi que ce soit.
-// - **Une opération non confirmée reste** dans une liste **en mémoire** (indépendante du stockage) **et** dans la liste persistante par compte
-//   (`store`) : un stockage indisponible ne la fait pas oublier dans la page, une fermeture de l'application ne la perd pas. `replay()` rejoue
-//   les deux (ouverture de l'écran, retour du réseau, début d'un envoi).
-// - Une opération rejetée par l'API pour une raison **définitive** (`final`, un 4xx qui n'est pas une panne passagère) sort des listes avec une
-//   trace (`onDrop`) : elle n'est pas rejouée sans fin. Seules les pannes réseau et les 5xx restent à rejouer ; une panne réseau arrête la
-//   série (`stops`).
-// - Si le compte de la liste n'est plus le compte connecté (`store.current()` faux), on ne lit, n'écrit et ne supprime plus rien : jamais les
-//   opérations de A dans la liste de B.
-// - Tout est sérialisé : un `replay()` ne double jamais un `release()` en cours.
+// **Règle (tour 3)** : une opération **entre dans la file avant son premier appel réseau**, en mémoire (`hasPending()` est vrai tout de suite)
+// **et** dans la liste persistante du compte (`store`), et n'en sort que sur une réponse qui prouve son issue :
+// - 2xx (204) : confirmée ;
+// - refus **définitif** (`final` : 400, 404, 409, 422 pour l'API d'albums) : l'opération sort des listes, mais **pas en silence** : elle va dans
+//   `takeDropped()` (état d'échec visible), l'écran relit l'album et les photos concernées **réapparaissent** avant toute publication ;
+// - tout le reste (réseau, 5xx, 408, 429, **401 et 403** : session expirée, droits en cours de rétablissement) : l'opération **reste**, rejouée
+//   plus tard sous la même session (`stops` arrête la série pour ne pas marteler l'API).
+// La file appartient à un compte **et à une session** : si `store.current()` devient faux (autre compte, autre session), on ne lit, n'écrit et
+// ne joue plus rien ; le stockage de A reste intact. Tout est sérialisé : un `replay()` ne double jamais une opération en cours. Les annulations
+// passent avant les suppressions d'envois (une photo non confirmée absente ne doit pas perdre son envoi).
 
 /** Un envoi à supprimer (`id`, `key`) ou une annulation d'ajout à confirmer (`albumId`, `clientId`). */
 export type QueuedOp = { id: string; key?: string; albumId?: string; clientId?: string };
@@ -27,80 +26,103 @@ export const cancelOp = (albumId: string, clientId: string): QueuedOp => ({
   clientId,
 });
 
+/** Codes qui prouvent que l'opération n'a plus d'objet ou ne peut pas aboutir : 400, 404, 409, 422. Tout autre refus (dont 401 et 403) reste en file. */
+export const DEFINITIVE_STATUSES: readonly number[] = [400, 404, 409, 422];
+export const isDefinitiveStatus = (status: number): boolean => DEFINITIVE_STATUSES.includes(status);
+
 export type RemovalStore = {
   read: () => Promise<QueuedOp[]>;
   write: (list: QueuedOp[]) => Promise<void>;
-  /** Faux dès que le compte de la liste n'est plus le compte connecté. */
+  /** Faux dès que le compte de la liste n'est plus le compte connecté, ou que la session a changé. */
   current?: () => boolean;
 };
 
+/** Issue d'une opération mise en file : confirmée, encore en attente (hors ligne, session, 5xx…), ou refusée pour de bon. */
+export type RemovalOutcome = "confirmed" | "pending" | "refused";
+export type DroppedOp = { op: QueuedOp; error: unknown };
+
 export type RemovalQueue = {
-  /** Retire un envoi ou annule un ajout : fait au prochain `release()` (ou rejoué plus tard s'il n'est pas confirmé). */
+  /** Met un envoi à supprimer en file (mémoire tout de suite, stockage ensuite) ; exécuté au prochain `release()`. */
   retire: (op: QueuedOp) => void;
-  /** Exécute tout de suite ce qui vient d'être retiré **et** ce qui n'était pas confirmé, avant d'envoyer autre chose. */
+  /** Met l'opération en file (mémoire **et** stockage) **avant** tout appel réseau, l'exécute et rend son issue. */
+  enqueue: (op: QueuedOp) => Promise<RemovalOutcome>;
+  /** Exécute tout ce qui n'est pas confirmé (avant d'envoyer autre chose). */
   release: () => Promise<void>;
-  /** Rejoue les deux listes (mémoire et persistante) : ouverture de l'écran, retour du réseau. */
+  /** Rejoue la file : ouverture de l'écran, retour du réseau. */
   replay: () => Promise<void>;
-  /** Des opérations ne sont pas confirmées (la publication attend). */
+  /** Des opérations ne sont pas confirmées, **y compris celles en cours d'appel** (la publication attend). */
   hasPending: () => boolean;
+  /** Les opérations refusées pour de bon depuis le dernier appel (état d'échec visible) ; `only` en retire une seule. */
+  takeDropped: (only?: string) => DroppedOp[];
+  /** Les opérations non confirmées (pour ne pas montrer à nouveau une photo dont le retrait attend). */
+  pendingOps: () => QueuedOp[];
 };
 
 export function createRemovalQueue(options: {
   remove: (op: QueuedOp) => Promise<unknown>;
   store: RemovalStore;
-  /** Erreur qui arrête la série (panne réseau) ; par défaut, toutes. */
+  /** Erreur qui arrête la série (panne réseau, 401, 403) ; par défaut, toutes. */
   stops?: (error: unknown) => boolean;
-  /** Refus définitif de l'API : l'opération sort des listes (jamais rejouée), avec une trace. */
+  /** Refus définitif de l'API : l'opération sort des listes avec une trace et un état d'échec (`takeDropped`), jamais rejouée. */
   final?: (error: unknown) => boolean;
   onDrop?: (op: QueuedOp, error: unknown) => void;
 }): RemovalQueue {
-  let retired: QueuedOp[] = [];
   /** Les opérations non confirmées, **en mémoire** : indépendantes du stockage (qui peut refuser d'écrire ou de lire). */
   const unconfirmed = new Map<string, QueuedOp>();
+  let dropped: DroppedOp[] = [];
   let chain: Promise<unknown> = Promise.resolve();
+  let writes: Promise<unknown> = Promise.resolve();
+  let loaded: Promise<void> | null = null;
   const current = () => options.store.current?.() ?? true;
   const stops = options.stops ?? (() => true);
   const final = options.final ?? (() => false);
-  const readStore = () => options.store.read().catch((): QueuedOp[] => []);
-  const writeStore = (list: QueuedOp[]) => options.store.write(list).catch(() => undefined);
 
-  function run(uploads: readonly QueuedOp[], replay: boolean): Promise<void> {
+  /** Lit une fois la liste persistante (séances précédentes) : elle entre en mémoire avant toute écriture, jamais écrasée. */
+  function loadOnce(): Promise<void> {
+    if (!current()) return Promise.resolve();
+    if (!loaded) {
+      loaded = options.store
+        .read()
+        .catch((): QueuedOp[] => [])
+        .then((stored) => {
+          for (const u of stored) if (!unconfirmed.has(u.id)) unconfirmed.set(u.id, u);
+        });
+    }
+    return loaded;
+  }
+
+  /** Écrit l'état en mémoire (le dernier gagne), en série ; sans compte courant, rien n'est écrit. */
+  async function persist(): Promise<void> {
+    await loadOnce();
+    if (!current()) return;
+    const snapshot = [...unconfirmed.values()];
+    const job = writes.then(() => (current() ? options.store.write(snapshot) : undefined)).catch(() => undefined);
+    writes = job;
+    await job;
+  }
+
+  function drain(): Promise<void> {
     const job = chain.then(async () => {
-      if (!current()) return;
-      // Les nouvelles opérations entrent d'abord en mémoire (le stockage ne décide pas de ce qui est oublié).
-      for (const u of uploads) unconfirmed.set(u.id, u);
-      const stored = await readStore();
-      if (!current()) return;
-      const pending = new Map<string, QueuedOp>();
-      // Celles de la liste persistante (d'une séance précédente) deviennent aussi des opérations en mémoire : si le stockage refuse ensuite
-      // d'écrire, la page ne les oublie pas.
-      for (const u of stored) {
-        pending.set(u.id, u);
-        unconfirmed.set(u.id, u);
-      }
-      for (const u of unconfirmed.values()) pending.set(u.id, u);
-      // Inscrites d'abord : une fermeture de l'application en plein nettoyage ne les perd pas.
-      if (uploads.length > 0) await writeStore([...pending.values()]);
-      // Les annulations d'abord (une photo qui n'est pas confirmée absente ne doit pas voir son envoi supprimé), puis les envois.
-      const todo = [...(replay ? pending.values() : uploads)].sort(
+      await loadOnce();
+      // Les annulations d'abord (une photo non confirmée absente ne doit pas voir son envoi supprimé), puis les envois.
+      const todo = [...unconfirmed.values()].sort(
         (a, b) => Number(b.clientId !== undefined) - Number(a.clientId !== undefined),
       );
       for (const u of todo) {
         if (!current()) return;
         try {
           await options.remove(u);
-          pending.delete(u.id);
           unconfirmed.delete(u.id);
+          await persist();
         } catch (e) {
           if (final(e)) {
-            pending.delete(u.id);
             unconfirmed.delete(u.id);
+            dropped.push({ op: u, error: e });
             options.onDrop?.(u, e);
+            await persist();
           } else if (stops(e)) break;
         }
       }
-      if (!current()) return;
-      await writeStore([...pending.values()]);
     });
     chain = job.catch(() => undefined);
     return job.catch(() => undefined);
@@ -108,19 +130,25 @@ export function createRemovalQueue(options: {
 
   return {
     retire(op) {
-      if (!retired.some((u) => u.id === op.id)) retired.push(op);
+      if (!unconfirmed.has(op.id)) unconfirmed.set(op.id, op);
+      void persist();
     },
-    release() {
-      const list = retired;
-      retired = [];
-      // Ce qui n'était pas confirmé est rejoué avec ce qui vient d'être retiré : la place du quota est libérée avant tout nouvel envoi.
-      return list.length > 0 || unconfirmed.size > 0 ? run(list, true) : chain.then(() => undefined);
+    async enqueue(op) {
+      // En mémoire d'abord (synchrone : `hasPending()` est vrai dès maintenant), puis dans la liste persistante, **avant** le premier appel.
+      unconfirmed.set(op.id, op);
+      await persist();
+      await drain();
+      if (unconfirmed.has(op.id)) return "pending";
+      return dropped.some((d) => d.op.id === op.id) ? "refused" : "confirmed";
     },
-    replay() {
-      return run([], true);
-    },
-    hasPending() {
-      return retired.length > 0 || unconfirmed.size > 0;
+    release: drain,
+    replay: drain,
+    hasPending: () => unconfirmed.size > 0,
+    pendingOps: () => [...unconfirmed.values()],
+    takeDropped(only) {
+      const taken = only ? dropped.filter((d) => d.op.id === only) : dropped;
+      dropped = only ? dropped.filter((d) => d.op.id !== only) : [];
+      return taken;
     },
   };
 }

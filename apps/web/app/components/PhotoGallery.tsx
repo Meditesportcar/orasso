@@ -54,7 +54,13 @@ export function PhotoGallery({
     ref.current?.showModal();
   };
   const close = () => ref.current?.close();
-  const go = (delta: number) => setIndex((i) => (i === null ? i : (i + delta + total) % total));
+  // Navigation depuis l'index **affiché** : après le retrait de la dernière photo de la suite, « précédente » et « suivante » ne réaffichent pas la même.
+  const go = (delta: number) =>
+    setIndex((i) => (i === null || total === 0 ? i : (Math.min(i, total - 1) + delta + total) % total));
+  // Et l'index d'état revient lui aussi dans la plage quand la suite raccourcit.
+  useEffect(() => {
+    setIndex((i) => (i !== null && total > 0 && i > total - 1 ? total - 1 : i));
+  }, [total]);
 
   // Flèches du clavier dans la visionneuse (la fenêtre modale a le focus) ; Échap ferme déjà la fenêtre.
   const onKeyDown = (e: React.KeyboardEvent) => {
