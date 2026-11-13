@@ -272,13 +272,16 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("practical-map-view")).toBeVisible();
   const pins = page.locator('[data-testid^="practical-pin-"]');
   await expect(pins.first()).toBeVisible({ timeout: 30_000 });
-  expect(await pins.count()).toBe(all);
+  // Petit lot de fin F : les épingles proches se regroupent (pastille avec leur nombre) ; chaque lieu de la zone est une épingle ou compté
+  // dans une pastille (jamais un lieu perdu).
+  const grouped = (await page.getByTestId("practical-group").allInnerTexts()).reduce((n, t) => n + Number(t), 0);
+  expect((await pins.count()) + grouped).toBeGreaterThanOrEqual(all);
   await expect(page.getByTestId("practical-selected")).toBeVisible();
   await expect(page.getByTestId("practical-selected")).toContainText(/ · \d+,\d\skm/);
   await shot(page, "appli-carte-sable-384");
   // Toucher une autre épingle change le lieu sélectionné.
   const before = await page.getByTestId("practical-selected").innerText();
-  // Les stations voisines se recouvrent sur la carte cadrée sur 30 km : le clic part directement sur l'épingle visée.
+  // Le clic part directement sur l'épingle visée.
   await pins.nth(2).dispatchEvent("click");
   await expect(page.getByTestId("practical-selected")).not.toHaveText(before);
   await page.getByTestId("practical-selected-go").click();
@@ -286,7 +289,8 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("go-waze")).toBeVisible();
   await shot(page, "appli-carte-y-aller-sable-384");
   // Le dernier choix est retenu pendant la séance : retour à l'Accueil puis « Voir tout » rouvre la carte.
-  await page.keyboard.press("Escape");
+  // Depuis la partie C du petit lot de fin, la feuille couvre tout l'écran (la bascule comprise) : on la ferme (voile « Fermer »).
+  await page.getByRole("button", { name: "Fermer" }).last().click();
   await page.getByTestId("list-toggle").click();
   await expect(page.getByTestId("practical-list")).toBeVisible();
   await ctx.close();
