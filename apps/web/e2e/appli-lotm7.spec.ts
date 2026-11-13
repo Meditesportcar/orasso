@@ -431,14 +431,14 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
     },
     page: /\/publier/,
   },
-  // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la fiche de l'événement,
-  // ouverte par le titre d'une carte des Missions. Média : la ligne « Mon profil média » de la Page ouvre un écran B.
+  // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la recherche, ouverte
+  // par la loupe depuis l'onglet Missions. Média : la ligne « Mon profil média » de la Page ouvre un écran B.
   provider: {
     tab: ["Missions", "missions"],
-    // Le titre d'une carte de mission (lien « … : ouvrir la fiche ») ouvre la fiche de l'événement (écran B) ; « Voir » mène à l'onglet
-    // Candidatures, pas à un écran B.
-    open: (page) => page.getByTestId("mission-card").first().getByRole("link").first().click(),
-    page: /\/e\//,
+    // Le compte du prestataire de la recette n'a aucune mission et « Voir » d'une mission mène à l'onglet Candidatures : l'écran B est la
+    // recherche, ouverte par la loupe de la bande du haut depuis l'onglet Missions.
+    open: (page) => page.getByRole("button", { name: "Rechercher" }).filter({ visible: true }).first().click(),
+    page: /\/recherche/,
   },
   media: {
     tab: ["Page", "page"],
