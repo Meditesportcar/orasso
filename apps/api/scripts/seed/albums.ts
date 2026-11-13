@@ -5,8 +5,8 @@
 // garde Sud Cars (T36). Photos : seulement celles du seed (`assets/photos`, relues « aucune plaque lisible »). Idempotent.
 //
 // Lot R9f : des identifications sur cet album (T37 à T42). La voiture de Damien (pointée à l'événement par `seed/memories.ts`) est identifiée
-// par le média sur 5 photos et par lui-même sur une sixième (« 6 photos de ta … ») ; Kenji_66 (présence validée) l'est par son pseudo ;
-// Lea_11 (présence validée) a retiré une identification (« Ce n'est pas moi », `not_mine`). Damien reçoit la notification `album_tagged`
+// par le média sur 5 photos et par lui-même sur une sixième (« 6 photos de ta … ») ; Kenji_66 (place retenue et pointée) l’est par son pseudo ;
+// Lea_11 (place retenue et pointée) a retiré une identification (« Ce n'est pas moi », `not_mine`). Damien reçoit la notification `album_tagged`
 // (5 photos : jamais celle qu'il a posée lui-même), livrée tout de suite.
 import { randomBytes } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -19,7 +19,7 @@ import { adoptLegacyGalleries } from "../../src/modules/albums/reprise";
 import { sendTaggedNotifications } from "../../src/modules/albums/tags-notify";
 import { albumPhotoKey } from "../../src/modules/albums/view";
 import { blurPlateRegions } from "../../src/modules/vehicles/photos-blur";
-import { DAY, HOUR, now } from "./helpers";
+import { apply, DAY, HOUR, now } from "./helpers";
 import { putRealPhoto } from "./photos";
 
 const RASSEMBLEMENT = "rassemblement-cote-vermeille-2025";
@@ -188,9 +188,35 @@ async function tag(
     .onConflictDoNothing();
 }
 
-/** Une présence validée à l'événement (« une place ou une présence » : la personne peut être identifiée par son pseudo). */
-async function presence(eventId: string, userId: string, at: Date) {
-  await db.insert(t.eventPresences).values({ eventId, userId, validatedAt: at }).onConflictDoNothing();
+/**
+ * Une place à l'événement (« une place ou une présence » : la personne peut être identifiée par son pseudo) : sa candidature **retenue**
+ * avec sa première voiture active, entrée (pointée) après celle de Damien (qui garde le n° 1 du plateau). Aucune présence GPS : ces lignes
+ * alimentent le direct, le récap et les tampons. Rend `false` si la personne n'a pas de voiture active (pas d'identification alors).
+ */
+async function seatAt(event: typeof t.events.$inferSelect, userId: string, decidedBy: string, enteredAt: Date) {
+  const existing = await db.query.applications.findFirst({
+    where: and(eq(t.applications.eventId, event.id), eq(t.applications.userId, userId)),
+  });
+  let applicationId = existing?.id;
+  if (!applicationId) {
+    const [car] = await db
+      .select({ id: t.vehicles.id })
+      .from(t.vehicles)
+      .where(and(eq(t.vehicles.ownerId, userId), eq(t.vehicles.status, "active")))
+      .orderBy(t.vehicles.createdAt)
+      .limit(1);
+    if (!car) return false;
+    const row = await apply(event, { id: car.id, ownerId: userId }, "accepted", {
+      decidedBy,
+      createdAt: new Date(event.startsAt.getTime() - 10 * DAY),
+    });
+    applicationId = row.id;
+  }
+  await db
+    .insert(t.checkins)
+    .values({ applicationId, eventId: event.id, method: "scan", checkedInAt: enteredAt })
+    .onConflictDoNothing();
+  return true;
 }
 
 export async function seedAlbumTags() {
@@ -227,8 +253,8 @@ export async function seedAlbumTags() {
     .innerJoin(t.checkins, eq(t.checkins.applicationId, t.applications.id))
     .where(and(eq(t.applications.eventId, rassemblement.id), eq(t.applications.userId, damien.userId)));
   const car = entry?.vehicleId;
-  await presence(rassemblement.id, kenji.userId, at);
-  await presence(rassemblement.id, lea.userId, at);
+  const kenjiSeat = await seatAt(rassemblement, kenji.userId, damien.userId, at);
+  const leaSeat = await seatAt(rassemblement, lea.userId, damien.userId, at);
   const ids = photos.map((p) => p.id);
   if (car) {
     for (const i of [0, 1, 2, 3, 4]) {
@@ -247,19 +273,23 @@ export async function seedAlbumTags() {
     );
   }
   // Kenji par son pseudo (annoncé : on n'ajoute pas de ligne à son Activité).
-  await tag(
-    ids[6] as string,
-    { kind: "user", userId: kenji.userId },
-    { userId: leo.id, as: "media" },
-    { notifiedAt: at },
-  );
+  if (kenjiSeat) {
+    await tag(
+      ids[6] as string,
+      { kind: "user", userId: kenji.userId },
+      { userId: leo.id, as: "media" },
+      { notifiedAt: at },
+    );
+  }
   // Léa a retiré une identification : « Ce n'est pas moi » (`not_mine`), la ligne reste, personne ne la repose.
-  await tag(
-    ids[7] as string,
-    { kind: "user", userId: lea.userId },
-    { userId: leo.id, as: "media" },
-    { notifiedAt: at, removedAt: at, removedBy: lea.userId, removedReason: "not_mine" },
-  );
+  if (leaSeat) {
+    await tag(
+      ids[7] as string,
+      { kind: "user", userId: lea.userId },
+      { userId: leo.id, as: "media" },
+      { notifiedAt: at, removedAt: at, removedBy: lea.userId, removedReason: "not_mine" },
+    );
+  }
   // La notification de Damien : une pour l'album (5 photos), livrée tout de suite.
   await withTx(async (tx) => void (await sendTaggedNotifications(tx, album.id, { userIds: [damien.userId] })));
   await db

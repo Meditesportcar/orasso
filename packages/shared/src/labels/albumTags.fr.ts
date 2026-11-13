@@ -81,6 +81,7 @@ export const albumTagLabels = {
     tagDeclined: "Cette personne a retiré son identification de cette photo : elle ne peut pas être reposée.",
     saveNotAllowed: "Le média n'autorise pas l'enregistrement de ses photos.",
     notIdentified: "Tu n'es pas identifié sur cette photo.",
+    saveUnknownPlate: "Cette photo d'une ancienne galerie ne peut pas être enregistrée.",
     plateUnknown: "Cette photo d'une ancienne galerie ne peut pas être partagée en story.",
     reasonMismatch: "Ce motif ne correspond pas à cette identification.",
     notAccredited: "Tu n'es plus accrédité sur cet événement : tu ne peux plus identifier.",

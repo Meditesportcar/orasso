@@ -32,6 +32,7 @@ import type { Actor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
+import { visibleSourcePhotos } from "../albums/source-visible";
 import { followSets } from "../social/pageFollows";
 
 export type StoryRecord = typeof stories.$inferSelect;
@@ -206,9 +207,15 @@ export function selectStories(where: SQL | undefined, ex: Executor = db): Promis
     .leftJoin(originProvider, eq(originProvider.id, originStory.providerId))
     .leftJoin(originMedia, eq(originMedia.id, originStory.mediaId))
     .where(where) as unknown as Promise<StoryRow[]>;
-  return query.then((rows) => {
+  return query.then(async (rows) => {
     const at = now();
-    return rows.filter((r) => originAvailable(r, at));
+    const live = rows.filter((r) => originAvailable(r, at));
+    // Lot R9f : une story reprise d'une photo d'album n'est servie que tant que l'album est visible (lectures, fichiers, exports,
+    // barre : tout passe par ici).
+    const sources = live.flatMap((r) => (r.story.sourceAlbumPhotoId ? [r.story.sourceAlbumPhotoId] : []));
+    if (!sources.length) return live;
+    const visible = await visibleSourcePhotos(ex, sources, at);
+    return live.filter((r) => !r.story.sourceAlbumPhotoId || visible.has(r.story.sourceAlbumPhotoId));
   });
 }
 

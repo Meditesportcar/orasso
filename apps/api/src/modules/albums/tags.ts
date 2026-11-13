@@ -108,10 +108,22 @@ export const albumTagsService = {
         const join = await visibleAlbum(tx, v, photo.albumId);
         const at = now();
         const actor = await actorOf(tx, v, join);
-        const role = await roleOf(tx, v, join, actor);
+        // Un responsable sans second facteur reste un passionné pour **sa propre** voiture ou son pseudo ; pour toute autre cible,
+        // c'est le second facteur qui est demandé (403), pas un 404.
+        let role: TagRole;
+        let twoFactor: AppError | null = null;
+        try {
+          role = await roleOf(tx, v, join, actor);
+        } catch (error) {
+          if (!(error instanceof AppError) || error.code !== "two_factor_required") throw error;
+          role = "owner";
+          twoFactor = error;
+        }
         // Le média identifie tant qu'il est accrédité (il garde la main pour lire et retirer, pas pour compléter).
         if (role === "media") await assertAccredited(tx, join.e.id, join.a.mediaProfileId);
-        const target = await resolveTarget(tx, join, v, role, input);
+        const target = await resolveTarget(tx, join, v, role, input).catch((error) => {
+          throw twoFactor ?? error;
+        });
         const mine = target.userId === v.user.id;
         const rows = await tagsOfPhoto(tx, photo.id);
         const found = existingOf(rows, target);

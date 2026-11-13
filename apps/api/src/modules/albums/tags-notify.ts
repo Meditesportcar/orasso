@@ -17,7 +17,7 @@ import {
   tagDeclinedTitle,
   tagNotificationTitle,
 } from "@orasso/shared";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { albumPhotoTags, eventAlbumPhotos, eventAlbums, notifications, profiles } from "../../db/schema";
@@ -100,31 +100,58 @@ export async function sendTaggedNotifications(
       eventTitle: join.e.title,
     });
     const albumName = albumTitle(join.a.title, join.e.title);
-    const row = await notificationsService.notify(tx, userId, "album_tagged", {
-      title,
-      body: albumTagLabels.taggedBody(join.m.name, albumName),
-      groupKey: taggedGroupKey(albumId, userId),
-      eventId: join.e.id,
-      eventStartsAt: join.e.startsAt,
-      eventEndsAt: join.e.endsAt,
-      after: opts.after,
-      data: {
-        albumId,
-        screen: "album-my-photos",
-        link: `/app/albums/${albumId}/mes-photos`,
-        count: total.count,
-        mediaKey: `m:${join.m.id}`,
-        mediaName: join.m.name,
-        mediaLogoUrl: storage.url(join.m.logoKey),
-        eventTitle: join.e.title,
-        thumbs: total.thumbs.map((k) => albumPhotoUrl(albumId, k)),
-      },
-    });
-    // `notify` regroupe en ajoutant un à `count` : le compte juste est celui de la base (identifications actives annoncées).
-    await tx
-      .update(notifications)
-      .set({ data: sql`${notifications.data} || ${JSON.stringify({ count: total.count })}::jsonb` })
-      .where(eq(notifications.id, row.id));
+    const groupKey = taggedGroupKey(albumId, userId);
+    const text = { title, body: albumTagLabels.taggedBody(join.m.name, albumName) };
+    const data = {
+      albumId,
+      screen: "album-my-photos",
+      link: `/app/albums/${albumId}/mes-photos`,
+      count: total.count,
+      mediaKey: `m:${join.m.id}`,
+      mediaName: join.m.name,
+      mediaLogoUrl: storage.url(join.m.logoKey),
+      eventTitle: join.e.title,
+      thumbs: total.thumbs.map((k) => albumPhotoUrl(albumId, k)),
+    };
+    // **Une seule ligne par album et par personne, durable** : le regroupement de `notify` ne vaut que pour une ligne non lue de moins de
+    // 24 h ; ici la ligne existante (lue ou non, quel que soit son âge) est actualisée (compte, vignettes, titre) **sans nouveau push** :
+    // le push ne part qu'à la livraison d'une ligne neuve. Même verrou que `notify` (par personne et par clé).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`notif-group:${userId}:${groupKey}`}))`);
+    const [existing] = await tx
+      .select({ id: notifications.id, deliveredAt: notifications.deliveredAt })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.type, "album_tagged"),
+          eq(notifications.groupKey, groupKey),
+          isNull(notifications.structureId),
+        ),
+      )
+      .orderBy(desc(notifications.createdAt), desc(notifications.id))
+      .limit(1)
+      .for("update");
+    if (existing) {
+      await tx
+        .update(notifications)
+        .set({
+          ...text,
+          data: sql`${notifications.data} || ${JSON.stringify(data)}::jsonb`,
+          // Déjà livrée : elle repasse en tête des « non vus » de la cloche (comme le regroupement générique), sans push.
+          ...(existing.deliveredAt ? { deliveredAt: at, readAt: null } : {}),
+        })
+        .where(eq(notifications.id, existing.id));
+    } else {
+      await notificationsService.notify(tx, userId, "album_tagged", {
+        ...text,
+        groupKey,
+        eventId: join.e.id,
+        eventStartsAt: join.e.startsAt,
+        eventEndsAt: join.e.endsAt,
+        after: opts.after,
+        data,
+      });
+    }
     notified.push(userId);
   }
   if (notified.length) publishAfter(opts.after, notified);

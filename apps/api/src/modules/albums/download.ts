@@ -3,7 +3,7 @@
 // média n'a pas autorisé l'enregistrement (`allow_save`) ou si la personne n'est pas identifiée sur la photo ; le média auteur peut
 // toujours. Sans dépendance native : l'appli passe par la feuille de partage du système, le site par un téléchargement. Compté par
 // la limite `albumDownload` seulement (jamais qui a téléchargé quoi dans une réponse ni dans un journal).
-import { albumCreditLine, albumTagLabels, canSavePhoto } from "@orasso/shared";
+import { albumCreditLine, albumTagLabels, canSavePhoto, type PlateRect } from "@orasso/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
 
@@ -14,7 +14,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { textLine } from "../events/poster/text";
-import { MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
+import { blurPlateRegions, MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
 import { visibleAlbum } from "./tag-visibility";
 
 const CREAM = "#f3ebdd";
@@ -72,8 +72,17 @@ export const albumDownload = {
     if (!canSavePhoto({ allowSave: join.a.allowSave, isMediaAuthor })) {
       throw new AppError(403, "save_not_allowed", albumTagLabels.errors.saveNotAllowed);
     }
-    const file = await storage.get(photo.storageKey);
-    if (!file) throw notFound(albumTagLabels.errors.photoNotFound);
+    // Tout fichier qui sort d'Orasso a ses plaques floutées : `kept` est flouté avec les cadres gardés, `unknown` (ancienne galerie,
+    // plaque jamais regardée) est refusé.
+    if (photo.plateState === "unknown") {
+      throw new AppError(409, "plate_unknown", albumTagLabels.errors.saveUnknownPlate);
+    }
+    const stored = await storage.get(photo.storageKey);
+    if (!stored) throw notFound(albumTagLabels.errors.photoNotFound);
+    const file =
+      photo.plateState === "kept" && photo.plateRects?.length
+        ? (await blurPlateRegions(stored, photo.plateRects as PlateRect[])).data
+        : stored;
     return {
       data: await withCredit(file, join.m.name),
       type: "image/webp",

@@ -19,6 +19,7 @@ import { and, asc, desc, eq, exists, isNull, lte, or, type SQL, sql } from "driz
 import { db } from "../../db/client";
 import { applications, checkins, profiles, vehicles } from "../../db/schema";
 import { now } from "../../lib/deps";
+import { AppError } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -131,18 +132,36 @@ const likePattern = (q: string) => `%${q.replace(/[\\%_]/g, "\\$&")}%`;
 
 const PEOPLE_MAX = 20;
 
-/** La recherche par pseudo : au moins 2 caractères, ceux qui avaient une place ou une présence, le pseudo qui commence par `q` d'abord. */
+/**
+ * La recherche par pseudo : au moins 2 caractères, ceux qui avaient une place ou une présence, le pseudo qui commence par `q` d'abord.
+ * Un compte **privé** ne se trouve que sur son pseudo **exact** (insensible à la casse) : un fragment ne rend que des comptes publics,
+ * sinon une recherche de deux lettres listerait les comptes privés présents. `onlySelf` : le filtre sur la personne est dans la requête,
+ * **avant** la limite (un intéressé retrouve son pseudo même s'il y a plus de vingt correspondances).
+ */
 export async function searchPeople(
   ex: Executor,
   eventId: string,
   q: string,
   viewerId: string,
+  opts: { onlySelf?: boolean } = {},
 ): Promise<TaggablePerson[]> {
   const at = now();
+  const exact = sql`lower(${profiles.pseudo}) = lower(${q})`;
   const rows = await ex
     .select({ userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey })
     .from(profiles)
-    .where(and(accountOk(at), hadAPlace(eventId), sql`${profiles.pseudo} ilike ${likePattern(q)}`))
+    .where(
+      and(
+        accountOk(at),
+        hadAPlace(eventId),
+        opts.onlySelf ? eq(profiles.userId, viewerId) : undefined,
+        or(
+          // Lui-même, ou un compte public : le fragment suffit ; un compte privé : le pseudo exact seulement.
+          sql`(${profiles.pseudo} ilike ${likePattern(q)} and (${profiles.visibility} = 'public' or ${profiles.userId} = ${viewerId}))`,
+          exact,
+        ),
+      ),
+    )
     .orderBy(sql`(${profiles.pseudo} ilike ${`${q.replace(/[\\%_]/g, "\\$&")}%`}) desc`, asc(profiles.pseudo))
     .limit(PEOPLE_MAX);
   return rows.map((r) => ({
@@ -160,7 +179,11 @@ export const taggableService = {
    */
   async list(v: Viewer, albumId: string, q: TaggableQuery): Promise<Taggable> {
     const join = await visibleAlbum(db, v, albumId);
-    const role: TagRole = await roleOf(db, v, join, await actorOf(db, v, join));
+    // Un responsable sans second facteur reste un passionné : il se propose lui-même (ses voitures, son pseudo), rien de plus.
+    const role: TagRole = await roleOf(db, v, join, await actorOf(db, v, join)).catch((error) => {
+      if (error instanceof AppError && error.code === "two_factor_required") return "owner" as const;
+      throw error;
+    });
     const search = q.q && q.q.length >= ALBUM_TAG_SEARCH_MIN ? q.q : undefined;
     if (search) rateLimit("peopleSearch", v.user.id);
     const eventId = join.e.id;
@@ -208,8 +231,8 @@ export const taggableService = {
     if (search) {
       people =
         role === "owner"
-          ? // Un intéressé : lui seul, si son pseudo correspond et s'il avait une place ou une présence.
-            (await searchPeople(db, eventId, search, v.user.id)).filter((p) => p.mine)
+          ? // Un intéressé : lui seul, si son pseudo correspond et s'il avait une place ou une présence (filtré dans la requête).
+            await searchPeople(db, eventId, search, v.user.id, { onlySelf: true })
           : await searchPeople(db, eventId, search, v.user.id);
     } else if (role === "owner" && (await isPersonTaggable(db, eventId, v.user.id))) {
       // « C'est ma voiture » / « C'est moi » : mon propre pseudo est proposé, jamais celui d'un autre sans recherche.

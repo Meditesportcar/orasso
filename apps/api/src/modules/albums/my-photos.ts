@@ -35,62 +35,69 @@ import { albumPhotoUrl, albumVisibleSql, mediaKey } from "./view";
 
 type Scope = { vehicleId?: string; userId?: string; eventIds?: readonly string[] };
 
-type MentionRow = {
-  tagUserId: string;
-  photoId: string;
-  storageKey: string;
-  width: number | null;
-  height: number | null;
-  position: number;
+/** Une ligne par album et par personne identifiée : le nombre de photos **distinctes** est calculé en base (jamais borné par une limite de lignes). */
+type Group = {
   albumId: string;
-  albumTitle: string | null;
   eventId: string;
   eventTitle: string;
   eventSlug: string;
-  startsAt: Date;
   structureId: string;
   mediaName: string;
   mediaUserId: string;
-  publishedAt: Date | null;
+  tagUserId: string;
   pseudoPrivate: boolean;
+  n: number;
 };
 
-/** Plafond d'albums lus pour une liste de mentions (une personne ne compte pas des centaines d'albums). */
-const MAX_ALBUMS = 500;
+/** Plafond de groupes lus hors pagination (une voiture ou quelques événements : jamais des centaines d'albums). */
+const MAX_GROUPS = 1000;
+
+/** Un compte suspendu garde la lecture de **ses** mentions ; supprimé ou banni : jamais. */
+const accountReadable = (
+  p: { deletedAt: Date | null; bannedAt: Date | null; suspendedUntil: Date | null },
+  tagUserId: string,
+  viewerId: string,
+  at: Date,
+) => profileOk(p, at) || (tagUserId === viewerId && !p.deletedAt && !p.bannedAt);
 
 /**
  * Les mentions d'un périmètre (une voiture, une personne, des événements) que ce lecteur a le droit de voir, par album : jusqu'à six
- * vignettes et le nombre de photos distinctes. Du plus récent au plus ancien. Une seule requête pour les identifications, une pour les
- * abonnements, une par structure pour les responsables.
+ * vignettes et le nombre de photos distinctes. Du plus récent au plus ancien. Les albums sont **paginés en base** (`page`, curseur
+ * à clés sur l'événement, la publication et l'identifiant), les comptes viennent d'un `count(distinct)` ; seule la liste des
+ * vignettes est limitée. `page.after` inconnu : page vide (jamais un retour au début).
  */
 async function loadMentions(
   ex: Executor,
   viewerId: string,
   scope: Scope,
-): Promise<{ eventId: string; mention: AlbumMention }[]> {
+  page?: { limit: number; after?: string },
+): Promise<{ items: { eventId: string; mention: AlbumMention }[]; more: boolean }> {
   const at = now();
-  const rows = (await ex
+  let after: { startsAt: Date; publishedAt: Date; id: string } | null = null;
+  if (page?.after) {
+    const [c] = await ex
+      .select({ startsAt: events.startsAt, publishedAt: eventAlbums.publishedAt, id: eventAlbums.id })
+      .from(eventAlbums)
+      .innerJoin(events, eq(events.id, eventAlbums.eventId))
+      .where(eq(eventAlbums.id, page.after.toLowerCase()));
+    if (!c?.publishedAt) return { items: [], more: false };
+    after = { startsAt: c.startsAt, publishedAt: c.publishedAt, id: c.id };
+  }
+  const rows = await ex
     .select({
-      tagUserId: albumPhotoTags.userId,
-      photoId: eventAlbumPhotos.id,
-      storageKey: eventAlbumPhotos.storageKey,
-      width: eventAlbumPhotos.width,
-      height: eventAlbumPhotos.height,
-      position: eventAlbumPhotos.position,
       albumId: eventAlbums.id,
-      albumTitle: eventAlbums.title,
       eventId: events.id,
       eventTitle: events.title,
       eventSlug: events.slug,
-      startsAt: events.startsAt,
       structureId: events.structureId,
       mediaName: mediaProfiles.name,
       mediaUserId: mediaProfiles.userId,
-      publishedAt: eventAlbums.publishedAt,
+      tagUserId: albumPhotoTags.userId,
       pseudoPrivate: sql<boolean>`(${profiles.visibility} = 'private')`,
       deletedAt: profiles.deletedAt,
       bannedAt: profiles.bannedAt,
       suspendedUntil: profiles.suspendedUntil,
+      n: sql<number>`count(distinct ${eventAlbumPhotos.id})::int`,
     })
     .from(albumPhotoTags)
     .innerJoin(eventAlbumPhotos, eq(eventAlbumPhotos.id, albumPhotoTags.photoId))
@@ -106,16 +113,18 @@ async function loadMentions(
         scope.vehicleId ? eq(albumPhotoTags.vehicleId, scope.vehicleId) : undefined,
         scope.userId ? eq(albumPhotoTags.userId, scope.userId) : undefined,
         scope.eventIds ? inArray(events.id, [...scope.eventIds]) : undefined,
+        after
+          ? sql`(${events.startsAt}, ${eventAlbums.publishedAt}, ${eventAlbums.id}) < (${after.startsAt.toISOString()}::timestamptz, ${after.publishedAt.toISOString()}::timestamptz, ${after.id}::uuid)`
+          : undefined,
       ) as SQL,
     )
-    .orderBy(desc(events.startsAt), desc(eventAlbums.publishedAt), asc(eventAlbums.id), asc(eventAlbumPhotos.position))
-    .limit(MAX_ALBUMS * ALBUM_MENTION_PHOTOS * 4)) as (MentionRow & {
-    deletedAt: Date | null;
-    bannedAt: Date | null;
-    suspendedUntil: Date | null;
-  })[];
-  const ok = rows.filter((r) => profileOk(r, at));
-  if (!ok.length) return [];
+    .groupBy(eventAlbums.id, events.id, mediaProfiles.id, albumPhotoTags.userId, profiles.userId)
+    .orderBy(desc(events.startsAt), desc(eventAlbums.publishedAt), desc(eventAlbums.id))
+    .limit(page ? page.limit + 1 : MAX_GROUPS);
+  const ok: Group[] = rows
+    .filter((r) => accountReadable(r, r.tagUserId, viewerId, at))
+    .map((r) => ({ ...r, n: Number(r.n) }));
+  if (!ok.length) return { items: [], more: false };
   const follows = await acceptedFollowsOf(
     ex,
     viewerId,
@@ -125,7 +134,8 @@ async function loadMentions(
   for (const sid of new Set(ok.map((r) => r.structureId))) {
     managers.set(sid, (await structureManagers(ex, sid, { userId: viewerId })).length > 0);
   }
-  const byAlbum = new Map<string, { row: MentionRow; photos: Map<string, MentionRow> }>();
+  // Les groupes visibles de ce lecteur, par album (l'ordre de la requête est gardé).
+  const byAlbum = new Map<string, { row: Group; n: number; users: Set<string> }>();
   for (const r of ok) {
     const visible = canSeeTag(
       { hasSession: true, accountPrivate: r.pseudoPrivate },
@@ -137,33 +147,67 @@ async function loadMentions(
       },
     );
     if (!visible) continue;
-    const entry = byAlbum.get(r.albumId) ?? { row: r, photos: new Map<string, MentionRow>() };
-    entry.photos.set(r.photoId, r);
+    const entry = byAlbum.get(r.albumId) ?? { row: r, n: 0, users: new Set<string>() };
+    entry.n += r.n;
+    entry.users.add(r.tagUserId);
     byAlbum.set(r.albumId, entry);
   }
-  return [...byAlbum.values()].slice(0, MAX_ALBUMS).map(({ row, photos }) => {
-    const list = [...photos.values()].sort((a, b) => a.position - b.position);
-    const mention: AlbumMention = {
-      albumId: row.albumId,
-      eventTitle: row.eventTitle,
-      eventSlug: row.eventSlug,
-      mediaName: row.mediaName,
-      photos: list.slice(0, ALBUM_MENTION_PHOTOS).map((p) => ({
-        id: p.photoId,
-        url: albumPhotoUrl(row.albumId, p.storageKey),
+  const more = page ? rows.length > page.limit : false;
+  const albums = [...byAlbum.values()].slice(0, page ? page.limit : MAX_GROUPS);
+  if (!albums.length) return { items: [], more };
+  // Les vignettes : six au plus par album, dans l'ordre des photos (seuls les albums de la page sont lus).
+  const albumIds = albums.map((a) => a.row.albumId);
+  const users = [...new Set(albums.flatMap((a) => [...a.users]))];
+  const res = await ex.execute<{
+    id: string;
+    album_id: string;
+    storage_key: string;
+    width: number | null;
+    height: number | null;
+    position: number;
+  }>(sql`
+    select id, album_id, storage_key, width, height, position from (
+      select p.id, p.album_id, p.storage_key, p.width, p.height, p.position,
+        row_number() over (partition by p.album_id order by p.position) as rn
+      from event_album_photos p
+      where p.deleted_at is null and p.album_id = any(${sql.param(albumIds)}::uuid[])
+        and exists (select 1 from album_photo_tags t where t.photo_id = p.id and t.removed_at is null
+          and t.user_id = any(${sql.param(users)}::text[])
+          ${scope.vehicleId ? sql`and t.vehicle_id = ${scope.vehicleId}` : sql``}
+          ${scope.userId ? sql`and t.user_id = ${scope.userId}` : sql``})
+    ) x where rn <= ${ALBUM_MENTION_PHOTOS} order by album_id, position`);
+  const thumbs = new Map<string, AlbumMention["photos"]>();
+  for (const p of res.rows) {
+    thumbs.set(p.album_id, [
+      ...(thumbs.get(p.album_id) ?? []),
+      {
+        id: p.id,
+        url: albumPhotoUrl(p.album_id, p.storage_key),
         width: p.width,
         height: p.height,
         position: p.position,
-      })),
-      count: list.length,
-    };
-    return { eventId: row.eventId, mention };
-  });
+      },
+    ]);
+  }
+  return {
+    items: albums.map(({ row, n }) => ({
+      eventId: row.eventId,
+      mention: {
+        albumId: row.albumId,
+        eventTitle: row.eventTitle,
+        eventSlug: row.eventSlug,
+        mediaName: row.mediaName,
+        photos: thumbs.get(row.albumId) ?? [],
+        count: n,
+      },
+    })),
+    more,
+  };
 }
 
 /** `GET /vehicles/:id` : « Vu au … · N photos » (visible de qui voit la fiche, filtré par `canSeeTag` du lecteur). */
 export async function mentionsOfVehicle(viewerId: string, vehicleId: string): Promise<AlbumMention[]> {
-  return (await loadMentions(db, viewerId, { vehicleId })).map((m) => m.mention);
+  return (await loadMentions(db, viewerId, { vehicleId })).items.map((m) => m.mention);
 }
 
 /** Mes propres mentions (voiture ou pseudo), pour ces événements : la sortie passée et le souvenir. Les miens seuls. */
@@ -173,7 +217,7 @@ export async function myMentionsByEvent(
 ): Promise<Map<string, AlbumMention[]>> {
   const out = new Map<string, AlbumMention[]>();
   if (!eventIds.length) return out;
-  for (const { eventId, mention } of await loadMentions(db, userId, { userId, eventIds })) {
+  for (const { eventId, mention } of (await loadMentions(db, userId, { userId, eventIds })).items) {
     out.set(eventId, [...(out.get(eventId) ?? []), mention]);
   }
   return out;
@@ -208,6 +252,7 @@ export const myPhotosService = {
         db,
         photos.map((p) => p.id),
         at,
+        v.user.id,
       )
     ).filter((t) => t.tag.userId === v.user.id);
     if (!tags.length) throw notFound(albumTagLabels.errors.photoNotFound);
@@ -230,7 +275,8 @@ export const myPhotosService = {
         taggedBy:
           chosen.tag.taggedBy === v.user.id ? "me" : chosen.tag.taggedAs === "organizer" ? "organizer" : "media",
         tagId: chosen.tag.id,
-        canSave: canSavePhoto({ allowSave: join.a.allowSave, isMediaAuthor }),
+        // Un fichier qui sort d'Orasso a ses plaques traitées : une photo d'ancienne galerie (`unknown`) ne s'enregistre pas.
+        canSave: p.plateState !== "unknown" && canSavePhoto({ allowSave: join.a.allowSave, isMediaAuthor }),
         canStory: storyPlateOfAlbumPhoto(p.plateState).ok,
       });
     }
@@ -255,10 +301,13 @@ export const myPhotosService = {
 
   /** `GET /me/album-tags?cursor=&limit=` : toutes mes identifications actives, par album (la sortie et le souvenir ouvrent « Tes photos »). */
   async mine(v: Viewer, q: MyAlbumTagsQuery): Promise<MyAlbumTagsList> {
-    const all = (await loadMentions(db, v.user.id, { userId: v.user.id })).map((m) => m.mention);
-    const start = q.cursor ? all.findIndex((m) => m.albumId === q.cursor) + 1 : 0;
-    const items = all.slice(start, start + q.limit);
+    const { items, more } = await loadMentions(
+      db,
+      v.user.id,
+      { userId: v.user.id },
+      { limit: q.limit, after: q.cursor },
+    );
     const last = items.at(-1);
-    return { items, nextCursor: start + q.limit < all.length && last ? last.albumId : null };
+    return { items: items.map((m) => m.mention), nextCursor: more && last ? last.mention.albumId : null };
   },
 };

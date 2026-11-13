@@ -28,13 +28,16 @@ import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Tx, withTx } from "../../lib/tx";
 import { notMaskedCopy } from "../stories/common";
 import { composeStoryPhoto } from "../stories/compose";
 import { removeOrRetry } from "../vehicles/photos-blur";
 import { assertWritable } from "./guards";
 import { visibleAlbum } from "./tag-visibility";
 import { mediaKey } from "./view";
+
+/** Points d'attente pour les tests de concurrence : `afterLocks` est attendu dans la transaction, verrous pris et droits relus, avant l'insertion. Jamais posé hors des tests. */
+export const shareToStoryTestHooks: { afterLocks?: () => Promise<void> } = {};
 
 export type StoryFromAlbum = { id: string; expiresAt: string; replayed: boolean };
 
@@ -94,9 +97,9 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
   if (!(await identified(db))) throw forbidden(albumTagLabels.errors.notIdentified);
   const plate = storyPlateOfAlbumPhoto(photo.plateState);
   if (!plate.ok) throw new AppError(409, "plate_unknown", albumTagLabels.errors.plateUnknown);
-  // Rejouée : déjà en story (vivante), la même.
-  const alreadyLive = async () => {
-    const [live] = await db
+  // Rejouée : déjà en story (vivante), la même. Lue d'abord sans verrou (évite de composer un fichier pour rien), puis **sous le verrou**.
+  const alreadyLive = async (ex: typeof db | Tx = db) => {
+    const [live] = await ex
       .select({ id: stories.id, expiresAt: stories.expiresAt })
       .from(stories)
       .where(
@@ -124,7 +127,7 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
   // Un compte privé ne publie jamais « à tout le monde » : ses abonnés acceptés, rien de plus large.
   const audience = v.profile.visibility === "private" ? "followers" : (input.audience ?? "public");
   try {
-    await withTx(async (tx) => {
+    const winner = await withTx(async (tx) => {
       const capKey = `u:${v.user.id}`;
       // Verrous : le plafond de stories, puis la photo (une identification retirée en même temps tombe avant ou après, jamais entre les deux).
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`story-cap:${capKey}`}))`);
@@ -136,9 +139,16 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
         .innerJoin(eventAlbums, eq(eventAlbums.id, eventAlbumPhotos.albumId))
         .where(
           and(eq(eventAlbumPhotos.id, photo.id), isNull(eventAlbumPhotos.deletedAt), isNull(eventAlbums.deletedAt)),
-        );
+        )
+        // La ligne de la photo est gardée jusqu'à l'insertion : une suppression (modération, média) attend la fin du partage et
+        // fait alors tomber la story qu'il vient de créer ; jamais une photo retirée dans une nouvelle story.
+        .for("share", { of: eventAlbumPhotos });
       if (!still) throw notFound(albumTagLabels.errors.photoNotFound);
       if (!(await identified(tx))) throw forbidden(albumTagLabels.errors.notIdentified);
+      // Deux appels simultanés : le second retrouve la story du premier (le fichier qu'il a composé est effacé plus bas).
+      const dup = await alreadyLive(tx);
+      if (dup) return dup;
+      await shareToStoryTestHooks.afterLocks?.();
       const [live] = await tx
         .select({ n: sql<number>`count(*)::int` })
         .from(stories)
@@ -168,7 +178,12 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
         createdAt: at,
         updatedAt: at,
       });
+      return null;
     });
+    if (winner) {
+      await removeOrRetry(key);
+      return winner;
+    }
   } catch (error) {
     await removeOrRetry(key);
     throw error;

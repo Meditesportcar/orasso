@@ -79,7 +79,13 @@ type TagWithAccount = {
 };
 
 /** Les identifications **actives** de ces photos dont le compte identifié est en règle, avec son pseudo, son avatar et sa visibilité. */
-export async function activeTagsOf(ex: Executor, photoIds: readonly string[], at: Date): Promise<TagWithAccount[]> {
+export async function activeTagsOf(
+  ex: Executor,
+  photoIds: readonly string[],
+  at: Date,
+  /** Le regard : un compte suspendu garde la lecture de **ses** identifications (il peut les retirer, jamais les perdre de vue). */
+  selfId?: string,
+): Promise<TagWithAccount[]> {
   if (!photoIds.length) return [];
   const rows = await ex
     .select({
@@ -96,7 +102,7 @@ export async function activeTagsOf(ex: Executor, photoIds: readonly string[], at
     .where(and(inArray(albumPhotoTags.photoId, [...photoIds]), isNull(albumPhotoTags.removedAt)))
     .orderBy(albumPhotoTags.createdAt, albumPhotoTags.id);
   return rows
-    .filter((r) => profileOk(r, at))
+    .filter((r) => profileOk(r, at) || (r.tag.userId === selfId && !r.deletedAt && !r.bannedAt))
     .map((r) => ({
       tag: r.tag,
       account: { pseudo: r.pseudo, avatarKey: r.avatarKey, visibility: r.visibility },
@@ -137,7 +143,7 @@ export async function tagsByPhoto(
 ): Promise<Map<string, AlbumTagView[]>> {
   const out = new Map<string, AlbumTagView[]>();
   const at = now();
-  const found = await activeTagsOf(ex, photoIds, at);
+  const found = await activeTagsOf(ex, photoIds, at, v.user.id);
   if (!found.length) return out;
   const who = actor ?? (await actorOf(ex, v, join));
   const follows = await acceptedFollowsOf(
