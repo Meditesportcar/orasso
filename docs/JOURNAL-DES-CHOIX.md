@@ -6390,3 +6390,9 @@ Trois recettes de l'appli périmées par des changements voulus (R8d, R9n), remi
 
 ### Vérifié
 Pile de recette seule (base seedée à neuf, API, appli compilée), chaque fichier relancé seul après `seed --reset` : voir le rapport du lot.
+
+## Réponses de Damien du 13/11/2026 (points « À revoir » des lots R9e et R9f)
+
+- **Plaque lisible dans un album public (D28, « Envoyer telle quelle »)** : Damien : « proposé le floutage de plaque ». Le flou reste **proposé** au média pour chaque lot de photos (« Flouter et ajouter » | « Envoyer telle quelle »), jamais imposé : c'est le fonctionnement de R9e. Point fermé. Ce qui **sort** d'Orasso (téléchargement « Enregistrer », story reprise) reste flouté (décision du coordinateur, lot R9f).
+- **Droit à l'image (identification par pseudo sur une photo d'album)** : Damien : « aucun souci… Instagram le fait bien ». Point fermé ; l'identifié garde « Ce n'est pas ma voiture » / « Retirer mon identification » (R9f).
+- **Âge** : la règle existe (`docs/01`, « Âge ») : compte à partir de 15 ans, candidature avec un véhicule à partir de 17 ans, **dans les conditions d'utilisation seulement**, sans case ni contrôle dans l'application. Orasso ne stocke donc pas de date de naissance : aucune règle propre aux mineurs n'est ajoutée aux identifications (même traitement pour tous les comptes ; le compte privé reste la protection). Point fermé.
