@@ -36,7 +36,6 @@ import {
   withRole,
 } from "@/lib/orgaV2";
 import { useSession } from "@/lib/session";
-import { emitTeamChanged } from "@/lib/teamBadge";
 import { canManageMember, isSuspended, memberGroups, myRoleIn } from "@/lib/teamModel";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
@@ -129,7 +128,6 @@ export function TeamScreen() {
 
   const reloadMembers = async () => {
     await Promise.all([members.reload(), history.reload()]);
-    emitTeamChanged();
   };
   const closeAll = () => {
     setOpened(null);
@@ -263,7 +261,6 @@ export function TeamScreen() {
 
   const reloadAll = async () => {
     await Promise.all([structure.reload(), members.reload(), history.reload(), events.reload(), staff.reload()]);
-    emitTeamChanged();
   };
 
   const failure = error ?? structure.error ?? members.error ?? history.error ?? events.error ?? staff.error;

@@ -24,6 +24,16 @@ export const r9NotificationTable = {
     push: true,
     email: false,
   },
+  // Lot R9d (T27) : le seul type neuf de l'Activité de la structure. Regroupé par événement et par genre (24 h), sans push
+  // (150 voitures en 30 minutes : le journal suffit), hors de l'Essentiel. Le titre est composé par l'émetteur (genre).
+  application_received: {
+    family: "application",
+    label: "Candidature à trier (organisateur)",
+    title: "Candidature à trier",
+    body: "Une candidature attend votre tri.",
+    push: false,
+    email: false,
+  },
 } as const satisfies Record<string, R7NotificationSpec>;
 
 type R9Table = typeof r9NotificationTable;

@@ -42,7 +42,7 @@ const HIDDEN_DATA_KEYS = new Set(["actor", "actorIds", "actors", "pseudos", "cou
 const sanitize = (data: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith("_") && !HIDDEN_DATA_KEYS.has(k)));
 
-const windowStart = () => new Date(now().getTime() - ACTIVITY_WINDOW_DAYS * DAY);
+export const windowStart = () => new Date(now().getTime() - ACTIVITY_WINDOW_DAYS * DAY);
 
 // Ni les nouvelles du Fil, ni les annonces de demandes (la ligne « Demandes » de l'écran les porte : lot R7c2).
 const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes, ...requestNotificationTypes]);
@@ -52,7 +52,7 @@ const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes,
  * personnes au compte en règle comptent ; une ligne dont toutes les personnes ont disparu n'est pas montrée. Le titre et
  * le corps d'une ligne regroupée sont recomposés avec les personnes restantes.
  */
-async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<ActivityRow[]> {
+export async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<ActivityRow[]> {
   const views = await citedViews(rows, ex);
   // Gardes de lecture (commentaires du Fil…) : mêmes verdicts que le Journal, en lot.
   const verdicts = rows[0] ? await journalVerdicts(rows[0].userId, rows) : new Map();
@@ -95,6 +95,8 @@ export const activityService = {
       .where(
         and(
           eq(notifications.userId, me),
+          // Lot R9d (T26) : une ligne de l'Activité d'une structure n'est jamais dans la cloche personnelle.
+          isNull(notifications.structureId),
           eq(notifications.inJournal, true),
           isNotNull(delivered),
           feedFilter,
@@ -129,6 +131,7 @@ export const activityService = {
       .where(
         and(
           eq(notifications.userId, userId),
+          isNull(notifications.structureId),
           eq(notifications.inJournal, true),
           isNotNull(notifications.deliveredAt),
           isNull(notifications.readAt),
@@ -167,6 +170,7 @@ export const activityService = {
       .where(
         and(
           eq(notifications.userId, userId),
+          isNull(notifications.structureId),
           eq(notifications.inJournal, true),
           isNotNull(notifications.deliveredAt),
           isNull(notifications.readAt),
@@ -186,6 +190,7 @@ export const activityService = {
           .where(
             and(
               eq(notifications.userId, userId),
+              isNull(notifications.structureId),
               eq(notifications.inJournal, true),
               isNotNull(notifications.deliveredAt),
               isNull(notifications.readAt),

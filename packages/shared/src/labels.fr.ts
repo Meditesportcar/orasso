@@ -74,6 +74,7 @@ export * from "./labels/storyPublish.fr";
 export * from "./labels/storyShare.fr";
 export * from "./labels/storyVideo.fr";
 export * from "./labels/storyViewer.fr";
+export * from "./labels/structureActivity.fr";
 export * from "./labels/structures.fr";
 export * from "./labels/styles.fr";
 export * from "./labels/tickets-app.fr";

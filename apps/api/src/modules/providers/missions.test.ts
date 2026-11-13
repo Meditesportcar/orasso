@@ -259,9 +259,34 @@ describe("candidature sur une mission", () => {
     expect(ok.status).toBe(201);
     expect(ok.json).toMatchObject({ status: "pending", need: { id: need.id, trade: "food_truck" }, spot: null });
     expect(await notifsOf(orga.id, "need_application_received")).toHaveLength(1);
+    // Lot R9d : la vraie candidature range l'ancien envoi dans la structure (hors cloche personnelle) et pose la ligne « À trier »
+    // (genre prestataire), jamais à la personne qui répond.
+    expect((await notifsOf(orga.id, "need_application_received"))[0]?.structureId).toBe(structureId);
+    const toSort = await notifsOf(orga.id, "application_received");
+    expect(toSort).toHaveLength(1);
+    expect(toSort[0]?.title).toContain("propose ses services");
+    expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
 
+    // Lot R9d : une candidate qui est aussi responsable de la structure ne reçoit rien ; l'autre responsable, si.
+    const ines = await signUp("Ines_Truck");
+    await readyProvider(ines, { name: "La Friterie" });
+    await addMember(structureId, ines.id, "co_organizer");
+    const second = await addNeed(nocturneId, { quantity: 1 });
+    const own = await applyTo(ines, nocturneId, second.id);
+    expect(own.status).toBe(201);
+    expect(await notifsOf(ines.id, "application_received")).toHaveLength(0);
+    expect(await notifsOf(ines.id, "need_application_received")).toHaveLength(0);
+    expect(await notifsOf(orga.id, "application_received")).toHaveLength(2);
+    // Pastille de la cloche de la structure : une ligne par demande (l'ancien envoi, non listé, ne compte pas), puis elle tombe
+    // à mesure que les demandes sont décidées.
+    await notificationsService.deliverDue();
+    const unseen = async () => (await call(orga, "GET", `/structures/${structureId}/activity/count`)).json.unseen;
+    expect(await unseen()).toBe(2);
     // Comblée par Sofia : Léa ne peut plus y répondre.
     await call(orga, "POST", `/events/${nocturneId}/applications/${ok.json.id}/decide`, ACCEPT);
+    expect(await unseen()).toBe(1);
+    await call(orga, "POST", `/events/${nocturneId}/applications/${own.json.id}/decide`, ACCEPT);
+    expect(await unseen()).toBe(0);
     const lea = await signUp("Lea_Truck");
     await readyProvider(lea, { name: "La Caravane" });
     expect((await applyTo(lea, nocturneId, need.id)).status).toBe(409);

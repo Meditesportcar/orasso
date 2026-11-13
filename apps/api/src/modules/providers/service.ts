@@ -43,7 +43,6 @@ import {
   providerPhotos,
   providerProfiles,
   structureBans,
-  structureMembers,
   structures,
 } from "../../db/schema";
 import { organizerActor, requireOrganizer } from "../../lib/access";
@@ -54,9 +53,10 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { notifyApplicationReceived } from "../applications/received";
 import { lineupService } from "../events/lineup";
 import { eventsRepo } from "../events/repo";
-import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { filledByNeed, needView, reviewsByApplication, reviewsOf } from "./needs";
 import {
   loadProvider,
@@ -525,19 +525,10 @@ export const providersService = {
           .returning();
         if (!row) throw new Error("Candidature non enregistrée");
         if (need) {
-          const organizers = await tx
-            .select({ userId: structureMembers.userId })
-            .from(structureMembers)
-            .where(
-              and(
-                eq(structureMembers.structureId, event.structureId),
-                eq(structureMembers.status, "active"),
-                inArray(structureMembers.role, ["owner", "co_organizer"]),
-              ),
-            );
-          await notificationsService.notifyMany(
+          // Lot R9d : une ligne par responsable (fonction commune), marquée de la structure, jamais à la personne qui répond.
+          await notifyStructure(
             tx,
-            organizers.map((o) => o.userId),
+            event.structureId,
             "need_application_received",
             {
               title: needApplicationTexts.notifTitle(event.title),
@@ -545,9 +536,10 @@ export const providersService = {
               data: { applicationId: row.id, eventId, needId: need.id },
               eventId,
               eventStartsAt: event.startsAt,
+              after,
             },
+            { exclude: [v.user.id] },
           );
-          after(() => notificationsService.kick());
         }
         await tx.insert(applicationEvents).values({
           applicationId: row.id,
@@ -556,6 +548,13 @@ export const providersService = {
           actor: "user",
           actorUserId: v.user.id,
           at: t,
+        });
+        // Lot R9d : la ligne « À trier » de l'Activité de la structure (genre prestataire).
+        await notifyApplicationReceived(tx, after, event, {
+          id: row.id,
+          kind: "provider",
+          applicantName: profileRow.name,
+          authorId: v.user.id,
         });
         after(() => announce(event, row));
         return row;

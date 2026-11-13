@@ -89,6 +89,14 @@ const notifs = async (userId: string, type: string) =>
     .where(and(eq(notifications.userId, userId), eq(notifications.type, type)));
 const rowOf = async (postId: string) =>
   (await db.select().from(feedPostCoauthors).where(eq(feedPostCoauthors.postId, postId)))[0];
+/** Lot R9d : les demandes d'une structure (`GET /structures/:id/requests`) : une invitation adressée à la page s'y traite, jamais dans `/me/requests`. */
+const structureRequests = async (u: TestUser, structureId: string) =>
+  ((await call(u, "GET", `/structures/${structureId}/requests`)).json?.items ?? []) as {
+    kind: string;
+    id: string;
+    payload: Record<string, unknown>;
+  }[];
+
 const requests = async (u: TestUser) =>
   ((await call(u, "GET", "/me/requests")).json?.items ?? []) as {
     kind: string;
@@ -479,11 +487,17 @@ describe("au nom d'une page", () => {
     expect(await notifs(staffer.id, "coauthor_invited")).toHaveLength(1);
     expect(await notifs(simple.id, "coauthor_invited")).toHaveLength(0);
     expect(await notifs(kenji.id, "coauthor_invited")).toHaveLength(0);
-    const item = (await requests(owner)).find((i) => i.kind === "coauthor");
+    // Lot R9d : la demande de la page se lit dans les demandes de la structure (ancienne assertion : `/me/requests`), jamais dans
+    // la liste personnelle du responsable.
+    const item = (await structureRequests(owner, structure.id)).find((i) => i.kind === "coauthor");
     expect(((item as { payload: unknown }).payload as { forName: string }).forName).toBe("Club de test");
     expect(((item as { payload: unknown }).payload as { forKey: string }).forKey).toBe(
       authorKeyOf("structure", structure.id),
     );
+    expect((await requests(owner)).some((i) => i.kind === "coauthor")).toBe(false);
+    // Un simple staff n'est pas responsable : refusé, aucune demande.
+    expect((await call(simple, "GET", `/structures/${structure.id}/requests`)).status).toBe(403);
+    expect((await structureRequests(simple, structure.id)).some((i) => i.kind === "coauthor")).toBe(false);
     expect((await requests(simple)).some((i) => i.kind === "coauthor")).toBe(false);
     expect(post.coAuthor).toBeNull();
   });
@@ -537,8 +551,12 @@ describe("au nom d'une page", () => {
     const other = await signUp("Autre_Nul", { twoFactor: true });
     const structure = await createStructure(owner.id);
     await publishWith(kenji, co("structure", structure.id));
+    // Lot R9d : la liste de la structure (ancienne assertion : `/me/requests`). Un autre compte n'y a pas accès.
+    expect((await call(other, "GET", `/structures/${structure.id}/requests`)).status).toBe(403);
+    expect((await structureRequests(other, structure.id)).some((i) => i.kind === "coauthor")).toBe(false);
     expect((await requests(other)).some((i) => i.kind === "coauthor")).toBe(false);
-    expect((await requests(owner)).some((i) => i.kind === "coauthor")).toBe(true);
+    expect((await structureRequests(owner, structure.id)).some((i) => i.kind === "coauthor")).toBe(true);
+    expect((await requests(owner)).some((i) => i.kind === "coauthor")).toBe(false);
   });
 });
 

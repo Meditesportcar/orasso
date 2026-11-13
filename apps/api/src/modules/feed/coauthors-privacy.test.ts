@@ -23,6 +23,7 @@ import { db, pool } from "../../db/client";
 import { feedPostCoauthors, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { notificationsService } from "../notifications/service";
 import { fil, follow, person } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -332,9 +333,15 @@ describe("notifications", () => {
     expect(await notifs(owner.id, "coauthor_invited")).toHaveLength(0);
     expect(await notifs(second.id, "coauthor_invited")).toHaveLength(1);
     expect(mine.id).toBeDefined();
-    // Il voit tout de même la demande dans son Activité (il gère la page invitée).
-    const items = (await call(owner, "GET", "/me/requests")).json.items as { kind: string; id: string }[];
+    // Il voit tout de même la demande (il gère la page invitée) : dans les demandes de la structure (ancienne assertion :
+    // `/me/requests`, lot R9d), plus dans sa liste personnelle.
+    const items = (await call(owner, "GET", `/structures/${other.id}/requests`)).json.items as {
+      kind: string;
+      id: string;
+    }[];
     expect(items.some((i) => i.kind === "coauthor" && i.id === post.id)).toBe(true);
+    const personal = (await call(owner, "GET", "/me/requests")).json.items as { kind: string; id: string }[];
+    expect(personal.some((i) => i.kind === "coauthor" && i.id === post.id)).toBe(false);
     // En répondant lui-même, il ne se prévient pas.
     await call(owner, "POST", `/me/feed-coauthor-requests/${post.id}/accept`);
     expect(await notifs(owner.id, "coauthor_accepted")).toHaveLength(0);
@@ -350,5 +357,30 @@ describe("notifications", () => {
     const accepted = (await notifs(kenji.id, "coauthor_accepted"))[0];
     expect(((accepted as { data: unknown }).data as { link?: string }).link).toBe("/app/fil");
     expect(randomUUID()).toBeDefined();
+    // Lot R9d : l'invitation adressée à une structure mène aux demandes de la structure (le site : `?vue=demandes`).
+    const owner = await signUp("Orga_Lien", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    await publishWith(kenji, { kind: "structure", id: structure.id });
+    const forStructure = (await notifs(owner.id, "coauthor_invited"))[0];
+    expect(((forStructure as { data: unknown }).data as { link?: string }).link).toBe(
+      `/orga/${structure.slug}/activite?vue=demandes`,
+    );
+    // Parcours complet : l'événement `notification` du canal du responsable (le bandeau de l'appli ouverte) porte l'écran et la
+    // structure de l'invitation, comme le push (`structureRequestsTarget` les lit dans l'appli).
+    const { realtime } = await import("../../lib/realtime");
+    const events: { channel: string; type: string; payload: { data?: Record<string, unknown> } }[] = [];
+    const original = realtime.publish;
+    realtime.publish = ((channel: string, type: string, payload: never) => {
+      events.push({ channel, type, payload });
+    }) as never;
+    try {
+      await notificationsService.deliverDue();
+      await publishWith(kenji, { kind: "structure", id: structure.id });
+      await notificationsService.flush();
+    } finally {
+      realtime.publish = original;
+    }
+    const banner = events.find((e) => e.type === "notification" && e.channel === `user:${owner.id}`);
+    expect(banner?.payload.data).toMatchObject({ screen: "structure-requests", structureId: structure.id });
   });
 });

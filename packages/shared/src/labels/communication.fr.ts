@@ -42,7 +42,8 @@ export function statusChangeText(status: EventOutlook | "cancelled"): string {
 }
 
 export const communicationLabels = {
-  space: "Communication",
+  // Lot R9d : « Messages » (la bulle de l'organisateur) ; la Boîte et « Communication » ne sont plus des mots de l'interface.
+  space: "Messages",
   tabInstructions: "Consignes et annonces",
   tabGroup: "Messages groupés",
   tabTemplates: "Modèles",

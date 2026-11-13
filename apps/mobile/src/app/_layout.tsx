@@ -32,7 +32,7 @@ import { adminLinkOf } from "@/lib/adminModel";
 import { ApplicationsProvider } from "@/lib/applications";
 import { initClock } from "@/lib/clockStore";
 import { kvGet, kvSet } from "@/lib/kv";
-import { appLinkOf, teamRequestTarget } from "@/lib/links";
+import { appLinkOf, structureRequestsTarget, teamRequestTarget } from "@/lib/links";
 import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
 import { misplacedTarget } from "@/lib/personaModel";
@@ -171,6 +171,12 @@ function Shell() {
       const team = teamRequestTarget(data);
       if (team) {
         choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
+        return;
+      }
+      // Lot R9d : invitation à publier adressée à une structure : la casquette de cette structure, sur ses demandes.
+      const structureRequests = structureRequestsTarget(data);
+      if (structureRequests) {
+        choose({ kind: "organizer", structureId: structureRequests }, "/activite/orga?vue=demandes");
         return;
       }
       // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.

@@ -43,18 +43,22 @@ describe("publication de page : aucun privilège de gestion dans les gardes de n
   }
 
   it("un co-organisateur retiré de la structure ne reçoit ni notification, ni ligne d'Activité, ni pastille pour un commentaire privé", async () => {
-    const { coOrga, structure, priv, open, id } = await world();
+    const { owner, coOrga, structure, priv, open, id } = await world();
     await db
       .delete(structureMembers)
       .where(and(eq(structureMembers.structureId, structure.id), eq(structureMembers.userId, coOrga.id)));
     await comment(priv, id, "Un commentaire d'un compte privé");
     expect(await lines(coOrga.id, "feed_comment")).toHaveLength(0);
+    // Lot R9d : l'intention du volet est gardée pour un responsable actuel (le propriétaire ne lit pas ce commentaire privé).
+    expect(await lines(owner.id, "feed_comment")).toHaveLength(0);
     await notificationsService.deliverDue();
     expect(JSON.stringify((await call(coOrga, "GET", "/me/activity")).json)).not.toContain("Prive_66");
     expect((await call(coOrga, "GET", "/me/activity/count")).json.unseen).toBe(0);
-    // Un commentaire public, lui, reste notifié (témoin).
+    // Un commentaire public, lui, reste notifié (témoin). Lot R9d : une publication de structure prévient ses responsables
+    // d'aujourd'hui (le propriétaire), non plus la personne qui l'a publiée ; l'ancien co-organisateur n'en reçoit plus.
     await comment(open, id, "Un commentaire public");
-    expect(await lines(coOrga.id, "feed_comment")).toHaveLength(1);
+    expect(await lines(owner.id, "feed_comment")).toHaveLength(1);
+    expect(await lines(coOrga.id, "feed_comment")).toHaveLength(0);
   });
 
   it("un responsable actuel de la page a le même verdict qu'un lecteur sans gestion (il lit en ouvrant la publication)", async () => {

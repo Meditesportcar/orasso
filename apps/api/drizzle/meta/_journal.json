@@ -631,6 +631,13 @@
       "when": 1794545390720,
       "tag": "0089_event-albums",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794552542062,
+      "tag": "0090_structure-activity",
+      "breakpoints": true
     }
   ]
 }

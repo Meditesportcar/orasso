@@ -25,6 +25,8 @@ export default [
     route("e/:eventId/invitations", "routes/orga-invitations.tsx"),
     // Lot 20 : communication (consignes, annonces, messages groupés, modèles, messages des participants, staff).
     route("communication", "routes/orga-communication.tsx"),
+    // Lot R9d : l'Activité de la structure (la cloche de l'organisateur).
+    route("activite", "routes/orga-activite.tsx"),
     route("communication/conversation/:id", "routes/orga-conversation.tsx"),
   ]),
 ] satisfies RouteConfig;
