@@ -5,6 +5,7 @@ import {
   albumViewerRoleOf,
   appendTaggablePage,
   createOperationGate,
+  createPagedReads,
   mentionsSummary,
   myPhotoTaggedBy,
   reviewButtonsOf,
@@ -147,6 +148,36 @@ describe("createOperationGate", () => {
     expect(op()).toBe(false);
     gate.invalidate();
     expect(op()).toBe(false);
+  });
+});
+
+describe("createPagedReads (« Voir plus » pendant une nouvelle lecture de liste)", () => {
+  const list = (from: number, n: number, next: number | null) => ({ vehicles: Array.from({ length: n }, (_, i) => ({ vehicleId: `v${from + i}` })), people: [], nextCursor: next }) as never;
+  it("la nouvelle puce lue pendant « Voir plus » : la liste fraîche est gardée, la page de l'ancien curseur est jetée", () => {
+    const reads = createPagedReads();
+    let shown = list(0, 60, 60);
+    const oldList = reads.startList();
+    const page = reads.startPage();
+    const fresh = reads.startList();
+    // La liste de la nouvelle puce répond d'abord : appliquée.
+    expect(fresh()).toBe(true);
+    shown = list(100, 5, null);
+    // La page de l'ancien filtre répond ensuite : jetée, jamais ajoutée au nouveau résultat.
+    expect(page()).toBe(false);
+    expect(oldList()).toBe(false);
+    expect((shown as { vehicles: unknown[] }).vehicles).toHaveLength(5);
+  });
+  it("une page ne périme pas la lecture de liste ; seule la dernière page démarrée est appliquée", () => {
+    const reads = createPagedReads();
+    const l = reads.startList();
+    const p1 = reads.startPage();
+    const p2 = reads.startPage();
+    expect(l()).toBe(true);
+    expect(p1()).toBe(false);
+    expect(p2()).toBe(true);
+    reads.invalidate();
+    expect(p2()).toBe(false);
+    expect(l()).toBe(false);
   });
 });
 

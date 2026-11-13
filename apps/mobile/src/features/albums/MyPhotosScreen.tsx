@@ -57,11 +57,27 @@ export function MyPhotosScreen({ id }: { id: string }) {
       saveGate.current.invalidate();
     };
   }, []);
+  // Présence à l'écran : une story ouverte par-dessus garde « Tes photos » monté sans focus.
+  const [focused, setFocused] = useState(true);
   useFocusEffect(
     useCallback(() => {
-      return () => saveGate.current.invalidate();
+      setFocused(true);
+      return () => {
+        setFocused(false);
+        saveGate.current.invalidate();
+      };
     }, []),
   );
+  // La sortie après un retrait : décidée par la relecture (404 = plus aucune identification à mon nom dans cet album), et seulement si
+  // l'écran est monté et a le focus (sinon, à son retour). Une 404 de chargement ordinaire ne ferme rien.
+  const exitWanted = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `close` est recréé à chaque rendu
+  useEffect(() => {
+    if (exitWanted.current && focused && view.error?.status === 404) {
+      exitWanted.current = false;
+      close();
+    }
+  }, [view.error, focused]);
   const photos = (v?.photos ?? []).filter((p) => !removed.has(p.tagId));
 
   async function remove(photo: MyPhoto) {
@@ -78,15 +94,13 @@ export function MyPhotosScreen({ id }: { id: string }) {
       return;
     }
     setSheetBusy(false);
-    // La sortie de l'écran se décide sur la **relecture** : 404 = plus aucune identification à mon nom dans cet album, on quitte ; sinon la
+    // La relecture passe par `useApi` (garde de compte, ordre des lectures, écran monté) : 404 = on quitte (effet ci-dessus) ; sinon la
     // photo reste (avec son autre identification) et la liste est celle du serveur.
-    try {
-      const next = await api.myPhotos(id);
-      if (!alive.current) return;
-      view.setData(next);
+    exitWanted.current = true;
+    const next = await view.reload();
+    if (next && alive.current) {
+      exitWanted.current = false;
       setRemoved(new Set());
-    } catch (e) {
-      if ((e as { status?: number }).status === 404) close();
     }
   }
   async function save(photo: MyPhoto) {

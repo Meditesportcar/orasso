@@ -8,7 +8,7 @@ import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
   appendTaggablePage,
-  createOperationGate,
+  createPagedReads,
   albumTagLabels as L,
   showPeopleTab,
   type Taggable,
@@ -64,7 +64,9 @@ export function TagPicker({
   const q = useDebounced(text.trim());
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
   const [loadingMore, setLoadingMore] = useState(false);
-  const gate = useRef(createOperationGate());
+  // Une lecture de liste est en route : « Voir plus » est désactivé (il porterait un curseur de l'ancien résultat).
+  const [listLoading, setListLoading] = useState(false);
+  const gate = useRef(createPagedReads());
   // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
   const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
@@ -73,6 +75,7 @@ export function TagPicker({
     if (visible) return;
     gate.current.invalidate();
     setLoadingMore(false);
+    setListLoading(false);
     setData(null);
     setText("");
     setCategory(null);
@@ -84,9 +87,10 @@ export function TagPicker({
   useEffect(() => {
     if (!visible) return;
     // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
-    const current = gate.current.start();
+    const current = gate.current.startList();
     setLoadError(null);
     setLoadingMore(false);
+    setListLoading(true);
     api
       .albumTaggable(albumId, { q: q || undefined, category: category ?? undefined })
       .then((res) => {
@@ -94,6 +98,9 @@ export function TagPicker({
       })
       .catch((e) => {
         if (current()) setLoadError(errorMessage(e));
+      })
+      .finally(() => {
+        if (current()) setListLoading(false);
       });
     return () => gate.current.invalidate();
   }, [visible, albumId, q, category]);
@@ -111,9 +118,10 @@ export function TagPicker({
 
   /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
   async function more() {
-    if (!data || data.nextCursor === null || loadingMore) return;
+    if (!data || data.nextCursor === null || loadingMore || listLoading) return;
     setLoadingMore(true);
-    const current = gate.current.start();
+    // Une page n'arrête jamais la lecture de liste ; une nouvelle lecture de liste la périme.
+    const current = gate.current.startPage();
     try {
       const next = await api.albumTaggable(albumId, {
         q: q || undefined,
@@ -227,6 +235,7 @@ export function TagPicker({
                 icon="down"
                 fullWidth
                 loading={loadingMore}
+                disabled={listLoading}
                 onPress={() => void more()}
                 testID="tag-picker-more"
               >

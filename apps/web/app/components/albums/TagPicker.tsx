@@ -8,7 +8,7 @@ import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
   appendTaggablePage,
-  createOperationGate,
+  createPagedReads,
   albumTagLabels as L,
   showPeopleTab,
   type Taggable,
@@ -47,7 +47,9 @@ export function TagPicker({
   const [error, setError] = useState<string | null>(null);
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
   const [loadingMore, setLoadingMore] = useState(false);
-  const gate = useRef(createOperationGate());
+  const gate = useRef(createPagedReads());
+  // Une lecture de liste est en route : « Voir plus » est désactivé (il porterait un curseur de l'ancien résultat).
+  const [listLoading, setListLoading] = useState(false);
   // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
   const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
@@ -64,6 +66,7 @@ export function TagPicker({
     if (open) return;
     gate.current.invalidate();
     setLoadingMore(false);
+    setListLoading(false);
     setData(null);
     setText("");
     setQ("");
@@ -82,15 +85,17 @@ export function TagPicker({
   useEffect(() => {
     if (!open) return;
     // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
-    const current = gate.current.start();
+    const current = gate.current.startList();
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
     const suffix = params.size ? `?${params}` : "";
     setLoadError(null);
     setLoadingMore(false);
+    setListLoading(true);
     void apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable${suffix}`).then((res) => {
       if (!current()) return;
+      setListLoading(false);
       if (res.ok) setData(res.data);
       else setLoadError(res.error.message);
     });
@@ -110,9 +115,10 @@ export function TagPicker({
 
   /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
   async function more() {
-    if (!data || data.nextCursor === null || loadingMore) return;
+    if (!data || data.nextCursor === null || loadingMore || listLoading) return;
     setLoadingMore(true);
-    const current = gate.current.start();
+    // Une page n'arrête jamais la lecture de liste ; une nouvelle lecture de liste la périme.
+    const current = gate.current.startPage();
     const params = new URLSearchParams({ cursor: String(data.nextCursor) });
     if (q) params.set("q", q);
     if (category) params.set("category", category);
@@ -246,7 +252,7 @@ export function TagPicker({
                 type="button"
                 variant="secondary"
                 icon="down"
-                disabled={loadingMore}
+                disabled={loadingMore || listLoading}
                 onClick={() => void more()}
                 data-testid="tag-picker-more"
               >

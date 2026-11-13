@@ -13,7 +13,19 @@ import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
 
-export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albumId: string; myUserId: string }) {
+export function MyPhotos({ view: loaded, albumId, myUserId }: { view: MyPhotosView; albumId: string; myUserId: string }) {
+  // La liste lue par la relecture d'après un retrait prime sur celle du chargement de la page, jusqu'au prochain chargement.
+  const [fresh, setFresh] = useState<MyPhotosView | null>(null);
+  const view = fresh ?? loaded;
+  useEffect(() => setFresh(null), [loaded]);
+  // Page quittée (retour, autre lien) pendant la relecture : ni navigation ni mise à jour.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<MyPhoto | null>(null);
@@ -38,9 +50,14 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
     setNote(L.screens.removed);
     setRemoved((cur) => new Set([...cur, photo.tagId]));
     // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album ; sinon la liste est relue.
+    // Une seule lecture de `my-photos` : la relecture elle-même (pas de lecture puis `revalidate`) ; page quittée entre-temps : rien.
     const next = await apiFetch(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
+    if (!alive.current) return;
     if (!next.ok && next.status === 404) navigate(`/albums/${albumId}`);
-    else revalidator.revalidate();
+    else if (next.ok) {
+      setFresh(next.data as MyPhotosView);
+      setRemoved(new Set());
+    }
   }
 
   return (

@@ -110,6 +110,32 @@ export function createOperationGate() {
 }
 
 /**
+ * Les lectures du plateau : la lecture de liste (recherche, puce, album, réouverture) et les pages « Voir plus » ont chacune leur
+ * compteur. Une nouvelle lecture de liste périme les pages en route ; une page ne périme jamais la lecture de liste, et seule la
+ * dernière page démarrée, lancée sur la même liste, est appliquée.
+ */
+export function createPagedReads() {
+  let list = 0;
+  let page = 0;
+  return {
+    startList(): () => boolean {
+      const id = ++list;
+      page += 1;
+      return () => list === id;
+    },
+    startPage(): () => boolean {
+      const l = list;
+      const p = ++page;
+      return () => list === l && page === p;
+    },
+    invalidate() {
+      list += 1;
+      page += 1;
+    },
+  };
+}
+
+/**
  * Les boutons « Revoir mes photos » d'un souvenir : **un par album** (un seul : le libellé simple ; plusieurs : le média et le rang, pour les
  * distinguer). Appli et site les rendent tels quels.
  */
