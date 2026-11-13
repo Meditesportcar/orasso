@@ -3,7 +3,6 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   addVehicleApi,
   apiCall,
-  applyApi,
   login,
   loginInBrowser,
   MOBILE,
@@ -113,7 +112,16 @@ test("POST /seen en échec : la page se rafraîchit quand même, le vu est reten
   );
   const cookie = await signUpApi(`Cand_${unique()}`);
   const vehicle = await addVehicleApi(cookie, randomPlate());
-  await applyApi(cookie, nocturne.data.id, vehicle);
+  // La Nocturne demande de cocher « J'ai vu » sous l'horaire d'arrivée des exposants.
+  const applied = await apiCall(cookie, "POST", `/events/${nocturne.data.id}/applications`, {
+    vehicleIds: [vehicle],
+    rulesAccepted: true,
+    followStructure: true,
+    newsletterOptIn: false,
+    companions: 0,
+    arrivalSeen: true,
+  });
+  expect(applied.status).toBe(201);
   await expect.poll(async () => lines.first().innerText(), { timeout: 30_000 }).not.toBe(before);
   // Le POST est rétabli : la lecture suivante repose le « vu ».
   failing = false;
