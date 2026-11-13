@@ -214,6 +214,9 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Europe/Paris",
 });
 
+/** Plancher d'un titre du rail : la plus petite taille de texte des jetons (« credit »), jamais en dessous. */
+const RAIL_TITLE_MIN = tokens.type.credit.fontSize ?? 9;
+
 /** `.rail` d'affiches `.mp` (150 × 188, corps : titre italique, date · distance). */
 export function PosterRail({
   events,
@@ -276,7 +279,13 @@ export function PosterRail({
                 {homeLabels.sponsored}
               </Text>
             </View>
-            <WordSafeText variant="posterS" base={styles.mpTitle.fontSize} color={c.ink} style={styles.mpTitle}>
+            <WordSafeText
+              variant="posterS"
+              base={styles.mpTitle.fontSize}
+              min={RAIL_TITLE_MIN}
+              color={c.ink}
+              style={styles.mpTitle}
+            >
               {sponsored.pro.name}
             </WordSafeText>
           </View>
@@ -305,7 +314,13 @@ export function PosterRail({
             </View>
             <View style={styles.mpBody}>
               {/* Un mot ne se coupe jamais (« EXPO RIVESALTE / S » à 384 dp, police ×1,3) : le corps baisse au besoin. */}
-              <WordSafeText variant="posterS" base={styles.mpTitle.fontSize} color={c.ink} style={styles.mpTitle}>
+              <WordSafeText
+                variant="posterS"
+                base={styles.mpTitle.fontSize}
+                min={RAIL_TITLE_MIN}
+                color={c.ink}
+                style={styles.mpTitle}
+              >
                 {e.title}
               </WordSafeText>
               <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>

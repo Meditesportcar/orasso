@@ -4,6 +4,7 @@ import {
   CAPCHIP_LOGO,
   CAPCHIP_PAD_LEFT,
   CAPCHIP_PAD_RIGHT,
+  CAPCHIP_SAFETY,
   capChipCompact,
   capChipRoom,
   capChipTextWidth,
@@ -68,5 +69,23 @@ describe("pastille de casquette : rôle entier ou logo rond", () => {
   it("un rôle inconnu n'est jamais sous-estimé (0,8 em par signe), et sans rôle : logo rond", () => {
     expect(capChipTextWidth("Organisateur")).toBeLessThan(capChipTextWidth("Xxxxxxxxxxxx"));
     expect(capChipCompact({ width: 480 })).toBe(true);
+  });
+});
+
+describe("la pastille compte les boutons réellement posés (petit lot de fin, partie A)", () => {
+  it("avec Activité et Messages (3 boutons), « Organisateur » à 390 px passe au logo rond : jamais « ORGA… »", () => {
+    expect(capChipCompact({ width: 390, role: "Organisateur" })).toBe(false);
+    expect(capChipCompact({ width: 390, role: "Organisateur", buttons: 3 })).toBe(true);
+    expect(capChipRoom(390, false, 3)).toBe(capChipRoom(390) - 48);
+  });
+  it("quand elle montre le rôle avec 3 boutons, il tient dans la place", () => {
+    for (const width of [412, 480, 600]) {
+      for (const role of ["Organisateur", "Administration", "Staff"]) {
+        if (capChipCompact({ width, role, buttons: 3 })) continue;
+        expect(
+          CAPCHIP_PAD_LEFT + CAPCHIP_LOGO + CAPCHIP_GAP + capChipTextWidth(role) + CAPCHIP_PAD_RIGHT + CAPCHIP_SAFETY,
+        ).toBeLessThanOrEqual(capChipRoom(width, false, 3));
+      }
+    }
   });
 });
