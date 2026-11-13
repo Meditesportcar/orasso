@@ -364,8 +364,8 @@ describe("Overpass : délai propre et recul", () => {
   });
 });
 
-describe("panne avec cache ancien : jamais annoncée comme complète", () => {
-  it("les caches de TOUS les départements sont remplis (10 jours), Overpass tombe : partial vrai", async () => {
+describe("panne avec cache ancien : partiel seulement si la liste est incomplète", () => {
+  it("les caches `osm:` de TOUS les départements sont remplis (10 jours, toléré), Overpass tombe : liste complète, partial faux", async () => {
     const departments = nearestDepartments(PERPIGNAN);
     for (const d of departments) {
       await db.insert(externalCache).values({
@@ -377,6 +377,20 @@ describe("panne avec cache ancien : jamais annoncée comme complète", () => {
     practicalSources({ fuel: { "66": [station()] } }, { failWith: { wash: { status: 502, body: "at capacity" } } });
     const res = await here(await fan("Fan_Complet"));
     expect(washes(res).map((p) => p.name)).toEqual(["Cache"]);
+    expect(res.json.partial).toBe(false);
+  });
+
+  it("seulement l'ancienne ligne `wash:` de chaque département (forme d'avant, sans stations), Overpass tombe : partial vrai", async () => {
+    for (const d of nearestDepartments(PERPIGNAN)) {
+      await db.insert(externalCache).values({
+        key: `wash:${d}`,
+        fetchedAt: new Date(NOW.getTime() - 3 * DAY),
+        data: d === "66" ? [{ name: "Ancien", address: null, lat: 42.71, lng: 2.9 }] : [],
+      });
+    }
+    practicalSources({ fuel: { "66": [station()] } }, { failWith: { wash: { status: 502, body: "at capacity" } } });
+    const res = await here(await fan("Fan_AncienSeul"));
+    expect(washes(res).map((p) => p.name)).toEqual(["Ancien"]);
     expect(res.json.partial).toBe(true);
   });
 

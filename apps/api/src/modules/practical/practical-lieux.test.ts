@@ -2,7 +2,7 @@
 // (`car_wash=yes`), dans la MÊME requête Overpass que les lavages (aucun appel de plus vers une instance déjà saturée). Le jeu public
 // des prix gagne un doublon ; E10 et GPLc comptent ; une panne d'une source laisse l'autre répondre ; la vie privée est inchangée
 // (les sources ne reçoivent qu'un code de département). Aucun appel réseau : bouchons de `test/practicalStubs.ts`.
-import { HOUR, PRACTICAL_SAME_PLACE_M, practicalTexts } from "@orasso/shared";
+import { HOUR, nearestDepartments, PRACTICAL_SAME_PLACE_M, practicalTexts } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -296,13 +296,17 @@ describe("pannes : une source tombe, l'autre répond", () => {
     expect(stub.count("wash", "66")).toBe(2);
   });
 
-  it("Overpass en panne avec un cache périmé tolérable (moins de 30 jours) : le cache est servi, réponse partielle ; au-delà, plus rien", async () => {
+  it("Overpass en panne avec un cache périmé tolérable (moins de 30 jours) : le cache est servi, réponse complète ; au-delà, plus rien, partielle", async () => {
     const old = new Date(NOW.getTime() - 10 * DAY);
     await db.insert(externalCache).values({
       key: "osm:66",
       fetchedAt: old,
       data: [{ name: "Station du cache", address: null, lat: 42.71, lng: 2.9, as: "both" }],
     });
+    // Les autres départements de la zone ont leur cache aussi (sinon l'un d'eux n'aurait rien de servable : partiel).
+    for (const d of nearestDepartments(PERPIGNAN).filter((x) => x !== "66")) {
+      await db.insert(externalCache).values({ key: `osm:${d}`, fetchedAt: old, data: [] });
+    }
     practicalSources({ fuel: { "66": [gov] } }, { failWith: { wash: { status: 502, body: "at capacity" } } });
     const u = await fan("Fan_Cache502");
     const res = await here(u);
@@ -313,8 +317,8 @@ describe("pannes : une source tombe, l'autre répond", () => {
         .map((p) => p.name)
         .sort(),
     ).toEqual(["Station du cache", "Station-service"]);
-    // Le cache a été servi malgré la panne : la réponse est PARTIELLE (l'écran relit plus tard), même si tous les départements ont un cache.
-    expect(res.json.partial).toBe(true);
+    // Un cache toléré de la même forme est servi : la liste est complète, la réponse aussi (comme le jeu public de moins de 7 jours).
+    expect(res.json.partial).toBe(false);
     clock.advance(25 * DAY);
     const gone = await here(u);
     expect(washes(gone)).toHaveLength(0);

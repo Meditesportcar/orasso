@@ -173,12 +173,13 @@ export const practicalService = {
     const osm: OsmEntry[] = [];
     const gov: GovEntry[] = [];
     for (const l of listed) {
-      // OpenStreetMap. Source lente ou muette, ou ancien cache servi faute de mieux : réponse partielle (l'écran relit plus tard).
+      // OpenStreetMap. Source lente ou muette : réponse partielle (l'écran relit plus tard). Un cache toléré de la même forme (`osm:`,
+      // 30 jours au plus) est complet ; seul le repli sur l'ancienne ligne `wash:` (sans les stations) est incomplet, donc partiel.
       let osmList: OsmEntry[] | null = l.osm?.data ?? null;
       if (l.osm === null) {
         partial = true;
         osmList = (tolerated(`osm:${l.d}`, STALE_LIMIT_MS.osm)?.data as OsmEntry[] | undefined) ?? null;
-      } else if (l.osm.data === null || !l.osm.fresh) partial = true;
+      } else if (l.osm.data === null) partial = true;
       osm.push(...(osmList ?? []));
       // Ancienne ligne `wash:` (lavages seulement) : un complément en lecture seule, tant que la nouvelle n'est pas là ou qu'elle date
       // de moins d'une semaine (au-delà, la nouvelle ligne `osm:` fait foi).
