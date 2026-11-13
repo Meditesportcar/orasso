@@ -60,7 +60,7 @@ const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: t
 /** Lot R9n : l'Équipe n'a plus d'onglet, elle s'ouvre par la ligne « Équipe » de la « Page » de la casquette organisateur. */
 async function openTeam(page: Page) {
   await tab(page, "Page").click();
-  await page.getByTestId("page-row-team").click();
+  await page.getByTestId("page-gest-team").click(); // Lot R9b : le chip « Équipe » de la Page
   await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
 }
 
@@ -70,6 +70,8 @@ async function openStructure(page: Page, reload = false) {
   // (comme le faisait `go("/structure")` avant) : la feuille couvre la barre, un onglet n'y est plus joignable.
   if (reload) await go(page, "/page");
   else await tab(page, "Page").click();
+  // Lot R9b : la Structure s'ouvre par le chip « Réglages de la structure » de la Page.
+  await page.getByTestId("page-gest-structure").click();
   await expect(page.getByTestId("tile-verification")).toBeVisible({ timeout: 30_000 });
 }
 

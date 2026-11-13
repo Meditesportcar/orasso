@@ -18,13 +18,15 @@ test.use({ actionTimeout: 20_000 });
 /** Lot R9n : l'Équipe n'a plus d'onglet, elle s'ouvre par la ligne « Équipe » de la « Page » de la casquette organisateur. */
 async function openTeam(page: Page) {
   await tab(page, "Page");
-  await page.getByTestId("page-row-team").click();
+  await page.getByTestId("page-gest-team").click();
   await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
 }
 
 /** Lot R9n : l'ancien onglet « Structure » est le corps de l'onglet « Page » (sceau, pastille au O, tuiles). */
 async function openStructure(page: Page) {
   await tab(page, "Page");
+  // Lot R9b : la Structure s'ouvre par le chip « Réglages de la structure » de la Page.
+  await page.getByTestId("page-gest-structure").click();
 }
 
 for (const theme of THEMES) {

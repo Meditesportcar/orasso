@@ -387,8 +387,8 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
     await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   }
   await page.screenshot({ path: `${DIR}/41-garde-2fa-page-sable.png` });
-  // L'Équipe (ligne de la Page).
-  await page.getByTestId("page-row-team").click();
+  // L'Équipe : sous la garde, la Page ne montre pas ses chips (lot R9b) ; l'écran est ouvert par son adresse.
+  await page.goto("/equipe");
   await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
   await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("team-bubble")).toHaveCount(0);
