@@ -24,27 +24,13 @@ import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
 import { inboxService, registerInboxCounter } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { structureById } from "../structures/service";
 
 type MemberRow = typeof structureMembers.$inferSelect;
 
 const lockStructureStaff = (tx: Tx, structureId: string) =>
   tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`staff-requests:${structureId}`}, 0))`);
-
-/** Propriétaire et co-organisateurs actifs (ceux qui reçoivent les demandes). */
-async function organizersOf(ex: Executor, structureId: string): Promise<string[]> {
-  const rows = await ex
-    .select({ userId: structureMembers.userId })
-    .from(structureMembers)
-    .where(
-      and(
-        eq(structureMembers.structureId, structureId),
-        eq(structureMembers.status, "active"),
-        inArray(structureMembers.role, ["owner", "co_organizer"]),
-      ),
-    );
-  return rows.map((r) => r.userId);
-}
 
 /** Demandes et invitations en attente d'une structure. */
 async function pendingTotal(ex: Executor, structureId: string): Promise<number> {
@@ -158,20 +144,21 @@ export const staffRequestsService = {
       };
       if (existing) await tx.update(structureMembers).set(values).where(eq(structureMembers.id, existing.id));
       else await tx.insert(structureMembers).values({ structureId, userId: v.user.id, ...values });
-      const organizers = await organizersOf(tx, structureId);
       const note = message?.trim();
-      for (const userId of organizers) {
-        await notificationsService.notify(tx, userId, "staff_request", {
+      // Lot R9d : une ligne par responsable, marquée de la structure (Activité de la structure), `inbox.changed` pour chacun.
+      await notifyStructure(
+        tx,
+        structureId,
+        "staff_request",
+        {
           title: "Demande pour rejoindre le staff",
           body: `${v.profile.pseudo} voudrait rejoindre le staff de « ${structure.name} »${note ? ` : « ${note} »` : "."}`,
-          data: { structureId, screen: "staff-requests" },
+          data: { screen: "staff-requests" },
           link: { label: "Répondre", path: `/orga/${structure.slug}/staff` },
-        });
-      }
-      after(() => {
-        for (const userId of organizers) inboxService.publish(userId);
-        notificationsService.kick();
-      });
+          after,
+        },
+        { exclude: [v.user.id] },
+      );
     });
     return { status: "requested" };
   },

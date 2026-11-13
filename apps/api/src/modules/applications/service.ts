@@ -57,6 +57,7 @@ import { socialJournal } from "../social/journal";
 import { staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
+import { notifyApplicationReceived } from "./received";
 
 export type ApplicationRow = typeof applications.$inferSelect;
 type Actor = { kind: TransitionActor; userId: string | null };
@@ -574,7 +575,12 @@ export const applicationsService = {
             actorUserId: v.user.id,
             at: t,
           });
-          created.push(event.admission === "open" ? await admitOpen(tx, event, row) : row);
+          const admitted = event.admission === "open" ? await admitOpen(tx, event, row) : row;
+          created.push(admitted);
+          // Lot R9d : une candidature à trier prévient les responsables (admission ouverte : rien à trier).
+          if (admitted.status === "pending") {
+            await notifyApplicationReceived(tx, after, event, { id: admitted.id, kind: "vehicle" });
+          }
         }
         // « Suivre l'organisateur » (cochée d'office) et « Newsletter Orasso » (libre).
         if (input.followStructure) {

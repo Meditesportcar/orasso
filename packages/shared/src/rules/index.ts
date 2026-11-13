@@ -96,6 +96,7 @@ export * from "./storyFrame";
 export * from "./storyPublish";
 export * from "./storyVideo";
 export * from "./storyViewer";
+export * from "./structureActivity";
 export * from "./styles";
 export * from "./templates";
 export * from "./ticketing";

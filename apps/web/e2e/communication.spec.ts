@@ -63,7 +63,7 @@ test("communication : annonce publique, consignes, message groupé, discussions 
   // information publique est une publication, une information privée un message groupé) ; la route des annonces reste en
   // service pour l'ancien APK : l'annonce est écrite par elle, comme le fait l'ancien APK, et reste lisible partout.
   await page.goto(`${base}?e=${event.id}`);
-  await expect(page.getByRole("heading", { name: "Communication" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
   await expect(page.getByTestId("announcement-panel")).toHaveCount(0);
   await expect(page.getByTestId("orga-publish-for-event")).toBeVisible();
   const announcement = `Musique coupée à 22 h ${s}`;

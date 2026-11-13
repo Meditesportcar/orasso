@@ -55,6 +55,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { organizerIds } from "../after-event/helpers";
+import { notifyApplicationReceived } from "../applications/received";
 import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
@@ -422,6 +423,8 @@ export const mediaService = {
           actorUserId: v.user.id,
           at: t,
         });
+        // Lot R9d : la ligne « À trier » de l'Activité de la structure (genre média).
+        await notifyApplicationReceived(tx, after, event, { id: row.id, kind: "media", applicantName: profile.name });
         // L'organisation est prévenue (famille `staff`) : une demande à trancher.
         const structure = await tx.query.structures.findFirst({ where: eq(structures.id, event.structureId) });
         for (const userId of await organizerIds(event.structureId, tx)) {

@@ -40,7 +40,6 @@ import {
   profiles,
   proProfiles,
   structureFollows,
-  structureMembers,
   structures,
   userFollows,
 } from "../../db/schema";
@@ -50,9 +49,11 @@ import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { structureManagers } from "../../lib/structureManagers";
 import { anyColumnContains, fold, searchTokens } from "../../lib/text-search";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
+import { notifyStructure } from "../notifications/structure";
 import { activePartnerCandidates } from "../partnerships/commercial";
 import { proShown } from "../partnerships/shown";
 import { requireVisiblePost, unavailable } from "./access";
@@ -79,19 +80,7 @@ const personaOf = (kind: CoauthorKind | "provider"): StoryPersona =>
 /** Les comptes à prévenir et à qui revient la réponse pour une cible. */
 async function recipientsOf(ex: Executor, kind: CoauthorKind | "provider", id: string): Promise<string[]> {
   if (kind === "user") return [id];
-  if (kind === "structure") {
-    const rows = await ex
-      .select({ userId: structureMembers.userId })
-      .from(structureMembers)
-      .where(
-        and(
-          eq(structureMembers.structureId, id),
-          eq(structureMembers.status, "active"),
-          inArray(structureMembers.role, ["owner", "co_organizer"]),
-        ),
-      );
-    return rows.map((r) => r.userId);
-  }
+  if (kind === "structure") return structureManagers(ex, id);
   if (kind === "pro") {
     const [r] = await ex.select({ u: proProfiles.ownerUserId }).from(proProfiles).where(eq(proProfiles.id, id));
     return r ? [r.u] : [];
@@ -247,6 +236,8 @@ export async function writeInvite(
     /** Le nom et la photo de l'auteur d'origine (la page, ou la personne) pour la notification. */
     author: { name: string; avatarUrl: string | null };
     at: Date;
+    /** Le `after` de la transaction (R9d) : `inbox.changed` des responsables après la validation. */
+    after?: (cb: () => unknown) => void;
   },
 ): Promise<void> {
   await tx.insert(feedCoauthorInviteLog).values({ invitedBy: input.inviterId, invitedAt: input.at });
@@ -259,6 +250,22 @@ export async function writeInvite(
     invitedAt: input.at,
   });
   const content = r8DefaultContent("coauthor_invited", input.author.name);
+  const data = {
+    actor: { pseudo: input.author.name, avatarUrl: input.author.avatarUrl },
+    postId: input.postId,
+    link: "/app/activite/demandes",
+  };
+  // Lot R9d : une invitation à une structure est une ligne de l'Activité de la structure, une par responsable.
+  if (input.invite.kind === "structure") {
+    await notifyStructure(
+      tx,
+      input.invite.id,
+      "coauthor_invited",
+      { title: content.title, body: content.body, data, after: input.after },
+      { exclude: [input.inviterId] },
+    );
+    return;
+  }
   for (const userId of input.invite.recipients) {
     if (userId === input.inviterId) continue;
     await notificationsService.notify(tx, userId, "coauthor_invited", {

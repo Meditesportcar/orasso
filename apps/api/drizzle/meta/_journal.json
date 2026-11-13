@@ -624,6 +624,13 @@
       "when": 1794514999075,
       "tag": "0088_pro-offers",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794527331038,
+      "tag": "0089_structure-activity",
+      "breakpoints": true
     }
   ]
 }

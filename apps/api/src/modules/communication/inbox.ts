@@ -14,6 +14,7 @@ import { db } from "../../db/client";
 import { conversations, structureMembers } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
+import { structureActivityService } from "../activity/structure";
 import { isMySide, lastMessageOf, resolveAccess, unreadCountOf } from "../messaging/core";
 import { unreadConversationCount } from "../messaging/inbox";
 import { registerOrganizerBadge } from "../profiles/personas";
@@ -44,6 +45,9 @@ export const organizerInboxService = {
       participantMessages: await unreadConversationCount(v.user.id, { includeStructure: true, structureId }),
       staffDiscussions: await staffChatsService.unreadFor(v, structureId),
       staffRequests: await requestedStaffCount(structureId),
+      // Lot R9d : la cloche de la structure (anciens champs gardés, l'APK en ligne les lit).
+      activityUnseen: await structureActivityService.unseen(v.user.id, structureId),
+      coauthorRequests: (await structureActivityService.requestCounts(v.user.id, structureId)).coauthor,
     };
   },
 

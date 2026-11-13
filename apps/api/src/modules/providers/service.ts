@@ -54,6 +54,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { notifyApplicationReceived } from "../applications/received";
 import { lineupService } from "../events/lineup";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
@@ -535,6 +536,12 @@ export const providersService = {
           actor: "user",
           actorUserId: v.user.id,
           at: t,
+        });
+        // Lot R9d : la ligne « À trier » de l'Activité de la structure (genre prestataire).
+        await notifyApplicationReceived(tx, after, event, {
+          id: row.id,
+          kind: "provider",
+          applicantName: profileRow.name,
         });
         after(() => announce(event, row));
         return row;

@@ -22,6 +22,7 @@ import {
   type StaffConversationState,
   type StructurePublic,
   segmentNeedsEvent,
+  structureActivityLabels,
   type TemplateView,
   templateKindLabels,
   templateKinds,
@@ -49,7 +50,7 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 export function meta() {
-  return [{ title: "Communication · Orasso" }, { name: "robots", content: "noindex" }];
+  return [{ title: "Messages · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 async function context(request: Request, slug: string) {
@@ -216,6 +217,28 @@ function Tabs({ tab, organizer, base }: { tab: Tab; organizer: boolean; base: st
   );
 }
 
+/** « Nouveau message » (lot R9d, T30) : un bouton principal, puis deux lignes : le message groupé et la discussion de staff. */
+function NewMessageMenu({ base }: { base: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="comm__new" data-testid="comm-new-message">
+      <Button variant="primary" icon="send" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {structureActivityLabels.newMessage}
+      </Button>
+      {open ? (
+        <div className="comm__new-list">
+          <Button variant="secondary" icon="bubble" href={`${base}?onglet=messages`} data-testid="comm-new-group">
+            {structureActivityLabels.groupedMessage}
+          </Button>
+          <Button variant="secondary" icon="staff" href={`${base}?onglet=staff`} data-testid="comm-new-staff">
+            {structureActivityLabels.staffDiscussion}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Feedback() {
   const result = useActionData() as Result | undefined;
   if (result?.error)
@@ -243,6 +266,7 @@ export default function OrgaCommunication({ loaderData, params }: Route.Componen
           <div className="s-label o-t-label">{d.structureName}</div>
           <h1 className="s-title">{communicationLabels.space}</h1>
         </div>
+        {d.organizer ? <NewMessageMenu base={base} /> : null}
       </div>
       <Tabs tab={d.tab} organizer={d.organizer} base={base} />
       <Feedback />

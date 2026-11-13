@@ -1,0 +1,20 @@
+/* Lot R9d : Activité de la structure (site) et pastilles de la barre latérale. Jetons seulement. */
+.orga__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.sact__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

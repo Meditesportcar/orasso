@@ -6,6 +6,7 @@ import { boolean, index, jsonb, pgEnum, pgTable, text, uniqueIndex, uuid } from 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { events } from "./events";
+import { structures } from "./structures";
 
 export const notificationFamilyEnum = pgEnum("notification_family", notificationFamilies);
 /** `skipped_quota` (relecture du lot 20) : non envoyé, budget d'e-mails du jour atteint (`MAIL_DAILY_BUDGET`). */
@@ -42,6 +43,11 @@ export const notifications = pgTable(
      * clé et par jour à la lecture.
      */
     groupKey: text("group_key"),
+    /**
+     * Lot R9d : ligne de l'Activité d'une structure (une ligne par responsable). Une ligne marquée n'apparaît jamais dans la
+     * cloche personnelle ; `cascade` pour qu'une ligne orpheline ne revienne pas dans la cloche personnelle.
+     */
+    structureId: uuid("structure_id").references(() => structures.id, { onDelete: "cascade" }),
     ...timestamps,
   },
   (t) => [
@@ -51,6 +57,10 @@ export const notifications = pgTable(
       .where(sql`${t.type} in ('event_nearby_interest')`),
     index("notifications_user_created_idx").on(t.userId, t.createdAt.desc()),
     index("notifications_user_group_idx").on(t.userId, t.groupKey),
+    // Lot R9d : l'Activité d'une structure (mes lignes de cette structure, les plus récentes d'abord).
+    index("notifications_user_structure_idx")
+      .on(t.userId, t.structureId, t.deliveredAt.desc())
+      .where(sql`${t.structureId} is not null`),
     // Lot R7c1, tour 3 : retrouver les lignes regroupées qui citent un compte (anonymisation) sans lire toute la table.
     index("notifications_actor_ids_idx")
       .using("gin", sql`(${t.data} -> '_actorIds')`)

@@ -380,7 +380,7 @@ export const feedPostsService = {
           );
         }
         // Mentions (lot R8a2) : les cibles de la publication, dans sa transaction ; les personnes citées sont prévenues.
-        await materializeMentions(tx, postId, { notify: true });
+        await materializeMentions(tx, postId, { notify: true, after });
         if (input.important && event) {
           await sendImportant(tx, after, {
             postId,
@@ -392,7 +392,7 @@ export const feedPostsService = {
           });
         }
         if (invite && inviteAuthor) {
-          await writeInvite(tx, { postId, invite, inviterId: userId, author: inviteAuthor, at });
+          await writeInvite(tx, { postId, invite, inviterId: userId, author: inviteAuthor, at, after });
         }
         if (commercialPartnerId) {
           await notifyPartnerMention(tx, {

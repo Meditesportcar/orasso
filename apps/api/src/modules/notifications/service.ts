@@ -17,6 +17,7 @@ import {
   r7QuietOverride,
   r8NotificationTable,
   shouldDeliver,
+  structureCommentTemplate,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
@@ -76,6 +77,11 @@ export type NotifyInput = {
   after?: (cb: () => unknown) => void;
   /** Lot R7c1 : levée des heures calmes ; par défaut, celle de la table du type (`r7QuietOverride`). */
   urgent?: QuietOverride;
+  /**
+   * Lot R9d : la ligne appartient à l'Activité de cette structure (écrite en colonne). Elle n'apparaît jamais dans la cloche
+   * personnelle ; la livraison (push, e-mail, préférences, heures calmes) reste celle de la personne. Posé par `notifyStructure`.
+   */
+  structureId?: string | null;
 };
 
 /** Champs internes de `data` (clés commençant par `_`) jamais renvoyés aux clients. */
@@ -194,7 +200,8 @@ export function applyJournalVerdict(
     body:
       verdict?.commentReadable === false && n.type in r8NotificationTable
         ? fillTemplate(
-            r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
+            structureCommentTemplate(n.type, n.data as { structureName?: unknown }, n.structureId) ??
+              r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
             first?.pseudo ?? view?.actors[0]?.pseudo ?? "",
           )
         : (view?.body ?? n.body),
@@ -351,6 +358,7 @@ export const notificationsService = {
         inJournal: input.silent ? false : (input.inJournal ?? true),
         eventId: input.eventId ?? null,
         groupKey: grouped,
+        structureId: input.structureId ?? null,
         deliverAfter: due,
         // Trace silencieuse : déjà « livrée » et lue, elle n'est jamais reprise par `deliverDue`.
         ...(input.silent ? { deliveredAt: at, readAt: at } : {}),
@@ -498,6 +506,8 @@ export const notificationsService = {
       .where(
         and(
           eq(notifications.userId, userId),
+          // Lot R9d : une ligne de l'Activité d'une structure n'est jamais dans la cloche personnelle.
+          isNull(notifications.structureId),
           eq(notifications.inJournal, true),
           // Les notifications différées (heures calmes) n'apparaissent qu'une fois livrées.
           isNotNull(notifications.deliveredAt),
@@ -551,6 +561,7 @@ export const notificationsService = {
       .where(
         and(
           eq(notifications.userId, userId),
+          isNull(notifications.structureId),
           eq(notifications.inJournal, true),
           isNotNull(notifications.deliveredAt),
           isNull(notifications.readAt),
@@ -566,6 +577,7 @@ export const notificationsService = {
           .where(
             and(
               eq(notifications.userId, userId),
+              isNull(notifications.structureId),
               eq(notifications.inJournal, true),
               isNotNull(notifications.deliveredAt),
               isNull(notifications.readAt),
@@ -588,6 +600,8 @@ export const notificationsService = {
         and(
           eq(notifications.userId, userId),
           isNull(notifications.readAt),
+          // Lot R9d : « tout lire » ne touche que les lignes personnelles ; une ligne de structure se lit par son identifiant.
+          ids === "all" ? isNull(notifications.structureId) : undefined,
           ids === "all"
             ? undefined
             : inArray(notifications.id, ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
@@ -660,7 +674,10 @@ async function deliverOne(n: NotificationRow) {
     // Compte suspendu (lot 32, relecture) : pas d'aperçu de message sur l'écran verrouillé, il lit dans sa Boîte.
     const suspended = Boolean(profile?.suspendedUntil && profile.suspendedUntil > now());
     const body = suspended && n.type === "message_received" ? "Nouveau message" : n.body;
-    pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body, data })));
+    // Lot R9d : le push d'une ligne de structure dit de quelle structure il s'agit (la ligne de l'Activité porte le titre nu).
+    const structureName = n.structureId ? (n.data as { structureName?: unknown }).structureName : null;
+    const title = typeof structureName === "string" && structureName ? `${structureName} · ${n.title}` : n.title;
+    pushed = await push.send(tokens.map((to) => ({ to, title, body, data })));
     if (pushed) await db.update(notifications).set({ pushSentAt: now() }).where(eq(notifications.id, n.id));
   }
   // Push seulement (message reçu, lot 18) : pas d'e-mail de repli sans appareil.

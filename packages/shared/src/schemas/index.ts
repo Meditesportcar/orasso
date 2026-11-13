@@ -39,6 +39,7 @@ export * from "./social";
 export * from "./spotMeetup";
 export * from "./stories";
 export * from "./structure";
+export * from "./structureActivity";
 export * from "./styles";
 export * from "./team";
 export * from "./ticketing";
