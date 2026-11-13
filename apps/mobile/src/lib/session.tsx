@@ -8,6 +8,7 @@ import { api, authApi } from "./api";
 import { ApiRequestError, getSessionToken, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
 import { forgetArrivee } from "@/features/arrivee/persist";
+import { flames } from "@/features/fil/comments/flameRouter";
 import { postLive } from "@/features/fil/comments/live";
 import { clearSenders } from "@/features/fil/comments/sendActors";
 import { resetAnnouncements } from "@/ui/Announce";
@@ -209,6 +210,8 @@ async function clearSession() {
   postLive.clear();
   // Tour 3 : l'acteur mémorisé des commentaires envoyés non plus.
   clearSenders();
+  // Tour 5 : les files de flammes non plus (une nouvelle session ne rejoint jamais une ancienne file).
+  flames.reset();
   // Lot M6, tour 2 : les annonces en attente (bandeau) non plus.
   resetAnnouncements();
 }

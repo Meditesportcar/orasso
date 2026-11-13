@@ -15,13 +15,13 @@ export function emitPost(
   live: PostLiveSet,
   ticket: ScopedTicket,
   post: FeedPostView,
-  change: (post: FeedPostView) => FeedPostView,
+  change: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView,
   onCurrent: (next: FeedPostView) => void,
   mounted: () => boolean = () => true,
 ): void {
   if (!live.alive(ticket)) return;
   const next = live.changePost(post.id, ticket, change);
-  if (live.isCurrent(ticket) && mounted()) onCurrent(next ?? change(post));
+  if (live.isCurrent(ticket) && mounted()) onCurrent(next ?? change(post, { stale: false }));
 }
 
 /** Retire un commentaire du fil du ticket (R2 : l'état est lu dans le rappel) et met à jour la carte (`emit`). */
@@ -30,7 +30,7 @@ export function dropRemoved(
   postId: string,
   commentId: string,
   ticket: ScopedTicket,
-  emit: (change: (post: FeedPostView) => FeedPostView) => void,
+  emit: (change: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView) => void,
 ): void {
   let removedCount: number | null = null;
   const state = live.updateSheet(
@@ -43,7 +43,8 @@ export function dropRemoved(
     ticket,
   );
   const removed = removedCount;
-  if (removed !== null) emit((post) => postWithCommentRemoved(post, commentId, removed, state));
+  if (removed !== null)
+    emit((post, ctx) => (ctx.stale ? post : postWithCommentRemoved(post, commentId, removed, state)));
 }
 
 /**
@@ -55,7 +56,7 @@ export function parentGone(
   postId: string,
   parentId: string,
   ticket: ScopedTicket,
-  emit: (change: (post: FeedPostView) => FeedPostView) => void,
+  emit: (change: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView) => void,
 ): "reload" | "done" {
   live.dropReads(postId, `r:${parentId}`, ticket);
   if (!live.sheetOf(postId, ticket).items.some((c) => c.id === parentId)) return "done";

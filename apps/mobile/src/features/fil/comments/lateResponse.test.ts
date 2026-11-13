@@ -1,4 +1,5 @@
 import type { FeedPostView } from "@orasso/shared";
+import { postWithCommentAdded } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
 import { applyCommentsOff, dropRemoved, emitPost, parentGone } from "./lateResponse";
@@ -154,5 +155,72 @@ describe("lateResponse : la réponse reçue APRÈS le passage de A à B", () => 
     expect(parentGone(set, "p", "seul", tA as never, () => undefined)).toBe("done");
     expect(ids(set, tA as never)).toEqual(["k1", "parent"]);
     expect(ids(set)).toEqual(["k2", "parent"]);
+  });
+
+  const count = (set: ReturnType<typeof createPostLiveSet>, srv: FeedPostView) =>
+    (set.apply(srv) as { commentsCount: number }).commentsCount;
+  const created = { id: "new", parent: null } as never;
+
+  it("compteur : ajout confirmé, carte inchangée entre le départ et la confirmation → +1 (2 → 3)", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    emitPost(
+      set,
+      tA as never,
+      server,
+      (post, ctx) => (ctx.stale ? post : postWithCommentAdded(post, created, null, 1)),
+      () => undefined,
+    );
+    set.setAccount(A, true);
+    expect(count(set, server)).toBe(3);
+  });
+
+  it("compteur : la carte d'A est relue pendant l'ajout (le serveur rend déjà 3) → pas de second +1", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    set.setAccount(A, true);
+    // La carte est actualisée entre le départ et la confirmation : le serveur inclut déjà le commentaire.
+    const refreshed = { ...server, commentsCount: 3 } as FeedPostView;
+    set.apply(refreshed);
+    emitPost(
+      set,
+      tA as never,
+      refreshed,
+      (post, ctx) => (ctx.stale ? post : postWithCommentAdded(post, created, null, 1)),
+      () => undefined,
+    );
+    expect(count(set, refreshed)).toBe(3);
+  });
+
+  it("compteur : suppression, carte actualisée entre le départ et la confirmation → pas de second -1", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    set.updateSheet("p", (s) => ({ ...s, items: [item("k1")] }), tA as never);
+    set.setAccount(B, true);
+    set.setAccount(A, true);
+    const refreshed = { ...server, commentsCount: 1 } as FeedPostView; // le serveur a déjà retiré k1
+    set.apply(refreshed);
+    dropRemoved(set, "p", "k1", tA as never, (change) =>
+      emitPost(set, tA as never, refreshed, change, () => undefined),
+    );
+    expect(count(set, refreshed)).toBe(1);
+  });
+
+  it("compteur : suppression, carte inchangée → -1 (2 → 1)", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    set.updateSheet("p", (s) => ({ ...s, items: [item("k1")] }), tA as never);
+    dropRemoved(set, "p", "k1", tA as never, (change) => emitPost(set, tA as never, server, change, () => undefined));
+    expect(count(set, server)).toBe(1);
   });
 });

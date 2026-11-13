@@ -5,7 +5,6 @@
 // ticket (compte + génération) et est jetée si le compte a changé.
 import {
   type CommentDraft,
-  createFlameGate,
   type FeedCommentView,
   type FeedPostView,
   feedCommentScreenLabels as L,
@@ -39,7 +38,7 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { useActor } from "@/lib/useActor";
-import { createFlameRouter, flameKey } from "./flameRouter";
+import { flameKey, flames } from "./flameRouter";
 import { dropRemoved as lateDropRemoved, emitPost as lateEmitPost, parentGone as lateParentGone } from "./lateResponse";
 import { postLive } from "./live";
 import { replyParentOf } from "./replyParent";
@@ -48,7 +47,6 @@ import { forgetSender, rememberSender, senderOf } from "./sendActors";
 const statusOf = (e: unknown) => (e instanceof ApiRequestError ? e.status : -1);
 
 /** Les flammes de tous les commentaires : une mutation à la fois par commentaire. */
-const flames = createFlameRouter(createFlameGate());
 
 export type CommentsController = {
   sheet: SheetState;
@@ -108,16 +106,19 @@ export function useComments(
     [id],
   );
   /** Une réponse de l'API d'un autre compte n'écrit ni la feuille ni la carte. */
-  const emitPost = useCallback((change: (post: FeedPostView) => FeedPostView, ticket: LiveTicket) => {
-    lateEmitPost(
-      postLive,
-      ticket as never,
-      postRef.current,
-      change,
-      (next) => onPostRef.current(next),
-      () => mounted.current,
-    );
-  }, []);
+  const emitPost = useCallback(
+    (change: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView, ticket: LiveTicket) => {
+      lateEmitPost(
+        postLive,
+        ticket as never,
+        postRef.current,
+        change,
+        (next) => onPostRef.current(next),
+        () => mounted.current,
+      );
+    },
+    [],
+  );
   /**
    * 404 d'une **route de la publication** (première page, couper, envoi sans `parentId`) : la publication n'est plus lisible, tout ce qu'on
    * en gardait s'en va et la feuille se ferme. Le 404 d'une route de commentaire (réponses, suppression, envoi d'une réponse) ne dit que
@@ -221,7 +222,7 @@ export function useComments(
           counted = r.counted;
           return r.state;
         }, t);
-        emitPost((post) => postWithCommentAdded(post, created, p.parentId, counted), t);
+        emitPost((post, ctx) => (ctx.stale ? post : postWithCommentAdded(post, created, p.parentId, counted)), t);
         if (p.parentId && !next.replies[p.parentId]?.loaded && isCurrent(t)) void loadReplies(p.parentId);
       } catch (e) {
         if (!postLive.alive(t)) return;

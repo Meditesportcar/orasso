@@ -14,7 +14,7 @@ import {
 const accountOf = (scope: string): string => scope.split("|")[0] ?? scope;
 
 /** Un ticket porte sa portée (`s`) et l'identité du magasin qui l'a émis (`i`) : un magasin recréé (déconnexion, autre compte, même portée) ne reconnaît pas les tickets d'avant. */
-export type ScopedTicket = LiveTicket & { s: string | null; i: number };
+export type ScopedTicket = LiveTicket & { s: string | null; i: number; b?: FeedPostView | null };
 export type ScopedReadTicket = ReadTicket & { s: string | null; i: number };
 
 const SHARED_KEYS = new Set<PropertyKey>(["opening", "open", "close", "register", "setFocused", "host"]);
@@ -113,7 +113,11 @@ export function createPostLiveSet() {
       if (!silent) notify();
     },
     // --- Tickets : ils portent leur portée (`s`), la réponse s'écrit dans le magasin de cette portée. ---
-    ticket: (postId: string): ScopedTicket => tagged(current.ticket(postId)),
+    /** Le ticket garde la publication telle que l'API l'avait rendue au geste (`b`) : base pour savoir si la carte a été relue depuis. */
+    ticket: (postId: string): ScopedTicket => ({
+      ...tagged(current.ticket(postId)),
+      b: scope ? (servers.get(scope)?.get(postId) ?? null) : null,
+    }),
     beginRead: (postId: string, channel: string): ScopedReadTicket => tagged(current.beginRead(postId, channel)),
     followRead: (postId: string, channel: string): ScopedReadTicket => tagged(current.followRead(postId, channel)),
     /** La réponse peut-elle encore écrire ? Dans le magasin **de son ticket** (qui existe encore, même génération). */
@@ -168,11 +172,18 @@ export function createPostLiveSet() {
      * C3 : la modification d'une carte (`commentsOff`, compteurs, aperçus) pour une casquette qui n'est plus active : calculée depuis
      * **ses** données (l'API + ses modifications) et écrite dans **son** magasin ; elle la retrouve à son retour.
      */
-    changePost(postId: string, t: ScopedTicket, fn: (post: FeedPostView) => FeedPostView): FeedPostView | null {
+    changePost(
+      postId: string,
+      t: ScopedTicket,
+      fn: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView,
+    ): FeedPostView | null {
       const store = storeOf(t);
       const server = t.s ? servers.get(t.s)?.get(postId) : undefined;
       if (!store || !server) return null;
-      const next = fn(store.apply(server));
+      // Carte relue pendant la mutation (le compteur du serveur n'est plus celui du geste) : il inclut déjà le changement, on n'ajoute pas
+      // `+1`/`-1` une seconde fois (tour 5, Codex 3).
+      const stale = Boolean(t.b) && t.b !== server && t.b?.commentsCount !== server.commentsCount;
+      const next = fn(store.apply(server), { stale });
       store.set(server, next, t);
       return next;
     },
