@@ -28,6 +28,9 @@ export const casquettesLabels = {
   publishKindPost: "Publication",
   publishKindStory: "Story",
   publishAs: (name: string) => `en tant que ${name}`,
+  /** Le bandeau du Fil après une publication au nom d'une page (tour 1, point 9). */
+  bannerTitle: "Publié sur ta page.",
+  bannerLink: "Voir sur ma page",
   /** Basculer vers la story avec un brouillon en cours : on confirme avant de l'abandonner. */
   switchTitle: "Passer à la story ?",
   switchBody: "Ta publication en cours (photos, légende, rattachement) sera abandonnée.",

@@ -255,6 +255,9 @@ export function misplacedTarget(persona: Persona, segments: readonly string[]): 
   const same = tabHref(persona.kind, segments[1] ?? "");
   if (same) return same;
   if (isBaseKind(from) && isBaseKind(persona.kind)) return tabHref(persona.kind, "profil");
+  // Lot R9n (tour 1) : un lien vers `/profil` (le « Profil » est celui de la base) pris en casquette de page mène à la « Page » de la
+  // casquette, pas à son Accueil ; un lien qui vise la personne passe par `goTab("profil")` / `openProfile`, qui basculent vers la base.
+  if (isBaseKind(from) && segments[1] === "profil" && persona.kind !== "admin") return tabHref(persona.kind, "page");
   return landingOf(persona);
 }
 

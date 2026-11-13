@@ -64,8 +64,9 @@ export function errorMessage(error: unknown): string {
  * Lot R9n : l'API a refusé l'acteur (403 `persona_forbidden` : structure quittée, fiche supprimée ou suspendue). Un seul
  * abonné, le `PersonaProvider`, qui relit les casquettes et revient à la casquette de base avec un avis.
  */
-let onActorForbidden: (() => void) | null = null;
-export const setActorForbiddenListener = (listener: (() => void) | null) => {
+/** Le rappel reçoit l'acteur de la requête refusée (tour 1, point 5) : un 403 tardif d'une casquette quittée ne touche pas l'actuelle. */
+let onActorForbidden: ((actor: string) => void) | null = null;
+export const setActorForbiddenListener = (listener: ((actor: string) => void) | null) => {
   onActorForbidden = listener;
 };
 
@@ -137,7 +138,7 @@ export async function requestWithHeaders<T>(
     // Format de l'API métier, ou format de Better Auth (`{code, message}`).
     const api = (json as { error?: { code?: string; message?: string; details?: Record<string, unknown> } })?.error;
     const auth = json as { code?: string; message?: string } | null;
-    if (actor && response.status === 403 && api?.code === "persona_forbidden") onActorForbidden?.();
+    if (actor && response.status === 403 && api?.code === "persona_forbidden") onActorForbidden?.(actor);
     throw new ApiRequestError(
       response.status,
       api?.code ?? auth?.code ?? "internal",

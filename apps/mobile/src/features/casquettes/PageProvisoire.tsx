@@ -12,6 +12,8 @@ import { StructureScreen } from "@/features/orga/structure/StructureScreen";
 import { FicheScreen } from "@/features/pro/FicheScreen";
 import { HubRow, RowIcon } from "@/features/profil/parts";
 import { VitrineScreen } from "@/features/provider/VitrineScreen";
+import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import { PageFooterProvider } from "@/ui/pageFooter";
 import { openCasquettes } from "./sheetStore";
 
@@ -19,6 +21,11 @@ type Kind = "organizer" | "pro" | "provider" | "media";
 
 function Footer({ kind }: { kind: Kind }) {
   const router = useRouter();
+  // Le profil média dit s'il est vérifié (comme la ligne rapide de l'ancien Profil de la casquette) ; lu seulement pour le média.
+  const mediaProfile = useApi(async () => (await api.myMediaProfile()).profile, [kind], {
+    enabled: kind === "media",
+    cacheKey: "media-profile",
+  });
   return (
     <View style={styles.footer} testID="page-footer">
       {kind === "organizer" ? (
@@ -35,7 +42,9 @@ function Footer({ kind }: { kind: Kind }) {
         <HubRow
           lead={<RowIcon name="profile" />}
           title={mediaAppLabels.casquetteEdit}
-          caption={mediaAppLabels.casquetteEditCaption(null)}
+          caption={mediaAppLabels.casquetteEditCaption(
+            mediaProfile.data ? mediaProfile.data.verifiedAt !== null : null,
+          )}
           onPress={() => router.push("/media/modifier" as never)}
           testID="page-row-media-profile"
         />

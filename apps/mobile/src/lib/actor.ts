@@ -10,6 +10,11 @@ import { type AppPersonaEntry, entryOfPersona, type Persona } from "./personaMod
 export function actorKeyOf(persona: Persona, entries: readonly AppPersonaEntry[]): string | null {
   if (persona.kind === "fan" || persona.kind === "visitor" || persona.kind === "admin") return null;
   const entry = entryOfPersona(persona, entries);
-  if (!entry || entry.assisted) return null;
+  // Une structure suspendue (`suspended`, R9n tour 1) reste une casquette mais on ne lit ni n'agit au nom de sa page : pas d'en-tête.
+  if (!entry || entry.assisted || entry.suspended) return null;
   return authorKeyOfPersona({ kind: entry.kind, id: entry.id });
 }
+
+/** Un 403 `persona_forbidden` concerne-t-il toujours la casquette active ? (un refus tardif d'une casquette quittée ne compte pas) */
+export const forbiddenIsCurrent = (refused: string, persona: Persona, entries: readonly AppPersonaEntry[]): boolean =>
+  actorKeyOf(persona, entries) === refused;

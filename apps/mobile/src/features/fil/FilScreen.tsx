@@ -9,6 +9,7 @@ import { EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/
 import {
   CONTACT_EMAIL,
   casquetteFeedPhrases,
+  casquettesLabels,
   caughtUpIndex,
   type FeedCard,
   feedCardKindLabels,
@@ -28,6 +29,7 @@ import { StoriesBar } from "@/features/stories/StoriesBar";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
+import { tabHref } from "@/lib/personaModel";
 import { useActor } from "@/lib/useActor";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
@@ -100,7 +102,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   // Lot R9n : en casquette, le Fil est lu « en tant que » la page : sa pastille, les phrases d'« Abonnements » et la casquette
   // de départ de « Publier » (T18 : un seul geste, le segment « Publication | Story » est en haut de l'écran).
   const actor = useActor();
-  const { active } = usePersona();
+  const { active, persona } = usePersona();
   const followingPhrase = actor ? casquetteFeedPhrases.following(active.label) : null;
   // « Comment le Fil choisit » (le « i » à côté de la phrase).
   const [how, setHow] = useState(false);
@@ -233,17 +235,20 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
             testID="fil-filters"
           />
         </View>
-        <SmButton
-          kind="p"
-          big
-          icon="camera"
-          onPress={() =>
-            router.push((actor ? `/fil/publier?auteur=${encodeURIComponent(actor)}` : "/fil/publier") as never)
-          }
-          testID="fil-publish-open"
-          accessibilityLabel={L.publish}
-          style={styles.publish}
-        />
+        {/* Lot R9n (tour 1, point 10) : en survol d'une structure (assistance), pas de « Publier » personnel. */}
+        {active.assisted ? null : (
+          <SmButton
+            kind="p"
+            big
+            icon="camera"
+            onPress={() =>
+              router.push((actor ? `/fil/publier?auteur=${encodeURIComponent(actor)}` : "/fil/publier") as never)
+            }
+            testID="fil-publish-open"
+            accessibilityLabel={L.publish}
+            style={styles.publish}
+          />
+        )}
       </View>
       {/* Lot R8c2 : la phrase de l'onglet (maquette `r8phr`) et le « i » qui ouvre « Comment le Fil choisit ». */}
       <View style={styles.phrase}>
@@ -271,17 +276,21 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           <View style={styles.bannerBody}>
             <Text variant="caption" color={t.color.ink} style={styles.bannerText}>
               <Text variant="caption" color={t.color.ink} style={styles.bannerTitle}>
-                {L.bannerTitle}
+                {actor ? casquettesLabels.bannerTitle : L.bannerTitle}
               </Text>
               {L.bannerText}
             </Text>
             <SmButton
               kind="s"
               icon="profile"
-              onPress={() => router.push("/profil?onglet=publications")}
+              onPress={() =>
+                router.push(
+                  (actor ? (tabHref(persona.kind, "page") ?? "/profil") : "/profil?onglet=publications") as never,
+                )
+              }
               testID="fil-banner-profile"
             >
-              {L.bannerProfile}
+              {actor ? casquettesLabels.bannerLink : L.bannerProfile}
             </SmButton>
           </View>
           <Pressable

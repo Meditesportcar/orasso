@@ -14,6 +14,7 @@ import {
   eventsWithPlace,
   storyPublishLabels as L,
   partnershipLabels,
+  resolveStoryAuthor,
   type StoryAudienceOption,
   type StoryAuthor,
   type StoryCreated,

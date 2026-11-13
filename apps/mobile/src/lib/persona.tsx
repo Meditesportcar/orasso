@@ -10,7 +10,7 @@ import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { announce } from "@/ui/Announce";
-
+import { forbiddenIsCurrent } from "./actor";
 import { type AssistedStructure, adminEntryOf } from "./adminModel";
 import { setActorForbiddenListener } from "./http";
 import { kvDel, kvGet, kvSet } from "./kv";
@@ -139,19 +139,16 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     }
   }, [status, me, stored, entries, base]);
 
-  // Lot R9n : l'API refuse l'acteur (403 `persona_forbidden`, casquette périmée) : on relit les casquettes et on revient à la
-  // casquette de base avec un avis. Un 403 en rafale (Fil, stories) ne prévient qu'une fois (l'avis porte l'identifiant de la casquette).
+  // Lot R9n : l'API refuse l'acteur (403 `persona_forbidden`) : on relit les casquettes (`GET /me`). Si la casquette a disparu de la liste,
+  // l'effet ci-dessus ramène à la casquette de base avec l'avis ; si elle y est toujours (structure suspendue : l'en-tête n'est alors plus
+  // posé), on y reste. Tour 1, point 5 : un 403 tardif d'une casquette déjà quittée (autre acteur actif) ne touche pas la casquette en cours.
   const personaRef = useRef(persona);
   personaRef.current = persona;
-  const baseRef = useRef(base);
-  baseRef.current = base;
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
   useEffect(() => {
-    setActorForbiddenListener(() => {
-      const current = personaRef.current;
-      if (isBaseKind(current.kind) || current.kind === "admin") return;
-      announceGone(current);
-      setStored(baseRef.current);
-      void kvSet(KEY, serializePersona(baseRef.current));
+    setActorForbiddenListener((refused) => {
+      if (!forbiddenIsCurrent(refused, personaRef.current, entriesRef.current)) return;
       void refreshMe();
     });
     return () => setActorForbiddenListener(null);

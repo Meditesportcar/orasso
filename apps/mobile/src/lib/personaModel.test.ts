@@ -287,7 +287,10 @@ describe("les quatre barres des casquettes (lot R9n, maquette R9.1)", () => {
     expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(pro)", "fiche"])).toBeNull();
     expect(misplacedTarget({ kind: "organizer", structureId: "s" }, ["(orga)", "equipe"])).toBeNull();
     // Une casquette qui perd son Profil : un lien du passionné vers /(tabs)/profil ne la ramène pas à un Profil inexistant.
-    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(tabs)", "profil"])).toBe("/(pro)/accueil");
+    // (tour 1, point 9) : un lien vers « profil » pris en casquette mène à la Page de la casquette.
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(tabs)", "profil"])).toBe("/(pro)/page");
+    expect(misplacedTarget({ kind: "organizer", structureId: "s" }, ["(visitor)", "profil"])).toBe("/(orga)/page");
+    expect(misplacedTarget({ kind: "admin" }, ["(tabs)", "profil"])).toBe("/(admin)/administration");
   });
   it("la barre du passionné n'a pas bougé", () => {
     expect(Object.keys(personaTabs.fan)).toEqual(["explorer", "fil", "accueil", "crew", "profil"]);
