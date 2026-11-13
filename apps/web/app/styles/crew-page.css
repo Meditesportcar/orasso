@@ -570,12 +570,6 @@ div.crw-head__nm {
   line-height: 1.1;
   overflow-wrap: anywhere;
 }
-.crw-sel__menu[open] > .crw-head__nm svg:last-child {
-  transform: rotate(180deg);
-}
-.crw-head .crw-sel__list {
-  top: 88px;
-}
 .crw-head .pt-bio--open p {
   white-space: pre-line;
 }
@@ -763,4 +757,12 @@ div.crw-head__nm {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
+}
+
+/* Partie E : le chevron du nom tourne à l'ouverture, la liste « Mes crews » s'ouvre sous la vignette (après les règles de base). */
+.crw-sel__menu[open] > .crw-head__nm svg:last-child {
+  transform: rotate(180deg);
+}
+.crw-head .crw-sel__list {
+  top: 88px;
 }
