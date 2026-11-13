@@ -71,9 +71,12 @@ export const exportService = {
     // Le fichier garde la provenance de son contenu lié : repartager la publication d'un autre en story ne la fait pas
     // devenir « à moi », et un classement ne sort que par les règles de `/me/share/export` (événement ouvert à tous,
     // publié, visible pour moi). Un contenu supprimé ou devenu privé ne sort plus non plus (ses pixels sont dans le fichier).
+    let linkedCredit: string | null = null;
     if (story.linkedType && story.linkedId) {
       const found = await inspect(v, story.linkedType, story.linkedId);
       if (!found.ok) throw new LinkedError(found.refusal);
+      // Lot R9g (T45) : la reprise d'un album partagée en story garde le crédit du média (même ligne que l'export 4:5).
+      linkedCredit = found.content.credit ?? null;
       if (found.content.type === "feed_post" && !found.content.mine) {
         throw new AppError(403, "author_only", shareLabels.errors.authorOnly);
       }
@@ -83,7 +86,7 @@ export const exportService = {
     // Une vidéo sort telle quelle : pas de floutage de plaque, pas de signature (décision de Damien, 09/11).
     if (story.mediaKind === "video") return { data: file, type: "video/mp4", name: "orasso-story.mp4" };
     // Lot R9f : une story reprise d'une photo d'album sort avec le crédit du média (« Photos : <média> »), sous la signature.
-    const credit = await albumCreditLineOf(story.sourceAlbumPhotoId);
+    const credit = (await albumCreditLineOf(story.sourceAlbumPhotoId)) ?? linkedCredit;
     const mention = [await commercialMention(story.commercialPartnerId), credit].filter(Boolean).join(" · ") || null;
     return {
       data: await signFile(file, { width: STORY_W, height: STORY_H }, mention),
