@@ -262,14 +262,40 @@ describe("cache `osm:` et ancienne ligne `wash:`", () => {
     const res = await here(await fan("Fan_Migration"));
     expect(stub.count("wash", "66")).toBe(1);
     expect(fuels(res).map((p) => p.name)).toEqual(["Nouvelle station"]);
-    // L'ancienne ligne reste un complément pour les lavages (lecture seule), et n'est jamais lue comme des stations.
+    // Une liste `osm:` actuelle fait foi : l'ancienne ligne `wash:` ne complète rien (elle reste en place, intacte).
+    expect(washes(res).map((p) => p.name)).toEqual(["Nouvelle station"]);
+    const old = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") });
+    expect(old?.data).toEqual([{ name: "Ancien lavage", address: null, lat: 42.71, lng: 2.9 }]);
+  });
+
+  it("l'ancienne ligne `wash:` ne s'ajoute pas à `osm:` : lavage déplacé de 20 m, renommé, supprimé, ou `osm:` vide", async () => {
+    await db.insert(externalCache).values({
+      key: "wash:66",
+      fetchedAt: new Date(NOW.getTime() - HOUR),
+      data: [
+        { name: "Déplacé", address: null, lat: 42.71, lng: 2.9 },
+        { name: "Ancien nom", address: null, lat: 42.72, lng: 2.9 },
+        { name: "Supprimé", address: null, lat: 42.73, lng: 2.9 },
+      ],
+    });
+    practicalSources({
+      wash: {
+        "66": [
+          { name: "Déplacé", lat: 42.71 + m(20), lon: 2.9 },
+          { name: "Nouveau nom", lat: 42.72, lon: 2.9 },
+        ],
+      },
+    });
+    const res = await here(await fan("Fan_AncienOsm"));
     expect(
       washes(res)
         .map((p) => p.name)
         .sort(),
-    ).toEqual(["Ancien lavage", "Nouvelle station"]);
-    const old = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") });
-    expect(old?.data).toEqual([{ name: "Ancien lavage", address: null, lat: 42.71, lng: 2.9 }]);
+    ).toEqual(["Déplacé", "Nouveau nom"]);
+    // Une liste `osm:` actuelle vide fait foi aussi.
+    await db.delete(externalCache).where(eq(externalCache.key, "osm:66"));
+    await db.insert(externalCache).values({ key: "osm:66", fetchedAt: new Date(NOW.getTime() - HOUR), data: [] });
+    expect(washes(await here(await fan("Fan_AncienVide")))).toHaveLength(0);
   });
 
   it("Overpass en panne, seulement l'ancienne ligne `wash:` (3 jours) : ses lavages sont servis, jamais des stations ; partiel", async () => {
@@ -294,6 +320,109 @@ describe("cache `osm:` et ancienne ligne `wash:`", () => {
     const { washNear } = await import("../../lib/external/overpass");
     practicalSources({});
     expect(await washNear("66")).toEqual([]);
+  });
+});
+
+describe("regroupement : un objet sans nom ne relie jamais deux stations distinctes", () => {
+  const o = (ref: string | undefined, lat: number, name: string): OsmEntry => ({
+    name,
+    address: null,
+    lat,
+    lng: 2.9,
+    as: "fuel",
+    ...(ref ? { ref } : {}),
+  });
+  it("A (référence a), un objet anonyme à 21 m, B (référence b) à 42 m : l'anonyme rejoint le plus proche, B reste seule avec son lavage", () => {
+    const a = { ...o("a", 42.7, "Station A") };
+    const anon = o(undefined, 42.7 + m(21), "Station-service");
+    const b = { ...o("b", 42.7 + m(42), "Station B"), as: "both" as const };
+    const groups = groupOsmStations([a, anon, b]);
+    expect(groups).toHaveLength(2);
+    expect(groups.find((g) => g.ref === "a")).toMatchObject({ name: "Station A", as: "fuel" });
+    expect(groups.find((g) => g.ref === "b")).toMatchObject({ name: "Station B", as: "both" });
+    // Même résultat quel que soit l'ordre d'arrivée.
+    expect(groupOsmStations([b, anon, a])).toHaveLength(2);
+  });
+
+  it("deux stations nommées différemment, sans référence, reliées par un objet anonyme : deux stations", () => {
+    const groups = groupOsmStations([
+      o(undefined, 42.7, "Total"),
+      o(undefined, 42.7 + m(20), "Station-service"),
+      o(undefined, 42.7 + m(40), "Avia"),
+    ]);
+    expect(groups.map((g) => g.name).sort()).toEqual(["Avia", "Total"]);
+  });
+
+  it("une station et ses objets d'auvent (même nom ou sans nom) restent une seule station", () => {
+    expect(
+      groupOsmStations([
+        o(undefined, 42.7, "Total"),
+        o(undefined, 42.7 + m(10), "total"),
+        o(undefined, 42.7 + m(25), "Station-service"),
+      ]),
+    ).toHaveLength(1);
+  });
+});
+
+describe("anciennes lignes `fuel:` (sans référence)", () => {
+  it("seulement l'ancienne ligne `fuel:` : ses stations sont servies par la distance, la réponse est partielle ; `fuel2:` fait foi dès qu'elle existe", async () => {
+    await db.insert(externalCache).values({
+      key: "fuel:66",
+      fetchedAt: new Date(NOW.getTime() - 2 * HOUR),
+      data: [
+        {
+          name: "Station-service",
+          address: "Route d'avant, 66000 Perpignan",
+          lat: 42.7,
+          lng: 2.9,
+          prices: {},
+          updatedAt: null,
+        },
+      ],
+    });
+    practicalSources({}, { failWith: { fuel: { status: 503, body: "panne" } } });
+    const u = await fan("Fan_AncienFuel");
+    const old = await here(u);
+    expect(fuels(old).map((p) => p.address)).toEqual(["Route d'avant, 66000 Perpignan"]);
+    expect(old.json.partial).toBe(true);
+    // Le jeu public revient : `fuel2:` est écrite et l'ancienne ligne ne compte plus.
+    practicalSources({ fuel: { "66": [station({ adresse: "Route du jour", lat: 42.71 })] } });
+    clock.advance(11 * MIN);
+    const fresh = await here(u);
+    expect(fuels(fresh).map((p) => p.address)).toEqual(["Route du jour, 66000 Perpignan"]);
+    expect(fresh.json.partial).toBe(false);
+    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "fuel2:66") })).toBeDefined();
+  });
+});
+
+describe("chargement lent : deux départements en parallèle, `loading`", () => {
+  it("deux départements lents : deux appels Overpass en même temps (jamais trois), `loading` tant que ça charge, puis complet", async () => {
+    const stub = practicalSources({}, { delayMs: 400 });
+    const u = await fan("Fan_Parallele");
+    const first = await practicalService.get(
+      await viewerOf(u),
+      { near: "position", cell: { lat: 42.7, lng: 2.9, key: "42.7,2.9" } },
+      80,
+    );
+    expect(first.loading).toBe(true);
+    expect(first.partial).toBe(true);
+    let rows = 0;
+    for (let i = 0; i < 40 && rows < 2; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      rows = (await db.select().from(externalCache)).filter((r) => r.key.startsWith("osm:")).length;
+    }
+    expect(rows).toBeGreaterThanOrEqual(2);
+    expect(stub.maxWashInFlight()).toBe(2);
+    const done = await here(u);
+    expect(done.json.partial).toBe(false);
+    expect("loading" in done.json).toBe(false);
+  });
+
+  it("une source en échec n'est pas un chargement : partial sans loading", async () => {
+    practicalSources({}, { failWith: { wash: { status: 502, body: "at capacity" } } });
+    const res = await here(await fan("Fan_EchecSansLoading"));
+    expect(res.json.partial).toBe(true);
+    expect("loading" in res.json).toBe(false);
   });
 });
 

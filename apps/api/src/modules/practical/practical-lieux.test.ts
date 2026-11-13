@@ -351,7 +351,7 @@ describe("pannes : une source tombe, l'autre répond", () => {
 });
 
 describe("cache", () => {
-  it("les deux listes sont sous les clés `osm:<département>` et `fuel:<département>` ; stations 24 h, Overpass 7 jours", async () => {
+  it("les deux listes sont sous les clés `osm:<département>` et `fuel2:<département>` ; stations 24 h, Overpass 7 jours", async () => {
     const stub = practicalSources({
       fuel: { "66": [gov] },
       wash: { "66": [osmFuel({ name: "A", carWash: true, lat: 42.71 })] },
@@ -359,7 +359,7 @@ describe("cache", () => {
     const u = await fan("Fan_Cache");
     await here(u);
     const keys = (await db.select({ key: externalCache.key }).from(externalCache)).map((r) => r.key);
-    expect(keys.every((k) => /^(osm|fuel):[0-9][0-9AB]$/.test(k))).toBe(true);
+    expect(keys.every((k) => /^(osm|fuel2):[0-9][0-9AB]$/.test(k))).toBe(true);
     expect(keys).toContain("osm:66");
     expect(keys).not.toContain("wash:66");
     const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") });
@@ -373,13 +373,13 @@ describe("cache", () => {
     expect(stub.count("wash", "66")).toBe(2);
   });
 
-  it("un ancien cache `wash:` (lavages seulement, sans `as`) se lit toujours : des lavages, aucune station", async () => {
+  it("un ancien cache `wash:` (lavages seulement, sans `as`) se lit en secours quand Overpass ne répond pas : des lavages, aucune station", async () => {
     await db.insert(externalCache).values({
       key: "wash:66",
       fetchedAt: new Date(NOW.getTime() - HOUR),
       data: [{ name: "Ancien lavage", address: null, lat: 42.71, lng: 2.9 }],
     });
-    practicalSources({ fuel: { "66": [gov] } });
+    practicalSources({ fuel: { "66": [gov] } }, { failWith: { wash: { status: 502, body: "at capacity" } } });
     const res = await here(await fan("Fan_Ancien"));
     expect(washes(res).map((p) => p.name)).toEqual(["Ancien lavage"]);
     expect(fuels(res)).toHaveLength(1);

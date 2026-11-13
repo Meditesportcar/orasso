@@ -54,7 +54,7 @@ const fuel: Station[] = [
 
 /** Pose les deux listes (remplace celles qui existent : le seed se rejoue sans doublon). */
 export async function seedPractical() {
-  const caches: Record<string, unknown> = { "osm:66": wash, "fuel:66": fuel };
+  const caches: Record<string, unknown> = { "osm:66": wash, "fuel2:66": fuel };
   for (const [key, data] of Object.entries(caches)) {
     await db
       .insert(t.externalCache)

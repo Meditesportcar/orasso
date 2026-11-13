@@ -91,7 +91,7 @@ describe("POST /practical : la position n'est ni stockée ni journalisée ni env
     // Même la case de 0,1° n'est écrite nulle part : seules les deux listes de département sont en cache.
     const keys = (await db.select({ key: externalCache.key }).from(externalCache)).map((r) => r.key).sort();
     expect(
-      keys.every((k) => /^(osm|fuel):[0-9][0-9AB]$/.test(k)),
+      keys.every((k) => /^(osm|fuel2):[0-9][0-9AB]$/.test(k)),
       keys.join(","),
     ).toBe(true);
     expect(await db.select().from(profiles)).toEqual(profileBefore);

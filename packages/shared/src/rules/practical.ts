@@ -71,11 +71,16 @@ export type PracticalPlace = {
 /** D'où l'on part : la case de ma position, ma ville, ou l'événement où je vais. */
 export type PracticalOrigin = { kind: "cell" | "city" | "outing"; label: string; lat: number; lng: number };
 
-/** `POST /practical`. `partial` : une source n'a pas répondu dans le budget (l'écran relit une fois après 3 secondes). */
+/**
+ * `POST /practical`. `partial` : une source n'a rien de servable ou sert une liste incomplète (l'écran relit). `loading` (facultatif, présent
+ * seulement quand il est vrai) : un chargement est encore en cours côté API (source lente, le cache se remplit) : relire tant qu'il dure,
+ * à la différence d'une source en échec (`partial` sans `loading`). Un client qui ne le connaît pas l'ignore.
+ */
 export type PracticalData = {
   origin: PracticalOrigin | null;
   places: PracticalPlace[];
   partial: boolean;
+  loading?: true;
   attribution: { wash: string; fuel: string };
 };
 

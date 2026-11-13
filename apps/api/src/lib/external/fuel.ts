@@ -1,6 +1,6 @@
 // Prix des carburants (lot 30, S35) : données ouvertes « prix des carburants en France, flux instantané » de
 // data.economie.gouv.fr (licence ouverte, sans clé). Un chargement par département et par jour au plus (cache
-// `fuel:<département>`). Sans réseau ou désactivé : aucun résultat, jamais d'erreur.
+// `fuel2:<département>`). Sans réseau ou désactivé : aucun résultat, jamais d'erreur.
 // Tout le département est chargé (filtre `code_departement`, pagination de 100) : un filtre géographique autour du
 // centre manquerait les stations des villes éloignées du centre (Perpignan est à 33 km de celui du 66). Vérifié le
 // 17/10/2026 ; pas de nom de station dans le jeu : adresse et ville seulement.
@@ -45,7 +45,7 @@ type FuelRecord = {
 type AllFuelPrices = FuelPrices & { e10: number | null; gplc: number | null };
 
 /**
- * Une station du cache `fuel:<département>`. `ref` : l'identifiant de la station dans le jeu public, que les stations d'OpenStreetMap
+ * Une station du cache `fuel2:<département>`. `ref` : l'identifiant de la station dans le jeu public, que les stations d'OpenStreetMap
  * portent dans `ref:FR:prix-carburants` (rapprochement certain, quelle que soit la distance). Absent d'un ancien cache.
  */
 export type FuelCacheStation = CachedFuelStation & { ref?: string };
@@ -110,6 +110,7 @@ export function fuelUrl(base: string, department: string, offset = 0): string {
   return `${base}?${params}`;
 }
 
+/** Cache `fuel2:<département>` : la forme porte `ref` (l'ancienne `fuel:<département>`, sans, n'est lue qu'en secours par le service de « Pratique »). */
 /** Stations-service de tout un département (cache 24 heures), `[]` si la source ne répond pas. */
 export async function fuelNear(department: string): Promise<FuelCacheStation[]> {
   return (await fuelState(department)).data ?? [];
@@ -119,7 +120,7 @@ export async function fuelNear(department: string): Promise<FuelCacheStation[]> 
 export async function fuelState(department: string): Promise<SourceState<FuelCacheStation[]>> {
   if (!departmentCentroids[department]) return { data: [], fresh: true };
   return cachedSourceState<FuelCacheStation[]>({
-    key: `fuel:${department}`,
+    key: `fuel2:${department}`,
     ttlMs: FUEL_TTL_MS,
     enabled: env.FUEL_API_URL !== "off",
     maxStaleMs: FUEL_MAX_STALE_MS,

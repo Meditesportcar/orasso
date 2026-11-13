@@ -28,7 +28,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { EXTERNAL_BUDGET_MS, withinBudget } from "../../lib/external/cache";
 import { FUEL_MAX_STALE_MS, fuelState } from "../../lib/external/fuel";
-import { osmState, WASH_MAX_STALE_MS, WASH_TTL_MS } from "../../lib/external/overpass";
+import { osmState, WASH_MAX_STALE_MS } from "../../lib/external/overpass";
 import { type GovEntry, isOsmFuel, mergeStations, type OsmEntry, washPlaces } from "../../lib/external/places";
 import type { Viewer } from "../../lib/session";
 
@@ -143,7 +143,7 @@ export const practicalService = {
   async placesAround(
     origin: PracticalOrigin,
     budgetMs: number,
-  ): Promise<{ places: PracticalPlace[]; partial: boolean; attribution: Attribution }> {
+  ): Promise<{ places: PracticalPlace[]; partial: boolean; loading?: true; attribution: Attribution }> {
     // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
     const departments = departmentsAround(origin);
     type Place = { name: string; address: string | null; lat: number; lng: number };
@@ -156,7 +156,7 @@ export const practicalService = {
       return { d, osm, gov };
     });
     const listed = await Promise.all(loads);
-    const keys = departments.flatMap((d) => [`osm:${d}`, `fuel:${d}`, `wash:${d}`]);
+    const keys = departments.flatMap((d) => [`osm:${d}`, `fuel2:${d}`, `wash:${d}`, `fuel:${d}`]);
     const rows = await db
       .select({ key: externalCache.key, fetchedAt: externalCache.fetchedAt, data: externalCache.data })
       .from(externalCache)
@@ -170,6 +170,8 @@ export const practicalService = {
       return r && age < limitMs ? { data: r.data, age } : null;
     };
     let partial = false;
+    // Un chargement encore en cours (source lente, hors budget) se distingue d'une source en échec : l'écran relit tant qu'il dure.
+    let loading = false;
     const osm: OsmEntry[] = [];
     const gov: GovEntry[] = [];
     for (const l of listed) {
@@ -178,21 +180,29 @@ export const practicalService = {
       let osmList: OsmEntry[] | null = l.osm?.data ?? null;
       if (l.osm === null) {
         partial = true;
+        loading = true;
         osmList = (tolerated(`osm:${l.d}`, STALE_LIMIT_MS.osm)?.data as OsmEntry[] | undefined) ?? null;
       } else if (l.osm.data === null) partial = true;
       osm.push(...(osmList ?? []));
-      // Ancienne ligne `wash:` (lavages seulement) : un complément en lecture seule, tant que la nouvelle n'est pas là ou qu'elle date
-      // de moins d'une semaine (au-delà, la nouvelle ligne `osm:` fait foi).
-      const legacy = tolerated(`wash:${l.d}`, STALE_LIMIT_MS.osm);
-      if (legacy && (legacy.age < WASH_TTL_MS || osmList === null || !l.osm?.fresh)) {
+      // Ancienne ligne `wash:` (lavages seulement, sans les stations) : un secours en lecture seule, SEULEMENT quand aucune liste `osm:`
+      // n'est servable pour ce département ; une liste `osm:` actuelle, même vide, fait foi. La réponse est alors partielle (déjà posée).
+      const legacy = osmList === null ? tolerated(`wash:${l.d}`, STALE_LIMIT_MS.osm) : null;
+      if (legacy) {
         osm.push(...(legacy.data as OsmEntry[]).filter((e) => e.as === undefined));
       }
       // Jeu public. Muet, lent : partiel. Un ancien cache servi (moins de 7 jours) ne rend pas la réponse partielle.
       let govList: GovEntry[] | null = l.gov?.data ?? null;
       if (l.gov === null) {
         partial = true;
-        govList = (tolerated(`fuel:${l.d}`, STALE_LIMIT_MS.fuel)?.data as GovEntry[] | undefined) ?? null;
+        loading = true;
+        govList = (tolerated(`fuel2:${l.d}`, STALE_LIMIT_MS.fuel)?.data as GovEntry[] | undefined) ?? null;
       } else if (l.gov.data === null) partial = true;
+      // Ancienne ligne `fuel:` (stations sans référence : rapprochement incomplet, donc partiel) : seulement sans liste `fuel2:` servable.
+      if (govList === null) {
+        const old = tolerated(`fuel:${l.d}`, STALE_LIMIT_MS.fuel);
+        if (old) govList = old.data as GovEntry[];
+        partial = true;
+      }
       gov.push(...(govList ?? []));
     }
     // Tous les rapprochements se font ICI, sur les listes de tous les départements réunis (pas par département) et sur les lieux de la
@@ -226,6 +236,7 @@ export const practicalService = {
     return {
       places,
       partial,
+      ...(loading ? { loading: true as const } : {}),
       attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
     };
   },

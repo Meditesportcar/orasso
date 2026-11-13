@@ -19,7 +19,7 @@ import {
 import { timestamps, tstz } from "./common";
 import { proProfiles } from "./pros";
 
-/** Cache d'une source externe : clé `osm:<département>` (7 jours ; avant le petit lot de fin D : `wash:<département>`, lavages seulement) ou `fuel:<département>` (1 heure). */
+/** Cache d'une source externe : clé `osm:<département>` (7 jours ; avant le petit lot de fin D : `wash:<département>`, lavages seulement) ou `fuel2:<département>` (24 heures ; avant : `fuel:<département>`, sans référence). */
 export const externalCache = pgTable("external_cache", {
   key: text("key").primaryKey(),
   fetchedAt: tstz("fetched_at").notNull(),

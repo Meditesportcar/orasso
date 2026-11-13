@@ -37,21 +37,48 @@ export function groupOsmStations(list: readonly OsmEntry[]): OsmEntry[] {
     }
     return r;
   };
+  // Ce que chaque groupe porte : sa référence (au plus une) et ses noms. On ne joint JAMAIS deux groupes de références différentes, ni
+  // deux groupes dont les noms n'ont rien en commun : un objet sans nom ne relie pas deux stations (il rejoint la plus proche).
+  const refOf = new Map<number, string | undefined>();
+  const namesOf = new Map<number, Set<string>>();
+  list.forEach((e, i) => {
+    refOf.set(i, e.ref || undefined);
+    namesOf.set(i, new Set(isGeneric(e) ? [] : [e.name.trim().toLowerCase()]));
+  });
+  const join = (i: number, j: number, byRef: boolean) => {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri === rj) return;
+    const refI = refOf.get(ri);
+    const refJ = refOf.get(rj);
+    if (refI && refJ && refI !== refJ) return;
+    const namesI = namesOf.get(ri) as Set<string>;
+    const namesJ = namesOf.get(rj) as Set<string>;
+    if (!byRef && namesI.size > 0 && namesJ.size > 0 && ![...namesI].some((n) => namesJ.has(n))) return;
+    parent[rj] = ri;
+    refOf.set(ri, refI ?? refJ);
+    for (const n of namesJ) namesI.add(n);
+  };
+  // (1) la même référence : la même station ; (2) puis les objets proches dont l'un est sans nom, du plus proche au plus loin.
+  const near: { i: number; j: number; m: number }[] = [];
   const box = (OSM_GROUP_M / 1000 / 111.2) * 2.2;
   for (let i = 0; i < list.length; i++) {
     const a = list[i] as OsmEntry;
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j] as OsmEntry;
-      if (a.ref && b.ref && a.ref !== b.ref) continue;
-      const sameRef = Boolean(a.ref) && a.ref === b.ref;
-      if (!sameRef) {
-        if (!(isGeneric(a) || isGeneric(b))) continue;
-        if (Math.abs(a.lat - b.lat) > box || Math.abs(a.lng - b.lng) > box) continue;
-        if (meters(a, b) > OSM_GROUP_M) continue;
+      if (a.ref && a.ref === b.ref) {
+        join(i, j, true);
+        continue;
       }
-      parent[find(j)] = find(i);
+      if (a.ref && b.ref) continue;
+      if (!(isGeneric(a) || isGeneric(b))) continue;
+      if (Math.abs(a.lat - b.lat) > box || Math.abs(a.lng - b.lng) > box) continue;
+      const m = meters(a, b);
+      if (m <= OSM_GROUP_M) near.push({ i, j, m });
     }
   }
+  near.sort((x, y) => x.m - y.m || x.i - y.i || x.j - y.j);
+  for (const { i, j } of near) join(i, j, false);
   const groups = new Map<number, OsmEntry[]>();
   list.forEach((p, i) => {
     const root = find(i);
