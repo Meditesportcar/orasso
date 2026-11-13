@@ -16,11 +16,11 @@ describe("flameRouter : une file par compte et par commentaire", () => {
     const stores: Record<"A" | "B", FlameState[]> = { A: [], B: [] };
     const key = flameKey("u1|s:a", "p", "c");
     const sent: boolean[] = [];
-    let release: (() => void) | null = null;
+    const slow: { release: (() => void) | null } = { release: null };
     const send = (on: boolean) => {
       sent.push(on);
       return new Promise<FlameState>((resolve) => {
-        release = () => resolve({ reactionsCount: on ? 5 : 4, reactedByMe: on });
+        slow.release = () => resolve({ reactionsCount: on ? 5 : 4, reactedByMe: on });
       });
     };
     const base: FlameState = { reactionsCount: 4, reactedByMe: false };
@@ -29,17 +29,13 @@ describe("flameRouter : une file par compte et par commentaire", () => {
     await tick();
     void router.fire(key, base, { send, apply: (s) => stores.A.push(s) });
     void router.fire(key, base, { send, apply: (s) => stores.B.push(s) });
-    release?.();
-    await tick();
-    // Une deuxième requête part si l'intention a changé depuis la première.
-    while (release && sent.length < 3) {
-      const r = release;
-      release = null;
+    // On libère chaque requête lente tant que la série n'est pas finie (une deuxième part si l'intention a changé).
+    for (let i = 0; i < 5 && slow.release; i++) {
+      const r = slow.release;
+      slow.release = null;
       r();
       await tick();
-      if (!release) break;
     }
-    release?.();
     await run;
     // Une seule file : les requêtes sont en série, la dernière intention est l'ajout (A ajoute, retire, B ajoute).
     expect(sent[sent.length - 1]).toBe(true);
