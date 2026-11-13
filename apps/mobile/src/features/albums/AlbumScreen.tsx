@@ -24,6 +24,7 @@ import { Waiting } from "@/ui/Waiting";
 import { AlbumCover } from "./AlbumCover";
 import { AlbumPhoto } from "./AlbumPhoto";
 import { AlbumPhotoViewer } from "./AlbumPhotoViewer";
+import { OrganizerHost, useIsEventOrganizer } from "./actions/OrganizerActions";
 import type { AlbumViewerRole } from "./actions/registry";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -78,6 +79,12 @@ export function AlbumScreen({ id }: { id: string }) {
     const task = InteractionManager.runAfterInteractions(runAfterClose);
     return () => task.cancel();
   }, [viewer, runAfterClose]);
+  /** Lot R9g : les actions de l'organisateur (feuille de reprise…) s'ouvrent après la fermeture de la visionneuse. */
+  const leaveViewer = useCallback((then: () => void) => {
+    afterClose.current = then;
+    setViewer(null);
+  }, []);
+  const reloadAlbum = useCallback(() => void album.reload(), [album.reload]);
   /** Signaler la photo affichée : la visionneuse se ferme, puis la feuille de signalement s'ouvre. */
   function reportPhoto(photo: AlbumPhotoView) {
     afterClose.current = () => openReport({ type: "album_photo", id: photo.id });
@@ -117,7 +124,9 @@ export function AlbumScreen({ id }: { id: string }) {
     }
   }
 
-  const role: AlbumViewerRole = a?.mine ? "media" : "member";
+  // Lot R9g : l'organisateur de l'événement a ses actions dans la visionneuse (reprise au journal, album officiel).
+  const organizer = useIsEventOrganizer(a ?? null);
+  const role: AlbumViewerRole = a?.mine ? "media" : organizer ? "organizer" : "member";
   return (
     <FlowScreen
       title={a?.media.name ?? L.albums}
@@ -239,6 +248,7 @@ export function AlbumScreen({ id }: { id: string }) {
               }}
             />
           ) : null}
+          <OrganizerHost album={a ?? null} leaveViewer={leaveViewer} onChanged={reloadAlbum} />
         </Overlay>
       }
     >

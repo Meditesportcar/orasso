@@ -189,7 +189,10 @@ function Shell() {
       // Un lien de l'appli (profil d'un membre, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
       // Lot R8b2 : une notification qui porte `postId` ouvre la publication seule (les commentaires s'ouvrent avec `commentId`).
       const link = publicationLinkOf(data) ?? appLinkOf(data?.link);
-      if (link) router.navigate(link as never);
+      // Lot R9g : « album publié » (`data.screen = "event-photos"`) ouvre la fiche de l'événement, à la section « Photos ».
+      if (link && screen === "event-photos" && /^\/e\/[^/?#\s]+$/.test(link)) {
+        router.navigate(`${link}?section=photos` as never);
+      } else if (link) router.navigate(link as never);
       else router.navigate("/acces");
     },
     [router, backToBase, choose, entries],

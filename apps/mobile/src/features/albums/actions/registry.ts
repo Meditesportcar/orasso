@@ -4,6 +4,8 @@
 import type { IconName } from "@orasso/design-system/native";
 import type { AlbumPhotoView, AlbumView } from "@orasso/shared";
 
+import { organizerActions } from "./OrganizerActions";
+
 /** Qui regarde : le média auteur, l'organisateur de l'événement, la personne identifiée, ou tout autre membre. */
 export type AlbumViewerRole = "media" | "organizer" | "tagged" | "member";
 
@@ -19,7 +21,8 @@ export type AlbumViewerAction = {
 };
 
 /** La liste des actions (une ligne par lot). */
-export const albumViewerActions: AlbumViewerAction[] = [];
+// Lot R9g : « Reprendre dans le journal » et « Choisir cet album comme officiel » (organisateur de l'événement).
+export const albumViewerActions: AlbumViewerAction[] = [...organizerActions];
 
 /** Les actions proposées à ce rôle. */
 export const actionsFor = (role: AlbumViewerRole): AlbumViewerAction[] =>

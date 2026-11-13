@@ -42,7 +42,7 @@ import {
 } from "@orasso/shared";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { type ScrollView, StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
 import { CandSheet } from "@/features/event/CandSheet";
@@ -60,6 +60,7 @@ import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
 import { NotifyBell } from "@/features/event/NotifyBell";
 import { OrgBar } from "@/features/event/OrgBar";
+import { PhotosSection } from "@/features/event/PhotosSection";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { PresenceSheet } from "@/features/event/PresenceSheet";
 import { orderPlaces, usedNow } from "@/features/event/places";
@@ -132,12 +133,17 @@ export default function EventPage() {
     candidater,
     jour,
     crew: crewParam,
+    section,
   } = useLocalSearchParams<{
     slug: string;
     candidater?: string;
     jour?: string;
     crew?: string;
+    section?: string;
   }>();
+  // Lot R9g : le lien « Photos » (notification d'album publié, gestion de l'événement) défile jusqu'à la section, une seule fois.
+  const pageScroll = useRef<ScrollView>(null);
+  const scrolledToPhotos = useRef(false);
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   // Lot M3 : reprend la lecture partie au toucher de la carte (Explorer, carte), sinon la lance.
@@ -544,6 +550,7 @@ export default function EventPage() {
         </>
       }
       liftHero
+      scrollRef={pageScroll}
       onClose={close}
       onRefresh={async () => {
         setJournalTick((t) => t + 1);
@@ -700,6 +707,23 @@ export default function EventPage() {
       ) : null}
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
       <LineupBlock eventId={e.id} slug={e.slug} />
+      {/* Lot R9g : « Photos », les albums des médias accrédités (l'officiel en tête) ; rien sans album publié. */}
+      {!cancelled ? (
+        <PhotosSection
+          slug={e.slug}
+          signedIn={status === "in"}
+          ownStructure={ownStructure}
+          onSectionY={
+            section === "photos"
+              ? (y) => {
+                  if (scrolledToPhotos.current) return;
+                  scrolledToPhotos.current = true;
+                  pageScroll.current?.scrollTo({ y, animated: false });
+                }
+              : undefined
+          }
+        />
+      ) : null}
       {/* Lot R6c (R6.3) : qui y va parmi ceux que je suis, et « Inviter du monde » (tout membre connecté, inscrit ou non). */}
       {shareable ? <WhoGoes going={going.data} onInvite={() => setInviting(true)} /> : null}
       <AdmissionTags event={e} />
