@@ -1,6 +1,7 @@
 export * from "./access";
 export * from "./admin";
 export * from "./admin-suite";
+export * from "./albums";
 export * from "./applications";
 export * from "./auth";
 export * from "./certification";

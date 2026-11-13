@@ -3,6 +3,7 @@
 // passeport du lot 49). Aucune position de personne n'en sort : « les passionnés du coin » sont comptés par département.
 import {
   type ArrivalSlot,
+  albumTitle,
   distanceKm,
   type EventCard,
   type HomeLocation,
@@ -22,6 +23,7 @@ import { and, asc, count, desc, eq, gt, gte, inArray, isNull, sql } from "drizzl
 import { db } from "../../db/client";
 import {
   applications,
+  eventAlbums,
   eventNeeds,
   eventPressSettings,
   events,
@@ -363,13 +365,47 @@ export async function mediaBlock(v: Viewer): Promise<HomeMedia | null> {
     .where(and(eq(mediaSavedEvents.mediaProfileId, profile.id), eq(events.status, "published"), gt(events.endsAt, t)))
     .orderBy(asc(events.startsAt))
     .limit(8);
-  const contents = await db
+  const links = await db
     .select({ c: mediaContents, eventTitle: events.title })
     .from(mediaContents)
     .innerJoin(events, eq(events.id, mediaContents.eventId))
-    .where(and(eq(mediaContents.mediaProfileId, profile.id), isNull(mediaContents.deletedAt)))
+    .where(
+      and(
+        eq(mediaContents.mediaProfileId, profile.id),
+        isNull(mediaContents.deletedAt),
+        eq(mediaContents.kind, "link"),
+      ),
+    )
     .orderBy(desc(mediaContents.publishedAt))
     .limit(3);
+  // Lot R9e : les galeries sont des albums ; les trois derniers contenus (liens et albums) et leurs vues.
+  const albums = await db
+    .select({ a: eventAlbums, eventTitle: events.title })
+    .from(eventAlbums)
+    .innerJoin(events, eq(events.id, eventAlbums.eventId))
+    .where(
+      and(
+        eq(eventAlbums.mediaProfileId, profile.id),
+        eq(eventAlbums.status, "published"),
+        isNull(eventAlbums.deletedAt),
+      ),
+    )
+    .orderBy(desc(eventAlbums.publishedAt))
+    .limit(3);
+  const contents = [
+    ...links.map((r) => ({
+      at: r.c.publishedAt,
+      c: { id: r.c.id, title: r.c.title, views: r.c.views },
+      eventTitle: r.eventTitle,
+    })),
+    ...albums.map((r) => ({
+      at: r.a.publishedAt ?? r.a.createdAt,
+      c: { id: r.a.id, title: albumTitle(r.a.title, r.eventTitle), views: r.a.views },
+      eventTitle: r.eventTitle,
+    })),
+  ]
+    .sort((x, y) => y.at.getTime() - x.at.getTime())
+    .slice(0, 3);
   return {
     name: profile.name,
     logoUrl: storage.url(profile.logoKey),
