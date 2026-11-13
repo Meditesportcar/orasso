@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
-import { OverlayProvider, OverlaySlot } from "@/ui/Overlay";
+import { OverlayProvider, OverlaySlot, SheetBoundary } from "@/ui/Overlay";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
 /** Cible de 44 px autour du ✕ de 38 px, comme celui de l'en-tête de fiche. */
@@ -146,7 +146,7 @@ export function PosterFlow({
               testID="status-bar-guard"
             />
           )}
-          {overlays}
+          <SheetBoundary>{overlays}</SheetBoundary>
           <OverlaySlot />
         </Ground>
       </OverlayProvider>

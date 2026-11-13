@@ -7,10 +7,21 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useKeyboardOverlap } from "./KeyboardSafe";
+import { SheetPortal } from "./Overlay";
 
 const { space2, space3 } = tokens.spacing;
 
-export function AppSheet({ children, from = "bottom", maxHeight = 0.8, ...rest }: SheetProps & { maxHeight?: number }) {
+// Partie C du petit lot de fin (13/11) : une feuille posée dans une carte qui défile (Partager d’une publication) s’ouvrait
+// dans la carte. `SheetPortal` l’envoie à la zone des feuilles de l’écran quand il y en a une ; sinon elle reste sur place.
+export function AppSheet(props: SheetProps & { maxHeight?: number }) {
+  return (
+    <SheetPortal>
+      <AppSheetBody {...props} />
+    </SheetPortal>
+  );
+}
+
+function AppSheetBody({ children, from = "bottom", maxHeight = 0.8, ...rest }: SheetProps & { maxHeight?: number }) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const ref = useRef<View>(null);

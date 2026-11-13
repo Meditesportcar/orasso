@@ -18,6 +18,46 @@ export const PRACTICAL_DEPARTMENTS = 2;
 /** Plafond du nombre de départements lus pour une demande. */
 export const PRACTICAL_DEPARTMENTS_MAX = 12;
 
+/**
+ * Petit lot de fin D : deux points à moins de cette distance (en mètres) sont le même lieu. Le jeu public des prix et
+ * OpenStreetMap placent une même station à quelques dizaines de mètres l'une de l'autre (pompe, caisse, centre du bâtiment) ;
+ * deux stations distinctes sont presque toujours à plus de 100 m l'une de l'autre.
+ */
+export const PRACTICAL_SAME_PLACE_M = 60;
+
+/**
+ * Les éléments de `extra` qui n'ont pas de jumeau dans `primary` (à `maxM` mètres au plus). Un jumeau est pris une seule fois :
+ * on apparie d'abord les paires les plus proches, de sorte que deux stations voisines gardent chacune la leur. Ordre de `extra` conservé.
+ * `canPair` : une paire à la bonne distance peut être refusée (deux stations qui ont chacune leur identifiant ne sont pas jumelles).
+ */
+export function withoutTwins<T extends LatLng, U extends LatLng>(
+  primary: readonly T[],
+  extra: readonly U[],
+  maxM = PRACTICAL_SAME_PLACE_M,
+  canPair: (p: T, e: U) => boolean = () => true,
+): U[] {
+  // Garde-fou rapide avant le calcul exact : 60 m font moins de 0,0012° de latitude ou de longitude jusqu'à 60° de latitude.
+  const box = (maxM / 1000 / 111.2) * 2.2;
+  const pairs: { p: number; e: number; m: number }[] = [];
+  extra.forEach((e, ei) => {
+    primary.forEach((p, pi) => {
+      if (Math.abs(p.lat - e.lat) > box || Math.abs(p.lng - e.lng) > box) return;
+      if (!canPair(p, e)) return;
+      const m = distanceKm(p, e) * 1000;
+      if (m <= maxM) pairs.push({ p: pi, e: ei, m });
+    });
+  });
+  pairs.sort((a, b) => a.m - b.m || a.p - b.p || a.e - b.e);
+  const usedPrimary = new Set<number>();
+  const twinned = new Set<number>();
+  for (const pair of pairs) {
+    if (usedPrimary.has(pair.p) || twinned.has(pair.e)) continue;
+    usedPrimary.add(pair.p);
+    twinned.add(pair.e);
+  }
+  return extra.filter((_, i) => !twinned.has(i));
+}
+
 /** Un lieu servi par `POST /practical` : ni prix, ni heure de mise à jour, ni distance. */
 export type PracticalPlace = {
   id: string;
@@ -31,11 +71,16 @@ export type PracticalPlace = {
 /** D'où l'on part : la case de ma position, ma ville, ou l'événement où je vais. */
 export type PracticalOrigin = { kind: "cell" | "city" | "outing"; label: string; lat: number; lng: number };
 
-/** `POST /practical`. `partial` : une source n'a pas répondu dans le budget (l'écran relit une fois après 3 secondes). */
+/**
+ * `POST /practical`. `partial` : une source n'a rien de servable ou sert une liste incomplète (l'écran relit). `loading` (facultatif, présent
+ * seulement quand il est vrai) : un chargement est encore en cours côté API (source lente, le cache se remplit) : relire tant qu'il dure,
+ * à la différence d'une source en échec (`partial` sans `loading`). Un client qui ne le connaît pas l'ignore.
+ */
 export type PracticalData = {
   origin: PracticalOrigin | null;
   places: PracticalPlace[];
   partial: boolean;
+  loading?: true;
   attribution: { wash: string; fuel: string };
 };
 
@@ -172,14 +217,17 @@ export function filterKind<T extends { kind: PracticalKind }>(places: readonly T
 }
 
 /**
- * Le titre d'un lieu. Lavage : son nom OpenStreetMap, à défaut « Station de lavage ». Station-service : la rue de son adresse
- * (le jeu public des prix n'a pas de nom de station), sans le numéro, à défaut « Station-service ».
+ * Le titre d'un lieu. Lavage : son nom OpenStreetMap, à défaut « Station de lavage ». Station-service : son nom quand
+ * OpenStreetMap en donne un (petit lot de fin D), sinon la rue de son adresse (le jeu public des prix n'a pas de nom de station),
+ * sans le numéro, à défaut « Station-service ».
  */
 export function practicalTitle(
   place: Pick<PracticalPlace, "kind" | "name" | "address">,
   unnamed: Record<PracticalKind, string>,
 ): string {
   if (place.kind === "wash") return place.name.trim() || unnamed.wash;
+  const named = place.name.replace(/\s+/g, " ").trim();
+  if (named && named !== unnamed.fuel) return named;
   const street = (place.address ?? "").split(",")[0]?.replace(/\s+/g, " ").trim() ?? "";
   // Pas de rue (l'adresse commence par le code postal) : le titre par défaut.
   if (/^\d{5}\b/.test(street)) return unnamed.fuel;
