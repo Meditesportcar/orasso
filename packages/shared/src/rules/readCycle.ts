@@ -34,6 +34,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
   let halted = false;
   // Une lecture est due mais attend le retour sur l'écran (échéance tombée masquée, ou échec transitoire).
   let pending = false;
+  // Le délai de la prochaine lecture programmée (gardé quand les minuteries sont suspendues : `rearm` le reprogramme tel quel).
+  let scheduledDelay: number | null = null;
   // Un numéro par reprise manuelle ou remise à zéro : l'issue d'une lecture partie avant est ignorée (pas de double lecture).
   let epoch = 0;
 
@@ -43,11 +45,13 @@ export function createReadCycle(deps: ReadCycleDeps) {
       return;
     }
     pending = false;
+    scheduledDelay = null;
     deps.run();
   };
 
   const manual = () => {
     epoch += 1;
+    scheduledDelay = null;
     timer.cancel();
     calendarStep = 0;
     networkAttempt = 0;
@@ -80,6 +84,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
       const step = nextPracticalRead(outcome, calendarStep, networkAttempt);
       calendarStep = step.calendarStep;
       networkAttempt = step.networkAttempt;
+      scheduledDelay = step.delay;
       if (step.delay !== null) timer.schedule(fire, step.delay);
       // Un échec transitoire reprend au retour sur l'écran même quand la série de relances est finie.
       if (outcome === "transient") pending = true;
@@ -110,6 +115,14 @@ export function createReadCycle(deps: ReadCycleDeps) {
         return "started";
       }
       return "idle";
+    },
+    /**
+     * Reprend après une suspension (`dispose`) SANS rien avancer : l'échéance en attente est reprogrammée telle quelle (au même délai),
+     * jamais une nouvelle issue. Sans échéance en attente, un refus ou une erreur inconnue, rien ne change.
+     */
+    rearm() {
+      if (halted || refusedAt > 0 || scheduledDelay === null) return;
+      timer.schedule(fire, scheduledDelay);
     },
     /** Un refus ou une erreur inconnue : aucune relecture automatique d'ici là (sauf le retour après `PRACTICAL_STALE_MS` d'un refus). */
     blocked(): boolean {
@@ -152,6 +165,12 @@ export function createPositionCalendar(deps: {
   // Le calendrier est en cours : au moins un écran monté pour des lieux partiels.
   let running = false;
   let generation = 0;
+  // Une lecture est en vol (une seule, partagée par tous les écrans montés) : « Réessayer » la rejoint au lieu d'en lancer une autre.
+  let reading = false;
+  const bump = () => {
+    generation += 1;
+    reading = false;
+  };
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const listener of listeners) listener();
@@ -163,11 +182,16 @@ export function createPositionCalendar(deps: {
     run: () => start(),
   });
   const start = () => {
+    // Une lecture est déjà en vol : sa réponse compte une fois, aucune requête concurrente.
+    if (reading) return;
     const gen = generation;
+    reading = true;
     cycle.begin();
+    notify();
     void deps.refresh().then((outcome) => {
       // Une autre position (ou une autre session, ou les lieux complets) entre-temps : cette réponse n'a plus de suite ni d'effet.
       if (gen !== generation) return;
+      reading = false;
       cycle.settled(outcome === "ok" ? "partial" : outcome);
       // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
       if (!active()) cycle.dispose();
@@ -178,7 +202,7 @@ export function createPositionCalendar(deps: {
     if (!partial) {
       // Lieux complets ou autre session : tout repart à 0.
       const changed = running || cycle.blocked();
-      generation += 1;
+      bump();
       cycle.reset();
       running = false;
       key = null;
@@ -188,9 +212,14 @@ export function createPositionCalendar(deps: {
     if (active()) {
       if (!running) {
         running = true;
-        // Remontage : une issue gardée (refus, erreur inconnue) n'est pas effacée ; un refus ancien est relu s'il a plus de 60 s.
+        // Remontage : jamais une nouvelle issue. Une issue gardée (refus, erreur inconnue) n'est pas effacée (un refus ancien est relu
+        // s'il a plus de 60 s) ; une lecture en vol garde sa réponse ; l'échéance en attente est reprogrammée sans avancer l'étape ;
+        // seul le tout premier départ d'un calendrier programme la première relecture.
         if (cycle.blocked()) cycle.resume();
-        else cycle.settled("partial");
+        else if (!reading) {
+          if (cycle.state().calendarStep === 0) cycle.settled("partial");
+          else cycle.rearm();
+        }
       }
     } else if (running) {
       running = false;
@@ -202,7 +231,7 @@ export function createPositionCalendar(deps: {
     setPartial(next: boolean, positionKey: unknown = null) {
       if (next && positionKey !== key && key !== null) {
         // Une nouvelle position : les suites de l'ancienne sont jetées, l'issue gardée ne la concerne pas.
-        generation += 1;
+        bump();
         cycle.reset();
         running = false;
         notify();
@@ -225,16 +254,22 @@ export function createPositionCalendar(deps: {
     },
     /** Retour sur l'écran : onglet visible, appli au premier plan. */
     resume() {
-      if (active()) cycle.resume();
+      if (!active()) return;
+      cycle.resume();
+      notify();
     },
     /** « Réessayer » : tout repart à 0 et une relecture part tout de suite. */
     retry() {
       if (!partial) return;
+      // Une lecture est en vol : elle est rejointe (un double appui ne fait pas de seconde requête et ne perd aucune étape).
+      if (reading) return;
       cycle.manual();
       running = active();
-      notify();
+      bump();
       start();
     },
+    /** Une lecture de la position est en vol : « Réessayer » est désactivé (avec son libellé, sans indicateur qui tourne). */
+    busy: () => reading,
     /** Le calendrier est arrêté par un refus ou une erreur inconnue : « Réessayer » est proposé. */
     failed: () => partial && cycle.blocked(),
     subscribe(listener: () => void) {

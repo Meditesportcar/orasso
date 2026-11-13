@@ -130,9 +130,16 @@ export function PracticalBlock() {
           ))}
         </div>
       )}
-      {read.failed && !read.loading ? (
+      {read.failed ? (
         <div className="pq-gps">
-          <Button type="button" variant="secondary" icon="undo" onClick={read.retry} data-testid="practical-retry">
+          <Button
+            type="button"
+            variant="secondary"
+            icon="undo"
+            disabled={read.loading}
+            onClick={read.retry}
+            data-testid="practical-retry"
+          >
             {L.retry}
           </Button>
         </div>

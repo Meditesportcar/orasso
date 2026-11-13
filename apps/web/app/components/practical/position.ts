@@ -76,6 +76,9 @@ export const retainPracticalCalendar = () => calendar.retain();
 /** Le calendrier est arrêté (refus, erreur inconnue) : « Réessayer » est proposé. */
 export const usePracticalCalendarFailed = () => useSyncExternalStore(calendar.subscribe, calendar.failed, () => false);
 
+/** Une lecture de la position est en vol : « Réessayer » est désactivé pendant ce temps. */
+export const usePracticalCalendarBusy = () => useSyncExternalStore(calendar.subscribe, calendar.busy, () => false);
+
 /** « Réessayer » : tout repart à 0 et les lieux de la position sont relus tout de suite. */
 export const retryPracticalCalendar = () => calendar.retry();
 

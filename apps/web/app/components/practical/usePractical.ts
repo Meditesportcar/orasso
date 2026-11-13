@@ -20,6 +20,7 @@ import {
   retainPracticalCalendar,
   retryPracticalCalendar,
   useFollowWeatherPosition,
+  usePracticalCalendarBusy,
   usePracticalCalendarFailed,
   usePracticalPosition,
 } from "./position";
@@ -75,6 +76,8 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   const alive = useRef(true);
   // Une seule lecture à la fois (reprises, « Réessayer », minuteries).
   const gate = useRef(createReadGate()).current;
+  // Une lecture est en vol : « Réessayer » la rejoint (aucun appel concurrent, aucune lecture en file).
+  const reading = useRef(false);
   // Le cycle de lecture (règle commune site et appli, tour 6) : une seule échéance à la fois, une issue la remplace ; un refus (4xx)
   // n'a aucune minuterie et est relu au retour après 60 s ; jamais de relance d'un onglet masqué.
   const cycle = useRef(
@@ -103,9 +106,11 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     }
     cycle.begin();
     let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
+    reading.current = true;
     try {
       res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near }, timeoutMs: 15_000 });
     } finally {
+      reading.current = false;
       // Une demande attendait : on relit pour la session courante (la réponse qui vient d'arriver est laissée de côté).
       if (gate.leave() && alive.current) {
         void latest.current();
@@ -142,8 +147,11 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     void load();
     // « Réessayer » : tout repart à 0 et la lecture part tout de suite.
     reload.current = () => {
+      // Une lecture est en vol : elle est rejointe (un double appui ne fait pas de seconde requête).
+      if (reading.current) return;
       cycle.manual();
-      setState((s) => ({ ...s, loading: s.data === null }));
+      // « Lecture en cours » : le bouton « Réessayer » est désactivé, sans indicateur qui tourne.
+      setState((s) => ({ ...s, loading: true }));
       void load();
     };
     // Retour en ligne et page redevenue visible : une reprise due part à l'écart de 15 s (en remplaçant l'échéance précédente), un
@@ -173,11 +181,12 @@ export function usePracticalSources(): PracticalSources {
   // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
   useEffect(() => retainPracticalCalendar(), []);
   const positionFailed = usePracticalCalendarFailed();
+  const positionBusy = usePracticalCalendarBusy();
   return {
     me: at
       ? {
           data: at.data,
-          loading: false,
+          loading: positionBusy,
           offline: false,
           failed: positionFailed,
           retry: retryPracticalCalendar,

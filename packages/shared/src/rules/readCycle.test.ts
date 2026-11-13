@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { createPositionStore } from "./positionStore";
 import { PRACTICAL_STALE_MS } from "./practicalRetry";
 import { createPositionCalendar, createReadCycle, type PositionOutcome } from "./readCycle";
 
@@ -288,5 +288,109 @@ describe("l'issue est gardée par le calendrier de position (suite R8q, tour 7)"
     pending[1]?.("ok");
     await vi.advanceTimersByTimeAsync(3_000);
     expect(refresh).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("un remontage ne consomme jamais une étape (suite R8q, tour 8)", () => {
+  it("retain puis 4 fois release/retain avant la première échéance : les relectures ont lieu à 3, 6, 12 et 24 s", async () => {
+    const { pending, refresh, calendar } = position();
+    let release = calendar.retain();
+    calendar.setPartial(true, "A");
+    for (let i = 0; i < 4; i += 1) {
+      release();
+      release = calendar.retain();
+    }
+    expect(calendar.state().calendarStep).toBe(1);
+    expect(refresh).not.toHaveBeenCalled();
+    for (const [index, delay] of [3_000, 6_000, 12_000, 24_000].entries()) {
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(refresh).toHaveBeenCalledTimes(index);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(refresh).toHaveBeenCalledTimes(index + 1);
+      pending[index]?.("ok");
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(refresh).toHaveBeenCalledTimes(4);
+  });
+
+  it("le magasin et le calendrier branchés ensemble : quatre remontages, une lecture à l'échéance ; plusieurs écrans, une réponse comptée une fois", async () => {
+    const pending: Array<(value: { partial: boolean }) => void> = [];
+    const store = createPositionStore<{ partial: boolean }>({
+      scope: () => "A",
+      now: () => Date.now(),
+      weatherAt: () =>
+        new Promise((resolve) => {
+          pending.push(resolve);
+        }),
+    });
+    const calendar = createPositionCalendar({
+      visible: () => true,
+      refresh: async (): Promise<PositionOutcome> =>
+        (await store.refresh(true)).status === "failed" ? "transient" : "ok",
+    });
+    store.subscribe(() => calendar.setPartial(store.view().at?.partial === true, store.view().coarse));
+    const given = store.give({ lat: 42.7, lng: 2.9 });
+    pending[0]?.({ partial: true });
+    await given;
+    let release = calendar.retain();
+    for (let i = 0; i < 4; i += 1) {
+      release();
+      release = calendar.retain();
+    }
+    const second = calendar.retain();
+    const third = calendar.retain();
+    await vi.advanceTimersByTimeAsync(3_000);
+    // Une seule requête de relecture, quel que soit le nombre d'écrans.
+    expect(pending.length).toBe(2);
+    // Un écran part et un autre arrive pendant la requête : elle est conservée, sa réponse compte une fois.
+    second();
+    const fourth = calendar.retain();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(pending.length).toBe(2);
+    pending[1]?.({ partial: true });
+    await vi.advanceTimersByTimeAsync(5_999);
+    expect(pending.length).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    // La deuxième étape (6 s) a eu lieu une fois : trois requêtes en tout.
+    expect(pending.length).toBe(3);
+    release();
+    third();
+    fourth();
+  });
+
+  it("« Réessayer » : appuis répétés pendant une réponse lente, une seule requête ; le calendrier se sait en lecture", async () => {
+    const { pending, refresh, calendar } = position();
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(true);
+    expect(calendar.busy()).toBe(false);
+    calendar.retry();
+    calendar.retry();
+    calendar.retry();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(calendar.busy()).toBe(true);
+    pending[1]?.("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.busy()).toBe(false);
+    expect(calendar.failed()).toBe(false);
+  });
+
+  it("le retour sur l'écran après un refus avertit les abonnés (« Réessayer » se met à jour)", async () => {
+    const { pending, calendar } = position();
+    const seen = vi.fn();
+    calendar.subscribe(seen);
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("refused");
+    await vi.advanceTimersByTimeAsync(61_000);
+    seen.mockClear();
+    calendar.resume();
+    expect(seen).toHaveBeenCalled();
+    expect(calendar.busy()).toBe(true);
   });
 });

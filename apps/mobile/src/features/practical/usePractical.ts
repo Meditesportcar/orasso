@@ -29,6 +29,7 @@ import {
   retainPracticalCalendar,
   retryPracticalCalendar,
   useFollowWeatherPosition,
+  usePracticalCalendarBusy,
   usePracticalCalendarFailed,
   usePracticalPosition,
 } from "./position";
@@ -87,6 +88,8 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée.
   const latest = useRef<() => Promise<void>>(async () => undefined);
   const alive = useRef(true);
+  // Une lecture est en vol : « Réessayer » la rejoint (aucun appel concurrent).
+  const reading = useRef(false);
   // Le cycle de lecture (règle commune site et appli, tour 6) : une seule échéance à la fois, une issue la remplace ; un refus (4xx)
   // n'a aucune minuterie et est relu au retour après 60 s ; une erreur inconnue n'est jamais relancée ; jamais de relance sans focus
   // ou appli en arrière-plan (elle reprend au retour, au délai restant de l'écart de 15 s).
@@ -115,6 +118,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     }
     lastStart.current = Date.now();
     const token = cycle.begin();
+    reading.current = true;
     const gen = generation.current;
     // Une lecture plus ancienne que « Réessayer » ou qu'une remise à zéro est ignorée (jamais deux lectures qui se disputent l'issue).
     const valid = () => alive.current && gen === generation.current && cycle.current(token) && guard.valid(ticket);
@@ -122,14 +126,20 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
-      if (!valid()) return;
+      if (!valid()) {
+        reading.current = false;
+        return;
+      }
       memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
       setState({ data, loading: false, offline: false, failed: false });
       outcome = data.partial ? "partial" : "complete";
     } catch (error) {
-      if (!valid()) return;
+      if (!valid()) {
+        reading.current = false;
+        return;
+      }
       if (error instanceof ApiRequestError) {
         // Réseau ou 5xx : transitoire (relance espacée) ; tout 4xx (403, 429…) : refus, aucune minuterie. « Hors ligne » : le réseau seul.
         outcome = practicalFailureOutcome(error.status);
@@ -149,6 +159,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     }
     // La suite remplace toute échéance : transitoire (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (0).
     waitTimer.cancel();
+    reading.current = false;
     cycle.settled(outcome);
   }, [enabled, near, eventId, waitTimer, cycle]);
   latest.current = load;
@@ -184,9 +195,12 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
 
   // « Réessayer » : tout repart à 0 et la lecture part tout de suite.
   const retry = useCallback(() => {
+    // Une lecture est en vol : elle est rejointe (un double appui ne fait pas de seconde requête).
+    if (reading.current) return;
     cycle.manual();
     waitTimer.cancel();
-    setState((s) => ({ ...s, loading: s.data === null }));
+    // « Lecture en cours » : le bouton « Réessayer » est désactivé, sans indicateur qui tourne.
+    setState((s) => ({ ...s, loading: true }));
     void latest.current();
   }, [cycle, waitTimer]);
 
@@ -236,11 +250,12 @@ export function usePracticalSources(eventId?: string): PracticalSources {
   // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
   useEffect(() => retainPracticalCalendar(), []);
   const positionFailed = usePracticalCalendarFailed();
+  const positionBusy = usePracticalCalendarBusy();
   return {
     me: at
       ? {
           data: at.data,
-          loading: false,
+          loading: positionBusy,
           offline: false,
           failed: positionFailed,
           retry: retryPracticalCalendar,
