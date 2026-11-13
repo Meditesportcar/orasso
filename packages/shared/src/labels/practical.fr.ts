@@ -49,6 +49,9 @@ export const practicalTexts = {
   list: "Liste",
   map: "Carte",
   mapAttribution: "© contributeurs OpenStreetMap",
+  /** Petit lot de fin D : les stations viennent du jeu public des prix, d'OpenStreetMap, ou des deux (les deux sont alors cités). */
+  fuelSourcesBoth: "Données : data.economie.gouv.fr (licence ouverte) et © contributeurs OpenStreetMap",
+  fuelSourcesOsm: "Données : © contributeurs OpenStreetMap",
   /** Carte d'un lieu touché pour une sortie : « Station-service · 0,8 km de l'événement ». */
   fromOuting: "de l'événement",
   myPosition: "Ma position",

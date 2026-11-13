@@ -351,7 +351,19 @@ export const homeService = {
     const dept = this.placeDepartment(v, located);
     if (!dept || !located) return [];
     const stations = await withinBudget(fuelNear(dept), [] as CachedFuelStation[]);
-    return nearestPlaces(stations, located.position);
+    // Petit lot de fin D : le cache lit aussi E10 et GPLc et la référence de la station ; l'Accueil garde sa liste blanche d'avant
+    // (quatre prix, jamais E10 ni GPLc sans décision) et ne montre pas une station qui n'a aucun de ces quatre prix.
+    const listed = stations
+      .filter((st) => [st.prices.sp95, st.prices.sp98, st.prices.gazole, st.prices.e85].some((v) => v !== null))
+      .map(({ name, address, lat, lng, prices, updatedAt }) => ({
+        name,
+        address,
+        lat,
+        lng,
+        prices: { sp95: prices.sp95, sp98: prices.sp98, gazole: prices.gazole, e85: prices.e85 },
+        updatedAt,
+      }));
+    return nearestPlaces(listed, located.position);
   },
 
   /** Garage favori : le pro suivi et marqué, s'il est publié, en règle et si la fiche complète est encore visible. */
