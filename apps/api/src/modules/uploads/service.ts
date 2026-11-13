@@ -60,6 +60,8 @@ const SIZE: Record<UploadPurpose, number> = {
   story_video: 0,
   // Lot R7g : première image d'une vidéo, 1080 de côté au plus (le serveur la recompresse en WebP).
   story_poster: 1080,
+  // Lot R9e : photo d'album d'un média, côté le plus long 1600 comme `media_content`.
+  album_photo: 1600,
 };
 const FOLDER: Record<UploadPurpose, string> = {
   message: "messages",
@@ -77,6 +79,7 @@ const FOLDER: Record<UploadPurpose, string> = {
   story: "story-uploads",
   story_video: "story-videos",
   story_poster: "story-posters",
+  album_photo: "album-uploads",
 };
 /** Extension du fichier rangé : la vidéo reste un MP4, tout le reste est recompressé en WebP. */
 const extOf = (purpose: UploadPurpose) => (purpose === "story_video" ? "mp4" : "webp");
@@ -209,7 +212,9 @@ export const uploadsService = {
     rateLimit(
       purpose === "media_content"
         ? "mediaFileUpload"
-        : purpose === "crew_post"
+        : purpose === "album_photo"
+          ? "albumPhotoUpload"
+          : purpose === "crew_post"
           ? "crewPhotoUpload"
           : purpose === "feed_post"
             ? "feedPhotoUpload"

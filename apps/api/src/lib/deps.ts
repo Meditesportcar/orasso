@@ -74,7 +74,9 @@ export type JobName =
   // Lot R7i : lieu et liste des rendez-vous au spot finis effacés (toutes les 5 minutes).
   | "spot.purge"
   // Lot R8c1 : cartes vues du Fil de plus de 30 jours (et au-delà de 5 000 par compte), quotidienne.
-  | "feed.seen-purge";
+  | "feed.seen-purge"
+  // Lot R9e : brouillons d'album sans activité depuis 7 jours, quotidienne.
+  | "albums.draft-purge";
 
 /** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
 export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };
