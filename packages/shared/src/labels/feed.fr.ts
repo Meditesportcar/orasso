@@ -73,6 +73,7 @@ export const feedCardKindLabels: Record<FeedCardKind, string> = {
   feed_post: "Publications",
   memory: "Souvenirs",
   sponsored: "Sponsorisé",
+  album: "Albums",
 };
 
 export const feedAspectLabels: Record<FeedAspect, string> = {

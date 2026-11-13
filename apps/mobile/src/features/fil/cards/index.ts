@@ -29,6 +29,8 @@ export const cardRegistry: { [K in FeedCardKind]: ComponentType<CardProps<any>> 
   feed_post: FeedPostCard,
   memory: MemoryCard,
   sponsored: SponsoredCard,
+  // Lot R9e (partie 1) : le genre existe dans l'API ; `AlbumCard` (partie 2) remplace cette ligne. L'API ne sert la carte qu'à qui envoie `?cards=album`.
+  album: UnknownCard,
 };
 
 /** Le composant d'un genre ; `UnknownCard` pour un genre que ce registre ne connaît pas. */

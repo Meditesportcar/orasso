@@ -10,16 +10,24 @@
 import {
   coarsePosition,
   createFollowTracker,
+  createPositionCalendar,
   createPositionStore,
   type LatLng,
+  type PositionOutcome,
+  PositionTimeoutError,
   PRACTICAL_PARTIAL_RETRY_MS,
   type PracticalAt,
+  type PracticalData,
+  practicalFailureOutcome,
   weatherFollowKey,
 } from "@orasso/shared";
+import * as Sentry from "@sentry/react-native";
 import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 import { beginMyPosition, giveMyPositionCell, useWeatherPosition } from "@/features/weather/position";
 import { api } from "@/lib/api";
+import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
@@ -31,10 +39,44 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
   weatherAt: async (coarse): Promise<PracticalAt> => {
     // L'exacte est prise AU DÉPART de cette demande (avant toute attente) : une réponse ne reprend jamais l'exacte d'un autre geste.
     const exact = pendingExact ?? store.getState().at?.exact ?? coarse;
-    const data = await api.practical({ near: "position", lat: coarse.lat, lng: coarse.lng });
+    const data: PracticalData = await api.practical({ near: "position", lat: coarse.lat, lng: coarse.lng });
     return { exact, data };
   },
 });
+
+/**
+ * Le calendrier unique des relectures de lieux partiels (3, 6, 12, 24 s), partagé par tous les écrans montés (l'Accueil reste monté
+ * derrière « Voir tout ») : il lit le résultat de chaque relecture ; un refus (4xx) l'arrête et retient son heure, relu au retour de
+ * l'appli au premier plan après 60 s ; une erreur inconnue l'arrête (signalée à Sentry) ; suspendu appli en arrière-plan.
+ */
+const calendar = createPositionCalendar({
+  visible: () => AppState.currentState === "active",
+  refresh: async (): Promise<PositionOutcome> => {
+    const result = await store.refresh(true);
+    if (result.status !== "failed") return "ok";
+    if (result.error instanceof ApiRequestError) return practicalFailureOutcome(result.error.status);
+    if (result.error instanceof PositionTimeoutError) return "transient";
+    if (Sentry.getClient()) Sentry.captureException(result.error, { tags: { area: "practical-position" } });
+    return "unknown";
+  },
+});
+// La clé du calendrier est la position gardée (`coarse` change à chaque position donnée) : une nouvelle position, un nouveau calendrier.
+store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true, store.view().coarse));
+AppState.addEventListener("change", (next) => {
+  if (next === "active") calendar.resume();
+});
+
+/** Un écran de « Pratique » est monté : le calendrier travaille tant qu'il l'est. */
+export const retainPracticalCalendar = () => calendar.retain();
+
+/** Le calendrier est arrêté (refus, erreur inconnue) : « Réessayer » est proposé. */
+export const usePracticalCalendarFailed = () => useSyncExternalStore(calendar.subscribe, calendar.failed, () => false);
+
+/** Une lecture de la position est en vol : « Réessayer » est désactivé pendant ce temps. */
+export const usePracticalCalendarBusy = () => useSyncExternalStore(calendar.subscribe, calendar.busy, () => false);
+
+/** « Réessayer » : tout repart à 0 et les lieux de la position sont relus tout de suite. */
+export const retryPracticalCalendar = () => calendar.retry();
 
 // Chaque fin de session invalide les demandes en cours, même sans position gardée (comme « Ma météo »).
 // Une autre session : le suivi de la météo repart de zéro (une première position du même lieu n'est pas ignorée).

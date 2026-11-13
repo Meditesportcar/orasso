@@ -2,9 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createFollowTracker,
+  createReadGate,
   createSingleTimer,
+  nextPracticalRead,
   PRACTICAL_MIN_GAP_MS,
+  PRACTICAL_STALE_MS,
+  practicalFailureOutcome,
+  practicalPendingDelay,
   practicalReadAllowed,
+  practicalRefusedReadAllowed,
+  practicalResumeDelay,
   practicalRetryDelay,
   shouldRetryPractical,
   weatherFollowKey,
@@ -82,5 +89,96 @@ describe("relances de Pratique (R8q, tour 3)", () => {
     expect(tracker.shouldFollow(weatherFollowKey({ lat: 42.5, lng: 3.0 }))).toBe(false);
     expect(tracker.shouldFollow(b)).toBe(true);
     expect(weatherFollowKey(null)).toBeNull();
+  });
+});
+
+describe("relectures tant que des chargements sont en cours (suite R8q, tour 2)", () => {
+  it("3 s, 6 s, 12 s, 24 s, puis arrêt", () => {
+    expect([0, 1, 2, 3, 4, 10].map(practicalPendingDelay)).toEqual([3_000, 6_000, 12_000, 24_000, null, null]);
+  });
+});
+
+describe("une lecture à la fois sans en perdre (suite R8q, tour 3)", () => {
+  it("une demande qui arrive pendant une lecture attend et repart à sa fin (changement de compte pendant la requête)", () => {
+    const gate = createReadGate();
+    expect(gate.enter()).toBe(true);
+    // Le nouveau compte demande sa lecture pendant celle de l'ancien : elle est mise en attente, une seule fois.
+    expect(gate.enter()).toBe(false);
+    expect(gate.enter()).toBe(false);
+    expect(gate.leave()).toBe(true);
+    // La lecture relancée est seule : à sa fin, rien n'attend.
+    expect(gate.enter()).toBe(true);
+    expect(gate.leave()).toBe(false);
+  });
+});
+
+describe("suite d'une lecture (suite R8q, tour 4)", () => {
+  it("réseau : relance espacée et bornée ; 403 et 429 : aucune relance", () => {
+    let step = nextPracticalRead("transient", 0, 0);
+    expect(step).toEqual({ delay: 15_000, calendarStep: 0, networkAttempt: 1 });
+    step = nextPracticalRead("transient", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(30_000);
+    // Un refus (4xx) n'est jamais relancé, quel que soit l'état.
+    expect(nextPracticalRead("refused", 0, 0).delay).toBeNull();
+    expect(nextPracticalRead("refused", 2, 3).delay).toBeNull();
+  });
+
+  it("partielle puis panne réseau : le calendrier continue ; au bout de la série il s'arrête", () => {
+    let step = nextPracticalRead("partial", 0, 0);
+    expect(step).toEqual({ delay: 3_000, calendarStep: 1, networkAttempt: 0 });
+    step = nextPracticalRead("transient", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(6_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(12_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(24_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBeNull();
+  });
+
+  it("complète puis partielle : les compteurs repartent de 0", () => {
+    const done = nextPracticalRead("complete", 3, 2);
+    expect(done).toEqual({ delay: null, calendarStep: 0, networkAttempt: 0 });
+    expect(nextPracticalRead("partial", done.calendarStep, done.networkAttempt).delay).toBe(3_000);
+  });
+});
+
+describe("refus, transitoire, complète : une règle unique (suite R8q, tour 5)", () => {
+  it("transitoire : réseau (0) et 5xx ; refus : tout 4xx", () => {
+    expect(practicalFailureOutcome(0)).toBe("transient");
+    expect(practicalFailureOutcome(502)).toBe("transient");
+    expect(practicalFailureOutcome(503)).toBe("transient");
+    for (const status of [400, 401, 403, 404, 429])
+      expect(practicalFailureOutcome(status), String(status)).toBe("refused");
+  });
+
+  it("un 502 est relancé à 15 s ; un refus n'a aucune minuterie", () => {
+    expect(nextPracticalRead(practicalFailureOutcome(502), 0, 0)).toEqual({
+      delay: 15_000,
+      calendarStep: 0,
+      networkAttempt: 1,
+    });
+    expect(nextPracticalRead(practicalFailureOutcome(429), 0, 0).delay).toBeNull();
+  });
+
+  it("un refus : retour à 10 s, aucune lecture ; retour à 61 s, une lecture", () => {
+    const refusedAt = 1_000_000;
+    const lastStart = refusedAt - 100;
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + 10_000)).toBe(false);
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + PRACTICAL_STALE_MS - 1)).toBe(false);
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + 61_000)).toBe(true);
+    // Sans refus retenu, aucune relecture de refus.
+    expect(practicalRefusedReadAllowed(0, 0, 9_999_999)).toBe(false);
+    // `practicalReadAllowed` garde la main : une lecture partie il y a moins de 15 s l'empêche.
+    expect(practicalRefusedReadAllowed(refusedAt, refusedAt + 61_000 - 5_000, refusedAt + 61_000)).toBe(false);
+  });
+});
+
+describe("reprise hors focus (suite R8q, tour 5, relecture Codex)", () => {
+  it("perte de focus à 3 s, retour à 5 s : la lecture partie à 0 reprend à 15 s (10 s restantes)", () => {
+    expect(practicalResumeDelay(0, 5_000)).toBe(0); // aucune lecture connue : tout de suite
+    expect(practicalResumeDelay(1_000, 6_000)).toBe(10_000);
+    expect(practicalResumeDelay(1_000, 16_000)).toBe(0);
+    expect(practicalResumeDelay(1_000, 60_000)).toBe(0);
   });
 });

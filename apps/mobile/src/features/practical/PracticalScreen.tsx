@@ -144,6 +144,13 @@ export function PracticalScreen() {
         </View>
       ) : null}
       {read.offline && data ? <Notice>{L.offline}</Notice> : null}
+      {read.failed ? (
+        <View style={styles.gps}>
+          <SmButton kind="s" icon="undo" disabled={read.loading} onPress={read.retry} testID="practical-retry">
+            {L.retry}
+          </SmButton>
+        </View>
+      ) : null}
 
       {!data ? (
         <Text variant="caption" color={c.inkMuted} testID="practical-state">

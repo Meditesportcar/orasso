@@ -1,0 +1,76 @@
+import { countFr } from "./plural.fr";
+
+// Albums des médias rattachés à un événement (lot R9e) : textes de la maquette R9 (`albumH`, `albCard`, `ALBS`) au
+// caractère près, plus les messages de l'API et les libellés absents de la maquette (consignés au journal des choix).
+// L'appli et le site lisent ici.
+
+export const albumLabels = {
+  // Création en trois étapes.
+  newAlbum: "Nouvel album",
+  step: (n: number) => `Étape ${n} sur 3`,
+  chooseEvent: "Choisis l'événement",
+  accredited: "accréditée",
+  accreditationPending: "accréditation en attente",
+  eventOption: (date: string, state: "accredited" | "pending") =>
+    `${date} · ${state === "accredited" ? "accréditée" : "accréditation en attente"}`,
+  eventsNote:
+    "Seuls les événements où tu es accrédité (média officiel) ou retenu comme photographe sont proposés. Un album est toujours rattaché à un événement.",
+  continue: "Continuer",
+  photosStep: "Les photos",
+  photosReady: "photos prêtes",
+  compressedNote: "Versions web compressées ; les originaux restent chez toi",
+  add: "Ajouter",
+  plateFound: (n: number) => `${countFr(n, "photo")} avec une plaque repérée`,
+  plateHint: (n: number) =>
+    `Le flou est proposé, jamais imposé : tu décides pour ${n >= 2 ? `ces ${n} photos` : "cette photo"}.`,
+  blurAndAdd: "Flouter et ajouter",
+  sendAsIs: "Envoyer telle quelle",
+  blurredTitle: (n: number) => `${n} ${n >= 2 ? "photos floutées" : "photo floutée"}`,
+  keptTitle: (n: number) => `${n} ${n >= 2 ? "photos gardées telles quelles" : "photo gardée telle quelle"}`,
+  blurredHint: "Plaques floutées avant l'envoi, de façon irréversible.",
+  keptHint: "Envoyées sans flouter : la plaque reste lisible.",
+  change: "Changer",
+  detailsStep: "Les détails",
+  credit: "Crédit",
+  creditLine: (mediaName: string) => `Photos : ${mediaName}`,
+  automatic: "automatique",
+  attachedTo: "Rattaché à",
+  fixed: "fixé",
+  photosAndPlates: (photos: number, blurred: number) =>
+    `${countFr(photos, "photo")} · ${blurred} ${blurred >= 2 ? "plaques floutées" : "plaque floutée"}`,
+  plates: (n: number) => (n >= 2 ? "plaques floutées" : "plaque floutée"),
+  modify: "modifier",
+  allowSave: "Les passionnés identifiés peuvent enregistrer leurs photos",
+  allowSaveOn: "Un passionné reconnu sur une photo peut l'enregistrer, avec ton crédit.",
+  allowSaveOff: "Ils pourront seulement les partager en story, avec ton crédit.",
+  whatOthersSee: "Ce que verront les autres",
+  publish: "Publier l'album",
+  // Carte du Fil, page du média, album ouvert.
+  defaultTitle: (eventTitle: string) => `Les photos du ${eventTitle}`,
+  photosCount: (n: number) => countFr(n, "photo"),
+  officialAlbum: "Album officiel",
+  presentAt: (eventTitle: string) => `présent au ${eventTitle}`,
+  seeAlbum: "Voir l'album",
+  albums: "Albums",
+  links: "Liens",
+  cardLine: (title: string, n: number) => `${title} · ${countFr(n, "photo")}`,
+  mediaTag: "Média",
+  // Absents de la maquette (journal des choix).
+  empty: "Pas encore d'album.",
+  resume: "Reprendre l'album",
+  photoOf: (n: number, total: number) => `Photo ${n} sur ${total}`,
+  deleteAlbum: "Supprimer l'album",
+  // Messages de l'API.
+  notAccredited: "Tu dois être accrédité sur cet événement pour y publier un album",
+  eventNotFound: "Événement introuvable",
+  eventCancelled: "L'événement est annulé",
+  notFound: "Album introuvable",
+  photoNotFound: "Photo introuvable",
+  imageUnknown: "Image inconnue : envoie-la à nouveau.",
+  full: (max: number) => `Un album compte ${max} photos au plus.`,
+  emptyAlbum: "Ajoute au moins une photo avant de publier l'album.",
+  plateDecision: "Décide du floutage de la plaque de cette photo avant de l'ajouter.",
+} as const;
+
+/** Genre « album » du Fil : libellé du menu « Moins de ce genre ». */
+export const albumFeedKindLabel = "Albums";

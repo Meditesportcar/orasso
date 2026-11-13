@@ -122,6 +122,13 @@ export function PracticalBlock() {
           ))}
         </View>
       )}
+      {read.failed ? (
+        <View style={styles.gps}>
+          <SmButton kind="s" icon="undo" disabled={read.loading} onPress={read.retry} testID="practical-retry">
+            {L.retry}
+          </SmButton>
+        </View>
+      ) : null}
       {active === "me" ? (
         <View style={styles.gps}>
           <SmButton

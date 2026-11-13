@@ -6,6 +6,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { mediaContents, mediaProfiles, mediaSavedEvents } from "../../db/schema";
 import type { Tx } from "../../lib/tx";
+import { anonymizeAlbumsForDeletedAccount } from "../albums/anonymize";
 
 export async function anonymizeMediaForDeletedAccount(tx: Tx, userId: string, at: Date): Promise<string[]> {
   const profiles = await tx.select().from(mediaProfiles).where(eq(mediaProfiles.userId, userId));
@@ -15,7 +16,13 @@ export async function anonymizeMediaForDeletedAccount(tx: Tx, userId: string, at
     .select({ photoKeys: mediaContents.photoKeys })
     .from(mediaContents)
     .where(inArray(mediaContents.mediaProfileId, ids));
-  const keys = [...contents.flatMap((c) => c.photoKeys), ...profiles.flatMap((p) => (p.logoKey ? [p.logoKey] : []))];
+  // Lot R9e : les albums (photos neuves et photos reprises d'une galerie) partent avec le compte.
+  const albumKeys = await anonymizeAlbumsForDeletedAccount(tx, ids, at);
+  const keys = [
+    ...contents.flatMap((c) => c.photoKeys),
+    ...albumKeys,
+    ...profiles.flatMap((p) => (p.logoKey ? [p.logoKey] : [])),
+  ];
   await tx
     .update(mediaContents)
     .set({ deletedAt: at, photoKeys: [], featuredAt: null, title: "Contenu supprimé", url: null })
