@@ -271,6 +271,8 @@ export const storiesShare = {
           eventId: source.eventId,
           sharedFromStoryId: id,
           sharedByUserId: v.user.id,
+          // Une story reprise d'une photo d'album garde son crédit « Photos : <média> » (servi, imprimé à l'export) et tombe avec l'identification.
+          sourceAlbumPhotoId: source.sourceAlbumPhotoId,
           // « Collaboration commerciale » : la copie garde la mention de l'originale (R7m2).
           commercialPartnerId: source.commercialPartnerId,
           // Même expiration que l'originale : la copie ne la prolonge jamais.

@@ -39,7 +39,12 @@ import { mediaKey } from "./view";
 /** Points d'attente pour les tests de concurrence : `afterLocks` est attendu dans la transaction, verrous pris et droits relus, avant l'insertion. Jamais posé hors des tests. */
 export const shareToStoryTestHooks: { afterLocks?: () => Promise<void> } = {};
 
-export type StoryFromAlbum = { id: string; expiresAt: string; replayed: boolean };
+export type StoryFromAlbum = {
+  id: string;
+  expiresAt: string;
+  replayed: boolean;
+  audience: "public" | "followers" | "crew";
+};
 
 /** Les crédits (« Photos : <média> ») de ces stories reprises d'une photo d'album : story → média. Une requête. */
 export async function albumCreditsOf(
@@ -100,17 +105,21 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
   // Rejouée : déjà en story (vivante), la même. Lue d'abord sans verrou (évite de composer un fichier pour rien), puis **sous le verrou**.
   const alreadyLive = async (ex: typeof db | Tx = db) => {
     const [live] = await ex
-      .select({ id: stories.id, expiresAt: stories.expiresAt })
+      .select({ id: stories.id, expiresAt: stories.expiresAt, audience: stories.audience })
       .from(stories)
       .where(
         and(
           eq(stories.authorId, v.user.id),
           eq(stories.sourceAlbumPhotoId, photo.id),
+          // Mes propres stories reprises de la photo, jamais une copie d'une story d'un autre (qui porte aussi le crédit).
+          isNull(stories.sharedFromStoryId),
           isNull(stories.deletedAt),
           sql`${stories.expiresAt} > ${now()}`,
         ),
       );
-    return live ? ({ id: live.id, expiresAt: live.expiresAt.toISOString(), replayed: true } as const) : null;
+    return live
+      ? ({ id: live.id, expiresAt: live.expiresAt.toISOString(), replayed: true, audience: live.audience } as const)
+      : null;
   };
   const again = await alreadyLive();
   if (again) return again;
@@ -188,5 +197,5 @@ export async function shareToStory(v: Viewer, photoId: string, input: ShareToSto
     await removeOrRetry(key);
     throw error;
   }
-  return { id, expiresAt: storyExpiresAt(at).toISOString(), replayed: false };
+  return { id, expiresAt: storyExpiresAt(at).toISOString(), replayed: false, audience };
 }

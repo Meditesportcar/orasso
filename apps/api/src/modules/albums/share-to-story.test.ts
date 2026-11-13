@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, stories } from "../../db/schema";
+import { eventAlbumPhotos, eventAlbums, stories, storyTags } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
@@ -44,7 +44,7 @@ describe("« En story » depuis une photo d'album (T38)", () => {
   it("une story personnelle publique, créée depuis le fichier de l'album sans re-téléversement, avec la photo d'origine et la plaque traitée", async () => {
     const res = await toStory(s.dam, photo(0), { caption: "  Mon GR sur la Côte  " });
     expect(res.status).toBe(201);
-    expect(Object.keys(res.json).sort()).toEqual(["expiresAt", "id"]);
+    expect(Object.keys(res.json).sort()).toEqual(["audience", "expiresAt", "id", "replayed"]);
     const row = await storyRow(res.json.id);
     expect(row).toMatchObject({
       authorId: s.dam.id,
@@ -235,6 +235,39 @@ describe("« En story » depuis une photo d'album (T38)", () => {
     await accountService.anonymize(s.leo.id, null);
     expect((await storyRow(story.json.id))?.deletedAt).not.toBeNull();
     expect((await toStory(s.dam, photo(2))).status).toBe(404);
+  });
+
+  it("une story déjà en ligne est rendue telle quelle : 200, `replayed`, l'audience réelle (ni public ni légende ne la modifient)", async () => {
+    await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    const first = await toStory(s.dam, photo(0), { audience: "public", caption: "Première" });
+    expect(first.status).toBe(201);
+    expect(first.json).toMatchObject({ replayed: false, audience: "public" });
+    const again = await toStory(s.dam, photo(0), { audience: "followers", caption: "Autre" });
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ id: first.json.id, replayed: true, audience: "public" });
+    expect((await storyRow(first.json.id))?.caption).toBe("Première");
+  });
+
+  it("repartagée (« Ajouter à ma story »), la copie garde le crédit du média, et elle tombe avec l'identification", async () => {
+    const tag = await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    const story = await toStory(s.dam, photo(0));
+    await db.insert(storyTags).values({ storyId: story.json.id, targetKind: "user", targetId: s.kenji.id });
+    const shared = await call(s.kenji, "POST", `/stories/${story.json.id}/share-to-mine`, {});
+    expect(shared.status).toBeLessThan(300);
+    const copy = (await db.select().from(stories).where(eq(stories.sharedFromStoryId, story.json.id)))[0];
+    expect(copy?.sourceAlbumPhotoId).toBe(photo(0));
+    const view = await byAuthor(s.kenji, `u:${s.kenji.id}`);
+    const mine = (view.json.stories as { id: string; credit: { mediaName: string } | null }[]).find(
+      (x) => x.id === copy?.id,
+    );
+    expect(mine?.credit).toMatchObject({ mediaName: "Sud Cars" });
+    // Une copie ne s'exporte pas (auteur seul de l'originale, `author_only`) : le crédit n'a pas à y être imprimé.
+    expect((await app.request(`/api/stories/${copy?.id}/export`, { headers: { cookie: s.kenji.cookie } })).status).toBe(
+      403,
+    );
+    // Plus d'identification : la story d'origine et la copie tombent.
+    expect((await call(s.dam, "DELETE", `/me/album-tags/${tag.json.id}`)).status).toBe(204);
+    expect((await storyRow(copy?.id as string))?.deletedAt).not.toBeNull();
   });
 
   it("l'export de la story incruste le crédit sous la signature ; sans crédit, le fichier est différent", async () => {
