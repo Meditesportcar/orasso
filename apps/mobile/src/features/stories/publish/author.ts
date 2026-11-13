@@ -42,6 +42,14 @@ export function storyAuthorFor(
   return actor ? authorOf(persona, activeLabel) : { persona: "fan" };
 }
 
-/** L'adresse de « Publier une story » depuis la barre des stories : la page de la casquette (`auteur=<clé>`), sinon la personne **explicitement** (`auteur=me`). */
-export const storyPublishHref = (actor: string | null): string =>
-  actor ? `/story/publier?auteur=${encodeURIComponent(actor)}` : "/story/publier?auteur=me";
+/**
+ * L'adresse de « Publier une story » depuis la barre des stories : la page de la casquette (`auteur=<clé>`) ; la personne
+ * **explicitement** (`auteur=me`) seulement si la casquette active est une page sans acteur (suspendue, survol) ; casquette de base
+ * (passionné, visiteur, administration) : l'adresse d'avant, sans paramètre (l'écran garde « Visible 24 h »).
+ */
+export const storyPublishHref = (actor: string | null, activeKind: string): string =>
+  actor
+    ? `/story/publier?auteur=${encodeURIComponent(actor)}`
+    : activeKind === "fan" || activeKind === "visitor" || activeKind === "admin"
+      ? "/story/publier"
+      : "/story/publier?auteur=me";

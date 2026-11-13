@@ -110,12 +110,14 @@ export function resolveStoryAuthor(
  */
 export function storyAuthorAllowed(
   author: { persona: string; structureId?: string; proId?: string },
-  entries: readonly Pick<SheetEntryInput, "kind" | "id" | "assisted">[],
+  entries: readonly (Pick<SheetEntryInput, "kind" | "id" | "assisted"> & { suspended?: boolean })[],
 ): boolean {
   if (author.persona === "fan") return true;
   return entries.some(
     (e) =>
       !e.assisted &&
+      // Une structure suspendue reste dans `GET /me` mais l'API refuse sa publication : « plus accès », pas un 403 après l'envoi.
+      !e.suspended &&
       e.kind === author.persona &&
       (author.persona === "organizer"
         ? e.id === author.structureId

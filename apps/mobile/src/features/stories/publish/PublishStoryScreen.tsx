@@ -644,7 +644,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
                   {sent < 1 ? L.sending : L.publishing}
                 </Muted>
               </View>
-            ) : blocking ? (
+            ) : blocking && !lostIssue ? (
               <Muted variant="caption" testID="story-missing">
                 {blocking}
               </Muted>

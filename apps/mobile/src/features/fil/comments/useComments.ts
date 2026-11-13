@@ -103,7 +103,8 @@ export function useComments(
   );
   /** Une réponse de l'API d'un autre compte n'écrit ni la feuille ni la carte. */
   const emitPost = useCallback((next: FeedPostView, ticket: LiveTicket) => {
-    if (postLive.alive(ticket)) onPostRef.current(next);
+    // La carte affichée est celle de la casquette active : une réponse d'une autre casquette n'y touche pas (tour 3).
+    if (postLive.alive(ticket) && postLive.isCurrent(ticket as never)) onPostRef.current(next);
   }, []);
   /**
    * 404 d'une **route de la publication** (première page, couper, envoi sans `parentId`) : la publication n'est plus lisible, tout ce qu'on
@@ -155,14 +156,14 @@ export function useComments(
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
         const next = update((s) => sheetWithTopPage(s, page.items, page.nextCursor, !from, since), t);
-        if (mounted.current) setLoadError(null);
+        if (mounted.current && postLive.isCurrent(t as never)) setLoadError(null);
         // Les réponses restées dépliées se revalident (elles ont pu être supprimées ou devenir privées entre deux ouvertures).
         if (!from) {
           for (const [pid, r] of Object.entries(next.replies)) if (r.open && !r.loaded) void loadReplies(pid);
         }
       } catch (e) {
         if (!postLive.fresh(t) || postGone(e, t)) return;
-        if (mounted.current) setLoadError(errorMessage(e));
+        if (mounted.current && postLive.isCurrent(t as never)) setLoadError(errorMessage(e));
       }
     },
     [id, update, postGone, loadReplies],

@@ -145,3 +145,33 @@ describe("le corps envoyé à l'API suit l'auteur figé (R9n, tour 2, point 9)",
     expect(me).not.toHaveProperty("structureId");
   });
 });
+
+describe("suspension pendant la rédaction d'une story (R9n, tour 3)", () => {
+  it("l'auteur figé (structure) perd ses droits au rafraîchissement : envoi bloqué ; « Publier en mon nom » : corps personnel", () => {
+    const frozen = { persona: "organizer", structureId: "s1", name: "Roues Libres 66" } as const;
+    const open = [{ kind: "organizer", id: "s1" }];
+    expect(storyAuthorAllowed(frozen, open)).toBe(true);
+    // Le rafraîchissement de GET /me remonte la structure suspendue.
+    const suspended = [{ kind: "organizer", id: "s1", suspended: true }];
+    expect(storyAuthorAllowed(frozen, suspended)).toBe(false);
+    // Aucun envoi n'est fait tant qu'il est bloqué ; après le choix explicite, l'auteur est la personne et le corps est personnel.
+    const choice = { persona: "fan" } as const;
+    expect(storyAuthorAllowed(choice, suspended)).toBe(true);
+    const body = storyBody({
+      uploadKey: "k",
+      frame: { x: 0, y: 0, scale: 1 },
+      rects: [],
+      noPlate: true,
+      audience: "public",
+      crewId: null,
+      author: choice,
+      caption: "",
+      place: "",
+      vehicleId: null,
+      eventId: null,
+      tags: [],
+    } as never);
+    expect(body.persona).toBe("fan");
+    expect(body).not.toHaveProperty("structureId");
+  });
+});

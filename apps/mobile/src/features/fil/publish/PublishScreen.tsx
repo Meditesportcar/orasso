@@ -61,7 +61,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 import { confirmSwitchToStory } from "@/features/casquettes/confirmSwitch";
-import { switchToStory } from "@/features/casquettes/switchRule";
+import { shouldLeave, switchToStory } from "@/features/casquettes/switchRule";
 import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
@@ -723,7 +723,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
             });
             if (rule === "locked") return;
             void (async () => {
-              if (rule === "confirm" && !(await confirmSwitchToStory())) return;
+              // « Rester » garde le brouillon (rien ne bouge) ; « Passer à la story » l'abandonne.
+              if (!shouldLeave(rule, rule === "confirm" ? await confirmSwitchToStory() : true)) return;
               router.replace(
                 `/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never,
               );

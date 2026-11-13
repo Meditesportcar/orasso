@@ -18,3 +18,7 @@ export function switchToStory(s: SwitchState): "locked" | "confirm" | "go" {
   if (s.busy || s.uncertain) return "locked";
   return hasDraft(s) ? "confirm" : "go";
 }
+
+/** Quitter pour la story ? `confirmed` : la réponse à la confirmation (« Passer à la story » vrai, « Rester » faux). « Rester » garde le brouillon : rien ne bouge. */
+export const shouldLeave = (rule: "locked" | "confirm" | "go", confirmed: boolean): boolean =>
+  rule === "go" || (rule === "confirm" && confirmed);

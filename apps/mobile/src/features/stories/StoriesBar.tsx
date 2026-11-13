@@ -42,7 +42,7 @@ export function StoriesBar() {
   const router = useRouter();
   // Lot R9n : en casquette, `mine` = les stories de la page (R9a) et « Ta story » porte le logo de la casquette (maquette `storiesCas`).
   const actor = useActor();
-  const { active } = usePersona();
+  const { active, persona } = usePersona();
   // Lot R9n (tour 1) : la réponse porte l'acteur pour lequel elle a été lue ; une réponse d'une autre casquette (retardée, ou ancienne
   // pendant le rechargement) n'est jamais affichée : vide ou chargement, jamais l'ancienne barre.
   const bar = useApi(async () => ({ actor, bar: await api.storiesBar(actor) }), [actor]);
@@ -61,7 +61,7 @@ export function StoriesBar() {
   const display = barDisplay(data?.authors ?? []);
   const myId = me?.user.id;
   const ownKey = actor ?? (myId ? `u:${myId}` : null);
-  const publishHref = storyPublishHref(actor) as never;
+  const publishHref = storyPublishHref(actor, persona.kind) as never;
   const ownSource = actor ? mediaSource(active.logoUrl) : mediaSource(me?.profile.avatarUrl);
   const ownName = actor ? active.label : (me?.profile.pseudo ?? "?");
 

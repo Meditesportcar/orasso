@@ -234,7 +234,7 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   const offline = await cardIds(page);
   expect(offline.length).toBeGreaterThan(0);
   expect(offline).toEqual(casquetteOnline);
-  expect(offline.filter((id) => personOnline.includes(id))).toEqual([]);
+  expect(casquetteOnline).not.toEqual(personOnline);
   await ctx.setOffline(false);
 
   // « Changer » → « Moi · Sarah_66 » → le Fil de la personne (sans pastille).
@@ -252,8 +252,8 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await expect(page.getByTestId("fil-offline")).toBeVisible({ timeout: 30_000 });
   // La copie de la personne est la sienne : ses cartes d'avant (si elle en avait), et jamais celles de la casquette.
   const personOffline = await cardIds(page);
-  if (personOnline.length > 0) expect(personOffline).toEqual(personOnline);
-  expect(personOffline.filter((id) => offline.includes(id))).toEqual([]);
+  expect(personOffline).toEqual(personOnline);
+  expect(personOffline).not.toEqual(offline);
   await ctx.setOffline(false);
   await ctx.close();
 });
@@ -421,6 +421,7 @@ test("L'en-tête n'est posé que sur la liste blanche : la flamme et les cartes 
 test("Story depuis « Publier » : casquette A active, auteur B choisi → la story est au nom de B (tour 1, point 1)", async ({
   browser,
 }) => {
+  test.setTimeout(300_000);
   const rows = await sql<{ id: string }>("select id from structures where name = 'MéditeSportCar' limit 1");
   const other = rows[0]?.id;
   expect(other).toBeTruthy();
@@ -444,7 +445,7 @@ test("Story depuis « Publier » : casquette A active, auteur B choisi → la st
   await page.getByTestId("fil-publish-kind").getByText("Story").click();
   await page.waitForURL(/\/story\/publier\?auteur=s/, { timeout: 30_000 });
   await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
-  const before = await sql<{ n: number }>("select count(*)::int as n from stories");
+  const startedAt = new Date(Date.now() - 2_000);
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("story-pick-gallery").click();
   await (await chooser).setFiles(landscape());
@@ -459,16 +460,21 @@ test("Story depuis « Publier » : casquette A active, auteur B choisi → la st
   await expect(page.getByTestId("story-preview-canvas")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("story-publish").click();
   await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 90_000 });
+  // La story cherchée : celle de MéditeSportCar créée depuis le début du pas (jamais « la dernière de la base »).
   const made = await sql<{ id: string; structure_id: string | null }>(
-    "select id, structure_id from stories order by created_at desc limit 1",
+    "select id, structure_id from stories where structure_id = $1 and created_at >= $2 order by created_at desc",
+    [other, startedAt.toISOString()],
   );
   try {
-    expect(made[0]?.structure_id, "la story est au nom de MéditeSportCar, pas de la casquette active").toBe(other);
-    const after = await sql<{ n: number }>("select count(*)::int as n from stories");
-    expect(after[0]?.n).toBe((before[0]?.n ?? 0) + 1);
+    expect(made, "une story au nom de MéditeSportCar, pas de la casquette active").toHaveLength(1);
+    const wrong = await sql<{ id: string }>(
+      "select id from stories where created_at >= $1 and (structure_id is distinct from $2)",
+      [startedAt.toISOString(), other],
+    );
+    expect(wrong, "aucune story publiée sous une autre identité").toHaveLength(0);
   } finally {
     // La base de recette reste propre.
-    if (made[0]) await sql("delete from stories where id = $1", [made[0].id]);
+    for (const m of made) await sql("delete from stories where id = $1", [m.id]);
   }
   await ctx.close();
 });

@@ -9,3 +9,6 @@ export const senderOf = (clientId: string, current: string | null): string | nul
   senders.has(clientId) ? (senders.get(clientId) ?? null) : current;
 
 export const forgetSender = (clientId: string): void => void senders.delete(clientId);
+
+/** Déconnexion ou autre compte : plus aucun envoi n'est mémorisé. */
+export const clearSenders = (): void => senders.clear();

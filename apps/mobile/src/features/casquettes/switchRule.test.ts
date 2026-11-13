@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasDraft, type SwitchState, switchToStory } from "./switchRule";
+import { hasDraft, type SwitchState, shouldLeave, switchToStory } from "./switchRule";
 
 const empty: SwitchState = { photos: 0, caption: "", eventId: null, offerOn: false, busy: false, uncertain: false };
 
@@ -26,5 +26,14 @@ describe("switchToStory : « Publication → Story »", () => {
     // Aller : rien à perdre → go ; le brouillon abandonné après confirmation laisse un écran vide, qui repasse sans question.
     expect(switchToStory(empty)).toBe("go");
     expect(switchToStory({ ...empty, photos: 3, caption: "x" })).toBe("confirm");
+  });
+});
+
+describe("shouldLeave : « Rester » garde le brouillon", () => {
+  it("Rester : on ne quitte pas (rien n'est remplacé, photos et légende restent) ; Passer : on quitte ; verrou : jamais", () => {
+    expect(shouldLeave("confirm", false)).toBe(false);
+    expect(shouldLeave("confirm", true)).toBe(true);
+    expect(shouldLeave("go", false)).toBe(true);
+    expect(shouldLeave("locked", true)).toBe(false);
   });
 });
