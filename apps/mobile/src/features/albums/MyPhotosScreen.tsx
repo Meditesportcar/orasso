@@ -1,13 +1,12 @@
 // « Tes photos » (lot R9f, maquette R9.7 `apparaisH`, route `/album/<id>/mes-photos`) : les photos d'un album où je suis identifié, voiture ou
-// pseudo. En-tête : le média, « N photos de ta <voiture> » (ou « N photos où tu es identifié ») et « Contacter » (une conversation avec le
-// titulaire de la page du média). Une ligne par photo : la vignette, « Photo N », « Identifiée par <média> | toi », « En story » (la photo
+// pseudo. En-tête : le média, « N photos de ta <voiture> » (ou « N photos où tu es identifié ») et Une ligne par photo : la vignette, « Photo N », « Identifiée par <média> | toi », « En story » (la photo
 // reprise telle quelle, avec le crédit du média qui ne se retire pas), « Enregistrer » (au choix du média : sinon inerte, avec sa raison), « … »
-// (retirer mon identification, ce n'est pas ma voiture, contacter, signaler). **Aucun bouton principal** sur cet écran. Ces photos ne
+// (retirer mon identification, ce n'est pas ma voiture, signaler). **Aucun bouton principal** sur cet écran. Ces photos ne
 // deviennent pas mes publications.
-import { Button, Chip, ChipRow, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { albumLabels, albumTagLabels as L, type MyPhoto, myPhotoTaggedBy } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { openReport } from "@/features/ReportSheet";
@@ -45,6 +44,17 @@ export function MyPhotosScreen({ id }: { id: string }) {
   const [saving, setSaving] = useState<string | null>(null);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
+  // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  const photos = (v?.photos ?? []).filter((p) => !removed.has(p.id));
+
   async function remove(photo: MyPhoto) {
     setSheetBusy(true);
     setSheetError(null);
@@ -52,35 +62,18 @@ export function MyPhotosScreen({ id }: { id: string }) {
       await api.removeMyTag(photo.tagId);
       setSheet(null);
       setNote(L.screens.removed);
-      const next = await view.reload();
-      // La dernière photo retirée : plus rien à montrer ici, retour à l'écran d'avant.
-      if (next && next.photos.length === 0) close();
+      const left = (v?.photos ?? []).filter((p) => p.id !== photo.id && !removed.has(p.id));
+      setRemoved((cur) => new Set([...cur, photo.id]));
+      // La dernière identification retirée : plus rien à montrer ici (l'API rend 404 ensuite), retour à l'écran d'avant.
+      if (left.length === 0) {
+        close();
+        return;
+      }
+      void view.reload();
     } catch (e) {
       setSheetError(errorMessage(e));
     } finally {
       setSheetBusy(false);
-    }
-  }
-  async function contact() {
-    setSheetBusy(true);
-    setSheetError(null);
-    try {
-      const { id: conversation } = await api.contactAlbumMedia(id);
-      setSheet(null);
-      router.push(`/messages/${conversation}` as never);
-    } catch (e) {
-      setSheetError(errorMessage(e) || L.screens.contactFailed);
-    } finally {
-      setSheetBusy(false);
-    }
-  }
-  async function contactFromHeader() {
-    setError(null);
-    try {
-      const { id: conversation } = await api.contactAlbumMedia(id);
-      router.push(`/messages/${conversation}` as never);
-    } catch (e) {
-      setError(errorMessage(e) || L.screens.contactFailed);
     }
   }
   async function save(photo: MyPhoto) {
@@ -89,7 +82,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
     setError(null);
     setNote(null);
     try {
-      const outcome = await savePhoto(photo.id);
+      // Écran fermé ou compte changé pendant le téléchargement : le partage ne s'ouvre pas (`null`).
+      const outcome = await savePhoto(photo.id, () => alive.current);
+      if (outcome === null) return;
       setNote(outcome === "unavailable" ? "Le partage n'est pas disponible sur cet appareil." : L.screens.saved);
     } catch {
       setError(L.screens.saveFailed);
@@ -102,7 +97,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
     openReport({ type: "album_photo", id: photo.id });
   }
 
-  const count = v?.photos.length ?? 0;
+  const count = photos.length;
   const headline = v ? (v.vehicle ? L.photosOfYourCar(count, v.vehicle.label) : L.photosWhereIdentified(count)) : "";
   return (
     <FlowScreen
@@ -119,7 +114,6 @@ export function MyPhotosScreen({ id }: { id: string }) {
             error={sheetError}
             onClose={() => setSheet(null)}
             onRemove={(p) => void remove(p)}
-            onContact={() => void contact()}
             onReport={report}
           />
           <StorySheet
@@ -134,7 +128,11 @@ export function MyPhotosScreen({ id }: { id: string }) {
       }
     >
       {view.loading && !v ? <Waiting blocks={[80, 90, 90]} label="Chargement…" /> : null}
-      {view.error && !v ? <LoadError message={view.error.message} onRetry={() => void view.reload()} /> : null}
+      {/* 404 : plus aucune identification à mon nom dans cet album (la dernière vient d'être retirée) : pas une erreur de chargement. */}
+      {view.error && !v && view.error.status === 404 ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
+      {view.error && !v && view.error.status !== 404 ? (
+        <LoadError message={view.error.message} onRetry={() => void view.reload()} />
+      ) : null}
       {v ? (
         <View style={styles.col} testID="my-photos">
           <View
@@ -150,9 +148,6 @@ export function MyPhotosScreen({ id }: { id: string }) {
                 {headline}
               </Text>
             </View>
-            <SmallButton icon="chat" onPress={() => void contactFromHeader()} testID="my-photos-contact">
-              {L.contact}
-            </SmallButton>
           </View>
           {note ? <Notice testID="my-photos-note">{note}</Notice> : null}
           {error ? (
@@ -161,7 +156,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
             </Notice>
           ) : null}
           {count === 0 ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
-          {v.photos.map((p, i) => (
+          {photos.map((p, i) => (
             <View
               key={p.id}
               style={[styles.row, { backgroundColor: t.color.surface, borderColor: t.color.line }]}
@@ -200,9 +195,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
                     style={[styles.more, { borderColor: t.color.line }]}
                     testID="my-photo-more"
                   >
-                    <Text variant="bodyStrong" color={t.color.ink}>
-                      …
-                    </Text>
+                    <Icon name="more" size={20} color={t.color.ink} />
                   </Pressable>
                 </View>
                 {!p.canSave ? (
@@ -252,12 +245,13 @@ function StorySheet({
   const [audience, setAudience] = useState<"public" | "followers">("public");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Rejouée : la story de cette photo est déjà en ligne, l'API la rend telle quelle (ni public ni légende ne la modifient).
+  const [done, setDone] = useState<{ replayed: boolean; audience: string } | null>(null);
   const reset = () => {
     setCaption("");
     setAudience("public");
     setError(null);
-    setDone(false);
+    setDone(null);
   };
   const shut = () => {
     reset();
@@ -268,9 +262,10 @@ function StorySheet({
     setBusy(true);
     setError(null);
     try {
-      await api.photoToStory(photo.id, { audience, caption: caption.trim() || null });
-      setDone(true);
-      onDone(L.screens.storyShared(mediaName));
+      const res = await api.photoToStory(photo.id, { audience, caption: caption.trim() || null });
+      const shown = res.audience === "followers" ? L.screens.storyAudienceFollowers : L.screens.storyAudienceAll;
+      setDone({ replayed: res.replayed, audience: shown });
+      onDone(res.replayed ? L.screens.storyAlready(shown) : L.screens.storyShared(mediaName));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -293,9 +288,14 @@ function StorySheet({
             </Text>
           </View>
           <Muted variant="caption">{L.screens.storyCreditNote(mediaName)}</Muted>
+          <Muted variant="caption">{L.screens.storyPlateNote}</Muted>
           {done ? (
             <>
-              <Notice testID="story-done">{L.screens.storyDone}</Notice>
+              <Notice testID="story-done">
+                {done.replayed
+                  ? `${L.screens.storyAlready(done.audience)}. ${L.screens.storyAlreadyNote}`
+                  : L.screens.storyDone}
+              </Notice>
               {authorKey ? (
                 <Button
                   variant="secondary"

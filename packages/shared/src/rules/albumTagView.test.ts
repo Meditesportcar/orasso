@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { albumTagLabels as L } from "../labels/albumTags.fr";
-import { albumViewerRoleOf, mentionsSummary, myPhotoTaggedBy, taggedByText, whoLabelOf } from "./albumTagView";
+import {
+  albumViewerRoleOf,
+  appendTaggablePage,
+  mentionsSummary,
+  myPhotoTaggedBy,
+  showPeopleTab,
+  taggedByText,
+  whoLabelOf,
+} from "./albumTagView";
 
 const car = { vehicleId: "v", label: "Toyota GR Supra" } as never;
 const me = { userId: "u", pseudo: "Damien_66", avatarUrl: null, mine: true };
@@ -86,5 +94,37 @@ describe("mentionsSummary", () => {
   it("rien sans photo", () => {
     expect(mentionsSummary(undefined, "x")).toBeNull();
     expect(mentionsSummary([], "x")).toBeNull();
+  });
+});
+
+describe("appendTaggablePage (« Voir plus » au-delà de 60 voitures)", () => {
+  const car = (i: number) => ({ vehicleId: `v${i}`, label: `Voiture ${i}` }) as never;
+  const page = (from: number, n: number, nextCursor: number | null) =>
+    ({
+      role: "media",
+      vehicles: Array.from({ length: n }, (_, i) => car(from + i)),
+      people: [],
+      categories: [],
+      fallback: false,
+      nextCursor,
+    }) as never;
+  it("130 voitures en trois pages : toutes, une fois chacune, le curseur de la dernière page", () => {
+    const a = appendTaggablePage(page(0, 60, 60), page(60, 60, 120));
+    const b = appendTaggablePage(a, page(120, 10, null));
+    expect(b.vehicles).toHaveLength(130);
+    expect(new Set(b.vehicles.map((v) => v.vehicleId)).size).toBe(130);
+    expect(b.nextCursor).toBeNull();
+    expect(a.nextCursor).toBe(120);
+  });
+  it("une voiture déjà lue n'est pas doublée", () => {
+    expect(appendTaggablePage(page(0, 3, 3), page(2, 3, null)).vehicles).toHaveLength(5);
+  });
+});
+
+describe("showPeopleTab", () => {
+  it("après deux caractères, ou dès que l'API rend « moi » sans recherche", () => {
+    expect(showPeopleTab(false, 0)).toBe(false);
+    expect(showPeopleTab(true, 0)).toBe(true);
+    expect(showPeopleTab(false, 1)).toBe(true);
   });
 });

@@ -76,3 +76,17 @@ export function mentionsSummary(
     : albumTagLabels.photosWhereIdentified(count);
   return { count, media, line: `${head} · ${media}` };
 }
+
+/**
+ * « Voir plus » du plateau à choisir : la page suivante s'ajoute à celles déjà lues (sans doublon : une voiture déjà montrée ne revient
+ * pas), le curseur et le reste (rôle, puces, repli, personnes) sont ceux de la **dernière** réponse.
+ */
+export function appendTaggablePage(prev: Taggable, next: Taggable): Taggable {
+  const seen = new Set(prev.vehicles.map((v) => v.vehicleId));
+  return { ...next, vehicles: [...prev.vehicles, ...next.vehicles.filter((v) => !seen.has(v.vehicleId))] };
+}
+
+/** L'onglet « Personnes » existe dès qu'on peut en proposer : une recherche de deux caractères, ou « moi » rendu sans recherche par l'API. */
+export function showPeopleTab(searchLongEnough: boolean, peopleCount: number): boolean {
+  return searchLongEnough || peopleCount > 0;
+}

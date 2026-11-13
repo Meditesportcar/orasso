@@ -39,7 +39,7 @@ function Rail({ mention, mine }: { mention: AlbumMention; mine: boolean }) {
         >
           <AlbumPhoto photo={p} style={styles.img} cover />
           <View style={[styles.pill, { backgroundColor: t.color.night }]}>
-            <Text variant="caption" color={t.color.nightInk} style={styles.pillText}>
+            <Text variant="credit" color={t.color.nightInk}>
               {mention.mediaName}
             </Text>
           </View>
@@ -113,7 +113,6 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     alignItems: "center",
   },
-  pillText: { fontSize: 11, lineHeight: 14 },
 });
 
 /**

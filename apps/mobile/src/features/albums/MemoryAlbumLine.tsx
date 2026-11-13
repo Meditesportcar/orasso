@@ -20,22 +20,26 @@ export function MemoryAlbumLine({
   const { t } = useTheme();
   const router = useRouter();
   const s = mentionsSummary(memory.albumPhotos, memory.car?.label ?? null);
-  const first = memory.albumPhotos?.[0];
-  if (!s || !first) return null;
+  const albums = memory.albumPhotos ?? [];
+  if (!s || albums.length === 0) return null;
   return (
     <>
       <Text variant="caption" color={tone === "poster" ? t.color.posterMuted : t.color.inkMuted} testID={testID}>
         {s.line}
       </Text>
-      <SmButton
-        kind="s"
-        icon="camera"
-        onPress={() => router.push(`/album/${first.albumId}/mes-photos` as never)}
-        style={styles.stretch}
-        testID={`${testID}-open`}
-      >
-        {L.reviewMyPhotos}
-      </SmButton>
+      {/* Un lien par album : le souvenir peut en annoncer plusieurs, chacun s'ouvre. */}
+      {albums.map((m, i) => (
+        <SmButton
+          key={m.albumId}
+          kind="s"
+          icon="camera"
+          onPress={() => router.push(`/album/${m.albumId}/mes-photos` as never)}
+          style={styles.stretch}
+          testID={`${testID}-open`}
+        >
+          {albums.length > 1 ? L.screens.reviewAlbum(m.mediaName, i + 1) : L.reviewMyPhotos}
+        </SmButton>
+      ))}
     </>
   );
 }

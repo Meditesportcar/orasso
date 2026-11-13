@@ -67,23 +67,26 @@ export function MemoryAlbumLine({
   testId?: string;
 }) {
   const s = mentionsSummary(albumPhotos, carLabel);
-  const first = albumPhotos?.[0];
-  if (!s || !first) return null;
+  const albums = albumPhotos ?? [];
+  if (!s || albums.length === 0) return null;
   return (
     <div className="s-stack s-stack--tight">
       <p className="o-t-caption s-muted" data-testid={testId}>
         {s.line}
       </p>
-      <div>
-        <Button
-          variant="secondary"
-          icon="camera"
-          href={`/app/albums/${first.albumId}/mes-photos`}
-          data-testid={`${testId}-open`}
-        >
-          {L.reviewMyPhotos}
-        </Button>
-      </div>
+      {/* Un lien par album : le souvenir peut en annoncer plusieurs, chacun s'ouvre. */}
+      {albums.map((m, i) => (
+        <div key={m.albumId}>
+          <Button
+            variant="secondary"
+            icon="camera"
+            href={`/app/albums/${m.albumId}/mes-photos`}
+            data-testid={`${testId}-open`}
+          >
+            {albums.length > 1 ? L.screens.reviewAlbum(m.mediaName, i + 1) : L.reviewMyPhotos}
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }

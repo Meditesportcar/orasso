@@ -1,6 +1,6 @@
 // « Tes photos » (lot R9f, maquette R9.7, `/app/albums/:id/mes-photos`) : les photos d'un album où je suis identifié, voiture ou pseudo.
-// Même contenu que l'appli : l'en-tête du média avec « Contacter », une ligne par photo (« Photo N », « Identifiée par … », « En story »,
-// « Enregistrer », « … »), la feuille « … » (retirer mon identification | ce n'est pas ma voiture, contacter, signaler). **Aucun bouton
+// Même contenu que l'appli : l'en-tête du média, une ligne par photo (« Photo N », « Identifiée par … », « En story »,
+// « Enregistrer », « … »), la feuille « … » (retirer mon identification | ce n'est pas ma voiture, signaler). **Aucun bouton
 // principal**. « Enregistrer » télécharge le fichier crédité (inerte, avec sa raison, si le média ne l'autorise pas) ; « En story » reprend
 // la photo avec le crédit du média, qui ne se retire pas. Aucune règle ici : tout vient de l'API.
 import { Button, Chip, Icon } from "@orasso/design-system/web";
@@ -21,24 +21,12 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const count = view.photos.length;
+  // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  const photos = view.photos.filter((p) => !removed.has(p.id));
+  const count = photos.length;
   const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
 
-  // Retour à l'écran d'avant quand la dernière photo est retirée : plus rien à montrer ici.
-  const wasEmpty = useRef(count === 0);
-  useEffect(() => {
-    if (count === 0 && !wasEmpty.current) navigate(`/albums/${albumId}`);
-    wasEmpty.current = count === 0;
-  }, [count, albumId, navigate]);
-
-  async function contact() {
-    setBusy(true);
-    setError(null);
-    const res = await apiFetch<{ id: string }>(`/albums/${encodeURIComponent(albumId)}/contact`, { method: "POST" });
-    setBusy(false);
-    if (!res.ok) return setError(res.error.message || L.screens.contactFailed);
-    navigate(`/app/messages/${res.data.id}`);
-  }
   async function remove(photo: MyPhoto) {
     setBusy(true);
     setError(null);
@@ -47,7 +35,11 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
     if (!res.ok) return setError(res.error.message);
     setSheet(null);
     setNote(L.screens.removed);
-    revalidator.revalidate();
+    const left = photos.filter((p) => p.id !== photo.id);
+    setRemoved((cur) => new Set([...cur, photo.id]));
+    // La dernière identification retirée : l'API rend 404 ensuite, on revient à l'album sans relire « Tes photos ».
+    if (left.length === 0) navigate(`/albums/${albumId}`);
+    else revalidator.revalidate();
   }
 
   return (
@@ -62,16 +54,6 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
             {headline}
           </span>
         </span>
-        <Button
-          type="button"
-          variant="secondary"
-          icon="chat"
-          disabled={busy}
-          onClick={() => void contact()}
-          data-testid="my-photos-contact"
-        >
-          {L.contact}
-        </Button>
       </div>
       {note && (
         <p className="s-notice" role="status" data-testid="my-photos-note">
@@ -85,7 +67,7 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
       )}
       {count === 0 && <p className="s-muted">{L.screens.myPhotosEmpty}</p>}
       <ul className="myp-list">
-        {view.photos.map((p, i) => (
+        {photos.map((p, i) => (
           <li key={p.id} className="myp-row" data-testid="my-photo">
             <span className="myp-row__thumb">
               <img src={p.url} alt="" loading="lazy" />
@@ -181,19 +163,6 @@ export function MyPhotos({ view, albumId, myUserId }: { view: MyPhotosView; albu
                 </span>
               </span>
             </button>
-            <button
-              type="button"
-              className="myp-sheet__row"
-              disabled={busy}
-              onClick={() => void contact()}
-              data-testid="photo-sheet-contact"
-            >
-              <Icon name="chat" size={20} />
-              <span>
-                <strong>{L.contactName(view.media.name)}</strong>
-                <span className="o-t-caption s-muted">{L.messageAboutPhoto}</span>
-              </span>
-            </button>
             <div className="myp-sheet__row" data-testid="photo-sheet-report">
               <ReportDialog
                 targetType="album_photo"
@@ -273,26 +242,31 @@ function StoryDialog({
   const [audience, setAudience] = useState<"public" | "followers">("public");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Rejouée : la story de cette photo est déjà en ligne, l'API la rend telle quelle (ni public ni légende ne la modifient).
+  const [done, setDone] = useState<{ replayed: boolean; audience: string } | null>(null);
   const shut = () => {
     setCaption("");
     setAudience("public");
     setError(null);
-    setDone(false);
+    setDone(null);
     onClose();
   };
   async function publish() {
     if (!photo || busy) return;
     setBusy(true);
     setError(null);
-    const res = await apiFetch(`/album-photos/${encodeURIComponent(photo.id)}/share-to-story`, {
-      method: "POST",
-      json: { audience, caption: caption.trim() || null },
-    });
+    const res = await apiFetch<{ replayed: boolean; audience: string }>(
+      `/album-photos/${encodeURIComponent(photo.id)}/share-to-story`,
+      {
+        method: "POST",
+        json: { audience, caption: caption.trim() || null },
+      },
+    );
     setBusy(false);
     if (!res.ok) return setError(res.error.message);
-    setDone(true);
-    onDone(L.screens.storyShared(mediaName));
+    const shown = res.data.audience === "followers" ? L.screens.storyAudienceFollowers : L.screens.storyAudienceAll;
+    setDone({ replayed: res.data.replayed, audience: shown });
+    onDone(res.data.replayed ? L.screens.storyAlready(shown) : L.screens.storyShared(mediaName));
   }
   return (
     <SheetDialog open={photo !== null} onClose={shut} label={L.screens.storyTitle}>
@@ -303,10 +277,13 @@ function StoryDialog({
             {albumLabels.creditLine(mediaName)}
           </span>
           <p className="o-t-caption s-muted">{L.screens.storyCreditNote(mediaName)}</p>
+          <p className="o-t-caption s-muted">{L.screens.storyPlateNote}</p>
           {done ? (
             <>
               <p className="s-notice" role="status" data-testid="story-done">
-                {L.screens.storyDone}
+                {done.replayed
+                  ? `${L.screens.storyAlready(done.audience)}. ${L.screens.storyAlreadyNote}`
+                  : L.screens.storyDone}
               </p>
               <Button
                 href={`/app/story/${encodeURIComponent(`u:${myUserId}`)}`}

@@ -7,7 +7,9 @@ import { Button, Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme }
 import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
+  appendTaggablePage,
   albumTagLabels as L,
+  showPeopleTab,
   type Taggable,
   type TaggablePerson,
   type TaggableVehicle,
@@ -60,6 +62,9 @@ export function TagPicker({
   const [error, setError] = useState<string | null>(null);
   const q = useDebounced(text.trim());
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
+  const [loadingMore, setLoadingMore] = useState(false);
+  // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
+  const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
   // Une feuille rouverte repart de zéro (aucune recherche ni aucun choix gardé d'une photo à l'autre).
   useEffect(() => {
@@ -89,8 +94,28 @@ export function TagPicker({
   }, [visible, albumId, q, category]);
 
   useEffect(() => {
-    if (!canSearchPeople && tab === "people") setTab("cars");
-  }, [canSearchPeople, tab]);
+    if (!peopleTab && tab === "people") setTab("cars");
+    // Aucune voiture à proposer mais mon pseudo oui : l'onglet « Personnes » s'ouvre tout seul.
+    if (data && data.vehicles.length === 0 && data.people.length > 0 && !q && !category) setTab("people");
+  }, [peopleTab, tab, data, q, category]);
+
+  /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
+  async function more() {
+    if (!data || data.nextCursor === null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await api.albumTaggable(albumId, {
+        q: q || undefined,
+        category: category ?? undefined,
+        cursor: data.nextCursor,
+      });
+      setData((cur) => (cur ? appendTaggablePage(cur, next) : next));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function pick(key: string, result: PickResult) {
     if (busy) return;
@@ -143,7 +168,7 @@ export function TagPicker({
           ))}
         </ChipRow>
       ) : null}
-      {canSearchPeople ? (
+      {peopleTab ? (
         <ChipRow accessibilityRole="tablist">
           <Chip selected={tab === "cars"} accessibilityRole="tab" onPress={() => setTab("cars")}>
             {L.screens.tabCars}
@@ -165,24 +190,38 @@ export function TagPicker({
             {L.screens.noMatch}
           </Muted>
         ) : (
-          <View style={styles.grid} testID="tag-picker-grid">
-            {data.vehicles.map((v) => (
-              <PickTile
-                key={v.vehicleId}
-                car={v}
-                busy={busy === v.vehicleId}
-                disabled={busy !== null}
-                onPress={() =>
-                  void pick(v.vehicleId, {
-                    target: { vehicleId: v.vehicleId },
-                    label: v.label,
-                    pseudo: v.pseudo,
-                    self: v.mine,
-                  })
-                }
-              />
-            ))}
-          </View>
+          <>
+            <View style={styles.grid} testID="tag-picker-grid">
+              {data.vehicles.map((v) => (
+                <PickTile
+                  key={v.vehicleId}
+                  car={v}
+                  busy={busy === v.vehicleId}
+                  disabled={busy !== null}
+                  onPress={() =>
+                    void pick(v.vehicleId, {
+                      target: { vehicleId: v.vehicleId },
+                      label: v.label,
+                      pseudo: v.pseudo,
+                      self: v.mine,
+                    })
+                  }
+                />
+              ))}
+            </View>
+            {data.nextCursor !== null ? (
+              <Button
+                variant="secondary"
+                icon="down"
+                fullWidth
+                loading={loadingMore}
+                onPress={() => void more()}
+                testID="tag-picker-more"
+              >
+                {L.screens.moreCars}
+              </Button>
+            ) : null}
+          </>
         )
       ) : null}
       {data && tab === "people" ? (

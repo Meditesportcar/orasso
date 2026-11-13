@@ -61,7 +61,8 @@ export const albumsApi = {
   myAlbumTags: (cursor?: string | null) => request<MyAlbumTagsList>(`/api/me/album-tags${qs({ cursor })}`),
   /** « En story » : crée la story depuis la photo (aucun téléversement). */
   photoToStory: (photoId: string, body: { audience?: "public" | "followers"; caption?: string | null }) =>
-    request<{ id: string; expiresAt: string }>(`/api/album-photos/${photoId}/share-to-story`, { method: "POST", body }),
-  /** « Contacter » le média : la conversation s'ouvre avec le titulaire de la page (l'API ne donne jamais son compte). */
-  contactAlbumMedia: (albumId: string) => request<{ id: string }>(`/api/albums/${albumId}/contact`, { method: "POST" }),
+    request<{ id: string; expiresAt: string; replayed: boolean; audience: "public" | "followers" | "crew" }>(
+      `/api/album-photos/${photoId}/share-to-story`,
+      { method: "POST", body },
+    ),
 };

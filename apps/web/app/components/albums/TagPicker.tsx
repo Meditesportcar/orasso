@@ -7,7 +7,9 @@ import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
+  appendTaggablePage,
   albumTagLabels as L,
+  showPeopleTab,
   type Taggable,
   type TaggablePerson,
   type TaggableVehicle,
@@ -43,6 +45,9 @@ export function TagPicker({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
+  const [loadingMore, setLoadingMore] = useState(false);
+  // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
+  const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
   // La fenêtre suit `open` ; une fenêtre fermée (Échap) le dit au parent.
   useEffect(() => {
@@ -85,8 +90,23 @@ export function TagPicker({
   }, [open, albumId, q, category]);
 
   useEffect(() => {
-    if (!canSearchPeople && tab === "people") setTab("cars");
-  }, [canSearchPeople, tab]);
+    if (!peopleTab && tab === "people") setTab("cars");
+    // Aucune voiture à proposer mais mon pseudo oui : l'onglet « Personnes » s'ouvre tout seul.
+    if (data && data.vehicles.length === 0 && data.people.length > 0 && !q && !category) setTab("people");
+  }, [peopleTab, tab, data, q, category]);
+
+  /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
+  async function more() {
+    if (!data || data.nextCursor === null || loadingMore) return;
+    setLoadingMore(true);
+    const params = new URLSearchParams({ cursor: String(data.nextCursor) });
+    if (q) params.set("q", q);
+    if (category) params.set("category", category);
+    const res = await apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable?${params}`);
+    setLoadingMore(false);
+    if (res.ok) setData((cur) => (cur ? appendTaggablePage(cur, res.data) : res.data));
+    else setError(res.error.message);
+  }
 
   async function pick(key: string, result: PickResult) {
     if (busy) return;
@@ -158,7 +178,7 @@ export function TagPicker({
             ))}
           </div>
         )}
-        {canSearchPeople && (
+        {peopleTab && (
           <div className="tag-chips" role="tablist">
             <Chip selected={tab === "cars"} onClick={() => setTab("cars")}>
               {L.screens.tabCars}
@@ -204,6 +224,18 @@ export function TagPicker({
                   </li>
                 ))}
               </ul>
+            )}
+            {data.nextCursor !== null && (
+              <Button
+                type="button"
+                variant="secondary"
+                icon="down"
+                disabled={loadingMore}
+                onClick={() => void more()}
+                data-testid="tag-picker-more"
+              >
+                {L.screens.moreCars}
+              </Button>
             )}
           </>
         )}

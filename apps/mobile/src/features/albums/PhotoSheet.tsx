@@ -1,6 +1,6 @@
 // La feuille « … » d'une ligne de « Tes photos » (lot R9f, maquette R9.7 `phsheetH`) : l'intro (qui a posé l'identification), puis
 // « Retirer mon identification » (je l'ai posée moi-même) ou « Ce n'est pas ma voiture » (un autre l'a posée : le média ou l'organisateur
-// en est prévenu), « Contacter <média> » et « Signaler ». C'est le même geste côté API (`DELETE /me/album-tags/:id`) : le motif vient
+// en est prévenu), « Signaler ». C'est le même geste côté API (`DELETE /me/album-tags/:id`) : le motif vient
 // de qui avait posé l'identification.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { albumTagLabels as L, type MyPhoto } from "@orasso/shared";
@@ -19,7 +19,6 @@ export function PhotoSheet({
   error,
   onClose,
   onRemove,
-  onContact,
   onReport,
 }: {
   /** La photo dont la feuille est ouverte ; `null` : fermée. */
@@ -29,7 +28,6 @@ export function PhotoSheet({
   error: string | null;
   onClose: () => void;
   onRemove: (photo: MyPhoto) => void;
-  onContact: () => void;
   onReport: (photo: MyPhoto) => void;
 }) {
   const self = photo?.taggedBy === "me";
@@ -55,14 +53,6 @@ export function PhotoSheet({
             testID={self ? "photo-sheet-withdraw" : "photo-sheet-not-mine"}
           />
           <Row
-            icon="chat"
-            title={L.contactName(mediaName)}
-            sub={L.messageAboutPhoto}
-            disabled={busy}
-            onPress={onContact}
-            testID="photo-sheet-contact"
-          />
-          <Row
             icon="flag"
             title={L.report}
             sub={L.awkwardOrPlate}
@@ -84,7 +74,7 @@ function Row({
   onPress,
   testID,
 }: {
-  icon: "close" | "chat" | "flag";
+  icon: "close" | "flag";
   title: string;
   sub: string;
   disabled: boolean;
