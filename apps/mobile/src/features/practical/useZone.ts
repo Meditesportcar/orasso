@@ -14,6 +14,29 @@ import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
+import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
+
+// Tour 2 : le magasin de zones est rattaché au compte. Une fin de session ou un autre compte remonte l'écran (clé) : mémoire, recherche et
+// cadrage effacés, requêtes en vol jetées. Un seul abonnement au module `kv` (ses gestionnaires ne se retirent pas).
+const scopeListeners = new Set<() => void>();
+let scopeVersion = 0;
+onCacheScopeDropped(async () => {
+  scopeVersion += 1;
+  for (const l of scopeListeners) l();
+});
+/** La clé du compte courant : elle change à chaque fin de session. */
+export function usePracticalScope(): string {
+  return useSyncExternalStore(
+    (cb) => {
+      scopeListeners.add(cb);
+      return () => {
+        scopeListeners.delete(cb);
+      };
+    },
+    () => `${cacheScope() ?? "-"}:${scopeVersion}`,
+    () => "-:0",
+  );
+}
 
 /** Le contrôleur de zone d'un écran « Pratique » (créé au montage, détruit au démontage). */
 export function usePracticalZone(): { zone: PracticalZoneController; state: ZoneState } {
@@ -30,6 +53,8 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
     [],
   );
   useEffect(() => {
+    // Réentrant : un montage double (rendu strict) rend le contrôleur vivant.
+    zone.attach();
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active") zone.resume();
     });
@@ -45,10 +70,18 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
 const DEBOUNCE_MS = 250;
 
 /** Les communes que le texte tapé propose (deux lettres au moins, le texte seul part), après un court délai. */
-export function useCitySearch(text: string): { cities: CitySuggestion[]; busy: boolean } {
-  const [found, setFound] = useState<{ q: string; cities: CitySuggestion[] } | null>(null);
+export function useCitySearch(text: string): {
+  cities: CitySuggestion[];
+  busy: boolean;
+  /** La recherche de villes a échoué (réseau, serveur) : ce n'est pas « Aucun résultat » ; la saisie est gardée, `retry` relance. */
+  failed: boolean;
+  retry: () => void;
+} {
+  const [found, setFound] = useState<{ q: string; cities: CitySuggestion[]; failed: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const latest = useRef(0);
   const q = text.trim();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la même recherche (« Réessayer »).
   useEffect(() => {
     const run = ++latest.current;
     if (q.length < 2) return undefined;
@@ -56,14 +89,22 @@ export function useCitySearch(text: string): { cities: CitySuggestion[]; busy: b
       api
         .searchCities(q)
         .then((res) => {
-          if (run === latest.current) setFound({ q, cities: res.cities });
+          if (run === latest.current) setFound({ q, cities: res.cities, failed: false });
         })
         .catch(() => {
-          if (run === latest.current) setFound({ q, cities: [] });
+          if (run === latest.current) setFound({ q, cities: [], failed: true });
         });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [q]);
-  const current = found && found.q === q ? found.cities : [];
-  return { cities: q.length < 2 ? [] : current, busy: q.length >= 2 && found?.q !== q };
+  }, [q, attempt]);
+  const current = found && found.q === q ? found : null;
+  return {
+    cities: q.length < 2 ? [] : (current?.cities ?? []),
+    busy: q.length >= 2 && current === null,
+    failed: q.length >= 2 && current?.failed === true,
+    retry: () => {
+      setFound(null);
+      setAttempt((a) => a + 1);
+    },
+  };
 }

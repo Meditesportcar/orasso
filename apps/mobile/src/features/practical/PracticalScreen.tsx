@@ -12,6 +12,7 @@ import {
   cityNameOf,
   countByKind,
   filterKind,
+  fitView,
   formatKm,
   practicalTexts as L,
   type LatLng,
@@ -45,7 +46,7 @@ import { PracticalMap } from "./PracticalMap";
 import { usePracticalPosition } from "./position";
 import { kindIcon, PracticalRow, useEscape, useGoSheet } from "./Row";
 import { giveMyPosition, practicalSession, usePracticalSources } from "./usePractical";
-import { useCitySearch, usePracticalZone } from "./useZone";
+import { useCitySearch, usePracticalScope, usePracticalZone } from "./useZone";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -63,7 +64,12 @@ const filters: { value: PracticalFilter; label: string }[] = [
 /** Une ville cherchée : le centre de la carte et les distances. */
 type Searched = { name: string; lat: number; lng: number };
 
+/** Le magasin de zones est rattaché au compte : une autre session remonte l'écran (mémoire, recherche et cadrage effacés). */
 export function PracticalScreen() {
+  return <PracticalScreenBody key={usePracticalScope()} />;
+}
+
+function PracticalScreenBody() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -87,7 +93,7 @@ export function PracticalScreen() {
   const seq = useRef(0);
   // La dernière vue de la carte : la carte remontée (retour de « Liste » à « Carte ») reprend là où on l'avait laissée.
   const resume = useRef<MapViewport | null>(null);
-  const { cities, busy: citiesBusy } = useCitySearch(suggest ? field : "");
+  const { cities, busy: citiesBusy, failed: citiesFailed, retry: retryCities } = useCitySearch(suggest ? field : "");
   useEscape(groupIds !== null, () => setGroupIds(null));
 
   const outingOrigin = sources.outing.data?.origin ?? null;
@@ -118,14 +124,20 @@ export function PracticalScreen() {
   if (!initial.current && fromLat !== undefined && fromLng !== undefined) {
     initial.current = { lat: fromLat, lng: fromLng, zoom: zoomForWidthKm(fromLat, PRACTICAL_OPEN_VIEW_KM, MAP_WIDTH) };
   }
-  const flyTo = (p: LatLng, zoomKm = PRACTICAL_OPEN_VIEW_KM) => {
-    const v = { lat: p.lat, lng: p.lng, zoom: zoomForWidthKm(p.lat, zoomKm, MAP_WIDTH) };
+  // Tour 2 : la vue cible vit dans l'écran (`resume`) : une carte montée plus tard (recherche faite depuis la liste) part de cette vue, sans
+  // attendre un ordre en cours. La liste suit aussi quand la carte n'est pas montrée.
+  const goTo = (v: MapViewport) => {
+    resume.current = v;
     seq.current += 1;
     setCommand({ seq: seq.current, view: v });
-    // La liste suit aussi quand la carte n'est pas montrée : la vue est connue sans attendre un geste.
     zone.setView(viewZone(v, MAP_WIDTH, MAP_HEIGHT));
+  };
+  const flyTo = (p: LatLng) => {
+    const v = { lat: p.lat, lng: p.lng, zoom: zoomForWidthKm(p.lat, PRACTICAL_OPEN_VIEW_KM, MAP_WIDTH) };
+    goTo(v);
     return v;
   };
+
   // L'origine change (ma position donnée, autre choix) : la carte s'y rend.
   const lastOrigin = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `flyTo` ne dépend que de la mémoire de l'écran.
@@ -207,10 +219,14 @@ export function PracticalScreen() {
     setSuggest(false);
     setPicked(null);
     const matches = filterKind([...zs.places.values()], filter).filter((p) => matchesSearch(titleOf(p), q));
-    if (matches.length) {
-      seq.current += 1;
-      setCommand({ seq: seq.current, fit: matches.map((p) => ({ lat: p.lat, lng: p.lng })) });
-    }
+    if (matches.length)
+      goTo(
+        fitView(
+          matches.map((p) => ({ lat: p.lat, lng: p.lng })),
+          MAP_WIDTH,
+          MAP_HEIGHT,
+        ),
+      );
   };
   const chooseTextPlace = (p: {
     id: string;
@@ -224,8 +240,7 @@ export function PracticalScreen() {
     setText("");
     setSuggest(false);
     setPicked(p.id);
-    seq.current += 1;
-    setCommand({ seq: seq.current, view: { lat: p.lat - 0.004, lng: p.lng, zoom: 14 } });
+    goTo({ lat: p.lat - 0.004, lng: p.lng, zoom: 14 });
   };
 
   const q = field.trim();
@@ -306,6 +321,8 @@ export function PracticalScreen() {
           query={q}
           cities={cities}
           busy={citiesBusy}
+          failed={citiesFailed}
+          onRetry={retryCities}
           places={placeMatches
             .slice(0, 4)
             .map((p) => ({ p, title: titleOf(p), sub: `${L.kindLabel[p.kind]} · ${formatKm(p.distanceKm)}` }))}
@@ -632,6 +649,8 @@ function Suggestions({
   query,
   cities,
   busy,
+  failed,
+  onRetry,
   places,
   total,
   onCity,
@@ -641,6 +660,9 @@ function Suggestions({
   query: string;
   cities: CitySuggestion[];
   busy: boolean;
+  /** La recherche de villes a échoué : ce n'est pas « Aucun résultat ». */
+  failed: boolean;
+  onRetry: () => void;
   places: { p: { id: string; kind: "fuel" | "wash" }; title: string; sub: string }[];
   total: number;
   onCity: (g: CitySuggestion) => void;
@@ -649,7 +671,7 @@ function Suggestions({
 }) {
   const { t } = useTheme();
   const c = t.color;
-  const empty = query.length >= 2 && !busy && cities.length === 0 && places.length === 0;
+  const empty = query.length >= 2 && !busy && !failed && cities.length === 0 && places.length === 0;
   return (
     <View style={[styles.sg, { backgroundColor: c.surface, borderColor: c.line }]} testID="practical-suggest">
       {query.length < 2 ? (
@@ -670,6 +692,16 @@ function Suggestions({
         </View>
       ) : (
         <>
+          {failed ? (
+            <View style={styles.sgEmpty} testID="practical-suggest-failed">
+              <Text variant="caption" color={c.ink}>
+                {L.searchCitiesFailed}
+              </Text>
+              <SmButton kind="s" icon="undo" onPress={onRetry} testID="practical-suggest-retry">
+                {L.retry}
+              </SmButton>
+            </View>
+          ) : null}
           {cities.length ? (
             <>
               <Text variant="label" color={c.inkMuted}>

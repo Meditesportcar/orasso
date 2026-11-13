@@ -63,6 +63,8 @@ export const practicalTexts = {
   clearSearch: "Effacer la recherche",
   searchHint: "Tape au moins deux lettres",
   searchEmpty: "Aucun résultat. Essaie un autre mot.",
+  /** La recherche de villes est en panne : ce n'est pas un résultat vide (la saisie est gardée). */
+  searchCitiesFailed: "La recherche de villes est indisponible pour le moment.",
   searchHere: "Rechercher dans cette zone",
   searchHereOffline: "Il faut du réseau pour chercher dans cette zone.",
   zoomIn: "Zoome sur un secteur pour voir ses lieux.",

@@ -12,11 +12,23 @@ import {
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { currentSession, listenSession } from "../../lib/sessionChannel";
 
 class ZoneReadError extends Error {
   constructor(readonly status: number) {
     super(`lecture de la zone : ${status}`);
   }
+}
+
+// Tour 2 : le magasin de zones est rattaché au compte. Un autre compte (autre onglet, déconnexion) remonte la page (clé) : mémoire, recherche et
+// cadrage effacés, requêtes en vol jetées, aucune réponse tardive appliquée.
+/** La clé du compte courant : elle change à chaque annonce de session. */
+export function usePracticalScope(): string {
+  return useSyncExternalStore(
+    (cb) => listenSession(() => cb()),
+    () => currentSession() ?? "-",
+    () => "-",
+  );
 }
 
 /** Le contrôleur de zone d'une page « Pratique » (créé au montage, détruit au démontage). */
@@ -40,6 +52,8 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
     [],
   );
   useEffect(() => {
+    // Réentrant : le rendu strict (développement) monte, nettoie puis remonte : le contrôleur doit rester vivant.
+    zone.attach();
     const resume = () => zone.resume();
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("online", resume);
@@ -56,10 +70,18 @@ export function usePracticalZone(): { zone: PracticalZoneController; state: Zone
 const DEBOUNCE_MS = 250;
 
 /** Les communes que le texte tapé propose (deux lettres au moins, le texte seul part), après un court délai. */
-export function useCitySearch(text: string): { cities: CitySuggestion[]; busy: boolean } {
-  const [found, setFound] = useState<{ q: string; cities: CitySuggestion[] } | null>(null);
+export function useCitySearch(text: string): {
+  cities: CitySuggestion[];
+  busy: boolean;
+  /** La recherche de villes a échoué (réseau, serveur) : ce n'est pas « Aucun résultat » ; la saisie est gardée, `retry` relance. */
+  failed: boolean;
+  retry: () => void;
+} {
+  const [found, setFound] = useState<{ q: string; cities: CitySuggestion[]; failed: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const latest = useRef(0);
   const q = text.trim();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la même recherche (« Réessayer », retour du réseau).
   useEffect(() => {
     const run = ++latest.current;
     if (q.length < 2) return undefined;
@@ -68,14 +90,28 @@ export function useCitySearch(text: string): { cities: CitySuggestion[]; busy: b
         timeoutMs: 10_000,
       })
         .then((res) => {
-          if (run === latest.current) setFound({ q, cities: res.ok ? res.data.cities : [] });
+          if (run === latest.current) setFound({ q, cities: res.ok ? res.data.cities : [], failed: !res.ok });
         })
         .catch(() => {
-          if (run === latest.current) setFound({ q, cities: [] });
+          if (run === latest.current) setFound({ q, cities: [], failed: true });
         });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [q]);
-  const current = found && found.q === q ? found.cities : [];
-  return { cities: q.length < 2 ? [] : current, busy: q.length >= 2 && found?.q !== q };
+  }, [q, attempt]);
+  // Le réseau revient : une recherche en échec repart d'elle-même.
+  useEffect(() => {
+    const online = () => setAttempt((a) => a + 1);
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, []);
+  const current = found && found.q === q ? found : null;
+  return {
+    cities: q.length < 2 ? [] : (current?.cities ?? []),
+    busy: q.length >= 2 && current === null,
+    failed: q.length >= 2 && current?.failed === true,
+    retry: () => {
+      setFound(null);
+      setAttempt((a) => a + 1);
+    },
+  };
 }

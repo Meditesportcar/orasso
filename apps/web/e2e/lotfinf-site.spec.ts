@@ -271,3 +271,32 @@ test("1280 px : trop dézoomée, « Zoome sur un secteur pour voir ses lieux. »
   expect(zoneCalls().length).toBeGreaterThanOrEqual(2);
   await ctx.close();
 });
+
+test("390 px : panne de la recherche de villes et recherche faite depuis la liste", async ({ browser }) => {
+  const { ctx, page } = await open(browser, { width: 390 });
+  await page.goto("/app/pratique");
+  await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
+  await ctx.route(/\/api\/geo\/cities/, (route) => route.abort());
+  const search = page.getByTestId("practical-search");
+  await search.fill("argel");
+  await expect(page.getByTestId("practical-suggest-failed")).toContainText(
+    "La recherche de villes est indisponible pour le moment.",
+    {
+      timeout: 15_000,
+    },
+  );
+  await expect(page.getByTestId("practical-suggest-empty")).toHaveCount(0);
+  await expect(search).toHaveValue("argel");
+  await ctx.unroute(/\/api\/geo\/cities/);
+  await page.getByTestId("practical-suggest-retry").click();
+  await expect(page.getByTestId("practical-suggest-city-0")).toContainText("Argelès-sur-Mer (66)", { timeout: 15_000 });
+  // La ville est choisie depuis la LISTE : la carte montée ensuite est cadrée sur elle.
+  await search.fill("toul");
+  await page.getByTestId("practical-suggest-city-0").click();
+  await expect(page.getByTestId("practical-hint")).toContainText("Autour de Toulouse, la ville cherchée.", {
+    timeout: 30_000,
+  });
+  await page.getByTestId("map-toggle").click();
+  await expect(page.getByTestId("practical-searched")).toBeVisible({ timeout: 20_000 });
+  await ctx.close();
+});

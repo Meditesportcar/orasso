@@ -11,6 +11,7 @@ import {
   cityNameOf,
   countByKind,
   filterKind,
+  fitView,
   formatKm,
   practicalTexts as L,
   type LatLng,
@@ -37,7 +38,7 @@ import { type MapCommand, PracticalMap } from "./PracticalMap";
 import { askPracticalPosition, usePracticalPosition } from "./position";
 import { kindIcon, PracticalRow } from "./Row";
 import { practicalSession, usePracticalSources } from "./usePractical";
-import { useCitySearch, usePracticalZone } from "./useZone";
+import { useCitySearch, usePracticalScope, usePracticalZone } from "./useZone";
 
 const filters: { value: PracticalFilter; label: string }[] = [
   { value: "all", label: L.filterAll },
@@ -64,7 +65,12 @@ function useWide(): boolean {
 type Searched = { name: string; lat: number; lng: number };
 type PlaceLike = { id: string; kind: "fuel" | "wash"; name: string; address: string | null; lat: number; lng: number };
 
+/** Le magasin de zones est rattaché au compte : une autre session (autre onglet) remonte la page (mémoire, recherche et cadrage effacés). */
 export function PracticalScreen() {
+  return <PracticalScreenBody key={usePracticalScope()} />;
+}
+
+function PracticalScreenBody() {
   const [params] = useSearchParams();
   const sources = usePracticalSources();
   const { busy } = usePracticalPosition();
@@ -85,7 +91,7 @@ export function PracticalScreen() {
   const seq = useRef(0);
   // La dernière vue de la carte : la carte remontée (retour de « Liste » à « Carte ») reprend là où on l'avait laissée.
   const resume = useRef<MapViewport | null>(null);
-  const { cities, busy: citiesBusy } = useCitySearch(suggest ? field : "");
+  const { cities, busy: citiesBusy, failed: citiesFailed, retry: retryCities } = useCitySearch(suggest ? field : "");
 
   const outingOrigin = sources.outing.data?.origin ?? null;
   const active: PracticalChoice = outingOrigin ? choice : "me";
@@ -112,11 +118,18 @@ export function PracticalScreen() {
   if (!initial.current && fromLat !== undefined && fromLng !== undefined) {
     initial.current = { lat: fromLat, lng: fromLng, zoom: zoomForWidthKm(fromLat, PRACTICAL_OPEN_VIEW_KM, MAP_WIDTH) };
   }
-  const flyTo = (p: LatLng) => {
-    const v = { lat: p.lat, lng: p.lng, zoom: zoomForWidthKm(p.lat, PRACTICAL_OPEN_VIEW_KM, MAP_WIDTH) };
+  // Tour 2 : la vue cible vit dans l'écran (`resume`) : une carte montée plus tard (recherche faite depuis la liste) part de cette vue, sans
+  // attendre un ordre en cours. La liste suit aussi quand la carte n'est pas montrée.
+  const goTo = (v: MapViewport) => {
+    resume.current = v;
     seq.current += 1;
     setCommand({ seq: seq.current, view: v });
     zone.setView(viewZone(v, MAP_WIDTH, MAP_HEIGHT));
+  };
+  const flyTo = (p: LatLng) => {
+    const v = { lat: p.lat, lng: p.lng, zoom: zoomForWidthKm(p.lat, PRACTICAL_OPEN_VIEW_KM, MAP_WIDTH) };
+    goTo(v);
+    return v;
   };
   const lastOrigin = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `flyTo` ne dépend que de la mémoire de la page.
@@ -196,18 +209,21 @@ export function PracticalScreen() {
     setSuggest(false);
     setPicked(null);
     const matches = filterKind([...zs.places.values()], filter).filter((p) => matchesSearch(titleOf(p), q));
-    if (matches.length) {
-      seq.current += 1;
-      setCommand({ seq: seq.current, fit: matches.map((p) => ({ lat: p.lat, lng: p.lng })) });
-    }
+    if (matches.length)
+      goTo(
+        fitView(
+          matches.map((p) => ({ lat: p.lat, lng: p.lng })),
+          MAP_WIDTH,
+          MAP_HEIGHT,
+        ),
+      );
   };
   const choosePlace = (p: PlaceLike) => {
     setField(titleOf(p));
     setText("");
     setSuggest(false);
     setPicked(p.id);
-    seq.current += 1;
-    setCommand({ seq: seq.current, view: { lat: p.lat - 0.004, lng: p.lng, zoom: 14 } });
+    goTo({ lat: p.lat - 0.004, lng: p.lng, zoom: 14 });
   };
 
   const q = field.trim();
@@ -405,13 +421,27 @@ export function PracticalScreen() {
               <Icon name="info" size={14} />
               <span>{L.searchHint}</span>
             </p>
-          ) : !citiesBusy && cities.length === 0 && placeMatches.length === 0 ? (
+          ) : !citiesBusy && !citiesFailed && cities.length === 0 && placeMatches.length === 0 ? (
             <div className="pq-sg__empty" data-testid="practical-suggest-empty">
               <b className="o-t-body-strong">{L.searchEmpty}</b>
               <small className="o-t-caption s-muted">{practicalNb(L.noBrand)}</small>
             </div>
           ) : (
             <>
+              {citiesFailed ? (
+                <div className="pq-sg__empty" data-testid="practical-suggest-failed">
+                  <small className="o-t-caption">{L.searchCitiesFailed}</small>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="undo"
+                    onClick={retryCities}
+                    data-testid="practical-suggest-retry"
+                  >
+                    {L.retry}
+                  </Button>
+                </div>
+              ) : null}
               {cities.length ? <p className="pq-sg__h o-t-label">{L.citiesTitle}</p> : null}
               {cities.slice(0, 4).map((g, i) => (
                 <button
