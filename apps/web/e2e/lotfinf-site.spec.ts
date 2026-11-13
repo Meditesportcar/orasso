@@ -104,10 +104,11 @@ test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, 
   browser,
 }) => {
   const { ctx, page, zoneCalls, allCalls } = await open(browser, { width: 1280 });
+  const accueil = allCalls();
   await openPage(page, 1280);
   // Une seule paire de lectures à l'ouverture (ville et sortie) : l'écran n'est monté qu'une fois, la session annoncée ne le remonte pas.
   await page.waitForTimeout(2_000);
-  expect(allCalls()).toBe(2);
+  expect(allCalls() - accueil).toBe(2);
   await shot(page, "site-ouverture-beton-1280");
   await expect(page.getByTestId("map-toggle")).toHaveCount(0);
   await expect(page.getByTestId("practical-list")).toBeVisible();

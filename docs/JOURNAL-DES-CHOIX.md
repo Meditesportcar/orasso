@@ -6710,6 +6710,13 @@ Damien a choisi l’option C « Hybride » sur la maquette (`.claude/maquettes-p
 - **Panne de la recherche de villes** : un échec n'est plus un « Aucun résultat » : message « La recherche de villes est indisponible pour le moment. » et « Réessayer » (la saisie est gardée ; sur le site, le retour du réseau relance). Recettes de l'appli et du site.
 - **Recettes** : « Réessayer » rejoué sur place hors ligne avant le déplacement ; paires « chargée », « déplacée » et « chargement » avec un cran de zoom arrière pour que des lieux chargés restent visibles sous le voile.
 
+### Petit lot de fin, partie F, tour 3 (13/11/2026)
+- **Écran monté une seule fois** : la clé de compte ne change plus que pour un vrai changement (A vers B, A vers déconnecté), jamais de « inconnu » vers A (la mise en page annonce la session après le premier rendu : l'écran se montait deux fois, six lectures au lieu de deux, la limite de 40 par minute épuisée). Site : compteur de générations ; appli : version de la fin de session seule. Recette : exactement deux lectures à l'ouverture sur le site.
+- **Limite de débit isolée** dans `lotfinf-site` : un compte par test (tournante sur quatre comptes du 66), sans relever la limite. La boucle de trois clics sur « Réessayer » est retirée : un seul clic. Preuve : trois passages complets de suite.
+- **Bouton bloqué** : une réponse `loading` arrivée après une vue sortie puis revenue est jugée « ailleurs » dès que la recherche n'est plus la zone demandée (`asked !== zone`) ; le bouton se libère. Test.
+- **Zone dense** : quand la zone resserrée revient elle aussi coupée, plus de bouton, message « Trop de lieux ici : zoome davantage. » (`tooDense`), aucune lecture répétée ; effacé au prochain cadrage. Test avec 250 lieux dans un coin de case. **À revoir** : une répartition des lieux par case côté serveur éviterait ce cul-de-sac (non faite : l'API garde les 200 plus proches du centre).
+- **Captures** refaites après `overflow: hidden` de la carte du navigateur.
+
 ## Petit lot de fin, partie D2 (la graine ne doit plus masquer les vraies sources de Pratique) (13/11/2026)
 
 Cause réelle de la remarque de Damien : sur le serveur de dev, le cache de « Pratique » pour le 66 ne contenait que les lieux inventés de la graine, réécrits avec une date fraîche à chaque déploiement (`SEED_DEMO`) par `seed/practical.ts` (et `seed/home.ts` posait `osm:66` s'il manquait) : l'API ne lisait donc jamais les vraies sources pour Perpignan. Fichiers : `apps/api/scripts/seed/practical.ts`, `seed/home.ts`, `seed/practical-cache.ts` (règles pures), `seed/practical-cache.test.ts`, `apps/api/src/env.ts` (les adresses par défaut deviennent des constantes exportées).
