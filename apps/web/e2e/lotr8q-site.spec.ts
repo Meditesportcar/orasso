@@ -334,8 +334,8 @@ test("« Réessayer » : visible quand la lecture échoue, désactivé pendant l
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await ctx.unroute(//api/practical/);
-  await ctx.route(//api/practical/, async (route) => {
+  await ctx.unroute(/\/api\/practical/);
+  await ctx.route(/\/api\/practical/, async (route) => {
     await gate;
     await route.continue();
   });
