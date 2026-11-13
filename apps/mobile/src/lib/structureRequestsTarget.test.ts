@@ -34,4 +34,17 @@ describe("structureRequestsTarget : bandeau et push d'une invitation de structur
     expect(structureRequestsTarget({ screen: "staff-requests", structureId: ID })).toBeNull();
     expect(structureRequestsTarget(null)).toBeNull();
   });
+  it("ancien format (push reçu avant la mise à jour, sans `screen`) : type coauthor_invited + structureId valide", () => {
+    expect(structureRequestsTarget({ notificationType: "coauthor_invited", structureId: ID })).toBe(ID);
+    expect(structureRequestsTarget({ type: "coauthor_invited", structureId: ID })).toBe(ID);
+    // Assertions du tour 4, rétablies : sans identifiant, identifiant invalide, autre type, invitation personnelle.
+    expect(structureRequestsTarget({ notificationType: "coauthor_invited" })).toBeNull();
+    expect(structureRequestsTarget({ notificationType: "coauthor_invited", structureId: "x" })).toBeNull();
+    expect(structureRequestsTarget({ notificationType: "feed_comment", structureId: ID })).toBeNull();
+    expect(structureRequestsTarget({ notificationType: "coauthor_invited", postId: "p1" })).toBeNull();
+    // Un autre écran explicite n'est jamais pris pour une invitation de structure, même avec le type.
+    expect(
+      structureRequestsTarget({ screen: "staff-requests", notificationType: "coauthor_invited", structureId: ID }),
+    ).toBeNull();
+  });
 });
