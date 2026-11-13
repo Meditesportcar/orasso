@@ -166,6 +166,8 @@ function PracticalScreenBody() {
   const countLine = practicalNb(L.zoneCount(count.fuel, count.wash, text, kinds));
   const needsSearch = zoneNeedsSearch(zs);
   const tooWide = zoneIsTooWide(zs);
+  // La zone resserrée sur la vue est revenue coupée : trop de lieux pour ce zoom (aucun bouton).
+  const crowded = zs.tooDense && !tooWide;
   const originInView = from && zview ? zoneContains(zview, from) : true;
   const onPosition = active === "me" && sources.me.onPosition;
 
@@ -319,10 +321,10 @@ function PracticalScreenBody() {
             </button>
           ) : null}
           <div className="pq-bottom">
-            {tooWide ? (
+            {tooWide || crowded ? (
               <p className="pq-note o-t-caption" data-testid="practical-zoom-note">
                 <Icon name="info" size={14} />
-                <span>{L.zoomIn}</span>
+                <span>{tooWide ? L.zoomIn : L.tooDense}</span>
               </p>
             ) : (
               zoneButton
@@ -357,9 +359,11 @@ function PracticalScreenBody() {
         <p className="o-t-caption s-muted" data-testid="practical-empty">
           {tooWide
             ? L.zoomIn
-            : data?.partial && data.places.length === 0 && zs.places.size === 0
-              ? L.unavailable
-              : L.nothingInZone}
+            : crowded
+              ? L.tooDense
+              : data?.partial && data.places.length === 0 && zs.places.size === 0
+                ? L.unavailable
+                : L.nothingInZone}
         </p>
       ) : null}
       {list.map((p, i) => (

@@ -37,6 +37,8 @@ export type ZoneState = {
   offline: boolean;
   /** L'API a refusé la zone regardée (4xx, hors de France par exemple) : jamais relue, aucun bouton tant que la vue ne change pas. */
   refused: boolean;
+  /** La zone resserrée sur la vue est elle aussi revenue coupée (trop de lieux) : aucun bouton, « Trop de lieux ici : zoome davantage. ». */
+  tooDense: boolean;
 };
 
 export type ZoneDeps = {
@@ -51,8 +53,9 @@ export type ZoneDeps = {
 };
 
 /** Faut-il proposer « Rechercher dans cette zone » ? La zone regardée n'est pas toute chargée, elle n'est pas trop grande, l'API ne l'a pas refusée. */
-export const zoneNeedsSearch = (s: Pick<ZoneState, "view" | "cover"> & { refused?: boolean }): boolean =>
-  s.view !== null && !s.refused && !zoneTooBig(s.view) && !viewCovered(s.cover, s.view);
+export const zoneNeedsSearch = (
+  s: Pick<ZoneState, "view" | "cover"> & { refused?: boolean; tooDense?: boolean },
+): boolean => s.view !== null && !s.refused && !s.tooDense && !zoneTooBig(s.view) && !viewCovered(s.cover, s.view);
 
 /** « Zoome sur un secteur pour voir ses lieux. » : la zone regardée dépasse 60 km. */
 export const zoneIsTooWide = (s: Pick<ZoneState, "view">): boolean => s.view !== null && zoneTooBig(s.view);
@@ -84,11 +87,14 @@ export function createPracticalZone(deps: ZoneDeps) {
     failed: false,
     offline: false,
     refused: false,
+    tooDense: false,
   });
   let state: ZoneState = blank(null);
   const listeners = new Set<() => void>();
   const seen = new WeakSet<object>();
   let asked: PracticalZone | null = null;
+  /** La zone demandée est la version resserrée (déjà une zone coupée) : si elle revient coupée, il y a trop de lieux pour ce zoom. */
+  let askedTight = false;
   /** Les zones demandées dont la réponse a été coupée : une recherche dedans ne s'élargit plus (la zone se resserre sur la vue). */
   let dense: PracticalZone[] = [];
   let reading = false;
@@ -137,19 +143,22 @@ export function createPracticalZone(deps: ZoneDeps) {
       reading = false;
       if (!alive || !cycle.current(token)) return;
       const view = state.view;
-      const away = view !== null && !insideZone(zone, view);
+      // « Ailleurs » : la recherche a été abandonnée (`asked` n'est plus cette zone) ou la vue est sortie de la zone demandée.
+      const away = asked !== zone || (view !== null && !insideZone(zone, view));
       if (!data.partial && !data.loading) {
         // Lecture complète : elle REMPLACE les lieux de son emprise (une station vue seule puis fusionnée n'existe qu'une fois) ; la zone
         // demandée est chargée, sauf si la réponse est coupée (plus de 200 lieux, ou plus de 12 départements) : seul le disque couvert l'est.
         const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
         const covered = coveredBy(data, zoneCenter(zone), { t: "rect", zone });
         if (cut) dense = [...dense, zone];
+        const crowded = cut && askedTight;
         set({
           ...store(cut ? () => false : (p) => zoneContains(zone, p), data.places, covered),
           loading: false,
           failed: false,
           offline: false,
           refused: false,
+          tooDense: crowded,
         });
         cycle.settled("complete");
         return;
@@ -178,7 +187,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       // Aucune relance automatique d'un échec : « Réessayer » (le calendrier de `readCycle` ne s'applique qu'aux chargements).
       cycle.settled("unknown");
       const view = state.view;
-      if (view !== null && !insideZone(zone, view)) {
+      if (asked !== zone || (view !== null && !insideZone(zone, view))) {
         // La vue est ailleurs : l'échec concernait l'ancienne zone, il n'est pas montré.
         asked = null;
         set({ asked: null, loading: false, failed: false, offline: false });
@@ -225,7 +234,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       const v = state.view;
       if (v && sameZone(v, view)) return;
       // La vue change : un refus de l'API ne vaut plus pour la nouvelle zone.
-      const patch: Partial<ZoneState> = { view, refused: false };
+      const patch: Partial<ZoneState> = { view, refused: false, tooDense: false };
       // La vue sort de la zone demandée : une relecture attendue de l'ancienne zone est abandonnée (le bouton redevient actif pour la
       // nouvelle) et un échec ne se rejoue pas sur l'ancienne zone (« Réessayer » : un seul appui pour la zone regardée).
       if (!insideZone(asked, view) && (state.failed || state.loading)) {
@@ -242,12 +251,14 @@ export function createPracticalZone(deps: ZoneDeps) {
     /** Appui sur « Rechercher dans cette zone » (ou ville cherchée hors du chargé). Sans effet si la zone est trop grande ou déjà chargée. */
     searchHere(): boolean {
       const v = state.view;
-      if (!v || reading || !alive || state.refused || zoneTooBig(v) || viewCovered(state.cover, v)) return false;
+      if (!v || reading || !alive || state.refused || state.tooDense || zoneTooBig(v) || viewCovered(state.cover, v))
+        return false;
       // Une zone déjà coupée (trop de lieux) : on ne l'élargit plus, la zone se resserre sur la vue (toujours en cases entières).
       const centre = zoneCenter(v);
       const tight = dense.some((d) => zoneContains(d, centre));
       asked = zoneForRequest(v, !tight);
-      state = { ...state, asked, refused: false };
+      askedTight = tight;
+      state = { ...state, asked, refused: false, tooDense: false };
       generation += 1;
       cycle.manual();
       void load();
@@ -285,6 +296,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       generation += 1;
       asked = null;
       dense = [];
+      askedTight = false;
       reading = false;
       cycle.reset();
       state = blank(state.view);

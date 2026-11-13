@@ -68,6 +68,8 @@ export const practicalTexts = {
   searchHere: "Rechercher dans cette zone",
   searchHereOffline: "Il faut du réseau pour chercher dans cette zone.",
   zoomIn: "Zoome sur un secteur pour voir ses lieux.",
+  /** La zone resserrée sur la vue revient elle aussi coupée : trop de lieux pour ce zoom. */
+  tooDense: "Trop de lieux ici : zoome davantage.",
   loadingZone: "Recherche des lieux de la zone",
   recenter: "Recentrer",
   citiesTitle: "Villes et lieux",

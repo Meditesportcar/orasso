@@ -23,12 +23,20 @@ class ZoneReadError extends Error {
 // Tour 2 : le magasin de zones est rattaché au compte. Un autre compte (autre onglet, déconnexion) remonte la page (clé) : mémoire, recherche et
 // cadrage effacés, requêtes en vol jetées, aucune réponse tardive appliquée.
 /** La clé du compte courant : elle change à chaque annonce de session. */
-export function usePracticalScope(): string {
-  return useSyncExternalStore(
+export function usePracticalScope(): number {
+  const raw = useSyncExternalStore(
     (cb) => listenSession(() => cb()),
     () => currentSession() ?? "-",
     () => "-",
   );
+  // Un vrai changement de compte seulement (A vers B, A vers déconnecté) : jamais de « inconnu » (la mise en page n'a pas encore annoncé la
+  // session) vers A, sinon l'écran se monterait deux fois à chaque chargement (deux fois plus de lectures).
+  const memo = useRef({ raw, generation: 0 });
+  if (memo.current.raw !== raw) {
+    if (memo.current.raw !== "-") memo.current.generation += 1;
+    memo.current.raw = raw;
+  }
+  return memo.current.generation;
 }
 
 /** Le contrôleur de zone d'une page « Pratique » (créé au montage, détruit au démontage). */

@@ -14,7 +14,7 @@ import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
-import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
+import { onCacheScopeDropped } from "@/lib/kv";
 
 // Tour 2 : le magasin de zones est rattaché au compte. Une fin de session ou un autre compte remonte l'écran (clé) : mémoire, recherche et
 // cadrage effacés, requêtes en vol jetées. Un seul abonnement au module `kv` (ses gestionnaires ne se retirent pas).
@@ -24,8 +24,8 @@ onCacheScopeDropped(async () => {
   scopeVersion += 1;
   for (const l of scopeListeners) l();
 });
-/** La clé du compte courant : elle change à chaque fin de session. */
-export function usePracticalScope(): string {
+/** La clé du compte courant : elle ne change qu'à une fin de session (jamais quand l'identité devient connue). */
+export function usePracticalScope(): number {
   return useSyncExternalStore(
     (cb) => {
       scopeListeners.add(cb);
@@ -33,8 +33,8 @@ export function usePracticalScope(): string {
         scopeListeners.delete(cb);
       };
     },
-    () => `${cacheScope() ?? "-"}:${scopeVersion}`,
-    () => "-:0",
+    () => scopeVersion,
+    () => 0,
   );
 }
 

@@ -253,4 +253,52 @@ describe("contrôleur, tour 2", () => {
     }
     expect(z.getState().cover.length).toBeLessThan(30);
   });
+
+  it("la vue sort pendant la lecture puis revient, la réponse arrive en `loading` : le bouton n'est pas bloqué sur « Recherche… »", async () => {
+    let done: (d: PracticalData) => void = () => undefined;
+    const read = vi
+      .fn()
+      .mockReturnValueOnce(new Promise<PracticalData>((r) => (done = r)))
+      .mockResolvedValue(zoneData([]));
+    const z = make(read);
+    z.setView(view);
+    z.searchHere();
+    z.setView(toulouse);
+    z.setView(view);
+    done(zoneData([], { partial: true, loading: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.getState().loading).toBe(false);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+    expect(z.searchHere()).toBe(true);
+  });
+
+  it("lieux concentrés dans un coin de case : la zone resserrée revient coupée aussi, plus de bouton (trop de lieux), jamais de lecture répétée", async () => {
+    // 250 lieux dans un coin de 0,01° d'une case de Paris : même resserrée (3 × 3 cases), la zone revient coupée.
+    const corner = Array.from({ length: 250 }, (_, i) =>
+      place(`d${i}`, 48.805 + (i % 25) * 0.0002, 2.305 + Math.floor(i / 25) * 0.0002),
+    );
+    const read = vi.fn().mockResolvedValue(zoneData(corner.slice(0, 200), { truncated: true, coveredKm: 0.1 }));
+    const z = make(read);
+    const v = { south: 48.8, west: 2.3, north: 48.81, east: 2.31 };
+    z.setView(v);
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+    // Deuxième appui : zone resserrée, coupée elle aussi.
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledTimes(2);
+    const first = read.mock.calls[0]?.[0] as { north: number; south: number };
+    const second = read.mock.calls[1]?.[0] as { north: number; south: number };
+    expect(second.north - second.south).toBeLessThan(first.north - first.south);
+    expect(z.getState().tooDense).toBe(true);
+    expect(zoneNeedsSearch(z.getState())).toBe(false);
+    expect(z.searchHere()).toBe(false);
+    expect(read).toHaveBeenCalledTimes(2);
+    // Un autre cadrage : le message disparaît, la recherche repart.
+    z.setView({ south: 48.9, west: 2.4, north: 48.91, east: 2.41 });
+    expect(z.getState().tooDense).toBe(false);
+  });
 });
