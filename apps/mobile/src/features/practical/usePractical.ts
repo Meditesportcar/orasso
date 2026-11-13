@@ -4,23 +4,19 @@
 // (hors ligne, le bloc n'affiche rien de faux : cette réponse, sinon rien). Réponse partielle (une source n'a pas répondu dans le
 // budget de l'API) : une seule relecture, après 3 secondes.
 import {
+  createReadCycle,
   createSessionGuard,
   createSingleTimer,
   type LatLng,
-  nextPracticalRead,
   PRACTICAL_STALE_MS,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
-  type PracticalReadOutcome,
-  positionCalendarContinues,
   practicalFailureOutcome,
-  practicalPendingDelay,
   practicalReadAllowed,
-  practicalRefusedReadAllowed,
-  practicalResumeDelay,
-  shouldRetryPractical,
+  type ReadCycleOutcome,
 } from "@orasso/shared";
+import * as Sentry from "@sentry/react-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -30,9 +26,7 @@ import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
-  positionReadStatus,
-  refreshPracticalPosition,
-  resetPositionReadStatus,
+  retainPracticalCalendar,
   useFollowWeatherPosition,
   usePracticalPosition,
 } from "./position";
@@ -56,8 +50,11 @@ const remembered = (near: string, eventId?: string): PracticalData | null => {
   return key ? (memory.get(key) ?? null) : null;
 };
 
-/** Un état de lecture : la réponse (ou la dernière connue), et si le réseau n'a pas répondu. */
-type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
+/**
+ * Un état de lecture : la réponse (ou la dernière connue), si le réseau n'a pas répondu (`offline`), si la dernière lecture a échoué
+ * (`failed` : « Réessayer » est proposé) et la relecture sur demande.
+ */
+type Read = { data: PracticalData | null; loading: boolean; offline: boolean; failed: boolean; retry: () => void };
 
 /** Relit au retour sur l'écran quand la réponse a plus d'une minute (et un refus, seulement après ce délai). */
 const STALE_MS = PRACTICAL_STALE_MS;
@@ -70,38 +67,41 @@ onCacheScopeDropped(async () => guard.invalidate());
 const WAIT_IDENTITY_MS = 500;
 
 function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): Read {
-  const [state, setState] = useState<Read>(() => ({
+  const [state, setState] = useState<Omit<Read, "retry">>(() => ({
     data: remembered(near, eventId),
     loading: enabled,
     offline: false,
+    failed: false,
   }));
   /** Le compte pour qui `state` a été lu : une autre session l'efface. */
   const shownFor = useRef<string | null>(null);
   const fetchedAt = useRef(0);
-  const retried = useRef(0);
-  // Une seule chaîne d'attente d'identité et une seule chaîne de relances, annulées au démontage (tour 3).
+  // Une seule chaîne d'attente d'identité, annulée au démontage (tour 3).
   const waitTimer = useRef(createSingleTimer()).current;
-  const retryTimer = useRef(createSingleTimer()).current;
-  const attempts = useRef(0);
   const lastStart = useRef(0);
   const focused = useRef(false);
-  // Un refus (4xx) : aucune minuterie, l'heure est retenue et il n'est relu au retour qu'après `STALE_MS` ; une relance tombée sans
-  // focus ou en arrière-plan reprend au retour (une seule).
-  const refusedAt = useRef(0);
   // Une génération par effet (entrées : événement, mode) : la réponse d'une ancienne sortie ne s'affiche jamais pour la nouvelle.
   const generation = useRef(0);
-  const resumePending = useRef(false);
   // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée.
   const latest = useRef<() => Promise<void>>(async () => undefined);
   const alive = useRef(true);
+  // Le cycle de lecture (règle commune site et appli, tour 6) : une seule échéance à la fois, une issue la remplace ; un refus (4xx)
+  // n'a aucune minuterie et est relu au retour après 60 s ; une erreur inconnue n'est jamais relancée ; jamais de relance sans focus
+  // ou appli en arrière-plan (elle reprend au retour, au délai restant de l'écart de 15 s).
+  const cycle = useRef(
+    createReadCycle({
+      run: () => void latest.current(),
+      visible: () => focused.current && AppState.currentState === "active",
+    }),
+  ).current;
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
       waitTimer.cancel();
-      retryTimer.cancel();
+      cycle.dispose();
     };
-  }, [waitTimer, retryTimer]);
+  }, [waitTimer, cycle]);
 
   const load = useCallback(async () => {
     if (!enabled) return;
@@ -112,9 +112,10 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       return;
     }
     lastStart.current = Date.now();
+    cycle.begin();
     const gen = generation.current;
     const valid = () => alive.current && gen === generation.current && guard.valid(ticket);
-    let outcome: PracticalReadOutcome;
+    let outcome: ReadCycleOutcome;
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
@@ -122,58 +123,46 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
-      refusedAt.current = 0;
-      setState({ data, loading: false, offline: false });
+      setState({ data, loading: false, offline: false, failed: false });
       outcome = data.partial ? "partial" : "complete";
     } catch (error) {
       if (!valid()) return;
-      // Réseau ou 5xx : transitoire (relance espacée) ; tout 4xx (403, 429…) : refus, aucune minuterie. « Hors ligne » : le réseau seul.
-      const status = error instanceof ApiRequestError ? error.status : 0;
-      outcome = practicalFailureOutcome(status);
-      refusedAt.current = outcome === "refused" ? Date.now() : 0;
-      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: status === 0 }));
+      if (error instanceof ApiRequestError) {
+        // Réseau ou 5xx : transitoire (relance espacée) ; tout 4xx (403, 429…) : refus, aucune minuterie. « Hors ligne » : le réseau seul.
+        outcome = practicalFailureOutcome(error.status);
+        setState((s) => ({
+          data: s.data ?? remembered(near, eventId),
+          loading: false,
+          offline: error.status === 0,
+          failed: true,
+        }));
+      } else {
+        // Une exception qui n'est pas une réponse du serveur (un bogue) : aucune relance automatique, jamais « hors ligne »,
+        // signalée à Sentry ; « Réessayer » reste proposé.
+        outcome = "unknown";
+        if (Sentry.getClient()) Sentry.captureException(error, { tags: { area: "practical" } });
+        setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: false, failed: true }));
+      }
     }
-    // La suite : transitoire (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
-    const step = nextPracticalRead(outcome, retried.current, attempts.current);
-    retried.current = step.calendarStep;
-    attempts.current = step.networkAttempt;
-    if (step.delay !== null) {
-      retryTimer.schedule(() => {
-        if (!alive.current) return;
-        // Jamais de relance écran sans focus ou appli en arrière-plan : elle reprend au retour (`refresh`).
-        if (
-          !shouldRetryPractical({
-            network: true,
-            focused: focused.current,
-            foreground: AppState.currentState === "active",
-          })
-        ) {
-          resumePending.current = true;
-          return;
-        }
-        void latest.current();
-      }, step.delay);
-    }
-  }, [enabled, near, eventId, waitTimer, retryTimer]);
+    // La suite remplace toute échéance : transitoire (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (0).
+    waitTimer.cancel();
+    cycle.settled(outcome);
+  }, [enabled, near, eventId, waitTimer, cycle]);
   latest.current = load;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `load` change avec ses entrées ; une lecture par changement.
   useEffect(() => {
-    retried.current = 0;
     fetchedAt.current = 0;
-    attempts.current = 0;
     lastStart.current = 0;
-    refusedAt.current = 0;
-    resumePending.current = false;
     // Nouvelles entrées : plus aucune minuterie de l'ancienne lecture, et sa réponse tardive est jetée (M1, M2).
     generation.current += 1;
-    retryTimer.cancel();
+    cycle.reset();
     waitTimer.cancel();
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return;
     }
-    setState({ data: remembered(near, eventId), loading: true, offline: false });
+    setState({ data: remembered(near, eventId), loading: true, offline: false, failed: false });
     void load();
   }, [enabled, near, eventId]);
 
@@ -183,54 +172,33 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     if (shownFor.current !== null && shownFor.current !== who) {
       shownFor.current = null;
       fetchedAt.current = 0;
-      retryTimer.cancel();
+      cycle.reset();
       waitTimer.cancel();
-      retried.current = 0;
-      attempts.current = 0;
-      refusedAt.current = 0;
-      setState({ data: remembered(near, eventId), loading: enabled, offline: false });
+      setState({ data: remembered(near, eventId), loading: enabled, offline: false, failed: false });
       void load();
     }
   });
 
-  // Retour sur l'écran et retour de l'appli au premier plan : relit quand la réponse a plus d'une minute, ou quand aucune lecture
-  // n'a encore réussi (premier échec réseau).
+  // « Réessayer » : tout repart à 0 et la lecture part tout de suite.
+  const retry = useCallback(() => {
+    cycle.manual();
+    waitTimer.cancel();
+    setState((s) => ({ ...s, loading: s.data === null }));
+    void latest.current();
+  }, [cycle, waitTimer]);
+
+  // Retour sur l'écran et retour de l'appli au premier plan : une reprise due part à l'écart de 15 s (en remplaçant l'échéance
+  // précédente) ; un refus n'est relu qu'après 60 s ; sinon relit quand la réponse a plus d'une minute, ou quand aucune lecture
+  // n'a encore réussi.
   const refresh = useCallback(() => {
     if (!enabled) return;
-    // Une relance tombée hors focus est reprise au retour, même si la dernière lecture date de moins de 15 s (une seule, sans boucle).
-    if (resumePending.current) {
-      resumePending.current = false;
-      const wait = practicalResumeDelay(lastStart.current, Date.now());
-      if (wait <= 0) {
-        void load();
-        return;
-      }
-      // Retour avant les 15 s minimales : la reprise n'est pas perdue, elle part au délai restant (une seule, sans boucle).
-      retryTimer.schedule(() => {
-        if (!alive.current) return;
-        if (
-          !shouldRetryPractical({
-            network: true,
-            focused: focused.current,
-            foreground: AppState.currentState === "active",
-          })
-        ) {
-          resumePending.current = true;
-          return;
-        }
-        void latest.current();
-      }, wait);
-      return;
-    }
-    // Un refus (4xx) : relu seulement après `STALE_MS` (et jamais deux lectures à moins de 15 s).
-    if (refusedAt.current > 0) {
-      if (practicalRefusedReadAllowed(refusedAt.current, lastStart.current, Date.now())) void load();
-      return;
-    }
+    if (cycle.resume() !== "idle") return;
+    // Un refus ou une erreur inconnue : rien d'automatique d'ici là.
+    if (cycle.blocked()) return;
     // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran).
     if (!practicalReadAllowed(lastStart.current, Date.now())) return;
     if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
-  }, [enabled, load, retryTimer]);
+  }, [enabled, load, cycle]);
   useFocusEffect(
     useCallback(() => {
       focused.current = true;
@@ -245,8 +213,8 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     }, [refresh]),
   );
   return state.data && shownFor.current !== null && shownFor.current !== cacheScope()
-    ? { data: null, loading: enabled, offline: false }
-    : state;
+    ? { data: null, loading: enabled, offline: false, failed: false, retry }
+    : { ...state, retry };
 }
 
 export type PracticalSources = {
@@ -262,54 +230,19 @@ export function usePracticalSources(eventId?: string): PracticalSources {
   const { at, busy } = usePracticalPosition();
   const city = useRead("city", at === null);
   const outing = useRead("outing", true, eventId);
-  // Position donnée avec des lieux partiels : une seule relecture, après le délai.
-  const partial = at?.data.partial === true;
-  const partialAttempts = useRef(0);
-  // Le calendrier (3, 6, 12, 24 s) se poursuit après un échec de relecture : la minuterie suivante est programmée à la fin de chaque
-  // relecture, réussie ou non ; il s'arrête quand la réponse est complète, au bout de la série ou au démontage.
-  useEffect(() => {
-    if (!partial) {
-      partialAttempts.current = 0;
-      return undefined;
-    }
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Suspendu tant que l'appli est en arrière-plan : la relecture due reprend au retour (jamais perdue, jamais en arrière-plan).
-    let suspended = false;
-    const visible = () => AppState.currentState === "active";
-    const fire = () => {
-      if (!active) return;
-      if (!visible()) {
-        suspended = true;
-        return;
-      }
-      suspended = false;
-      resetPositionReadStatus();
-      void refreshPracticalPosition(true).then(() => {
-        // Un refus (4xx) arrête tout le calendrier ; une panne transitoire le poursuit.
-        if (active && positionCalendarContinues(positionReadStatus())) next();
-      });
-    };
-    const next = () => {
-      const delay = practicalPendingDelay(partialAttempts.current);
-      if (delay === null || !active) return;
-      partialAttempts.current += 1;
-      timer = setTimeout(fire, delay);
-    };
-    const onVisible = () => {
-      if (suspended && visible()) fire();
-    };
-    const sub = AppState.addEventListener("change", onVisible);
-    next();
-    return () => {
-      active = false;
-      sub.remove();
-      if (timer) clearTimeout(timer);
-    };
-  }, [partial]);
+  // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
+  useEffect(() => retainPracticalCalendar(), []);
   return {
     me: at
-      ? { data: at.data, loading: false, offline: false, exact: at.exact, onPosition: true }
+      ? {
+          data: at.data,
+          loading: false,
+          offline: false,
+          failed: false,
+          retry: city.retry,
+          exact: at.exact,
+          onPosition: true,
+        }
       : { ...city, exact: null, onPosition: false },
     outing,
     busy,

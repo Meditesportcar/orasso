@@ -3,30 +3,20 @@
 // affiché (il n'est pas dans `GET /me/home`). Rien n'est écrit dans le navigateur : la dernière réponse de la séance reste en mémoire.
 // Réponse partielle : une seule relecture, après 3 secondes.
 import {
+  createReadCycle,
   createReadGate,
   createSessionGuard,
-  createSingleTimer,
-  nextPracticalRead,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
   type PracticalReadOutcome,
-  positionCalendarContinues,
   practicalFailureOutcome,
-  practicalPendingDelay,
-  practicalRefusedReadAllowed,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
-import {
-  positionReadStatus,
-  refreshPracticalPosition,
-  resetPositionReadStatus,
-  useFollowWeatherPosition,
-  usePracticalPosition,
-} from "./position";
+import { retainPracticalCalendar, useFollowWeatherPosition, usePracticalPosition } from "./position";
 
 /** Les derniers choix de la séance (page chargée) : « Près de moi | Près de ma sortie », les puces, « Liste | Carte ». */
 export const practicalSession: { choice: PracticalChoice; filter: PracticalFilter; view: "list" | "map" } = {
@@ -73,29 +63,27 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   // Une nouvelle lecture sur demande (« Réessayer », retour en ligne) : le chargement repart, le compteur de relance aussi.
   const reload = useRef<() => void>(() => undefined);
   const retry = useCallback(() => reload.current(), []);
-  // `failed` : une reprise est due au retour sur l'écran (échec transitoire) ; `refusedAt` : heure d'un refus (4xx), relu au retour seulement après `STALE_MS`.
-  const failed = useRef(false);
-  const refusedAt = useRef(0);
-  const lastStart = useRef(0);
   // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée (changement de compte ou d'entrées).
   const latest = useRef<() => Promise<void>>(async () => undefined);
-  const retried = useRef(0);
   // Le composant est monté : plus aucune lecture ni relance après son démontage (tour 2 de la suite).
   const alive = useRef(true);
   // Une seule lecture à la fois (reprises, « Réessayer », minuteries).
   const gate = useRef(createReadGate()).current;
-  // Une seule relance de lieux partiels, annulée au démontage (tour 3).
-  const partialTimer = useRef(createSingleTimer()).current;
-  const retryTimer = useRef(createSingleTimer()).current;
-  const attempts = useRef(0);
+  // Le cycle de lecture (règle commune site et appli, tour 6) : une seule échéance à la fois, une issue la remplace ; un refus (4xx)
+  // n'a aucune minuterie et est relu au retour après 60 s ; jamais de relance d'un onglet masqué.
+  const cycle = useRef(
+    createReadCycle({
+      run: () => void latest.current(),
+      visible: () => typeof document === "undefined" || document.visibilityState === "visible",
+    }),
+  ).current;
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      partialTimer.cancel();
-      retryTimer.cancel();
+      cycle.dispose();
     };
-  }, [partialTimer, retryTimer]);
+  }, [cycle]);
 
   // Sans identité connue, rien ne part (la lecture attend l'annonce de la session, `who` change alors et relance l'effet).
   const load = useCallback(async () => {
@@ -107,7 +95,7 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       gate.leave();
       return;
     }
-    lastStart.current = Date.now();
+    cycle.begin();
     let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
     try {
       res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near }, timeoutMs: 15_000 });
@@ -119,48 +107,26 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     }
     // Une réponse devenue étrangère (autre compte, autre génération de session) ou arrivée après le démontage est jetée.
     if (!alive.current || !guard.valid(ticket)) return;
-    // La suite d'une lecture : réseau (relance espacée), refus (jamais relancé), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
+    // La suite d'une lecture : transitoire (relance espacée), refus (aucune minuterie), partielle (calendrier 3/6/12/24 s), complète (tout à 0).
     const outcome: PracticalReadOutcome = res.ok
       ? res.data.partial
         ? "partial"
         : "complete"
       : practicalFailureOutcome(res.status);
-    const step = nextPracticalRead(outcome, retried.current, attempts.current);
-    retried.current = step.calendarStep;
-    attempts.current = step.networkAttempt;
+    cycle.settled(outcome);
     if (res.ok) {
-      failed.current = false;
-      refusedAt.current = 0;
       memory.set(`${ticket.who}|${near}`, res.data);
       setState({ data: res.data, loading: false, offline: false });
     } else {
-      // Transitoire (réseau, 5xx) : reprise au retour ; refus (4xx) : l'heure est retenue, aucune minuterie ; « hors ligne » seulement pour le réseau.
-      failed.current = outcome === "transient";
-      refusedAt.current = outcome === "refused" ? Date.now() : 0;
+      // « Hors ligne » seulement pour le réseau ; un 5xx ou un refus garde la réponse connue, sans mention.
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: res.status === 0, failed: true }));
     }
-    if (step.delay !== null) {
-      // Jamais la relance d'un onglet masqué : elle reprend au retour sur la page (`failed` : voir la reprise plus bas).
-      (outcome === "partial" ? partialTimer : retryTimer).schedule(() => {
-        if (!alive.current) return;
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-          failed.current = true;
-          return;
-        }
-        void latest.current();
-      }, step.delay);
-    }
-  }, [enabled, near, who, partialTimer, retryTimer, gate]);
+  }, [enabled, near, who, cycle, gate]);
   latest.current = load;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {
-    retried.current = 0;
-    attempts.current = 0;
-    failed.current = false;
-    refusedAt.current = 0;
-    retryTimer.cancel();
-    partialTimer.cancel();
+    cycle.reset();
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return undefined;
@@ -168,21 +134,15 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     // Un autre compte (ou aucun) : les données de l'ancien disparaissent tout de suite.
     setState({ data: who ? remembered(near) : null, loading: true, offline: false });
     void load();
+    // « Réessayer » : tout repart à 0 et la lecture part tout de suite.
     reload.current = () => {
-      attempts.current = 0;
+      cycle.manual();
       setState((s) => ({ ...s, loading: s.data === null }));
       void load();
     };
-    // Retour en ligne et retour sur la page : une lecture qui n'a jamais réussi est reprise tout de suite.
-    const resume = () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      if (failed.current) {
-        reload.current();
-        return;
-      }
-      if (practicalRefusedReadAllowed(refusedAt.current, lastStart.current, Date.now())) reload.current();
-    };
-    // Retour en ligne et page redevenue visible (une relance tombée dans un onglet masqué n'est pas perdue).
+    // Retour en ligne et page redevenue visible : une reprise due part à l'écart de 15 s (en remplaçant l'échéance précédente), un
+    // refus n'est relu qu'après 60 s ; une relance tombée dans un onglet masqué n'est pas perdue.
+    const resume = () => void cycle.resume();
     window.addEventListener("online", resume);
     document.addEventListener("visibilitychange", resume);
     return () => {
@@ -204,50 +164,8 @@ export function usePracticalSources(): PracticalSources {
   const { at, busy } = usePracticalPosition();
   const city = useRead("city", at === null);
   const outing = useRead("outing", true);
-  const partial = at?.data.partial === true;
-  const partialAttempts = useRef(0);
-  // Le calendrier (3, 6, 12, 24 s) se poursuit après un échec de relecture : la minuterie suivante est programmée à la fin de chaque
-  // relecture, réussie ou non ; il s'arrête quand la réponse est complète, au bout de la série ou au démontage.
-  useEffect(() => {
-    if (!partial) {
-      partialAttempts.current = 0;
-      return undefined;
-    }
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Suspendu tant que l'onglet est masqué : la relecture due reprend au retour (jamais perdue, jamais en arrière-plan).
-    let suspended = false;
-    const visible = () => typeof document === "undefined" || document.visibilityState === "visible";
-    const fire = () => {
-      if (!active) return;
-      if (!visible()) {
-        suspended = true;
-        return;
-      }
-      suspended = false;
-      resetPositionReadStatus();
-      void refreshPracticalPosition(true).then(() => {
-        // Un refus (4xx) arrête tout le calendrier ; une panne transitoire le poursuit.
-        if (active && positionCalendarContinues(positionReadStatus())) next();
-      });
-    };
-    const next = () => {
-      const delay = practicalPendingDelay(partialAttempts.current);
-      if (delay === null || !active) return;
-      partialAttempts.current += 1;
-      timer = setTimeout(fire, delay);
-    };
-    const onVisible = () => {
-      if (suspended && visible()) fire();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    next();
-    return () => {
-      active = false;
-      document.removeEventListener("visibilitychange", onVisible);
-      if (timer) clearTimeout(timer);
-    };
-  }, [partial]);
+  // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
+  useEffect(() => retainPracticalCalendar(), []);
   return {
     me: at
       ? { data: at.data, loading: false, offline: false, retry: city.retry, exact: at.exact, onPosition: true }

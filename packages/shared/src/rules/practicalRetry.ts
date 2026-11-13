@@ -162,11 +162,3 @@ export function nextPracticalRead(
 export function practicalResumeDelay(lastStartedAt: number, now: number): number {
   return lastStartedAt === 0 ? 0 : Math.max(0, PRACTICAL_MIN_GAP_MS - (now - lastStartedAt));
 }
-
-/**
- * Le calendrier des relectures de position (3/6/12/24 s) suit la même règle à trois issues : `status` est celui de l'échec de la
- * relecture (`null` : elle a répondu). Un refus (4xx) arrête tout ; une panne transitoire ou une réponse poursuit le calendrier.
- */
-export function positionCalendarContinues(status: number | null): boolean {
-  return status === null || practicalFailureOutcome(status) === "transient";
-}

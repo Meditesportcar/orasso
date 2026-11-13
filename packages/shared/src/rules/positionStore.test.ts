@@ -372,3 +372,37 @@ describe("position en mémoire de « Ma météo »", () => {
     }
   });
 });
+
+describe("suite R8q, tour 6 : chaque appel à refresh reçoit le résultat de la relecture rejointe", () => {
+  it("deux appels concurrents : une seule requête, les deux reçoivent son échec (la cause comprise)", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const one = t.store.refresh(true);
+    const two = t.store.refresh(true);
+    expect(t.calls()).toBe(2);
+    const failure = new Error("403");
+    t.pending[1]?.reject(failure);
+    expect(await one).toEqual({ status: "failed", error: failure });
+    expect(await two).toEqual({ status: "failed", error: failure });
+    expect(t.store.view().at?.label).toBe("A");
+  });
+
+  it("sans position gardée, ou pendant un geste : rien ne part, résultat « skipped »", async () => {
+    const t = setup();
+    expect(await t.store.refresh(true)).toEqual({ status: "skipped" });
+    expect(t.calls()).toBe(0);
+  });
+
+  it("une réponse : « ok »", async () => {
+    const t = setup();
+    const first = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await first;
+    const refresh = t.store.refresh(true);
+    t.pending[1]?.resolve(at("A, relue"));
+    expect(await refresh).toEqual({ status: "ok" });
+  });
+});

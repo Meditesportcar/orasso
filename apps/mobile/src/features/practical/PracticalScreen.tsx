@@ -146,9 +146,18 @@ export function PracticalScreen() {
       {read.offline && data ? <Notice>{L.offline}</Notice> : null}
 
       {!data ? (
-        <Text variant="caption" color={c.inkMuted} testID="practical-state">
-          {read.loading ? L.loading : L.unavailable}
-        </Text>
+        <>
+          <Text variant="caption" color={c.inkMuted} testID="practical-state">
+            {read.loading ? L.loading : L.unavailable}
+          </Text>
+          {read.failed && !read.loading ? (
+            <View style={styles.gps}>
+              <SmButton kind="s" icon="undo" onPress={read.retry} testID="practical-retry">
+                {L.retry}
+              </SmButton>
+            </View>
+          ) : null}
+        </>
       ) : list.length === 0 ? (
         <Text variant="caption" color={c.inkMuted} testID="practical-empty">
           {data.partial && data.places.length === 0 ? L.unavailable : L.nothingNear}
