@@ -268,12 +268,14 @@ describe("candidature sur une mission", () => {
     expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
 
     // Lot R9d : une candidate qui est aussi responsable de la structure ne reçoit rien ; l'autre responsable, si.
-    await addMember(structureId, sofia.id, "co_organizer");
+    const ines = await signUp("Ines_Truck");
+    await readyProvider(ines, { name: "La Friterie" });
+    await addMember(structureId, ines.id, "co_organizer");
     const second = await addNeed(nocturneId, { quantity: 1 });
-    const own = await applyTo(sofia, nocturneId, second.id);
+    const own = await applyTo(ines, nocturneId, second.id);
     expect(own.status).toBe(201);
-    expect(await notifsOf(sofia.id, "application_received")).toHaveLength(0);
-    expect(await notifsOf(sofia.id, "need_application_received")).toHaveLength(0);
+    expect(await notifsOf(ines.id, "application_received")).toHaveLength(0);
+    expect(await notifsOf(ines.id, "need_application_received")).toHaveLength(0);
     expect(await notifsOf(orga.id, "application_received")).toHaveLength(2);
     // Comblée par Sofia : Léa ne peut plus y répondre.
     await call(orga, "POST", `/events/${nocturneId}/applications/${ok.json.id}/decide`, ACCEPT);
