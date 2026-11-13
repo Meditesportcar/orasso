@@ -12,12 +12,14 @@ import {
   PRACTICAL_DEPARTMENTS_MAX,
   PRACTICAL_MAX,
   PRACTICAL_RADIUS_KM,
+  PRACTICAL_SAME_PLACE_M,
   type PracticalPlace,
   placesAround,
   practicalKinds,
   practicalPlaceId,
   practicalTitle,
   withDistance,
+  withoutTwins,
 } from "./practical";
 
 const PERPIGNAN = { lat: 42.7, lng: 2.9 };
@@ -262,5 +264,46 @@ describe("le département du point : par l'emprise, pas par le centre (suite R8q
     const around = departmentsAround(point, 300);
     expect(around.length).toBe(PRACTICAL_DEPARTMENTS_MAX);
     expect(around).toContain("75");
+  });
+});
+
+describe("fusion des stations de deux sources (petit lot de fin D)", () => {
+  // 1 m de latitude = 1 / 111 200 degré.
+  const at = (meters: number, name = "x") => ({ name, lat: 42.7 + meters / 111_200, lng: 2.9 });
+  const gov = [{ name: "gov", lat: 42.7, lng: 2.9 }];
+
+  it("le seuil est de 60 m : à 59 m c'est le même lieu, à 61 m non", () => {
+    expect(PRACTICAL_SAME_PLACE_M).toBe(60);
+    expect(withoutTwins(gov, [at(59)])).toEqual([]);
+    expect(withoutTwins(gov, [at(61)])).toHaveLength(1);
+    expect(withoutTwins(gov, [at(0)])).toEqual([]);
+  });
+
+  it("un jumeau n'est pris qu'une fois : deux stations d'OpenStreetMap près d'une seule du jeu public, la plus proche est le doublon", () => {
+    const extra = [at(40, "loin"), at(10, "près")];
+    expect(withoutTwins(gov, extra).map((p) => p.name)).toEqual(["loin"]);
+  });
+
+  it("deux stations voisines gardent chacune la leur ; l'ordre est conservé ; listes vides", () => {
+    const two = [{ name: "a", lat: 42.7, lng: 2.9 }, at(100, "b")];
+    expect(withoutTwins(two, [at(100, "b2"), at(0, "a2"), at(500, "c")]).map((p) => p.name)).toEqual(["c"]);
+    expect(withoutTwins([], [at(0, "seul")]).map((p) => p.name)).toEqual(["seul"]);
+    expect(withoutTwins(gov, [])).toEqual([]);
+  });
+
+  it("un jumeau en longitude compte aussi (à 42,7° de latitude, 0,0008° de longitude font environ 65 m)", () => {
+    const east = (deg: number) => ({ name: "e", lat: 42.7, lng: 2.9 + deg });
+    expect(withoutTwins(gov, [east(0.0007)])).toEqual([]);
+    expect(withoutTwins(gov, [east(0.0009)])).toHaveLength(1);
+  });
+
+  it("titre d'une station : son nom OpenStreetMap quand il y en a un, sinon la rue", () => {
+    expect(
+      practicalTitle(place("fuel", 1, 1, { name: "Station Leclerc", address: "1 rue A, 66000 Perpignan" }), UNNAMED),
+    ).toBe("Station Leclerc");
+    expect(practicalTitle(place("fuel", 1, 1, { name: "  Avia  ", address: null }), UNNAMED)).toBe("Avia");
+    expect(
+      practicalTitle(place("fuel", 1, 1, { name: "Station-service", address: "1 rue A, 66000 Perpignan" }), UNNAMED),
+    ).toBe("Rue A");
   });
 });
