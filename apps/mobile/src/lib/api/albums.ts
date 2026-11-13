@@ -7,7 +7,14 @@ import type {
   AlbumPhotoView,
   AlbumStatus,
   AlbumsList,
+  AlbumTagCreate,
+  AlbumTagRemove,
+  AlbumTagView,
   AlbumView,
+  MyAlbumTagsList,
+  MyPhotosView,
+  Taggable,
+  TaggableQuery,
 } from "@orasso/shared";
 
 import { request } from "../http";
@@ -38,4 +45,23 @@ export const albumsApi = {
     request<{ items: import("@orasso/shared").MediaContentView[]; nextCursor: string | null }>(
       `/api/media/${mediaId}/contents${qs({ kind: "link", limit: 20, cursor })}`,
     ),
+  // Lot R9f : identifications sur une photo et « Tes photos ».
+  /** Le plateau à choisir et la recherche par pseudo (2 caractères au moins pour les personnes). */
+  albumTaggable: (id: string, q: Partial<Pick<TaggableQuery, "q" | "category" | "cursor">> = {}) =>
+    request<Taggable>(`/api/albums/${id}/taggable${qs({ q: q.q, category: q.category, cursor: q.cursor })}`),
+  tagPhoto: (photoId: string, body: AlbumTagCreate) =>
+    request<AlbumTagView>(`/api/album-photos/${photoId}/tags`, { method: "POST", body }),
+  /** Retirer une identification que j'ai posée (média, organisateur). */
+  untagPhoto: (photoId: string, tagId: string) =>
+    request<null>(`/api/album-photos/${photoId}/tags/${tagId}`, { method: "DELETE" }),
+  /** « Ce n'est pas ma voiture » / « Retirer mon identification » : le même geste, le motif vient de l'API. */
+  removeMyTag: (tagId: string, body: AlbumTagRemove = {}) =>
+    request<null>(`/api/me/album-tags/${tagId}`, { method: "DELETE", body }),
+  myPhotos: (albumId: string) => request<MyPhotosView>(`/api/me/albums/${albumId}/my-photos`),
+  myAlbumTags: (cursor?: string | null) => request<MyAlbumTagsList>(`/api/me/album-tags${qs({ cursor })}`),
+  /** « En story » : crée la story depuis la photo (aucun téléversement). */
+  photoToStory: (photoId: string, body: { audience?: "public" | "followers"; caption?: string | null }) =>
+    request<{ id: string; expiresAt: string }>(`/api/album-photos/${photoId}/share-to-story`, { method: "POST", body }),
+  /** « Contacter » le média : la conversation s'ouvre avec le titulaire de la page (l'API ne donne jamais son compte). */
+  contactAlbumMedia: (albumId: string) => request<{ id: string }>(`/api/albums/${albumId}/contact`, { method: "POST" }),
 };

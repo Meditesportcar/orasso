@@ -3,7 +3,7 @@
 // le pro selon sa casquette) ; la toucher ouvre le profil, la page de la structure ou la fiche correspondante (lot R7h).
 // La ligne reste lisible sans le geste (texte seul).
 import { Photo, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
-import { storyViewerLabels as L, type StoryTagView, type StoryView } from "@orasso/shared";
+import { albumLabels, storyViewerLabels as L, type StoryTagView, type StoryView } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
@@ -22,7 +22,8 @@ export function SharedByLine({
   const { t } = useTheme();
   const c = t.color;
   const credit = story.sharedFrom;
-  if (!credit) return null;
+  // Lot R9f : une story reprise d'une photo d'album porte « Photos : <média> », le crédit du photographe, qui ne se retire pas.
+  if (!credit) return story.credit ? <PhotoCredit name={story.credit.mediaName} /> : null;
   const name = credit.name;
   const full = L.sharedBy(name, authorName);
   const at = name ? full.indexOf(name) : -1;
@@ -61,6 +62,23 @@ export function SharedByLine({
         )}
       </Text>
     </Pressable>
+  );
+}
+
+/** « Photos : <média> » : le crédit d'une story reprise d'une photo d'album (lot R9f), en pastille comme celui d'une copie. */
+function PhotoCredit({ name }: { name: string }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View
+      accessibilityLabel={albumLabels.creditLine(name)}
+      style={[styles.line, { backgroundColor: withAlpha(c.night, 0.6) }]}
+      testID="story-photo-credit"
+    >
+      <Text variant="caption" color={c.nightInk} style={styles.text}>
+        {albumLabels.creditLine(name)}
+      </Text>
+    </View>
   );
 }
 

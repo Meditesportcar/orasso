@@ -30,6 +30,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { AlbumMentionsBlock } from "@/features/albums/AlbumMentions";
 import { ContestSheet } from "@/features/ContestSheet";
 import { CrewConfirmSheet } from "@/features/CrewConfirmSheet";
 import { InvitationSheet } from "@/features/invitations/InvitationSheet";
@@ -785,6 +786,8 @@ function PastTicket({
           {recapScreenTexts.seeRecap}
         </SmallButton>
       ) : null}
+      {/* Lot R9f : « Photos de ma voiture · N · <média> » (les photos d'albums où je suis identifié). */}
+      <AlbumMentionsBlock mentions={app.albumPhotos} mine outing />
     </Ticket>
   );
 }
