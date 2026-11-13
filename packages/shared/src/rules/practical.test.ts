@@ -297,6 +297,20 @@ describe("fusion des stations de deux sources (petit lot de fin D)", () => {
     expect(withoutTwins(gov, [east(0.0009)])).toHaveLength(1);
   });
 
+  it("un prédicat peut refuser une paire : deux stations à 20 m qui ont chacune un identifiant ne sont pas jumelles", () => {
+    const withRef = (ref: string, meters: number) => ({ ref, lat: 42.7 + meters / 111_200, lng: 2.9 });
+    const refused = (p: { ref?: string }, e: { ref?: string }) => !(p.ref && e.ref);
+    expect(withoutTwins([withRef("1", 0)], [withRef("2", 20)], 60, refused)).toHaveLength(1);
+    expect(
+      withoutTwins(
+        [{ lat: 42.7, lng: 2.9 } as { ref?: string; lat: number; lng: number }],
+        [withRef("2", 20)],
+        60,
+        refused,
+      ),
+    ).toEqual([]);
+  });
+
   it("titre d'une station : son nom OpenStreetMap quand il y en a un, sinon la rue", () => {
     expect(
       practicalTitle(place("fuel", 1, 1, { name: "Station Leclerc", address: "1 rue A, 66000 Perpignan" }), UNNAMED),

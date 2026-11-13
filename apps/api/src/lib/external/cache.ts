@@ -53,18 +53,24 @@ export async function readBoundedJson(res: Response, max = MAX_EXTERNAL_BYTES): 
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-/** Appel HTTP identifié (`User-Agent`), borné dans le temps. */
-export async function externalRequest(url: string, init: RequestInit = {}): Promise<Response> {
+/** Appel HTTP identifié (`User-Agent`), borné dans le temps (`timeoutMs` : un délai propre à une source lente, Overpass). */
+export async function externalRequest(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = TIMEOUT_MS,
+): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("user-agent", env.EXTERNAL_USER_AGENT);
   headers.set("accept", "application/json");
-  const res = await (fetchImpl ?? fetch)(url, { ...init, headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await (fetchImpl ?? fetch)(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res;
 }
 
-const failures = new Map<string, number>();
-const flights = new Map<string, Promise<unknown>>();
+/** Échecs de suite d'une clé : quand le dernier a eu lieu, et combien. Un succès efface la clé. */
+const failures = new Map<string, { at: number; count: number }>();
+type Flight = { data: unknown; fresh: boolean };
+const flights = new Map<string, Promise<Flight>>();
 
 export type CachedSourceOptions<T> = {
   key: string;
@@ -72,41 +78,57 @@ export type CachedSourceOptions<T> = {
   ttlMs: number;
   /** Au-delà, même l'ancien cache n'est plus servi (des prix de la semaine dernière ne valent rien). */
   maxStaleMs: number;
+  /**
+   * Délais avant une nouvelle tentative après un échec, du premier échec de suite au suivant ; le dernier vaut pour les suivants.
+   * Défaut : 10 minutes. Une source saturée (Overpass) recule : 10 min, 30 min, 1 h.
+   */
+  retryAfterMs?: readonly number[];
   /** Faux (source désactivée par `off`) : on ne lit que le cache, jamais la source. */
   enabled?: boolean;
   /** Appelle la source ; lève une erreur ou renvoie `null` si elle ne répond pas. */
   load: () => Promise<T | null>;
 };
 
+/** Données d'une source et leur fraîcheur : `fresh` faux = ancien cache servi faute de mieux (échec, délai d'attente, source coupée). */
+export type SourceState<T> = { data: T | null; fresh: boolean };
+
 /**
  * Données d'une source, du cache si valable, sinon d'un appel (regroupé par clé). Source désactivée, en échec récent
  * ou injoignable : l'ancien cache tant qu'il n'est pas trop vieux, sinon `null`. Ne lève jamais.
  */
 export async function cachedSource<T>(opts: CachedSourceOptions<T>): Promise<T | null> {
-  const { key, ttlMs, maxStaleMs, load, enabled = true } = opts;
+  return (await cachedSourceState(opts)).data;
+}
+
+/** Comme `cachedSource`, avec en plus l'état de fraîcheur : l'écran sait qu'il lit un ancien cache et relit plus tard. */
+export async function cachedSourceState<T>(opts: CachedSourceOptions<T>): Promise<SourceState<T>> {
+  const { key, ttlMs, maxStaleMs, load, enabled = true, retryAfterMs = [RETRY_AFTER_FAILURE_MS] } = opts;
   const t = now().getTime();
   let row: typeof externalCache.$inferSelect | undefined;
   try {
     row = await db.query.externalCache.findFirst({ where: eq(externalCache.key, key) });
   } catch {
-    return null;
+    return { data: null, fresh: false };
   }
   const age = row ? t - row.fetchedAt.getTime() : Number.POSITIVE_INFINITY;
-  if (row && age < ttlMs) return row.data as T;
-  const stale = row && age < maxStaleMs ? (row.data as T) : null;
+  if (row && age < ttlMs) return { data: row.data as T, fresh: true };
+  const stale: SourceState<T> = { data: row && age < maxStaleMs ? (row.data as T) : null, fresh: false };
   if (!enabled || !externalEnabled()) return stale;
-  const failedAt = failures.get(key);
-  if (failedAt !== undefined && t - failedAt < RETRY_AFTER_FAILURE_MS) return stale;
+  const failed = failures.get(key);
+  if (failed !== undefined) {
+    const wait = retryAfterMs[Math.min(failed.count, retryAfterMs.length) - 1] ?? RETRY_AFTER_FAILURE_MS;
+    if (t - failed.at < wait) return stale;
+  }
 
-  let flight = flights.get(key) as Promise<T | null> | undefined;
+  let flight = flights.get(key);
   if (!flight) {
-    flight = (async () => {
+    flight = (async (): Promise<Flight> => {
       try {
         // Au début du vol : une autre demande a pu terminer son chargement (et retirer son vol) entre notre première lecture et ici ;
         // la ligne du cache, relue, est alors fraîche et on la rend sans rappeler la source.
         try {
           const fresh = await db.query.externalCache.findFirst({ where: eq(externalCache.key, key) });
-          if (fresh && now().getTime() - fresh.fetchedAt.getTime() < ttlMs) return fresh.data as T;
+          if (fresh && now().getTime() - fresh.fetchedAt.getTime() < ttlMs) return { data: fresh.data, fresh: true };
         } catch {
           // Lecture impossible : on charge comme avant.
         }
@@ -115,18 +137,19 @@ export async function cachedSource<T>(opts: CachedSourceOptions<T>): Promise<T |
         const values = { key, fetchedAt: now(), data: data as unknown };
         await db.insert(externalCache).values(values).onConflictDoUpdate({ target: externalCache.key, set: values });
         failures.delete(key);
-        return data;
+        return { data, fresh: true };
       } catch (error) {
-        failures.set(key, now().getTime());
+        failures.set(key, { at: now().getTime(), count: (failures.get(key)?.count ?? 0) + 1 });
         console.warn(`Source externe ${key} indisponible :`, error instanceof Error ? error.message : error);
-        return stale;
+        return { data: stale.data, fresh: false };
       } finally {
         flights.delete(key);
       }
     })();
     flights.set(key, flight);
   }
-  return flight;
+  const result = await flight;
+  return { data: result.data as T | null, fresh: result.fresh };
 }
 
 /** Attend au plus `EXTERNAL_BUDGET_MS` : au-delà, `fallback` (l'appel continue en arrière-plan et remplit le cache). */

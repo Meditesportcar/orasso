@@ -13,7 +13,7 @@ import {
 } from "@orasso/shared";
 
 import { env } from "../../env";
-import { cachedSource, externalRequest, readBoundedJson } from "./cache";
+import { cachedSourceState, externalRequest, readBoundedJson, type SourceState } from "./cache";
 
 // Lot R8q : « Pratique » n'affiche aucun prix, seulement où sont les stations : un chargement par département et par jour
 // suffit (au plus 101 par jour pour toute la plateforme), et une liste vieille d'une semaine vaut mieux que rien.
@@ -22,6 +22,7 @@ export const FUEL_TTL_MS = 24 * 3_600_000;
 export const FUEL_MAX_STALE_MS = 7 * 24 * 3_600_000;
 
 type FuelRecord = {
+  id?: number | string | null;
   adresse?: string | null;
   ville?: string | null;
   cp?: string | null;
@@ -43,6 +44,12 @@ type FuelRecord = {
 /** Petit lot de fin D : E10 et GPLc sont lus aussi, pour qu'une station qui ne vend que ceux-là ne soit pas écartée. */
 type AllFuelPrices = FuelPrices & { e10: number | null; gplc: number | null };
 
+/**
+ * Une station du cache `fuel:<département>`. `ref` : l'identifiant de la station dans le jeu public, que les stations d'OpenStreetMap
+ * portent dans `ref:FR:prix-carburants` (rapprochement certain, quelle que soit la distance). Absent d'un ancien cache.
+ */
+export type FuelCacheStation = CachedFuelStation & { ref?: string };
+
 /** Un prix plausible en €/L, sinon `null` (valeur absurde ou absente). */
 const price = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) && v >= 0.3 && v <= 6 ? Math.round(v * 1000) / 1000 : null;
@@ -50,10 +57,10 @@ const price = (v: unknown): number | null =>
 const clean = (s: string | null | undefined, max = 80) => (s ? s.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
 /** Lit la réponse du jeu de données (exporté pour les tests) : stations avec position et au moins un prix (SP95, SP98, gazole, E85, E10 ou GPLc). */
-export function parseFuel(json: unknown): CachedFuelStation[] {
+export function parseFuel(json: unknown): FuelCacheStation[] {
   const results = (json as { results?: FuelRecord[] } | null)?.results;
   if (!Array.isArray(results)) return [];
-  const out: CachedFuelStation[] = [];
+  const out: FuelCacheStation[] = [];
   for (const r of results) {
     const lat = r.geom?.lat;
     const lng = r.geom?.lon;
@@ -72,7 +79,9 @@ export function parseFuel(json: unknown): CachedFuelStation[] {
       .sort()
       .at(-1);
     const city = [clean(r.cp, 10), clean(r.ville)].filter(Boolean).join(" ");
+    const ref = r.id === null || r.id === undefined ? "" : clean(String(r.id), 40);
     out.push({
+      ...(ref ? { ref } : {}),
       name: homeLabels.fuelUnnamed,
       address: [clean(r.adresse), city].filter(Boolean).join(", ") || null,
       lat: Math.round(lat * 1e5) / 1e5,
@@ -93,7 +102,7 @@ export function fuelUrl(base: string, department: string, offset = 0): string {
   const params = new URLSearchParams({
     where: `code_departement="${department}"`,
     select:
-      "adresse,ville,cp,geom,sp95_prix,sp98_prix,gazole_prix,e85_prix,e10_prix,gplc_prix,sp95_maj,sp98_maj,gazole_maj,e85_maj,e10_maj,gplc_maj",
+      "id,adresse,ville,cp,geom,sp95_prix,sp98_prix,gazole_prix,e85_prix,e10_prix,gplc_prix,sp95_maj,sp98_maj,gazole_maj,e85_maj,e10_maj,gplc_maj",
     order_by: "id",
     limit: String(PAGE),
     offset: String(offset),
@@ -102,9 +111,14 @@ export function fuelUrl(base: string, department: string, offset = 0): string {
 }
 
 /** Stations-service de tout un département (cache 24 heures), `[]` si la source ne répond pas. */
-export async function fuelNear(department: string): Promise<CachedFuelStation[]> {
-  if (!departmentCentroids[department]) return [];
-  const data = await cachedSource<CachedFuelStation[]>({
+export async function fuelNear(department: string): Promise<FuelCacheStation[]> {
+  return (await fuelState(department)).data ?? [];
+}
+
+/** Comme `fuelNear`, avec la fraîcheur : `data` nul = aucune liste servable (source muette). */
+export async function fuelState(department: string): Promise<SourceState<FuelCacheStation[]>> {
+  if (!departmentCentroids[department]) return { data: [], fresh: true };
+  return cachedSourceState<FuelCacheStation[]>({
     key: `fuel:${department}`,
     ttlMs: FUEL_TTL_MS,
     enabled: env.FUEL_API_URL !== "off",
@@ -122,5 +136,4 @@ export async function fuelNear(department: string): Promise<CachedFuelStation[]>
       return parseFuel({ results: all });
     },
   });
-  return data ?? [];
 }

@@ -1,0 +1,28 @@
+{
+  "_note": "Extrait anonyme, arrondi à 4 décimales, de réponses réelles du 13/11/2026 (jeu public des prix et Overpass, département 66) : les cas qui ont fait échouer le seuil de 60 m. Jamais appelé, lu par les tests seulement.",
+  "gov": {
+    "results": [
+      { "id": 66500001, "adresse": "Grande Rocade", "ville": "Bourg-Madame", "cp": "66760", "geom": { "lat": 42.625, "lon": 2.428 }, "gazole_prix": 2.089, "gazole_maj": "2026-11-13T14:00:00+00:00" },
+      { "id": 66600002, "adresse": "Route de Perpignan", "ville": "Saint-Laurent", "cp": "66000", "geom": { "lat": 42.7791, "lon": 2.9999 }, "gazole_prix": 2.119, "gazole_maj": "2026-11-13T14:00:00+00:00" },
+      { "id": 66420001, "adresse": "BOULEVARD DU 14 JUILLET", "ville": "Le Barcarès", "cp": "66420", "geom": { "lat": 42.78737, "lon": 3.0349 }, "gazole_prix": 2.139, "gazole_maj": "2026-11-13T14:00:00+00:00" },
+      { "id": 66420002, "adresse": "Boulevard du 14 Juillet", "ville": "Le Barcarès", "cp": "66420", "geom": { "lat": 42.787, "lon": 3.035 }, "gazole_prix": 2.189, "gazole_maj": "2026-11-13T14:00:00+00:00" },
+      { "id": 66700001, "adresse": "ROUTE DE PERPIGNAN", "ville": "Argelès-sur-Mer", "cp": "66700", "geom": { "lat": 42.65, "lon": 2.7 }, "e10_prix": 1.919, "e10_maj": "2026-11-13T14:00:00+00:00" },
+      { "id": 66000099, "adresse": "Avenue du Vernet", "ville": "Perpignan", "cp": "66000", "geom": { "lat": 42.68, "lon": 2.9 }, "gplc_prix": 1.099, "gplc_maj": "2026-11-13T14:00:00+00:00" }
+    ]
+  },
+  "osm": {
+    "elements": [
+      { "type": "node", "id": 1, "lat": 42.6253, "lon": 2.4303, "tags": { "amenity": "fuel", "name": "Super U", "brand": "Super U", "ref:FR:prix-carburants": "66500001" } },
+      { "type": "node", "id": 2, "lat": 42.7791, "lon": 2.9999, "tags": { "amenity": "fuel", "name": "Total Access", "brand": "Total Access", "ref:FR:prix-carburants": "66600002" } },
+      { "type": "way", "id": 3, "center": { "lat": 42.7791, "lon": 3.0001 }, "tags": { "amenity": "fuel", "name": "Total Access" } },
+      { "type": "way", "id": 4, "center": { "lat": 42.77916, "lon": 3.00008 }, "tags": { "amenity": "fuel" } },
+      { "type": "way", "id": 5, "center": { "lat": 42.779, "lon": 3.0003 }, "tags": { "amenity": "fuel" } },
+      { "type": "way", "id": 6, "center": { "lat": 42.7790, "lon": 2.9998 }, "tags": { "amenity": "car_wash" } },
+      { "type": "node", "id": 7, "lat": 42.7909, "lon": 3.035, "tags": { "amenity": "fuel", "name": "Système U", "ref:FR:prix-carburants": "66420002" } },
+      { "type": "way", "id": 8, "center": { "lat": 42.7832, "lon": 3.0339 }, "tags": { "amenity": "fuel", "name": "Montaner et Fils", "ref:FR:prix-carburants": "66420001" } },
+      { "type": "node", "id": 9, "lat": 42.783, "lon": 3.034, "tags": { "amenity": "car_wash" } },
+      { "type": "node", "id": 10, "lat": 42.6501, "lon": 2.7001, "tags": { "amenity": "fuel", "name": "Intermarché", "car_wash": "yes", "ref:FR:prix-carburants": "66700001" } },
+      { "type": "node", "id": 11, "lat": 42.8, "lon": 2.5, "tags": { "amenity": "fuel", "name": "Aire des Fenouillèdes" } }
+    ]
+  }
+}

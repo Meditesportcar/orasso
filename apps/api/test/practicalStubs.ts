@@ -12,6 +12,8 @@ import { resetOverpassQueue } from "../src/lib/external/overpass";
 export type StubWash = {
   name?: string;
   brand?: string;
+  /** `ref:FR:prix-carburants` : l'identifiant de la station dans le jeu public. */
+  ref?: string;
   lat: number;
   lon: number;
   amenity?: "car_wash" | "fuel";
@@ -21,12 +23,16 @@ export type StubWash = {
 };
 /** `only` : la station ne déclare qu'un prix (E10 ou GPLc), les autres sont vides. */
 export type StubFuel = {
+  /** Identifiant dans le jeu public ; par défaut son rang dans le département + 1. */
+  id?: number;
   adresse: string;
   ville: string;
   cp: string;
   lat: number;
   lon: number;
   only?: "e10" | "gplc";
+  /** Prix E10 et GPLc en plus de ceux par défaut (gazole, SP95). */
+  extra?: { e10?: number; gplc?: number };
 };
 export type StubSource = "wash" | "fuel";
 
@@ -73,6 +79,7 @@ export function practicalSources(
             amenity: p.amenity ?? "car_wash",
             ...(p.name ? { name: p.name } : {}),
             ...(p.brand ? { brand: p.brand } : {}),
+            ...(p.ref ? { "ref:FR:prix-carburants": p.ref } : {}),
             ...(p.carWash ? { car_wash: "yes" } : {}),
             ...(p.addr
               ? { "addr:street": p.addr.street, "addr:city": p.addr.city, "addr:postcode": p.addr.postcode }
@@ -91,7 +98,8 @@ export function practicalSources(
     if (fuelFailure) return new Response(fuelFailure.body, { status: fuelFailure.status });
     if (opts.fail?.includes("fuel")) return new Response("panne", { status: 503 });
     return Response.json({
-      results: (data.fuel?.[department] ?? []).map((s) => ({
+      results: (data.fuel?.[department] ?? []).map((s, i) => ({
+        id: s.id ?? i + 1,
         adresse: s.adresse,
         ville: s.ville,
         cp: s.cp,
@@ -100,7 +108,13 @@ export function practicalSources(
           ? { e10_prix: 1.913, e10_maj: "2026-10-16T07:27:43+00:00" }
           : s.only === "gplc"
             ? { gplc_prix: 1.099, gplc_maj: "2026-10-16T07:27:43+00:00" }
-            : { gazole_prix: 1.789, sp95_prix: 1.859, gazole_maj: "2026-10-16T07:27:43+00:00" }),
+            : {
+                gazole_prix: 1.789,
+                sp95_prix: 1.859,
+                gazole_maj: "2026-10-16T07:27:43+00:00",
+                ...(s.extra?.e10 ? { e10_prix: s.extra.e10, e10_maj: "2026-10-16T07:27:43+00:00" } : {}),
+                ...(s.extra?.gplc ? { gplc_prix: s.extra.gplc, gplc_maj: "2026-10-16T07:27:43+00:00" } : {}),
+              }),
       })),
     });
   });

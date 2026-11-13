@@ -28,11 +28,13 @@ export const PRACTICAL_SAME_PLACE_M = 60;
 /**
  * Les éléments de `extra` qui n'ont pas de jumeau dans `primary` (à `maxM` mètres au plus). Un jumeau est pris une seule fois :
  * on apparie d'abord les paires les plus proches, de sorte que deux stations voisines gardent chacune la leur. Ordre de `extra` conservé.
+ * `canPair` : une paire à la bonne distance peut être refusée (deux stations qui ont chacune leur identifiant ne sont pas jumelles).
  */
 export function withoutTwins<T extends LatLng, U extends LatLng>(
   primary: readonly T[],
   extra: readonly U[],
   maxM = PRACTICAL_SAME_PLACE_M,
+  canPair: (p: T, e: U) => boolean = () => true,
 ): U[] {
   // Garde-fou rapide avant le calcul exact : 60 m font moins de 0,0012° de latitude ou de longitude jusqu'à 60° de latitude.
   const box = (maxM / 1000 / 111.2) * 2.2;
@@ -40,6 +42,7 @@ export function withoutTwins<T extends LatLng, U extends LatLng>(
   extra.forEach((e, ei) => {
     primary.forEach((p, pi) => {
       if (Math.abs(p.lat - e.lat) > box || Math.abs(p.lng - e.lng) > box) return;
+      if (!canPair(p, e)) return;
       const m = distanceKm(p, e) * 1000;
       if (m <= maxM) pairs.push({ p: pi, e: ei, m });
     });

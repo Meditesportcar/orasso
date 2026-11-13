@@ -65,7 +65,7 @@ export async function seedHome() {
   // --- Cache factice des sources externes (Perpignan et Aude), valable pour la démonstration -----------------------
   const fetchedAt = now;
   const caches: Record<string, unknown> = {
-    "wash:66": [
+    "osm:66": [
       {
         name: "Lavage Les Pins (démonstration)",
         address: "12 avenue du Roussillon, 66000 Perpignan",

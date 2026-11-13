@@ -1,22 +1,25 @@
 // Stations de lavage (lot 30, S35) : Overpass / OpenStreetMap (`amenity=car_wash`), données © contributeurs OSM (ODbL,
-// attribution affichée dans le widget). Un appel par département et par semaine au plus (cache `wash:<département>`) :
-// l'instance publique est un service bénévole à usage raisonnable (AS2). Sans réseau ou désactivé : aucun résultat.
-// Petit lot de fin D : la même requête (donc le même appel et le même cache) ramène aussi les stations-service d'OpenStreetMap
-// (`amenity=fuel`), que le jeu public des prix ne connaît pas toujours ; une station marquée `car_wash=yes` est aussi un lavage.
-import {
-  type CachedPlace,
-  departmentCentroids,
-  distanceKm,
-  homeLabels,
-  PRACTICAL_SAME_PLACE_M,
-  withoutTwins,
-} from "@orasso/shared";
+// attribution affichée dans le widget). Un appel par département et par semaine au plus : l'instance publique est un service
+// bénévole à usage raisonnable (AS2). Sans réseau ou désactivé : aucun résultat.
+// Petit lot de fin D : la même requête ramène aussi les stations-service d'OpenStreetMap (`amenity=fuel`), que le jeu public des prix
+// ne connaît pas toujours ; une station marquée `car_wash=yes` est aussi un lavage. Cache `osm:<département>` (la forme a changé : l'ancienne
+// clé `wash:<département>`, lavages seulement, n'est lue qu'en secours, en lecture seule, par le service de « Pratique »).
+import { type CachedPlace, departmentCentroids, distanceKm, homeLabels } from "@orasso/shared";
 
 import { env } from "../../env";
-import { cachedSource, externalRequest, readBoundedJson } from "./cache";
+import { cachedSourceState, externalRequest, readBoundedJson, type SourceState } from "./cache";
+import { groupOsmStations, isOsmFuel, type OsmEntry, washPlaces } from "./places";
 
 export const WASH_TTL_MS = 7 * 24 * 3_600_000;
-const WASH_MAX_STALE_MS = 30 * 24 * 3_600_000;
+export const WASH_MAX_STALE_MS = 30 * 24 * 3_600_000;
+/**
+ * Overpass met parfois près de 40 s à répondre à une requête de département (mesuré le 13/11) : le délai de 20 s des autres sources
+ * abandonnait avant la fin, le cache ne se remplissait jamais. Le chargement de fond attend jusqu'à 60 s ; la personne, elle, n'attend
+ * jamais plus que son budget (`withinBudget`) : elle reçoit le cache ou une réponse partielle.
+ */
+export const OVERPASS_TIMEOUT_MS = 60_000;
+/** Recul après des échecs de suite (instance saturée) : 10 minutes, puis 30 minutes, puis 1 heure. */
+export const OVERPASS_RETRY_AFTER_MS = [10 * 60_000, 30 * 60_000, 60 * 60_000] as const;
 
 type OverpassElement = {
   type?: string;
@@ -26,11 +29,8 @@ type OverpassElement = {
   tags?: Record<string, string>;
 };
 
-/**
- * Une entrée du cache `wash:<département>`. Sans `as` : un lavage (`amenity=car_wash`), la forme des anciennes lignes du cache.
- * `as: "fuel"` : une station-service sans lavage ; `as: "both"` : une station-service avec lavage (`car_wash=yes`).
- */
-export type CachedOsmPlace = CachedPlace & { as?: "fuel" | "both" };
+/** Une entrée du cache `osm:<département>` (voir `places.ts`). */
+export type CachedOsmPlace = OsmEntry;
 
 /** Lieux gardés par département (stations et lavages ensemble) : un département dense a plus de 800 stations et lavages. */
 export const OSM_CACHE_LIMIT = 1500;
@@ -48,8 +48,8 @@ function addressOf(tags: Record<string, string>): string | null {
 /**
  * Lit la réponse d'Overpass : retire les lieux désaffectés, privés ou sans position, trie par distance au centre du département
  * (`from`) et garde au plus `OSM_CACHE_LIMIT` lieux (exporté pour les tests). Lavages (`amenity=car_wash`) et stations-service
- * (`amenity=fuel`) ; une station avec `car_wash=yes` à moins de `PRACTICAL_SAME_PLACE_M` d'un lavage déjà cartographié n'est pas un
- * second lavage (`as: "fuel"`).
+ * (`amenity=fuel`, avec `ref:FR:prix-carburants` quand OpenStreetMap la donne). Aucun rapprochement ici : il se fait sur les listes
+ * de tous les départements réunis (`places.ts`).
  */
 export function parseOverpass(json: unknown, from: { lat: number; lng: number }): CachedOsmPlace[] {
   const elements = (json as { elements?: OverpassElement[] } | null)?.elements;
@@ -76,16 +76,16 @@ export function parseOverpass(json: unknown, from: { lat: number; lng: number })
     } else {
       // Nom de la station : `name`, sinon la marque, sinon le libellé des stations sans nom.
       const as = tags.car_wash === "yes" ? "both" : "fuel";
-      places.push({ name: clean(tags.name) || clean(tags.brand) || homeLabels.fuelUnnamed, ...base, as });
+      const ref = clean(tags["ref:FR:prix-carburants"], 40);
+      places.push({
+        name: clean(tags.name) || clean(tags.brand) || homeLabels.fuelUnnamed,
+        ...base,
+        as,
+        ...(ref ? { ref } : {}),
+      });
     }
   }
-  const washes = places.filter((p) => p.as === undefined);
-  const kept = places.map((p) => {
-    if (p.as !== "both") return p;
-    const twin = withoutTwins(washes, [p], PRACTICAL_SAME_PLACE_M).length === 0;
-    return twin ? { ...p, as: "fuel" as const } : p;
-  });
-  return kept
+  return places
     .sort((a, b) => a.km - b.km)
     .slice(0, OSM_CACHE_LIMIT)
     .map(({ km: _km, ...place }) => place);
@@ -112,7 +112,7 @@ function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** Tests : une file bloquée par un appel qui ne répond jamais est vidée (en production, le délai de 20 s la libère). */
+/** Tests : une file bloquée par un appel qui ne répond jamais est vidée (en production, le délai de 60 s la libère). */
 export function resetOverpassQueue(): void {
   overpassQueue = Promise.resolve();
 }
@@ -124,44 +124,45 @@ const isRuntimeError = (json: unknown) => {
 };
 
 /**
- * Lavages et stations-service d'OpenStreetMap pour tout un département (cache 7 jours, clé `wash:<département>`), `[]` si la
- * source ne répond pas. Une panne d'Overpass (502 « at capacity », 429, 504…) est un échec transitoire de `cachedSource` : l'ancien
- * cache est servi, aucune relance avant 10 minutes.
+ * Lavages et stations-service d'OpenStreetMap pour tout un département (cache 7 jours, clé `osm:<département>`), avec la fraîcheur.
+ * `data` nul : rien de servable (source muette). Une panne d'Overpass (502 « at capacity », 429, 504…) est un échec transitoire : l'ancien
+ * cache est servi (`fresh` faux), aucune relance avant 10 minutes, puis 30, puis 1 heure si les échecs se répètent.
  */
-export async function osmNear(department: string): Promise<CachedOsmPlace[]> {
+export async function osmState(department: string): Promise<SourceState<CachedOsmPlace[]>> {
   const centre = departmentCentroids[department];
-  if (!centre) return [];
-  const data = await cachedSource<CachedOsmPlace[]>({
-    key: `wash:${department}`,
+  if (!centre) return { data: [], fresh: true };
+  return cachedSourceState<CachedOsmPlace[]>({
+    key: `osm:${department}`,
     ttlMs: WASH_TTL_MS,
     enabled: env.OVERPASS_URL !== "off",
     maxStaleMs: WASH_MAX_STALE_MS,
+    retryAfterMs: OVERPASS_RETRY_AFTER_MS,
     load: () =>
       oneAtATime(async () => {
-        const res = await externalRequest(env.OVERPASS_URL, {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ data: overpassQuery(department) }),
-        });
+        const res = await externalRequest(
+          env.OVERPASS_URL,
+          {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ data: overpassQuery(department) }),
+          },
+          OVERPASS_TIMEOUT_MS,
+        );
         const json = await readBoundedJson(res);
         // Réponse sans liste (service en surcharge, message d'erreur en 200) : un échec, pas une liste vide mise en cache.
         if (!Array.isArray((json as { elements?: unknown })?.elements) || isRuntimeError(json)) return null;
         return parseOverpass(json, centre);
       }),
   });
-  return data ?? [];
 }
 
-/** Ces entrées du cache sont-elles un lavage ? (lavage seul, ou station avec lavage) */
-export const isWash = (p: CachedOsmPlace) => p.as !== "fuel";
-/** … ou une station-service ? */
-export const isFuel = (p: CachedOsmPlace) => p.as === "fuel" || p.as === "both";
+/** Lavages et stations d'OpenStreetMap d'un département, `[]` si la source ne répond pas. */
+export async function osmNear(department: string): Promise<CachedOsmPlace[]> {
+  return (await osmState(department)).data ?? [];
+}
 
-/** Stations de lavage de tout un département (cache 7 jours), `[]` si la source ne répond pas. */
+/** Stations de lavage de tout un département (cache 7 jours), `[]` si la source ne répond pas. Sert l'Accueil (blocs éteints). */
 export async function washNear(department: string): Promise<CachedPlace[]> {
   const list = await osmNear(department);
-  return list.filter(isWash).map(({ as, name, ...place }) => ({
-    ...place,
-    name: as === "both" && name === homeLabels.fuelUnnamed ? homeLabels.washUnnamed : name,
-  }));
+  return washPlaces(list, groupOsmStations(list.filter(isOsmFuel)));
 }
