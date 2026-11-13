@@ -28,6 +28,8 @@ import {
   audiencePrizeResults,
   eventInvitations,
   events,
+  feedPostPhotos,
+  feedPosts,
   notifications,
   profiles,
   stories,
@@ -773,5 +775,44 @@ describe("tour 4 : `exportable` suit exactement l'export", () => {
     const view = (await byAuthor(kenji, kenji)).json.stories[0];
     expect(view.exportable).toBe(false);
     expect((await exportOf(kenji, posted.json.id)).status).toBe(409);
+  });
+});
+
+describe("une publication sans photo propre (annonce reprise sans image)", () => {
+  /** Sa photo retirée, rattachée à un événement : le Fil la sert avec l’affiche de l’événement. */
+  async function bare(author: TestUser, poster: boolean) {
+    const post = await postFeed(author);
+    const { e } = await structureEvent(author);
+    if (poster) {
+      const key = `events/poster-${randomUUID()}.jpg`;
+      await storage.put(key, await noise(800, 1000));
+      await db.update(events).set({ posterKey: key }).where(eq(events.id, e.id));
+    }
+    await db.delete(feedPostPhotos).where(eq(feedPostPhotos.postId, post));
+    await db.update(feedPosts).set({ eventId: e.id }).where(eq(feedPosts.id, post));
+    return post;
+  }
+
+  it("la feuille et l’export retombent sur l’affiche de l’événement, comme le Fil", async () => {
+    const nina = await signUp("Nina");
+    const kenji = await signUp("Kenji");
+    const post = await bare(nina, true);
+    const info = await req(kenji, "GET", `/me/share/info?type=feed_post&id=${post}`);
+    expect(info.status, JSON.stringify(info.json)).toBe(200);
+    expect(info.json.destinations.message).toBe(true);
+    expect(info.json.destinations.external).toBe(false);
+    const mine = await req(nina, "GET", `/me/share/info?type=feed_post&id=${post}`);
+    expect(mine.status).toBe(200);
+    expect(mine.json.destinations.external).toBe(true);
+    expect((await req(nina, "GET", `/me/share/export?type=feed_post&id=${post}&format=post`)).status).toBe(200);
+    expect((await req(nina, "GET", `/feed-posts/${post}/export`)).status).toBe(200);
+    expect((await share(kenji, { type: "feed_post", id: post })).status).toBe(201);
+  });
+
+  it("sans affiche ni photo de l’événement : toujours 404", async () => {
+    const nina = await signUp("Nina");
+    const kenji = await signUp("Kenji");
+    const post = await bare(nina, false);
+    expect((await req(kenji, "GET", `/me/share/info?type=feed_post&id=${post}`)).status).toBe(404);
   });
 });
