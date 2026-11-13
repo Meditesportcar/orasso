@@ -76,7 +76,8 @@ describe("« Tes photos » : seulement les miennes", () => {
       .set({ plateState: "unknown" })
       .where(eq(eventAlbumPhotos.id, photo(1)));
     const open = await mine(s.dam);
-    expect(open.json.photos.map((p: { canSave: boolean }) => p.canSave)).toEqual([true, true]);
+    // Un fichier qui sort d'Orasso a ses plaques traitées : une photo d'ancienne galerie ne s'enregistre pas non plus.
+    expect(open.json.photos.map((p: { canSave: boolean }) => p.canSave)).toEqual([true, false]);
     expect(open.json.photos.map((p: { canStory: boolean }) => p.canStory)).toEqual([true, false]);
     await db.update(eventAlbums).set({ allowSave: false }).where(eq(eventAlbums.id, s.albumId));
     expect((await mine(s.dam)).json.photos.map((p: { canSave: boolean }) => p.canSave)).toEqual([false, false]);
@@ -231,5 +232,24 @@ describe("la sortie passée et le souvenir : mes photos, les miennes seules", ()
     const priv = await call(s.priv, "GET", `/me/memories/${s.event.id}`);
     expect(priv.status).toBe(200);
     expect(priv.json).not.toHaveProperty("albumPhotos");
+    // Forme d'avant, champ à champ (APK en ligne) : aucune clé de plus sans identification.
+    expect(Object.keys(priv.json).sort()).toEqual(
+      [
+        "anniversary",
+        "car",
+        "city",
+        "eventId",
+        "photoUrl",
+        "posterUrl",
+        "recapAvailable",
+        "slug",
+        "stamp",
+        "stampId",
+        "startsAt",
+        "title",
+        "vehicleLabel",
+        "yearsAgo",
+      ].sort(),
+    );
   });
 });

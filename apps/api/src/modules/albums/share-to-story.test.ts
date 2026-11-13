@@ -98,7 +98,41 @@ describe("« En story » depuis une photo d'album (T38)", () => {
       })
       .returning();
     const kenji = await byAuthor(s.dam, `u:${s.kenji.id}`);
-    expect(kenji.json.stories.find((x: { id: string }) => x.id === plain?.id).credit).toBeNull();
+    const plainStory = kenji.json.stories.find((x: { id: string }) => x.id === plain?.id);
+    expect(plainStory.credit).toBeNull();
+    // Forme d'avant, champ à champ (APK en ligne) : les champs de `StoryView` d'avant, plus `credit` seulement.
+    expect(Object.keys(plainStory).sort()).toEqual(
+      [
+        "audience",
+        "caption",
+        "commercialPartner",
+        "createdAt",
+        "credit",
+        "crewName",
+        "durationMs",
+        "event",
+        "expiresAt",
+        "exportBlockedReason",
+        "exportable",
+        "height",
+        "id",
+        "linked",
+        "mediaKind",
+        "mediaUrl",
+        "placeLabel",
+        "posterUrl",
+        "reacted",
+        "reactionsCount",
+        "sharedFrom",
+        "sharing",
+        "status",
+        "tags",
+        "vehicle",
+        "viewed",
+        "viewsCount",
+        "width",
+      ].sort(),
+    );
   });
 
   it("réservé à qui est identifié (voiture ou pseudo) et au média auteur ; sans session : 401", async () => {

@@ -68,9 +68,20 @@ describe("qui est identifiable : les voitures (T37) par regard", () => {
     expect(orga.json.vehicles).toHaveLength(3);
     const co = await signUp("CoOrga_66");
     await addMember(s.structure.id, co.id, "co_organizer");
+    // Un responsable sans second facteur reste un passionné : lui-même seulement ; le second facteur est demandé pour toute autre cible.
     const res = await taggable(co);
-    expect(res.status).toBe(403);
-    expect(res.json.error.code).toBe("two_factor_required");
+    expect(res.status).toBe(200);
+    expect(res.json.role).toBe("owner");
+    expect(res.json.vehicles).toEqual([]);
+    const coCar = await carAt(s.event.id, co, ref);
+    const own = await taggable(co);
+    expect(own.json.vehicles.map((v: { vehicleId: string }) => v.vehicleId)).toEqual([coCar.vehicle.id]);
+    const mineRes = await pose(co, photo(0), { vehicleId: coCar.vehicle.id });
+    expect(mineRes.status).toBe(201);
+    expect(mineRes.json.taggedAs).toBe("owner");
+    const other = await pose(co, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    expect(other.status).toBe(403);
+    expect(other.json.error.code).toBe("two_factor_required");
     const staff = await signUp("Staff_66");
     await addMember(s.structure.id, staff.id, "staff", ["filtering"]);
     const asStaff = await taggable(staff);
@@ -170,8 +181,24 @@ describe("la recherche d'une personne par son pseudo (T5)", () => {
     // Une présence validée suffit ; un inscrit sans place ni présence n'apparaît pas.
     expect((await taggable(s.leo, "?q=Lea")).json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual(["Lea_11"]);
     expect((await taggable(s.leo, "?q=Nobody")).json.people).toEqual([]);
-    // Un compte privé est proposé AVEC son pseudo (celui qui le tape le connaît).
-    expect((await taggable(s.leo, "?q=priv")).json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual([
+    // Un compte privé ne se trouve que sur son pseudo exact (insensible à la casse) : jamais par un fragment.
+    expect((await taggable(s.leo, "?q=priv")).json.people).toEqual([]);
+    expect((await taggable(s.leo, "?q=pr")).json.people).toEqual([]);
+    expect((await taggable(s.leo, "?q=riv_66")).json.people).toEqual([]);
+    expect((await taggable(s.leo, "?q=priv_66")).json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual([
+      "Priv_66",
+    ]);
+    expect((await taggable(s.leo, "?q=PRIV_66")).json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual([
+      "Priv_66",
+    ]);
+    // Un fragment ne rend que des comptes publics : « _66 » trouve Dam, Kenji et Lazy (une place retenue), pas Priv.
+    expect((await taggable(s.leo, "?q=_66")).json.people.map((p: { pseudo: string }) => p.pseudo).sort()).toEqual([
+      "Dam_66",
+      "Kenji_66",
+      "Lazy_66",
+    ]);
+    // Lui-même se retrouve sur un fragment.
+    expect((await taggable(s.priv, "?q=pri")).json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual([
       "Priv_66",
     ]);
     // Les caractères spéciaux ne sont pas des jokers : `%` ne renvoie pas tout le monde.
@@ -189,6 +216,22 @@ describe("la recherche d'une personne par son pseudo (T5)", () => {
       .set({ deletedAt: null, suspendedUntil: new Date(Date.now() + 86_400_000) })
       .where(eq(profiles.userId, s.kenji.id));
     expect((await taggable(s.leo, "?q=ke")).json.people).toEqual([]);
+  });
+
+  it("la recherche de soi-même ne dépend pas des vingt premières correspondances", async () => {
+    // Vingt-cinq comptes publics qui précèdent « Zed_66 » par l'ordre alphabétique et par le début du pseudo.
+    for (let i = 0; i < 25; i++) {
+      const u = await signUp(`Aaa_${String(i).padStart(2, "0")}`);
+      await presentAt(s.event.id, u.id);
+    }
+    const zed = await signUp("Zed_66");
+    await presentAt(s.event.id, zed.id);
+    // Le média : la liste est bornée à vingt, « Zed_66 » n'y est pas ; l'intéressé, lui, se retrouve.
+    const media = await taggable(s.leo, "?q=_");
+    expect(media.json.people.length).toBeLessThanOrEqual(20);
+    const self = await taggable(zed, "?q=_6");
+    expect(self.json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual(["Zed_66"]);
+    expect(self.json.people[0].mine).toBe(true);
   });
 
   it("un passionné ne cherche que lui-même (jamais un autre)", async () => {
