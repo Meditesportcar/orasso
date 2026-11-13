@@ -299,7 +299,7 @@ describe("pannes : une source tombe, l'autre répond", () => {
   it("Overpass en panne avec un cache périmé tolérable (moins de 30 jours) : le cache est servi, réponse partielle ; au-delà, plus rien", async () => {
     const old = new Date(NOW.getTime() - 10 * DAY);
     await db.insert(externalCache).values({
-      key: "wash:66",
+      key: "osm:66",
       fetchedAt: old,
       data: [{ name: "Station du cache", address: null, lat: 42.71, lng: 2.9, as: "both" }],
     });
@@ -313,7 +313,8 @@ describe("pannes : une source tombe, l'autre répond", () => {
         .map((p) => p.name)
         .sort(),
     ).toEqual(["Station du cache", "Station-service"]);
-    // Le cache a été servi malgré la panne ; l'écran relit plus tard (le service n'a pas la source en direct).
+    // Le cache a été servi malgré la panne : la réponse est PARTIELLE (l'écran relit plus tard), même si tous les départements ont un cache.
+    expect(res.json.partial).toBe(true);
     clock.advance(25 * DAY);
     const gone = await here(u);
     expect(washes(gone)).toHaveLength(0);
@@ -325,7 +326,7 @@ describe("pannes : une source tombe, l'autre répond", () => {
     const res = await here(await fan("Fan_Remark"));
     expect(res.json.partial).toBe(true);
     expect(fuels(res)).toHaveLength(1);
-    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") })).toBeUndefined();
+    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") })).toBeUndefined();
   });
 
   it("le jeu public en panne pendant qu'OpenStreetMap répond : les stations d'OpenStreetMap et les lavages sont servis, partiel", async () => {
@@ -346,7 +347,7 @@ describe("pannes : une source tombe, l'autre répond", () => {
 });
 
 describe("cache", () => {
-  it("les deux listes restent sous les clés `wash:<département>` et `fuel:<département>` ; stations 24 h, Overpass 7 jours", async () => {
+  it("les deux listes sont sous les clés `osm:<département>` et `fuel:<département>` ; stations 24 h, Overpass 7 jours", async () => {
     const stub = practicalSources({
       fuel: { "66": [gov] },
       wash: { "66": [osmFuel({ name: "A", carWash: true, lat: 42.71 })] },
@@ -354,9 +355,10 @@ describe("cache", () => {
     const u = await fan("Fan_Cache");
     await here(u);
     const keys = (await db.select({ key: externalCache.key }).from(externalCache)).map((r) => r.key);
-    expect(keys.every((k) => /^(wash|fuel):[0-9][0-9AB]$/.test(k))).toBe(true);
-    expect(keys).toContain("wash:66");
-    const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") });
+    expect(keys.every((k) => /^(osm|fuel):[0-9][0-9AB]$/.test(k))).toBe(true);
+    expect(keys).toContain("osm:66");
+    expect(keys).not.toContain("wash:66");
+    const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "osm:66") });
     expect(cached?.data).toEqual([{ name: "A", address: null, lat: 42.71, lng: 2.9, as: "both" }]);
     clock.advance(2 * DAY);
     await here(u);
