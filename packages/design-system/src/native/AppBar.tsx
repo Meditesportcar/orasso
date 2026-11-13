@@ -377,7 +377,19 @@ export function AppBar({
           persona={persona}
           // Correctif R4 : le rôle en entier s'il tient (« ORGANISATEUR » à 390 px), sinon le logo rond ; jamais de « … »,
           // et la Boîte reste dans l'écran (lot C7).
-          compact={capChipCompact({ width, fontScale, role: persona.role, withClose: Boolean(onClose) })}
+          compact={capChipCompact({
+            width,
+            fontScale,
+            role: persona.role,
+            withClose: Boolean(onClose),
+            // Les boutons réellement posés à droite : Activité et Messages comptent pour deux (un nom de casquette ne se tronque jamais).
+            buttons:
+              kind === "home"
+                ? Number(Boolean(onSearch)) + Number(Boolean(onNotifications)) + Number(Boolean(avatar))
+                : onActivity || onMessages
+                  ? 3
+                  : 2,
+          })}
           onPress={onPersona}
           testID="topbar-persona"
         />

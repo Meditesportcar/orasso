@@ -15,6 +15,9 @@ import { useWordSafeLabel } from "./useWordSafeLabel";
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const BUTTON_FONT_SIZE = textStyles.button.fontSize ?? 14;
 const BUTTON_LINE_HEIGHT = textStyles.button.lineHeight ?? 18;
+/** Épaisseur du contour des variantes bordées : retirée de la marge verticale, pour que le contour ne fasse pas grandir le bouton. */
+const BORDER_WIDTH = 1.5;
+const BORDERED_PADDING_V = spacing.space3 - BORDER_WIDTH;
 
 type Common = Omit<PressableProps, "children" | "style"> & {
   children?: ReactNode;
@@ -100,7 +103,7 @@ export function Button(props: ButtonProps) {
       ink = c.accentInk;
       break;
     case "secondary":
-      box = { borderWidth: 1.5, borderColor: c.ink };
+      box = { borderWidth: BORDER_WIDTH, borderColor: c.ink, paddingVertical: BORDERED_PADDING_V };
       break;
     case "poster":
       box = { backgroundColor: c.night, boxShadow: t.shadow.shadowCard };
@@ -115,7 +118,8 @@ export function Button(props: ButtonProps) {
       ink = wait ? c.statusWaitlistOnPlate : c.plateInk;
       box = {
         backgroundColor: c.plate,
-        borderWidth: 1.5,
+        borderWidth: BORDER_WIDTH,
+        paddingVertical: BORDERED_PADDING_V,
         // Lot C1 : .btn-s de l'artefact (fond de carte, filet --line).
         borderColor: wait ? c.statusWaitlistOnPlate : c.plateLine,
         borderStyle: tone === "dashed" ? "dashed" : "solid",
@@ -128,6 +132,7 @@ export function Button(props: ButtonProps) {
         flexDirection: "column",
         gap: 4,
         paddingHorizontal: 12,
+        paddingVertical: 0,
         backgroundColor: c.surface,
         borderWidth: theme === "sable" ? 2 : 1.5,
         borderColor: c.ink,
@@ -237,11 +242,14 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: spacing.touch,
     paddingHorizontal: 20,
+    // Petit lot de fin : un libellé qui passe sur deux lignes (police agrandie) garde de l'air en haut et en bas ; sur une ligne,
+    // la hauteur minimale (48) l'emporte, rien ne change.
+    paddingVertical: spacing.space3,
     borderRadius: radius.radiusMd,
     alignSelf: "flex-start",
   },
   full: { alignSelf: "stretch" },
   disabled: { opacity: 0.4, boxShadow: "none" },
-  label: { flexShrink: 1 },
+  label: { flexShrink: 1, textAlign: "center" },
   columnLabel: { textAlign: "center" },
 });
