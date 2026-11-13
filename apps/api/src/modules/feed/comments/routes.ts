@@ -20,7 +20,9 @@ export const feedCommentRoutes = new Hono<AppEnv>()
   .get("/feed-posts/:id/comments", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await feedCommentsService.list(v, uuidParam(c, "id"), query(c, feedCommentsQuery).cursor));
+    // Lot R9h (tour 1) : sous une casquette, la conversation se lit avec les droits de la page (`readActor`, comme les suggestions).
+    const actor = await readActor(c, v);
+    return c.json(await feedCommentsService.list(v, uuidParam(c, "id"), query(c, feedCommentsQuery).cursor, actor));
   })
   .post("/feed-posts/:id/comments", async (c) => {
     const v = await requireUser(c);
@@ -48,7 +50,8 @@ export const feedCommentRoutes = new Hono<AppEnv>()
   .get("/feed-comments/:id/replies", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await feedCommentsService.replies(v, uuidParam(c, "id"), query(c, feedCommentsQuery).cursor));
+    const actor = await readActor(c, v);
+    return c.json(await feedCommentsService.replies(v, uuidParam(c, "id"), query(c, feedCommentsQuery).cursor, actor));
   })
   .delete("/feed-comments/:id", async (c) => {
     const done = await feedCommentsService.remove(await requireUser(c), uuidParam(c, "id"));

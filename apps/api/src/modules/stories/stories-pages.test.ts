@@ -623,3 +623,18 @@ describe("tour 3 : l'ancien client, le repartage, les en-têtes", () => {
     }
   });
 });
+
+describe("le compte attendu par le composeur (R9h, tour 1)", () => {
+  it("une session devenue celle d'un autre compte : 409 `account_changed`, rien n'est écrit ; le bon compte publie", async () => {
+    const w = await world();
+    // Le brouillon de la page de A part avec les cookies de B : refusé avant toute lecture, la story de B n'existe pas.
+    const refused = await publish(w.mediaHolder, { persona: "media", expectedUserId: w.brasaHolder.id });
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json.error.code).toBe("account_changed");
+    expect(await db.select().from(stories)).toHaveLength(0);
+    // Le compte attendu est bien celui de la session : la story part sous sa page.
+    const done = await publish(w.mediaHolder, { persona: "media", expectedUserId: w.mediaHolder.id });
+    expect(done.status, JSON.stringify(done.json)).toBe(201);
+    expect(await db.select().from(stories)).toHaveLength(1);
+  });
+});

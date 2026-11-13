@@ -68,6 +68,15 @@ export function storyAudienceOptions(
 }
 
 /**
+ * La confidentialité qui compte pour **cette** story (lot R9h, tour 1) : celle du compte pour la personne, une structure et une fiche pro
+ * (comme `canTag` de l'API) ; « public » pour un prestataire et un média, dont la page est publique par nature (R9a, D38), quel que
+ * soit le réglage du compte de leur titulaire.
+ */
+export function storyEffectiveVisibility(author: StoryAuthor, visibility: ProfileVisibility): ProfileVisibility {
+  return author.persona === "provider" || author.persona === "media" ? "public" : visibility;
+}
+
+/**
  * L'autocollant d'événement : refusé pour un compte privé (la story ne pourrait pas être repartagée publiquement : même
  * règle que `canTag` de l'API, qui lit le réglage du compte) et pour une story de crew. `reason` dit pourquoi, pour le
  * bouton grisé.

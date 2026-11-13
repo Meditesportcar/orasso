@@ -1,9 +1,8 @@
-// Sélecteur de crew de l'onglet Crew (lot R7b2, maquette R7.11 `.r7csel`) : « Roussillon Drift ▾ » ouvre « Mes crews »
-// (feuille du kit) quand j'ai plusieurs crews ; avec un seul, le nom seul (pas de chevron). Le nom ne se tronque jamais.
+// Feuille « Mes crews » de l'onglet Crew (lot R7b2, maquette R7.11 `.r7csel`) : le nom du crew affiché (haut compact, partie E) l'ouvre
+// quand j'ai plusieurs crews. Le nom ne se tronque jamais. Le rond du crew (`CrewBadge`) sert aussi au haut de l'onglet.
 import { Icon, initialsOf, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { crewLabels, crewTabLabels as L, type MyCrew } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
@@ -24,61 +23,34 @@ export function CrewBadge({ crew, size = 40 }: { crew: Pick<MyCrew, "name" | "lo
   );
 }
 
-export function CrewSelector({
+/**
+ * La feuille « Mes crews » (la liste, et « Rejoindre ou créer un crew »). Le haut compact du crew (partie E, option B) l'ouvre par
+ * le nom du crew affiché (chevron ▾, plusieurs crews) ; elle ne dessine plus la carte du nom.
+ */
+export function CrewSwitchSheet({
   crews,
   current,
   unread,
   onChoose,
+  open,
+  onClose,
 }: {
   crews: readonly MyCrew[];
-  current: MyCrew;
+  current: Pick<MyCrew, "id">;
   /** Messages non lus de la discussion du crew affiché (ligne sous le nom de la feuille). */
   unread: number;
   onChoose: (slug: string) => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const several = crews.length > 1;
-  const sub = [
-    crewLabels.membersCount(current.membersCount),
-    several ? L.otherCrews(crews.length - 1) : current.role === "leader" ? L.youLeader : L.youMember,
-  ].join(" · ");
-  const head = (
-    <View style={[styles.sel, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
-      <CrewBadge crew={current} size={40} />
-      <View style={styles.text}>
-        <Text variant="posterS" color={c.ink}>
-          {current.name}
-        </Text>
-        <Text variant="caption" color={c.inkMuted}>
-          {sub}
-        </Text>
-      </View>
-      {several ? <Icon name="down" size={20} color={c.inkMuted} /> : null}
-    </View>
-  );
-  if (!several) {
-    return (
-      <View testID="crew-selector-single" accessibilityRole="header" accessibilityLabel={current.name}>
-        {head}
-      </View>
-    );
-  }
   return (
     <>
-      <Pressable
-        onPress={() => setOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={L.selectorA11y(current.name)}
-        testID="crew-selector"
-      >
-        {head}
-      </Pressable>
       {/* Dans la zone des feuilles de l'écran : rendue dans la zone qui défile, la feuille se caserait en bas du contenu. */}
       <Overlay>
-        <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.selectorTitle}>
+        <AppSheet visible={open} onClose={onClose} accessibilityLabel={L.selectorTitle}>
           <Text variant="posterM" color={c.ink} accessibilityRole="header">
             {L.selectorTitle}
           </Text>
@@ -89,7 +61,7 @@ export function CrewSelector({
                 <Pressable
                   key={crew.id}
                   onPress={() => {
-                    setOpen(false);
+                    onClose();
                     if (!on) onChoose(crew.slug);
                   }}
                   accessibilityRole="button"
@@ -115,7 +87,7 @@ export function CrewSelector({
             })}
             <Pressable
               onPress={() => {
-                setOpen(false);
+                onClose();
                 router.push("/rejoindre-crew");
               }}
               accessibilityRole="link"
@@ -137,13 +109,6 @@ export function CrewSelector({
 }
 
 const styles = StyleSheet.create({
-  sel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space3,
-    padding: space2 + 2,
-    borderRadius: tokens.radius.radiusLg,
-  },
   text: { flex: 1, minWidth: 0, gap: 2 },
   list: { gap: space2 },
   row: {

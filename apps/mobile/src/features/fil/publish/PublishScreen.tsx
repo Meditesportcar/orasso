@@ -43,15 +43,18 @@ import {
   type PublishChoice,
   partnershipLabels,
   publicationErrors,
+  publicationHiddenTitle,
   publishAuthors,
   publishIssueR8,
   publishSays,
   publishStartChoice,
   publishStartOffer,
+  resolvePublishAuthor,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
   feedPublishLabels as T,
+  uncertainCheckOutcome,
   vehicleWizardLabels as V,
   vehicleAllowed,
   withImportantLeft,
@@ -175,7 +178,11 @@ function PublishForm({ start }: { start?: PublishStart }) {
   );
   // Étiquette « Offre » (R9c) : titre et jours saisis ; comptée seulement pour la casquette fiche pro.
   const [offer, setOffer] = useState<OfferForm>(() => ({ ...emptyOfferForm, on: startOffer?.offerOn ?? false }));
-  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  // Les noms des auteurs vus : si la casquette choisie disparaît pendant la rédaction (suspension), son nom reste dans le message.
+  const authorNames = useRef(new Map<string, string>());
+  for (const a of authors) authorNames.current.set(a.key, a.name);
+  // Jamais de repli silencieux sur « Moi » (R9h, tour 2) : un auteur perdu bloque l'envoi, avec un choix explicite.
+  const { author, lost: authorLost } = resolvePublishAuthor(authors, choice.authorKey, authorNames.current);
   const fan = vehicleAllowed(author);
   const account = me?.user.id ?? "";
   const [loaded, setLoaded] = useState<EventsLoad>(emptyEventsLoad);
@@ -207,6 +214,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
   // jusqu'à la fin, une seule opération à la fois.
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
+  // La publication existe mais reste masquée (page suspendue, 409 `post_unavailable`) : un état distinct du succès (R9h, tour 5).
+  const [hidden, setHidden] = useState(false);
   const [invitedName, setInvitedName] = useState<string | null>(null);
   const [doneOffer, setDoneOffer] = useState<string | null>(null);
   const [clientId, setClientId] = useState(() => randomUUID());
@@ -440,6 +449,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   const offerOn = author.persona === "pro" && offer.on;
   const issue =
     publishIssueR8({
+      authorLost,
       photos,
       caption,
       preparing,
@@ -569,8 +579,10 @@ function PublishForm({ start }: { start?: PublishStart }) {
    * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
+  const uncertainOutcome = useRef<"freed" | "found" | "kept">("kept");
   async function abandonUncertain() {
     if (!uncertain || checking || busy || running.current) return;
+    uncertainOutcome.current = "kept";
     running.current = true;
     const guard = accountGuard();
     setChecking(true);
@@ -580,12 +592,28 @@ function PublishForm({ start }: { start?: PublishStart }) {
       if (!guard.current()) return;
       markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       if (mounted.current) discardTempPhotos();
+      uncertainOutcome.current = "found";
       setUncertain(null);
       setFound(true);
       setDone(true);
     } catch (e) {
       if (!guard.current()) return;
-      if (e instanceof ApiRequestError && e.status === 404) {
+      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4) ; retrouvée, sans contenu.
+      if (
+        uncertainCheckOutcome({
+          ok: false,
+          status: e instanceof ApiRequestError ? e.status : 0,
+          code: e instanceof ApiRequestError ? e.code : undefined,
+        }) === "hidden"
+      ) {
+        uncertainOutcome.current = "found";
+        if (mounted.current) discardTempPhotos();
+        setUncertain(null);
+        setFound(true);
+        setHidden(true);
+        setDone(true);
+      } else if (e instanceof ApiRequestError && e.status === 404) {
+        uncertainOutcome.current = "freed";
         setUncertain(null);
         setClientId(randomUUID());
         keys.current = {};
@@ -594,6 +622,19 @@ function PublishForm({ start }: { start?: PublishStart }) {
       running.current = false;
       setChecking(false);
     }
+  }
+
+  /**
+   * « Publier en mon nom » quand la casquette choisie a disparu (R9h, tour 3) : jamais un « Moi » affiché alors que la requête
+   * rejouée porte encore la page. Avec un envoi incertain, le changement passe par la vérification de « Modifier ma publication ».
+   */
+  async function chooseMeAfterLoss() {
+    if (busy || checking || running.current) return;
+    if (uncertain) {
+      await abandonUncertain();
+      if (uncertainOutcome.current !== "freed") return;
+    }
+    setChoice((c) => chooseAuthor(c, authors, "me"));
   }
 
   if (cropping) {
@@ -624,10 +665,10 @@ function PublishForm({ start }: { start?: PublishStart }) {
         <View style={[styles.done, { backgroundColor: c.surface }]} testID="fil-publish-done">
           <Icon name="check" size={28} color={c.accentText} />
           <Text variant="posterM" color={c.ink}>
-            {L.published}
+            {hidden ? publicationHiddenTitle : L.published}
           </Text>
-          <Text variant="body" color={c.inkMuted}>
-            {found ? T.uncertainFound : L.publishedText}
+          <Text variant="body" color={c.inkMuted} testID={hidden ? "fil-publish-hidden" : undefined}>
+            {hidden ? publicationErrors.post_unavailable : found ? T.uncertainFound : L.publishedText}
           </Text>
           {doneOffer ? (
             <Text variant="bodyStrong" color={c.ink} testID="fil-publish-done-offer">
@@ -679,6 +720,18 @@ function PublishForm({ start }: { start?: PublishStart }) {
             <Muted variant="caption" testID="fil-publish-missing">
               {issue}
             </Muted>
+          ) : null}
+          {authorLost ? (
+            <SmButton
+              kind="s"
+              wide
+              icon="profile"
+              disabled={busy || checking}
+              onPress={() => void chooseMeAfterLoss()}
+              testID="fil-publish-author-lost-me"
+            >
+              {casquettesLabels.authorLostChoice}
+            </SmButton>
           ) : null}
           {uncertain && !busy ? (
             <SmButton
@@ -946,7 +999,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       {showAuthorChoice(authors) ? (
         <AuthorChoice
           authors={authors}
-          value={author.key}
+          value={authorLost ? "" : author.key}
           disabled={frozen}
           onChoose={(key) => setChoice((c) => chooseAuthor(c, authors, key))}
         />

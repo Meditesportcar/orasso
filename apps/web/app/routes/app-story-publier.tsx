@@ -1,8 +1,9 @@
-import { storyPublishLabels as L } from "@orasso/shared";
+import { storyPublishLabels as L, resolveStoryAuthor, type StoryAuthor } from "@orasso/shared";
 
 import { ficheHandle } from "../components/FicheBar";
 import { PublishForm } from "../components/stories/PublishForm";
 import { api, requireMe } from "../lib/api.server";
+import { filHrefOfAuthor } from "../lib/casquetteFil";
 import type { Route } from "./+types/app-story-publier";
 
 // « Publier une story » (lot R7f3, D38, maquettes R7.8 et R7.22) : une photo en 9:16 (fichier, pas d'appareil : il vit dans
@@ -19,13 +20,37 @@ export async function loader({ request }: Route.LoaderArgs) {
     ),
     api<{ id: string; name: string; membersCount: number }[]>(request, "/me/crews"),
   ]);
+  // Lot R9h (T18, T51) : `?auteur=` comme l'appli (`resolveStoryAuthor`) : `me` ou absent → la personne ; une clé `s:`, `p:`, `v:`, `m:`
+  // d'une page que le compte tient → cette page ; une clé qui n'est pas au compte → ignorée (l'API revérifie les droits).
+  const asked = new URL(request.url).searchParams.get("auteur");
+  const choice = resolveStoryAuthor(
+    asked,
+    me.personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended),
+  );
+  const author: StoryAuthor =
+    choice?.kind === "page"
+      ? {
+          persona: choice.persona,
+          ...(choice.persona === "organizer" ? { structureId: choice.id } : {}),
+          ...(choice.persona === "pro" ? { proId: choice.id } : {}),
+          name: choice.name,
+        }
+      : { persona: "fan" };
+  const authorKey = choice?.kind === "page" ? choice.key : "me";
   return {
+    userId: me.user.id,
+    author,
+    authorKey,
+    back: filHrefOfAuthor(authorKey, me),
     visibility: me.profile.visibility,
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
       : [],
     applications: applications.ok ? applications.data.map((a) => ({ status: a.status, event: a.event })) : [],
-    crews: crews.ok ? crews.data.map((c) => ({ id: c.id, name: c.name, membersCount: c.membersCount })) : [],
+    crews:
+      author.persona === "fan" && crews.ok
+        ? crews.data.map((c) => ({ id: c.id, name: c.name, membersCount: c.membersCount }))
+        : [],
     optionsFailed: !vehicles.ok || !applications.ok || !crews.ok,
   };
 }
@@ -37,11 +62,16 @@ export function meta() {
 export default function AppStoryPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      key={loaderData.userId}
+      userId={loaderData.userId}
       visibility={loaderData.visibility}
       crews={loaderData.crews}
       vehicles={loaderData.vehicles}
       applications={loaderData.applications}
       optionsFailed={loaderData.optionsFailed}
+      author={loaderData.author}
+      authorKey={loaderData.authorKey}
+      back={loaderData.back}
     />
   );
 }

@@ -50,6 +50,7 @@ import {
   commentVisibleSql,
   managesPost,
   managesPostStrict,
+  type PostRow,
   repliesCountsOf,
   requireVisibleComment,
   toViews,
@@ -72,6 +73,8 @@ function readCursor(raw: string | undefined) {
 /** Une page de commentaires, du plus ancien au plus récent : `where` choisit premier niveau ou réponses. */
 async function page(
   v: Viewer,
+  /** Celui dont les droits décident de ce qui se lit : `v` lui-même, ou le lecteur sans lien d'une page (R9h). */
+  readerId: string,
   where: ReturnType<typeof and>,
   manages: boolean,
   cursor: string | undefined,
@@ -86,7 +89,7 @@ async function page(
       and(
         where,
         isNull(c.deletedAt),
-        commentVisibleSql(v.user.id, manages, at),
+        commentVisibleSql(readerId, manages, at),
         after
           ? sql`(${c.createdAt}, ${c.id}) > (${after.createdAt.toISOString()}::timestamptz, ${after.id}::uuid)`
           : undefined,
@@ -136,22 +139,65 @@ async function mentionedPeople(
   return people.sort((x, y) => (order.get(x.pseudo.toLowerCase()) ?? 0) - (order.get(y.pseudo.toLowerCase()) ?? 0));
 }
 
+/**
+ * Le lecteur d'une conversation (lot R9h, tour 1, décision du coordinateur) : sous une casquette, commentaires, réponses et
+ * suggestions de mentions se lisent avec les droits de la page — un membre sans aucun lien, comme à l'écriture —, jamais avec le
+ * réseau personnel du titulaire (comptes privés qu'il suit). Sans page, c'est le compte lui-même.
+ */
+const readerOf = (v: Viewer, actor?: Actor | null): Viewer =>
+  actor && isPageActor(actor) ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v;
+
+/**
+ * La page lit-elle cette publication comme son **responsable** ? Oui seulement si la publication est celle de la page de l'acteur
+ * (`pageKeyOf(post) === actor.key`) **et** que le compte la gère vraiment (`managesPost` : second facteur d'une structure compris,
+ * `readActor` ne l'exige pas). Une seule règle pour `list`, `replies` et `create` (R9h, tour 3) : sans elle, une conversation se lit
+ * avec le réseau personnel du titulaire (comptes privés suivis). Hors casquette : faux.
+ */
+async function ownManaged(
+  v: Viewer,
+  post: PostRow["post"],
+  actor: Actor | null | undefined,
+  ex?: Tx,
+): Promise<boolean> {
+  if (!actor || !isPageActor(actor) || pageKeyOf(post) !== actor.key) return false;
+  return managesPost(v, post, ex);
+}
+
 export const feedCommentsService = {
   /** `GET /feed-posts/:id/comments?cursor=` : le premier niveau, du plus ancien au plus récent, 20 par page. */
-  async list(v: Viewer, postId: string, cursor?: string): Promise<FeedCommentPage> {
+  async list(v: Viewer, postId: string, cursor?: string, actor?: Actor | null): Promise<FeedCommentPage> {
     rateLimit("feedRead", v.user.id);
-    const post = await requireVisiblePost(v, postId);
-    const manages = await managesPost(v, post.post);
-    return page(v, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
+    const asPage = Boolean(actor && isPageActor(actor));
+    const reader = readerOf(v, actor);
+    const post = await requireVisiblePost(reader, postId);
+    // Une page garde la main sur la conversation de SES publications (tour 2, décision du coordinateur) : sur une publication de P, la
+    // page lit tout comme son responsable (y compris le commentaire d'un compte privé qu'elle ne suit pas) et peut le supprimer ; sur la
+    // publication de quelqu'un d'autre, `manages` est faux (droits de la page sans lien, rien de privé dans la liste).
+    // (« Responsable » = `ownManaged` : la publication est celle de la page ET le compte la gère vraiment.)
+    const manages = asPage ? await ownManaged(v, post.post, actor) : await managesPost(v, post.post);
+    return page(v, reader.user.id, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
   },
 
   /** `GET /feed-comments/:id/replies?cursor=` : les réponses d'un commentaire de premier niveau. */
-  async replies(v: Viewer, commentId: string, cursor?: string): Promise<FeedCommentPage> {
+  async replies(v: Viewer, commentId: string, cursor?: string, actor?: Actor | null): Promise<FeedCommentPage> {
     rateLimit("feedRead", v.user.id);
-    const parent = await requireVisibleComment(v, commentId);
+    const asPage = Boolean(actor && isPageActor(actor));
+    const reader = readerOf(v, actor);
+    // Sur une publication de sa propre page, la page lit comme son responsable (voir `list`) : le commentaire parent aussi. La publication
+    // est lue d'abord, sans droit de lecture : un commentaire privé ne doit pas être refusé avant qu'on sache à qui est la publication.
+    const found = asPage ? await commentRow(commentId) : undefined;
+    const ofPost = found ? await postWithAuthor(found.c.postId) : null;
+    const own = ofPost ? await ownManaged(v, ofPost.post, actor) : false;
+    const parent = await requireVisibleComment(own ? v : reader, commentId);
     // Un seul niveau : un commentaire qui est lui-même une réponse n'a pas de réponses.
     if (parent.c.parentId) return { items: [], nextCursor: null };
-    return page(v, eq(c.parentId, parent.c.id), parent.manages, cursor);
+    return page(
+      v,
+      own ? v.user.id : reader.user.id,
+      eq(c.parentId, parent.c.id),
+      asPage && !own ? false : parent.manages,
+      cursor,
+    );
   },
 
   /** `POST /feed-posts/:id/comments` */
@@ -209,10 +255,14 @@ export const feedCommentsService = {
         let target: { id: string; authorId: string } | null = null;
         let parentId: string | null = null;
         if (input.parentId) {
-          const asked = await requireVisibleComment(reader, input.parentId, tx).catch((error: unknown) => {
-            if (error instanceof AppError && error.status === 404) return null;
-            throw error;
-          });
+          // Sur une publication de sa propre page, le commentaire parent se lit comme son responsable le lit (tour 2).
+          const ownPost = await ownManaged(v, post.post, page, tx);
+          const asked = await requireVisibleComment(ownPost ? v : reader, input.parentId, tx).catch(
+            (error: unknown) => {
+              if (error instanceof AppError && error.status === 404) return null;
+              throw error;
+            },
+          );
           const verdict = commentParent(
             asked && { id: asked.c.id, parentId: asked.c.parentId, postId: asked.c.postId, deleted: false },
             post.post.id,

@@ -1,12 +1,16 @@
 // « Pratique » (lot R8q, maquette R8.12) : la station-service et le lavage les plus proches, de moi ou de ma sortie.
-// Sources : lavage = OpenStreetMap par Overpass (cache `wash:<département>`, une semaine), stations-service = jeu public des
-// prix des carburants (cache `fuel:<département>`, un jour). Les sources ne reçoivent JAMAIS une position : seulement un code de
+// Sources : OpenStreetMap par Overpass, en une seule requête par département (cache `osm:<département>`, une semaine) : les lavages
+// et les stations-service ; jeu public des prix des carburants (cache `fuel:<département>`, un jour) : les stations-service. Les
+// stations des deux sources sont fusionnées (petit lot de fin D) : le jeu public gagne un doublon, OpenStreetMap ajoute les stations
+// qui ne déclarent pas de prix. Les sources ne reçoivent JAMAIS une position : seulement un code de
 // département. La position d'une personne n'arrive ici qu'arrondie à la case de 0,1° (`weatherCell`, dès la route) ; elle
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
   departmentsAround,
+  distanceKm,
   homeLabels,
   myWeatherPlaces,
+  PRACTICAL_RADIUS_KM,
   type PracticalData,
   type PracticalKind,
   type PracticalOrigin,
@@ -23,8 +27,9 @@ import { applications, eventDays, events, externalCache, profileWeatherPlaces, t
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { EXTERNAL_BUDGET_MS, withinBudget } from "../../lib/external/cache";
-import { FUEL_MAX_STALE_MS, fuelNear } from "../../lib/external/fuel";
-import { washNear } from "../../lib/external/overpass";
+import { FUEL_MAX_STALE_MS, fuelState } from "../../lib/external/fuel";
+import { osmState, WASH_MAX_STALE_MS } from "../../lib/external/overpass";
+import { type GovEntry, isOsmFuel, mergeStations, type OsmEntry, washPlaces } from "../../lib/external/places";
 import type { Viewer } from "../../lib/session";
 
 /** Ce que la route donne au service : la case de 0,1° (jamais la position reçue), ou le choix « ville » / « sortie ». */
@@ -35,16 +40,20 @@ export type PracticalTarget =
 
 type OutingEvent = { id: string; title: string; lat: number | null; lng: number | null; startsMs: number };
 
-/** Au-delà, la source ne sert plus sa liste périmée (lavage : 30 jours dans `overpass.ts`, stations : `FUEL_MAX_STALE_MS`). */
-const STALE_LIMIT_MS = { wash: 30 * 24 * 3_600_000, fuel: FUEL_MAX_STALE_MS } as const;
+/** Au-delà, la source ne sert plus sa liste périmée (Overpass : 30 jours dans `overpass.ts`, stations : `FUEL_MAX_STALE_MS`). */
+const STALE_LIMIT_MS = { osm: WASH_MAX_STALE_MS, fuel: FUEL_MAX_STALE_MS } as const;
 
-const attribution = { wash: homeLabels.washAttribution, fuel: homeLabels.fuelAttribution };
+/** Qui a servi les stations : le jeu public, OpenStreetMap, ou les deux (alors les deux sont cités). */
+const fuelAttribution = (gov: boolean, osm: boolean) =>
+  gov && osm ? practicalTexts.fuelSourcesBoth : osm ? practicalTexts.fuelSourcesOsm : homeLabels.fuelAttribution;
+const baseAttribution = { wash: homeLabels.washAttribution, fuel: homeLabels.fuelAttribution };
+type Attribution = { wash: string; fuel: string };
 
 export const practicalService = {
   async get(v: Viewer, target: PracticalTarget, budgetMs = EXTERNAL_BUDGET_MS): Promise<PracticalData> {
     const origin = await this.origin(v, target);
-    if (!origin) return { origin: null, places: [], partial: false, attribution };
-    return { origin, ...(await this.placesAround(origin, budgetMs)), attribution };
+    if (!origin) return { origin: null, places: [], partial: false, attribution: baseAttribution };
+    return { origin, ...(await this.placesAround(origin, budgetMs)) };
   },
 
   async origin(v: Viewer, target: PracticalTarget): Promise<PracticalOrigin | null> {
@@ -128,64 +137,107 @@ export const practicalService = {
   },
 
   /**
-   * Les lieux des deux départements les plus proches de l'origine, dans le rayon, du plus proche au plus loin. `partial` :
-   * une source n'a pas répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
+   * Les lieux des départements qui coupent la zone, dans le rayon, du plus proche au plus loin. `partial` : une source n'a pas
+   * répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
    */
   async placesAround(
     origin: PracticalOrigin,
     budgetMs: number,
-  ): Promise<{ places: PracticalPlace[]; partial: boolean }> {
+  ): Promise<{ places: PracticalPlace[]; partial: boolean; loading?: true; attribution: Attribution }> {
     // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
     const departments = departmentsAround(origin);
-    type Listed = {
-      kind: PracticalKind;
-      key: string;
-      list: { name: string; address: string | null; lat: number; lng: number }[] | null;
-    };
+    type Place = { name: string; address: string | null; lat: number; lng: number };
     // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
-    const loads: Promise<Listed>[] = departments.flatMap((d) => [
-      withinBudget<Listed["list"]>(washNear(d), null, budgetMs).then((list) => ({
-        kind: "wash" as const,
-        key: `wash:${d}`,
-        list,
-      })),
-      withinBudget<Listed["list"]>(fuelNear(d), null, budgetMs).then((list) => ({
-        kind: "fuel" as const,
-        key: `fuel:${d}`,
-        list,
-      })),
-    ]);
+    const loads = departments.map(async (d) => {
+      const [osm, gov] = await Promise.all([
+        withinBudget(osmState(d), null, budgetMs),
+        withinBudget(fuelState(d), null, budgetMs),
+      ]);
+      return { d, osm, gov };
+    });
     const listed = await Promise.all(loads);
-    const keys = listed.map((l) => l.key);
+    const keys = departments.flatMap((d) => [`osm:${d}`, `fuel2:${d}`, `wash:${d}`, `fuel:${d}`]);
     const rows = await db
       .select({ key: externalCache.key, fetchedAt: externalCache.fetchedAt, data: externalCache.data })
       .from(externalCache)
       .where(inArray(externalCache.key, keys));
     const t = now().getTime();
-    const servable = new Map(
-      rows
-        .filter((r) => t - r.fetchedAt.getTime() < STALE_LIMIT_MS[r.key.startsWith("wash:") ? "wash" : "fuel"])
-        .map((r) => [r.key, r.data as Listed["list"]]),
-    );
+    const rowOf = new Map(rows.map((r) => [r.key, r]));
+    /** La ligne du cache d'une clé si elle n'est pas trop vieille, avec son âge. */
+    const tolerated = (key: string, limitMs: number) => {
+      const r = rowOf.get(key);
+      const age = r ? t - r.fetchedAt.getTime() : Number.POSITIVE_INFINITY;
+      return r && age < limitMs ? { data: r.data, age } : null;
+    };
     let partial = false;
-    const all: PracticalPlace[] = [];
+    // Un chargement encore en cours (source lente, hors budget) se distingue d'une source en échec : l'écran relit tant qu'il dure.
+    let loading = false;
+    const osm: OsmEntry[] = [];
+    const gov: GovEntry[] = [];
     for (const l of listed) {
-      // Source lente : partiel, même si un cache toléré est servi (l'écran relit une fois).
-      if (l.list === null) partial = true;
-      // Une source muette (rien de servable en cache : en panne, désactivée) rend aussi la réponse partielle.
-      if (!servable.has(l.key)) partial = true;
-      // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
-      for (const p of l.list ?? servable.get(l.key) ?? []) {
-        all.push({
-          id: practicalPlaceId(l.kind, p.lat, p.lng),
-          kind: l.kind,
-          name: p.name,
-          address: p.address,
-          lat: p.lat,
-          lng: p.lng,
-        });
+      // OpenStreetMap. Source lente ou muette : réponse partielle (l'écran relit plus tard). Un cache toléré de la même forme (`osm:`,
+      // 30 jours au plus) est complet ; seul le repli sur l'ancienne ligne `wash:` (sans les stations) est incomplet, donc partiel.
+      let osmList: OsmEntry[] | null = l.osm?.data ?? null;
+      if (l.osm === null) {
+        partial = true;
+        loading = true;
+        osmList = (tolerated(`osm:${l.d}`, STALE_LIMIT_MS.osm)?.data as OsmEntry[] | undefined) ?? null;
+      } else if (l.osm.data === null) partial = true;
+      osm.push(...(osmList ?? []));
+      // Ancienne ligne `wash:` (lavages seulement, sans les stations) : un secours en lecture seule, SEULEMENT quand aucune liste `osm:`
+      // n'est servable pour ce département ; une liste `osm:` actuelle, même vide, fait foi. La réponse est alors partielle (déjà posée).
+      const legacy = osmList === null ? tolerated(`wash:${l.d}`, STALE_LIMIT_MS.osm) : null;
+      if (legacy) {
+        osm.push(...(legacy.data as OsmEntry[]).filter((e) => e.as === undefined));
       }
+      // Jeu public. Muet, lent : partiel. Un ancien cache servi (moins de 7 jours) ne rend pas la réponse partielle.
+      let govList: GovEntry[] | null = l.gov?.data ?? null;
+      if (l.gov === null) {
+        partial = true;
+        loading = true;
+        govList = (tolerated(`fuel2:${l.d}`, STALE_LIMIT_MS.fuel)?.data as GovEntry[] | undefined) ?? null;
+      } else if (l.gov.data === null) partial = true;
+      // Ancienne ligne `fuel:` (stations sans référence : rapprochement incomplet, donc partiel) : seulement sans liste `fuel2:` servable.
+      if (govList === null) {
+        const old = tolerated(`fuel:${l.d}`, STALE_LIMIT_MS.fuel);
+        if (old) govList = old.data as GovEntry[];
+        partial = true;
+      }
+      gov.push(...(govList ?? []));
     }
-    return { places: placesAround(all, origin), partial };
+    // Tous les rapprochements se font ICI, sur les listes de tous les départements réunis (pas par département) et sur les lieux de la
+    // zone seulement : deux points voisins de part et d'autre d'une limite départementale se rapprochent comme les autres.
+    const near = <T extends Place>(list: readonly T[]) =>
+      list.filter((p) => distanceKm(origin, p) <= PRACTICAL_RADIUS_KM + 2);
+    const nearOsm = near(osm);
+    const merged = mergeStations(near(gov), nearOsm.filter(isOsmFuel));
+    const washes = washPlaces(nearOsm, merged.groups);
+    // Liste blanche : ni prix, ni heure de mise à jour, ni référence ne sortent d'ici.
+    const place = (kind: PracticalKind, p: Place): PracticalPlace => ({
+      id: practicalPlaceId(kind, p.lat, p.lng),
+      kind,
+      name: p.name,
+      address: p.address,
+      lat: p.lat,
+      lng: p.lng,
+    });
+    const sources = new Map<string, { gov: boolean; osm: boolean }>();
+    const fuels = merged.stations.map((st) => {
+      const fuel = place("fuel", st);
+      sources.set(fuel.id, { gov: st.fromGov, osm: st.fromOsm });
+      return fuel;
+    });
+    const all: PracticalPlace[] = [...washes.map((p) => place("wash", p)), ...fuels];
+    const places = placesAround(all, origin);
+    // Les deux sources sont citées quand les deux ont servi une station de la réponse.
+    const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
+    const usedGov = served.some((x) => x?.gov);
+    const usedOsm = served.some((x) => x?.osm);
+    return {
+      places,
+      partial,
+      ...(loading ? { loading: true as const } : {}),
+      attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
+    };
   },
 };

@@ -33,10 +33,12 @@ import {
   publishIssueR8,
   publishSays,
   purgeUncertain,
+  resolvePublishAuthor,
   saveUncertain,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
+  uncertainCheckOutcome,
   vehicleAllowed,
   withImportantLeft,
 } from "./feedPublish";
@@ -69,6 +71,14 @@ describe("publishAuthors", () => {
       "provider:v1",
       "media:m1",
     ]);
+  });
+  it("une structure suspendue n'est pas proposée (R9h, tour 1) ; ni, par conséquent, préchoisie par ?auteur=", () => {
+    const withSuspended = publishAuthors(
+      [...personas, { kind: "organizer" as const, id: "s3", label: "Suspendue", logoUrl: null, suspended: true }],
+      "Damien_66",
+    );
+    expect(withSuspended.map((a) => a.key)).toEqual(authors.map((a) => a.key));
+    expect(withSuspended.some((a) => a.key === "structure:s3")).toBe(false);
   });
   it("les titres et sous-titres de la maquette", () => {
     expect(byKey("me")).toMatchObject({ title: "Moi · Damien_66", hint: "Ta publication personnelle", persona: "fan" });
@@ -658,7 +668,13 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
       placeLabel: "Port",
       importantOn: false,
     });
-    expect(draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey).toBe("me");
+    // R9h, tour 3 (décision du coordinateur, R2 d'Opus) : un envoi incertain dont la page a disparu n'est plus affiché sous « Moi » : le
+    // corps figé porte la page, sa clé reste (absente des auteurs proposés) et `resolvePublishAuthor` la signale perdue.
+    const lost = draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey;
+    expect(lost).toBe("structure:disparue");
+    expect(resolvePublishAuthor(authors, lost).lost).not.toBeNull();
+    expect(draftFromBody({ persona: "media" }, authors).choice.authorKey).toBe("media:m1");
+    expect(draftFromBody({ persona: "fan" }, authors).choice.authorKey).toBe("me");
   });
 });
 
@@ -737,5 +753,59 @@ describe("draftFromBody : l'offre du corps gardé (R9c)", () => {
     expect(d.choice.authorKey).toBe("pro:p1");
     expect(d.offer).toEqual({ on: true, title: "Polish", startsOn: "2026-11-10", endsOn: "2026-11-30" });
     expect(draftFromBody({ persona: "fan", photos: [] }, authors).offer.on).toBe(false);
+  });
+});
+
+describe("auteur devenu indisponible pendant la rédaction (R9h, tour 2)", () => {
+  const photos = [{ rects: [], noPlate: true }] as never;
+  it("suspension après la sélection de l'auteur : l'auteur est signalé perdu, jamais « Moi » en silence ; l'envoi est bloqué", () => {
+    const before = publishAuthors(personas, "Damien_66");
+    const names = new Map(before.map((a) => [a.key, a.name]));
+    // La structure s1 est suspendue après son choix : elle n'est plus proposée.
+    const after = publishAuthors(
+      personas.map((p) => (p.id === "s1" ? { ...p, suspended: true } : p)),
+      "Damien_66",
+    );
+    const resolved = resolvePublishAuthor(after, "structure:s1", names);
+    expect(resolved.lost).toBe("Roues Libres 66");
+    expect(resolved.author.key).toBe("me");
+    const issue = publishIssueR8({
+      photos,
+      caption: "",
+      author: resolved.author,
+      event: null,
+      important: { on: false, reason: null },
+      authorLost: resolved.lost,
+    });
+    expect(issue).toBe("Tu n'as plus accès à Roues Libres 66 : la publication ne peut pas partir en son nom.");
+    // Choix explicite de « Moi » : plus rien ne bloque.
+    const me = resolvePublishAuthor(after, "me", names);
+    expect(me.lost).toBeNull();
+    expect(
+      publishIssueR8({
+        photos,
+        caption: "",
+        author: me.author,
+        event: null,
+        important: { on: false, reason: null },
+        authorLost: me.lost,
+      }),
+    ).toBeNull();
+  });
+  it("une page encore proposée : rien de perdu", () => {
+    expect(resolvePublishAuthor(authors, "structure:s1").lost).toBeNull();
+  });
+});
+
+describe("uncertainCheckOutcome : la réponse de la vérification d'un envoi incertain (R9h, tours 4 et 5)", () => {
+  it("retrouvée, masquée (409 post_unavailable : jamais « Publié »), absente (404), tout le reste garde le verrou", () => {
+    expect(uncertainCheckOutcome({ ok: true })).toBe("found");
+    expect(uncertainCheckOutcome({ ok: false, status: 409, code: "post_unavailable" })).toBe("hidden");
+    expect(uncertainCheckOutcome({ ok: false, status: 404 })).toBe("freed");
+    // Un autre 409, un 403, un 5xx, le réseau : jamais « absente » ni « masquée ».
+    expect(uncertainCheckOutcome({ ok: false, status: 409, code: "account_changed" })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 403 })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 503 })).toBe("kept");
+    expect(uncertainCheckOutcome({ ok: false, status: 0, code: "network" })).toBe("kept");
   });
 });

@@ -17,8 +17,9 @@ export const feedCommentsApi = {
   // Lot R9n (liste blanche, T19) : lire et commenter au nom de la casquette active (`actor`, T7).
   feedComments: (postId: string, cursor?: string | null, actor?: string | null) =>
     request<FeedCommentPage>(`/api/feed-posts/${postId}/comments${qs({ cursor })}`, { actor }),
-  feedCommentReplies: (commentId: string, cursor?: string | null) =>
-    request<FeedCommentPage>(`/api/feed-comments/${commentId}/replies${qs({ cursor })}`),
+  // Lot R9h (tour 1) : les réponses et les suggestions « @ » se lisent aussi avec les droits de la page (`actor`).
+  feedCommentReplies: (commentId: string, cursor?: string | null, actor?: string | null) =>
+    request<FeedCommentPage>(`/api/feed-comments/${commentId}/replies${qs({ cursor })}`, { actor }),
   createFeedComment: (postId: string, body: FeedCommentCreateInput, actor?: string | null) =>
     request<FeedCommentCreated>(`/api/feed-posts/${postId}/comments`, { method: "POST", body, actor }),
   // 204 ; une réponse supprimée rend 200 avec le compteur de son parent (version comprise).
@@ -28,6 +29,6 @@ export const feedCommentsApi = {
     request<FeedCommentReaction>(`/api/feed-comments/${commentId}/reaction`, { method: on ? "PUT" : "DELETE" }),
   setFeedCommentsOff: (postId: string, off: boolean) =>
     request<{ commentsOff: boolean }>(`/api/me/feed-posts/${postId}/comments-off`, { method: "PUT", body: { off } }),
-  feedMentionSuggestions: (postId: string, q: string) =>
-    request<MentionSuggestion[]>(`/api/feed-posts/${postId}/mention-suggestions${qs({ q })}`),
+  feedMentionSuggestions: (postId: string, q: string, actor?: string | null) =>
+    request<MentionSuggestion[]>(`/api/feed-posts/${postId}/mention-suggestions${qs({ q })}`, { actor }),
 };

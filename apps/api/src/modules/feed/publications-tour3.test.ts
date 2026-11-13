@@ -1,5 +1,6 @@
 // R8p, tour 3 : `GET /me/feed-posts/by-client/:clientId` vérifie un envoi dont la réponse s'est perdue.
 import { fromWallTime } from "@orasso/shared";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -13,7 +14,8 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { app } from "../../app";
-import { pool } from "../../db/client";
+import { db, pool } from "../../db/client";
+import { structures } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 
 afterAll(async () => {
@@ -108,6 +110,34 @@ describe("GET /me/feed-posts/by-client/:clientId", () => {
     const { owner, sent } = await pagePost();
     expect((await call(owner, "DELETE", `/me/feed-posts/${sent.json.id}`)).status).toBe(204);
     expect((await call(owner, "GET", `/me/feed-posts/by-client/${CLIENT}`)).status).toBe(404);
+  });
+  it("la structure est suspendue : la publication existe mais n'est pas visible : 409 post_unavailable (jamais 404), sans contenu, pour le seul auteur ; réactivée : retrouvée (R9h, tour 4)", async () => {
+    const { owner, sent } = await pagePost();
+    await db
+      .update(structures)
+      .set({ verification: "suspended", suspendedReason: "moderation" })
+      .where(eq(structures.createdBy, owner.id));
+    const hidden = await call(owner, "GET", `/me/feed-posts/by-client/${CLIENT}`);
+    expect(hidden.status, hidden.text).toBe(409);
+    expect(hidden.json.error.code).toBe("post_unavailable");
+    // Réponse minimale : l'état seulement, aucun contenu de la publication.
+    expect(JSON.stringify(hidden.json)).not.toContain("Le plan est en ligne");
+    expect(JSON.stringify(hidden.json)).not.toContain(sent.json.id);
+    // Un autre compte n'apprend rien : 404 comme pour un identifiant inconnu.
+    const other = await signUp("Autre_T4");
+    expect((await call(other, "GET", `/me/feed-posts/by-client/${CLIENT}`)).status).toBe(404);
+    // Un identifiant réellement inconnu reste une absence : 404.
+    expect((await call(owner, "GET", "/me/feed-posts/by-client/0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0b98")).status).toBe(
+      404,
+    );
+    // Réactivée : la publication est retrouvée.
+    await db
+      .update(structures)
+      .set({ verification: "verified", suspendedReason: null })
+      .where(eq(structures.createdBy, owner.id));
+    const back = await call(owner, "GET", `/me/feed-posts/by-client/${CLIENT}`);
+    expect(back.status, back.text).toBe(200);
+    expect(back.json.id).toBe(sent.json.id);
   });
   it("un identifiant mal formé : 400", async () => {
     const { owner } = await pagePost();

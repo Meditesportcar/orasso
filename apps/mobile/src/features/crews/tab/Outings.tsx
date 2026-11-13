@@ -27,8 +27,9 @@ export function CrewOutings({
   return (
     <View style={styles.col} testID="crew-outings">
       {space.canProposeOuting ? (
+        // « Publier » (icône moutarde, au bout des onglets) est le bouton principal de l'écran : ici, secondaire.
         <SmButton
-          kind="p"
+          kind="s"
           big
           wide
           icon="add"

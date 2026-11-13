@@ -79,6 +79,8 @@ export const storyCreateSchema = z
     linked: z.object({ type: z.enum(storyLinkTypes), id: uuidLower }).optional(),
     /** Mention « Collaboration commerciale » posée à la main (R7m2) : une fiche pro publiée, partenaire ou non. */
     commercialPartnerId: uuidLower.optional(),
+    /** Lot R9h (tour 1) : le compte qui croit publier ; si la session est devenue celle d'un autre, rien n'est écrit (409 `account_changed`). */
+    expectedUserId: z.string().max(64).nullish(),
   })
   .refine((v) => !(v.plateRects?.length && v.noPlateConfirmed), {
     message: "Choisis : plaque floutée ou aucune plaque visible, pas les deux",
