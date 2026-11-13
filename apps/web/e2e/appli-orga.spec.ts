@@ -128,13 +128,46 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(page.getByTestId("orga-feed")).toContainText("Incertain", { timeout: 20_000 });
   await shot(page, "05-evenement-incertain-beton");
 
-  // Annonce avec « Prévenir ».
-  await page.getByTestId("orga-announcement-new").click();
+  // Lot R8d : plus de « Nouvelle annonce ». Une information publique est une publication de l'organisateur rattachée à
+  // l'événement (« Publier pour cet événement »), avec « Info importante » pour prévenir (l'ancien « Prévenir ») ;
+  // une information privée est un message groupé (« Écrire aux inscrits », plus bas : « Boîte », « Groupés »).
+  await expect(page.getByText("Nouvelle annonce")).toHaveCount(0);
+  await expect(page.getByTestId("orga-announcement-new")).toHaveCount(0);
+  await expect(page.getByTestId("orga-write-registered")).toBeVisible();
+  const salonFeed = (await apiCall<{ items: unknown[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`)).data.items;
+  await page.getByTestId("orga-publish-for-event").click();
+  await expect(page).toHaveURL(/fil\/publier/);
+  // L'événement est déjà posé : sans photo, son affiche fait le visuel (avec une légende).
+  await expect(page.getByText("Sans photo : l'affiche de l'événement sera le visuel.")).toBeVisible({
+    timeout: 30_000,
+  });
   const announcement = `Parking B ouvert dès 7 h ${Date.now()}`;
-  await page.getByTestId("orga-announcement-body").fill(announcement);
-  await shot(page, "06-annonce-feuille-beton");
-  await page.getByTestId("orga-announcement-publish").click();
-  await expect(page.getByTestId("orga-feed")).toContainText(announcement, { timeout: 20_000 });
+  await page.getByTestId("fil-publish-caption").fill(announcement);
+  await page.getByTestId("fil-publish-important-toggle").click();
+  await page.getByTestId("fil-publish-important-reasons").getByRole("radio").first().click();
+  await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
+  await shot(page, "06-publication-info-importante-beton");
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  // La publication est dans le journal de l'événement (c'est là que l'ancien fil des annonces a été repris).
+  await expect
+    .poll(
+      async () => {
+        const feed = await apiCall<{ items: { caption: string | null }[] }>(
+          damien,
+          "GET",
+          `/events/${salon?.id}/feed-posts`,
+        );
+        return feed.data.items.some((i) => i.caption === announcement);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  expect(
+    (await apiCall<{ items: unknown[] }>(damien, "GET", `/events/${salon?.id}/feed-posts`)).data.items.length,
+  ).toBe(salonFeed.length + 1);
+  await page.getByTestId("fil-publish-back").click();
+  await expect(page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
 
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
   // Lot C4a : la page d'un événement est un écran de flux sans barre ni Boîte : on revient à l'onglet.
@@ -294,12 +327,15 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
 
   const { ctx, page } = await openApp(browser, "damien@orasso.local", "sable");
   await chooseOrganizer(page, "MéditeSportCar");
-  await expect(page.getByTestId("orga-two-factor")).toBeVisible({ timeout: 30_000 });
+  // Lot R9n : plusieurs écrans d'onglet restent montés, chacun porte sa garde : on cherche celle qui est visible.
+  const gate = page.locator('[data-testid="orga-two-factor"]:visible').first();
+  await expect(gate).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("orga-direct-event")).toHaveCount(0);
   await page.screenshot({ path: `${DIR}/40-garde-2fa-direct-sable.png` });
-  for (const name of ["Événements", "Boîte", "Staff"]) {
+  // Lot R9n : les onglets de la barre sont Direct, Événements, Tri et Page (l'ancien « Staff » et la « Boîte » n'en sont plus).
+  for (const name of ["Événements", "Tri", "Page"]) {
     await tab(page, name).click();
-    await expect(page.getByTestId("orga-two-factor").last()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-testid="orga-two-factor"]:visible').first()).toBeVisible({ timeout: 20_000 });
   }
   await page.screenshot({ path: `${DIR}/41-garde-2fa-staff-sable.png` });
   await ctx.close();
