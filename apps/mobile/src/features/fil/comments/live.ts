@@ -1,13 +1,15 @@
 // La publication telle qu'on la montre : l'API, plus ce que l'écran a changé depuis (commentaire ajouté, commentaires coupés).
 // Un seul magasin pour la ligne d'actions, les deux commentaires sous la carte et la feuille (lot R8k2).
-import { createPostLiveStore, type FeedPostView } from "@orasso/shared";
+import type { FeedPostView } from "@orasso/shared";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import { cacheScope } from "@/lib/kv";
 import { useActor } from "@/lib/useActor";
 import { commentsScope } from "./scope";
+import { createPostLiveSet } from "./storeSet";
 
-export const postLive = createPostLiveStore();
+/** Un magasin par compte et par casquette, conservés au changement de casquette (R9n, tour 2, point 8). */
+export const postLive = createPostLiveSet();
 
 export function usePostLive(server: FeedPostView, onChange?: (post: FeedPostView) => void) {
   // Lot R9n (tour 1) : le magasin est rangé par compte et par casquette.

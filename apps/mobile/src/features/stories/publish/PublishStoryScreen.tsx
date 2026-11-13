@@ -20,6 +20,7 @@ import {
   type StoryCreated,
   sendIfAlive,
   storyAudienceOptions,
+  storyAuthorAllowed,
   storyBody,
   storyPublishIssue,
   storyVideoBody,
@@ -116,12 +117,24 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // une clé `s:`, `p:`, `v:`, `m:` tenue par le compte = cette page (même si une autre casquette est active), sinon la casquette
   // active. Une clé qui n'est pas au compte est ignorée (l'API revérifie les droits de toute façon).
   const choice = useMemo(() => resolveStoryAuthor(auteur, me?.personas ?? []), [auteur, me?.personas]);
-  const author = useMemo<StoryAuthor>(
+  // Tour 2, point 9 : l'auteur est figé à l'ouverture. Si un rafraîchissement de `me.personas` lui retire ses droits, l'envoi est
+  // bloqué avec un message et un choix explicite (« Publier en mon nom »), jamais une bascule silencieuse vers la casquette active.
+  const resolved = useMemo<StoryAuthor>(
     () => storyAuthorFor(choice, actor, persona, active.label),
     [choice, actor, persona, active.label],
   );
+  const frozen = useRef<{ author: StoryAuthor; key: string } | null>(null);
+  if (frozen.current === null) {
+    frozen.current = {
+      author: resolved,
+      key: choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me"),
+    };
+  }
+  const [asPerson, setAsPerson] = useState(false);
+  const author: StoryAuthor = asPerson ? { persona: "fan" } : frozen.current.author;
+  const allowed = asPerson || storyAuthorAllowed(frozen.current.author, me?.personas ?? []);
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
-  const kindKey = choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me");
+  const kindKey = asPerson ? "me" : frozen.current.key;
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
 
   const [step, setStep] = useState<StoryStep>("media");
@@ -361,18 +374,21 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     );
   };
 
-  const issue = draft
-    ? (video && offline ? V.offline : null) ||
-      (storyPublishIssue({
-        hasPhoto: true,
-        preparing: working,
-        plate: video ? null : plateOf(draft),
-        caption: details.caption,
-        needsCrew: chosen?.audience === "crew" && !chosen.crewId,
-        audienceLost: lost,
-      }) ??
-        commercialIssue(commercialLine, partnershipLabels.commercialPick))
-    : L.missingPhoto;
+  const lostIssue = allowed ? null : casquettesLabels.authorLost(frozen.current.author.name ?? "");
+  const issue = lostIssue
+    ? lostIssue
+    : draft
+      ? (video && offline ? V.offline : null) ||
+        (storyPublishIssue({
+          hasPhoto: true,
+          preparing: working,
+          plate: video ? null : plateOf(draft),
+          caption: details.caption,
+          needsCrew: chosen?.audience === "crew" && !chosen.crewId,
+          audienceLost: lost,
+        }) ??
+          commercialIssue(commercialLine, partnershipLabels.commercialPick))
+      : L.missingPhoto;
 
   /** Vidéo : envoi (progression réelle), vignette, création. Rien n'est gardé hors ligne : on le dit, on ne met rien en file. */
   async function publishVideo(clip: PickedVideo) {
@@ -604,7 +620,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const plateOnly = draft
     ? storyPublishIssue({ hasPhoto: true, preparing: working, plate: plateOf(draft), caption: "" })
     : L.missingPhoto;
-  const blocking = step === "plate" ? plateOnly : issue;
+  const blocking = lostIssue ?? (step === "plate" ? plateOnly : issue);
 
   return (
     <FlowScreen
@@ -692,6 +708,14 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         />
       ) : null}
+      {!allowed ? (
+        <View style={styles.lost} testID="story-author-lost">
+          <Muted variant="caption">{lostIssue}</Muted>
+          <SmButton kind="s" icon="profile" onPress={() => setAsPerson(true)} testID="story-author-lost-me">
+            {casquettesLabels.authorLostChoice}
+          </SmButton>
+        </View>
+      ) : null}
       {draft && onPlateStep ? (
         <Plate draft={draft} onPlate={(plate) => setDraft((d) => (d ? { ...d, plate } : d))} locked={busy} />
       ) : null}
@@ -732,6 +756,7 @@ function VideoStageOverlay({ stage }: { stage: { stage: VideoStage; ratio: numbe
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  lost: { gap: space2 },
   veil: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", gap: space3 },
   footer: { gap: space2 },
   progress: { flexDirection: "row", alignItems: "center", gap: space2 },

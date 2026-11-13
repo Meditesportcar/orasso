@@ -102,3 +102,25 @@ export function resolveStoryAuthor(
   const entry = entries.find((e) => !e.assisted && e.kind === persona && e.id === id);
   return entry ? { kind: "page", persona, id, name: entry.label, key: raw } : null;
 }
+
+/**
+ * L'auteur d'une story est-il encore une casquette du compte ? (R9n, tour 2, point 9 : l'auteur est figé à l'ouverture ; si un
+ * rafraîchissement de `GET /me` le retire, l'envoi est bloqué.) La personne : toujours ; une structure ou une fiche pro : sa ligne
+ * (même identifiant) ; prestataire et média : leur ligne.
+ */
+export function storyAuthorAllowed(
+  author: { persona: string; structureId?: string; proId?: string },
+  entries: readonly Pick<SheetEntryInput, "kind" | "id" | "assisted">[],
+): boolean {
+  if (author.persona === "fan") return true;
+  return entries.some(
+    (e) =>
+      !e.assisted &&
+      e.kind === author.persona &&
+      (author.persona === "organizer"
+        ? e.id === author.structureId
+        : author.persona === "pro"
+          ? e.id === author.proId
+          : true),
+  );
+}

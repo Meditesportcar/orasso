@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authorOf, storyAuthorFor } from "./author";
+import { authorOf, storyAuthorFor, storyPublishHref } from "./author";
 
 const orga = { kind: "organizer", structureId: "s-1" } as const;
 
@@ -23,5 +23,19 @@ describe("storyAuthorFor : l'auteur d'une story (R9n)", () => {
   });
   it("me : la personne", () => {
     expect(storyAuthorFor({ kind: "me" }, "s:s-1", orga, "x")).toEqual({ persona: "fan" });
+  });
+});
+
+describe("storyPublishHref : la barre des stories", () => {
+  it("avec acteur : sa clé ; sans (personne, casquette suspendue, survol) : auteur=me, explicitement", () => {
+    expect(storyPublishHref("s:abc")).toBe("/story/publier?auteur=s%3Aabc");
+    expect(storyPublishHref(null)).toBe("/story/publier?auteur=me");
+  });
+  it("une casquette suspendue : le parcours de la barre aboutit à l'auteur personnel", () => {
+    const orga = { kind: "organizer", structureId: "s-1" } as const;
+    const href = storyPublishHref(null);
+    expect(href).toContain("auteur=me");
+    // `auteur=me` résolu → la personne, même si la casquette active est une structure.
+    expect(storyAuthorFor({ kind: "me" }, null, orga, "Suspendue")).toEqual({ persona: "fan" });
   });
 });

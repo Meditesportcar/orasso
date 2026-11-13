@@ -36,6 +36,9 @@ export const casquettesLabels = {
   switchBody: "Ta publication en cours (photos, légende, rattachement) sera abandonnée.",
   switchStay: "Rester",
   switchGo: "Passer à la story",
+  /** L'auteur d'une story perd ses droits pendant la rédaction : l'envoi est bloqué, on choisit (jamais de bascule silencieuse). */
+  authorLost: (name: string) => `Tu n'as plus accès à ${name} : la story ne peut pas partir en son nom.`,
+  authorLostChoice: "Publier en mon nom",
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",

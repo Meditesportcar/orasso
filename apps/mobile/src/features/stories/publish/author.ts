@@ -41,3 +41,7 @@ export function storyAuthorFor(
   }
   return actor ? authorOf(persona, activeLabel) : { persona: "fan" };
 }
+
+/** L'adresse de « Publier une story » depuis la barre des stories : la page de la casquette (`auteur=<clé>`), sinon la personne **explicitement** (`auteur=me`). */
+export const storyPublishHref = (actor: string | null): string =>
+  actor ? `/story/publier?auteur=${encodeURIComponent(actor)}` : "/story/publier?auteur=me";

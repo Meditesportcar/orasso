@@ -19,11 +19,10 @@ import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
 import { barOfActor, barScope, rememberBar } from "./chainBar";
+import { storyPublishHref } from "./publish/author";
 
 const { space2, space3, space4 } = tokens.spacing;
 const ITEM_W = 68;
-/** Route créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours (Metro ne sait pas la détecter). */
-const PUBLISH = "/story/publier" as never;
 
 /**
  * Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). Depuis la barre du Fil (lot R8s) : `suite=barre`,
@@ -62,7 +61,7 @@ export function StoriesBar() {
   const display = barDisplay(data?.authors ?? []);
   const myId = me?.user.id;
   const ownKey = actor ?? (myId ? `u:${myId}` : null);
-  const publishHref = (actor ? `/story/publier?auteur=${encodeURIComponent(actor)}` : PUBLISH) as never;
+  const publishHref = storyPublishHref(actor) as never;
   const ownSource = actor ? mediaSource(active.logoUrl) : mediaSource(me?.profile.avatarUrl);
   const ownName = actor ? active.label : (me?.profile.pseudo ?? "?");
 
