@@ -251,7 +251,11 @@ export function PracticalScreen() {
         onClick={() => (zs.failed ? zone.retry() : zone.searchHere())}
         data-testid="practical-search-here"
       >
-        {zs.loading ? <OLoader size={18} label={null} /> : <Icon name={zs.failed ? "undo" : "search"} size={16} />}
+        {zs.loading ? (
+          <OLoader size={18} tone="dark" label={null} />
+        ) : (
+          <Icon name={zs.failed ? "undo" : "search"} size={16} />
+        )}
         <span>{zs.loading ? L.loadingZone : zs.failed ? L.retry : L.searchHere}</span>
       </button>
     ) : null;

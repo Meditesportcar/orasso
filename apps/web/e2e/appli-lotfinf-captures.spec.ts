@@ -148,7 +148,7 @@ for (const { theme, width, scale } of COMBOS) {
     // Le groupe « 2 lieux ici ».
     const groups = page.getByTestId("practical-group");
     const title = page.getByTestId("practical-group-title");
-    for (let i = 0; i < 5 && !(await title.isVisible().catch(() => false)); i++) {
+    for (let i = 0; scale === 1 && i < 5 && !(await title.isVisible().catch(() => false)); i++) {
       if (!(await groups.count())) break;
       const two = groups.filter({ hasText: /^2$/ }).first();
       await ((await two.count()) ? two : groups.first()).click();

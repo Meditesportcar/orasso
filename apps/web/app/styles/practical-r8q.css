@@ -394,10 +394,10 @@
   min-height: 40px;
   padding: 0 14px;
   justify-self: center;
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--ink);
-  color: var(--ground);
+  background: var(--bar);
+  color: var(--bar-ink);
   cursor: pointer;
 }
 .pq-zonebtn:disabled {

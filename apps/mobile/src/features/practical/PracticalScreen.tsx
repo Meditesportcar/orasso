@@ -540,15 +540,15 @@ function ZoneButton({ busy, failed, onPress }: { busy: boolean; failed: boolean;
       accessibilityState={{ disabled: busy, busy }}
       disabled={busy}
       onPress={onPress}
-      style={[styles.zoneBtn, { backgroundColor: c.ink }]}
+      style={[styles.zoneBtn, { backgroundColor: c.bar, borderWidth: 1, borderColor: c.line }]}
       testID="practical-search-here"
     >
       {busy ? (
-        <OLoader size={18} ink={c.ground} label={null} />
+        <OLoader size={18} ink={c.barInk} label={null} />
       ) : (
-        <Icon name={failed ? "undo" : "search"} size={16} color={c.ground} />
+        <Icon name={failed ? "undo" : "search"} size={16} color={c.barInk} />
       )}
-      <Text variant="meta" color={c.ground}>
+      <Text variant="meta" color={c.barInk}>
         {busy ? L.loadingZone : label}
       </Text>
     </Pressable>
