@@ -29,7 +29,7 @@ import { type MailContent, mail, renderMail } from "../../lib/mail";
 import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
-import { structureManagers } from "../../lib/structureManagers";
+import { isStructureManager } from "../../lib/structureManagers";
 import { type Executor, withTx } from "../../lib/tx";
 import { hasPlace } from "../events/place";
 import { type CitedView, citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
@@ -466,19 +466,13 @@ export const notificationsService = {
         ),
       )
       .returning();
-    // Les responsables d'une structure, lus une fois par structure pour toute la passe (jusqu'à 200 lignes).
-    const managersOf = new Map<string, Promise<string[]>>();
     for (const n of due) {
       try {
         // Lot R9d : une ligne de structure n'est livrée (temps réel, push, e-mail) qu'à une personne qui en est encore
         // responsable. Retirée entre l'émission (heures calmes) et la livraison : la ligne reste en base, invisible, rien ne part.
-        if (n.structureId) {
-          let managers = managersOf.get(n.structureId);
-          if (!managers) {
-            managers = structureManagers(db, n.structureId, { includeSuspended: true });
-            managersOf.set(n.structureId, managers);
-          }
-          if (!(await managers).includes(n.userId)) continue;
+        // Revérifié avant CHAQUE livraison (jamais mis en cache : un retrait entre deux envois d'une même passe compte).
+        if (n.structureId && !(await isStructureManager(db, n.structureId, n.userId, { includeSuspended: true }))) {
+          continue;
         }
         const guard = deliveryGuards.get(n.type);
         const verdict = guard ? await guard(n) : true;

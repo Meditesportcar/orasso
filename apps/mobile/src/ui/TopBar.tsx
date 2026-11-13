@@ -5,8 +5,9 @@
 // (exposant ou visiteur) ; appui sur la pastille : Mon profil de la casquette de base.
 // Lot R7a1 (D38) puis lot R7c2 : la Boîte a disparu. La cloche ouvre `/activite` (nouveautés depuis la dernière ouverture,
 // plus les demandes en attente), la bulle `/messages` (conversations non lues, plus les demandes de message), chacune avec
-// sa pastille (`topBarCounts`) ; seul l'organisateur garde une icône « Boîte » : les messages de sa structure
-// (`/messages/orga`), avec les non-lus de la structure.
+// sa pastille (`topBarCounts`). Lot R9d : l'organisateur a les mêmes deux icônes, celles de sa structure : la cloche ouvre
+// `/activite/orga` (nouveautés, demandes de staff et de collaboration), la bulle `/messages/orga` (conversations), chacune avec
+// sa pastille (`structureTopBarCounts`) ; il n'y a plus de Boîte.
 // Lot C1 (artefact DA v2, `.capchip`) : la pastille « Organisateur » (logo de la structure) seulement pour
 // l'organisateur (et l'Administration, sans onglet Profil : la pastille est son seul retour).
 // Lot M7 (deux modes d'affichage) : le layout d'un groupe d'onglets (`PersonaTabs`) pose la bande une fois
@@ -15,7 +16,7 @@
 // de la zone qui glisse (`TabScreen`, `TabStage`), sous ses feuilles (règle du socle C1 : une feuille couvre les deux
 // bandes). Hors d'un groupe d'onglets, pas de bande : l'écran est en mode B (en-tête de fiche, `FicheHeader`).
 import { AppBar, type AppBarProps } from "@orasso/design-system/native";
-import { casquettesLabels, topBarCounts } from "@orasso/shared";
+import { casquettesLabels, structureTopBarCounts, topBarCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,8 +38,6 @@ type Band = Pick<
   | "onLogoLongPress"
   | "logoHint"
   | "onSearch"
-  | "onInbox"
-  | "inboxCount"
   | "onActivity"
   | "activityCount"
   | "onMessages"
@@ -84,9 +83,11 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     { enabled: personal && userId !== null },
   );
   const reloadSummary = summary.reload;
-  useChannel(personal && userId ? `user:${userId}` : null, (event) => {
+  // Lot R9d : l'organisateur écoute le même canal pour les pastilles de sa structure (cloche : Activité, bulle : Messages).
+  useChannel(userId ? `user:${userId}` : null, (event) => {
     if (event.type === "inbox.changed" || event.type === "conversation.updated" || event.type === "notification") {
-      void reloadSummary();
+      if (personal) void reloadSummary();
+      else void reloadInbox();
     }
   });
   const refresh = useCallback(() => {
@@ -96,10 +97,9 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     void reloadInbox();
     void reloadSummary();
   }, [reloadInbox, reloadSummary]);
-  const orgCount = orgInbox.data
-    ? orgInbox.data.participantMessages + orgInbox.data.staffDiscussions + orgInbox.data.staffRequests
-    : 0;
-  const inboxCount = structureId ? orgCount : 0;
+  // Lot R9d : organisateur, la cloche est l'Activité de la structure (nouveautés, demandes de staff et de collaboration) et la
+  // bulle ses Messages (conversations seulement) : `structureTopBarCounts`. Plus de Boîte.
+  const orgCounts = structureTopBarCounts(orgInbox.data);
   // Cloche : nouveautés depuis la dernière ouverture et demandes en attente ; bulle : conversations non lues et demandes de
   // message en attente (une demande ne compte qu'une fois : voir `topBarCounts`).
   const { activity: activityCount, messages: messagesCount } = topBarCounts(summary.data);
@@ -122,8 +122,6 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
       onLogoLongPress: persona.kind === base.kind ? undefined : backToBase,
       logoHint: `Appui long : revenir au profil ${baseLabel.toLowerCase()}`,
       onSearch: () => router.push("/recherche"),
-      onInbox: () => router.push("/messages/orga"),
-      inboxCount,
       ...(personal
         ? {
             onActivity: () => router.push("/activite"),
@@ -131,7 +129,12 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
             onMessages: () => router.push("/messages"),
             messagesCount,
           }
-        : null),
+        : {
+            onActivity: () => router.push("/activite/orga"),
+            activityCount: orgCounts.activity,
+            onMessages: () => router.push("/messages/orga"),
+            messagesCount: orgCounts.messages,
+          }),
     }),
     [
       showPersona,
@@ -144,10 +147,11 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
       choose,
       backToBase,
       router,
-      inboxCount,
       personal,
       activityCount,
       messagesCount,
+      orgCounts.activity,
+      orgCounts.messages,
     ],
   );
 

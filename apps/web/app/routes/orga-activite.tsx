@@ -181,10 +181,12 @@ export default function OrgaActivite({ loaderData, actionData }: Route.Component
       if (r.ok) revalidator.revalidate();
     });
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: à chaque nouvelle lecture qui compte des lignes non vues
+  // À chaque nouvelle lecture (`loaderData` change) qui compte des lignes non vues : un « vu » qui a échoué est retenté après la
+  // lecture suivante ; un « vu » réussi relit la page, qui rend 0 : rien ne boucle. La relecture ne dépend jamais du POST.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: voir ci-dessus
   useEffect(() => {
     if (unseen > 0) markSeen();
-  }, [unseen]);
+  }, [loaderData]);
   // Une ligne regroupée qui s'ajoute à une ligne déjà livrée n'envoie que `inbox.changed` : tout signal relit la page, sans
   // exception (deux signaux rapprochés sont pris en compte tous les deux).
   useChannel(`user:${userId}`, (m) => {

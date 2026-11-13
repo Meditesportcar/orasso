@@ -17,7 +17,7 @@ import type { Executor } from "./tx";
 export async function structureManagers(
   ex: Executor,
   structureId: string,
-  opts: { includeSuspended?: boolean } = {},
+  opts: { includeSuspended?: boolean; userId?: string } = {},
 ): Promise<string[]> {
   const at = now();
   const rows = await ex
@@ -28,6 +28,7 @@ export async function structureManagers(
     .where(
       and(
         eq(structureMembers.structureId, structureId),
+        opts.userId ? eq(structureMembers.userId, opts.userId) : undefined,
         eq(structureMembers.status, "active"),
         inArray(structureMembers.role, ["owner", "co_organizer"]),
         isNull(structures.deletedAt),
@@ -40,4 +41,17 @@ export async function structureManagers(
     // Ordre stable : les verrous pris par responsable se prennent toujours dans le même ordre.
     .orderBy(structureMembers.userId);
   return rows.map((r) => r.userId);
+}
+
+/**
+ * Cette personne est-elle responsable de la structure **à l'instant** ? Une seule requête indexée (membre actif, propriétaire ou
+ * co-organisateur) : sert à revérifier chaque livraison d'une ligne de structure, sans cache.
+ */
+export async function isStructureManager(
+  ex: Executor,
+  structureId: string,
+  userId: string,
+  opts: { includeSuspended?: boolean } = {},
+): Promise<boolean> {
+  return (await structureManagers(ex, structureId, { ...opts, userId })).length > 0;
 }

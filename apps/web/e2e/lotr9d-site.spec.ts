@@ -1,6 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, MOBILE, setTheme } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  login,
+  loginInBrowser,
+  MOBILE,
+  randomPlate,
+  setTheme,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R9d, côté site : l'Activité de la structure (la cloche de l'organisateur) et les Messages (la bulle). Damien_66 est
@@ -68,3 +79,53 @@ for (const theme of ["beton", "sable"] as const) {
     });
   }
 }
+
+async function structureId(): Promise<string> {
+  const me = await apiCall<{ personas: { kind: string; id: string; label: string }[] }>(
+    await login("damien@orasso.local"),
+    "GET",
+    "/me",
+  );
+  const p = me.data.personas.find((x) => x.kind === "organizer" && x.label.includes("MéditeSportCar"));
+  if (!p) throw new Error("Structure introuvable");
+  return p.id;
+}
+
+// « Vu » en échec : la page se rafraîchit quand même à l'arrivée d'une candidature (la relecture ne dépend pas du POST), et le
+// « vu » est retenté après la lecture suivante (une fois le POST rétabli, le compteur de non-vus tombe à zéro).
+test("POST /seen en échec : la page se rafraîchit quand même, le vu est retenté ensuite", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, `/orga/${SLUG}/activite`);
+  let failing = true;
+  await page.route("**/api/structures/*/activity/seen", (route) => (failing ? route.abort() : route.continue()));
+  await page.goto(`/orga/${SLUG}/activite`);
+  await expect(page.getByRole("heading", { name: "Activité", exact: true })).toBeVisible();
+  const lines = page.getByTestId("activity-row").filter({ hasText: /candidatures? à trier/ });
+  await expect(lines.first()).toBeVisible();
+  const before = await lines.first().innerText();
+  // Une nouvelle candidature arrive pendant que la page est ouverte : la ligne se met à jour sans rechargement manuel.
+  const nocturne = await apiCall<{ id: string }>(
+    await login("damien@orasso.local"),
+    "GET",
+    "/events/by-slug/nocturne-de-canet-2026",
+  );
+  const cookie = await signUpApi(`Cand_${unique()}`);
+  const vehicle = await addVehicleApi(cookie, randomPlate());
+  await applyApi(cookie, nocturne.data.id, vehicle);
+  await expect.poll(async () => lines.first().innerText(), { timeout: 30_000 }).not.toBe(before);
+  // Le POST est rétabli : la lecture suivante repose le « vu ».
+  failing = false;
+  await page.reload();
+  const summary = async () =>
+    (
+      await apiCall<{ unseen: number }>(
+        await login("damien@orasso.local"),
+        "GET",
+        `/structures/${await structureId()}/activity/count`,
+      )
+    ).data.unseen;
+  await expect.poll(summary, { timeout: 30_000 }).toBe(0);
+  await ctx.close();
+});

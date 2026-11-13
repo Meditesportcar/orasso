@@ -163,6 +163,33 @@ describe("livraison et signaux", () => {
     expect((await call(lea, "GET", `/structures/${structureId}/activity`)).status).toBe(403);
   });
 
+  it("un responsable retiré entre deux envois d'une même passe ne reçoit pas le second", async () => {
+    await withTx((tx, after) =>
+      notifyStructure(tx, structureId, "staff_request", { title: "Demande", body: "B", after }),
+    );
+    const original = realtime.publish;
+    const sent: string[] = [];
+    realtime.publish = ((channel: string, type: string) => {
+      if (type !== "notification") return;
+      sent.push(channel);
+      // Au premier envoi de la passe, l'autre responsable est retiré : son envoi (le suivant) ne doit pas partir.
+      if (sent.length === 1) {
+        const other = channel === `user:${damien.id}` ? lea : damien;
+        void db
+          .update(structureMembers)
+          .set({ status: "removed" })
+          .where(and(eq(structureMembers.structureId, structureId), eq(structureMembers.userId, other.id)));
+      }
+    }) as never;
+    try {
+      await notificationsService.deliverDue();
+      // Laisse la mise à jour lancée dans le crochet se terminer avant la lecture suivante de la passe.
+    } finally {
+      realtime.publish = original;
+    }
+    expect(sent).toHaveLength(1);
+  });
+
   it("un seul inbox.changed par responsable quand une occurrence rejoint une ligne déjà livrée", async () => {
     const emit = () =>
       withTx((tx, after) =>

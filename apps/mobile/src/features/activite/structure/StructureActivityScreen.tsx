@@ -15,7 +15,7 @@ import {
   type StructureActivityFilter,
   structureActivityFilters,
 } from "@orasso/shared";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -79,7 +79,9 @@ function Body() {
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
   const [filter, setFilter] = useState<StructureActivityFilter>("all");
-  const [showRequests, setShowRequests] = useState(false);
+  // `?vue=demandes` (le toucher d'un push d'invitation à publier) ouvre la liste des demandes.
+  const params = useLocalSearchParams<{ vue?: string }>();
+  const [showRequests, setShowRequests] = useState(params.vue === "demandes");
   const activity = useApi<ActivityPage>(() => api.structureActivity(structureId, filter), [structureId, filter]);
   const summary = useApi(() => api.orgInboxSummary(structureId), [structureId]);
   const requests = useApi(() => api.structureRequests(structureId), [structureId]);
