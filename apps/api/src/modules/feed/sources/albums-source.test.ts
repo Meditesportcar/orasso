@@ -7,15 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { callAs } from "../../../../test/actor-call";
-import {
-  call,
-  createVehicle,
-  resetDb,
-  seedReference,
-  signUp,
-  type TestUser,
-  useClock,
-} from "../../../../test/helpers";
+import { call, createVehicle, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { applications, pageFollows, profiles } from "../../../db/schema";
 import {
@@ -151,7 +143,9 @@ describe("qui voit la carte", () => {
 
   it("un album ancien (plus de 30 jours) ne fait plus de carte", async () => {
     const album = await publishedAlbum(leo, eventId, 1);
-    await db.execute(sql`update event_albums set published_at = ${paris(10, 1, 12).toISOString()}::timestamptz where id = ${album.id}`);
+    await db.execute(
+      sql`update event_albums set published_at = ${paris(10, 1, 12).toISOString()}::timestamptz where id = ${album.id}`,
+    );
     expect(albums((await fil(kenji, "filter=for_you&cards=album")).items)).toHaveLength(0);
   });
 });
@@ -169,10 +163,21 @@ describe("la carte", () => {
       title: "Nuit au Lydia",
       photosCount: 5,
       official: false,
-      author: { key: `m:${leoMedia}`, kind: "media", name: "Sud Cars", pseudo: "Sud Cars", grade: null, official: false },
+      author: {
+        key: `m:${leoMedia}`,
+        kind: "media",
+        name: "Sud Cars",
+        pseudo: "Sud Cars",
+        grade: null,
+        official: false,
+      },
       attach: { role: "on_site", phase: "before", presenceValidated: false },
     });
-    expect(view.attach.event).toMatchObject({ id: eventId, slug: "rassemblement-du-lydia", title: "Rassemblement du Lydia" });
+    expect(view.attach.event).toMatchObject({
+      id: eventId,
+      slug: "rassemblement-du-lydia",
+      title: "Rassemblement du Lydia",
+    });
     expect(view.cover).toHaveLength(4);
     expect(view.cover[0]?.url).toMatch(new RegExp(`^/api/albums/${album.id}/photos/[0-9a-f]{32}\\.webp$`));
     // Liste blanche.
@@ -192,7 +197,9 @@ describe("la carte", () => {
     clock.advance(60_000);
     const next = await fil(kenji, "filter=for_you&cards=album");
     expect((next.items.find((c) => c.kind === "album") as FeedCard).seen).toBe(true);
-    expect((await call(kenji, "POST", "/me/fil/seen", { cards: [{ id: "album:pas-un-uuid", action: "view" }] })).status).toBe(400);
+    expect(
+      (await call(kenji, "POST", "/me/fil/seen", { cards: [{ id: "album:pas-un-uuid", action: "view" }] })).status,
+    ).toBe(400);
   });
 
   it("« Moins de ce genre » accepte le genre « album » comme les autres", async () => {

@@ -11,6 +11,7 @@ import {
   accredit,
   addPhoto,
   albumRow,
+  draftOf,
   keysOf,
   mediaUser,
   organizerEvent,
@@ -19,7 +20,6 @@ import {
   publishedAlbum,
   setAccreditation,
   softDeleteMedia,
-  draftOf,
 } from "./albums-test-helpers";
 
 afterAll(async () => {
@@ -52,11 +52,12 @@ beforeEach(async () => {
   kenji = await signUp("Kenji_66");
 });
 
-const regards = () => [
-  ["l'organisateur", orga],
-  ["un autre média accrédité", marc],
-  ["un passionné", kenji],
-] as const;
+const regards = () =>
+  [
+    ["l'organisateur", orga],
+    ["un autre média accrédité", marc],
+    ["un passionné", kenji],
+  ] as const;
 
 describe("un brouillon n'est vu que de son titulaire", () => {
   it("lecture, listes et photos : 404 pour tous les autres, 401 sans session", async () => {
@@ -114,7 +115,8 @@ describe("un album publié est vu de tout membre connecté", () => {
     expect(res.json).toHaveLength(1);
     expect(res.json[0]).toMatchObject({ id: album.id, kind: "gallery", featured: false });
     // Photos servies par la route publique (clé privée), jamais par `/api/files`.
-    for (const p of res.json[0].photos) expect(p.url).toMatch(/^\/api\/public\/albums\/.+\/photos\/[0-9a-f]{32}\.webp$/);
+    for (const p of res.json[0].photos)
+      expect(p.url).toMatch(/^\/api\/public\/albums\/.+\/photos\/[0-9a-f]{32}\.webp$/);
   });
 });
 
@@ -231,7 +233,9 @@ describe("routes des photos", () => {
     const [photo] = await photoRows(album.id);
     const name = photo?.storageKey.split("/").pop();
     const raw = (u: TestUser | null, headers: Record<string, string> = {}) =>
-      app.request(`/api/albums/${album.id}/photos/${name}`, { headers: { ...(u ? { cookie: u.cookie } : {}), ...headers } });
+      app.request(`/api/albums/${album.id}/photos/${name}`, {
+        headers: { ...(u ? { cookie: u.cookie } : {}), ...headers },
+      });
     expect((await raw(null)).status).toBe(401);
     const ok = await raw(kenji);
     expect(ok.status).toBe(200);
@@ -241,9 +245,13 @@ describe("routes des photos", () => {
     expect(etag).toMatch(/^"[0-9a-f]{32}"$/);
     expect((await raw(kenji, { "if-none-match": etag })).status).toBe(304);
     // Un nom inconnu, un nom mal formé, un autre album : 404.
-    const wrong = await app.request(`/api/albums/${album.id}/photos/${"a".repeat(32)}.webp`, { headers: { cookie: kenji.cookie } });
+    const wrong = await app.request(`/api/albums/${album.id}/photos/${"a".repeat(32)}.webp`, {
+      headers: { cookie: kenji.cookie },
+    });
     expect(wrong.status).toBe(404);
-    const bad = await app.request(`/api/albums/${album.id}/photos/..%2F..%2Fx.webp`, { headers: { cookie: kenji.cookie } });
+    const bad = await app.request(`/api/albums/${album.id}/photos/..%2F..%2Fx.webp`, {
+      headers: { cookie: kenji.cookie },
+    });
     expect(bad.status).toBe(404);
     const other = await publishedAlbum(marc, eventId, 1);
     const crossed = await app.request(`/api/albums/${other.id}/photos/${name}`, { headers: { cookie: kenji.cookie } });
@@ -260,7 +268,9 @@ describe("routes des photos", () => {
     expect(res.headers.get("cache-control")).toBe("public, no-cache");
     expect(res.headers.get("set-cookie")).toBeNull();
     const etag = res.headers.get("etag") as string;
-    const again = await app.request(`/api/public/albums/${album.id}/photos/${name}`, { headers: { "if-none-match": etag } });
+    const again = await app.request(`/api/public/albums/${album.id}/photos/${name}`, {
+      headers: { "if-none-match": etag },
+    });
     expect(again.status).toBe(304);
     // Une photo retirée disparaît tout de suite.
     const added = await addPhoto(leo, album.id);
@@ -275,16 +285,20 @@ describe("listes", () => {
     const a = await publishedAlbum(leo, eventId, 1, { title: "Premier" });
     const b = await publishedAlbum(marc, eventId, 1, { title: "Deuxième" });
     const c = await publishedAlbum(leo, eventId, 1, { title: "Troisième" });
-    await db.execute(sql`update event_albums set published_at = ${paris(11, 5, 13).toISOString()}::timestamptz where id = ${a.id}`);
-    await db.execute(sql`update event_albums set published_at = ${paris(11, 5, 14).toISOString()}::timestamptz where id = ${b.id}`);
-    await db.execute(sql`update event_albums set published_at = ${paris(11, 5, 15).toISOString()}::timestamptz, official_at = now() where id = ${c.id}`);
+    await db.execute(
+      sql`update event_albums set published_at = ${paris(11, 5, 13).toISOString()}::timestamptz where id = ${a.id}`,
+    );
+    await db.execute(
+      sql`update event_albums set published_at = ${paris(11, 5, 14).toISOString()}::timestamptz where id = ${b.id}`,
+    );
+    await db.execute(
+      sql`update event_albums set published_at = ${paris(11, 5, 15).toISOString()}::timestamptz, official_at = now() where id = ${c.id}`,
+    );
     const list = await call(kenji, "GET", `/events/${eventId}/albums`);
     expect(list.json.items.map((x: { id: string }) => x.id)).toEqual([c.id, b.id, a.id]);
     expect(list.json.items[0].official).toBe(true);
     // Un seul album officiel par événement.
-    await expect(
-      db.execute(sql`update event_albums set official_at = now() where id = ${a.id}`),
-    ).rejects.toThrow();
+    await expect(db.execute(sql`update event_albums set official_at = now() where id = ${a.id}`)).rejects.toThrow();
     // Page du média : du plus récent au plus ancien, deux par page.
     const p1 = await call(kenji, "GET", `/media/${leoMedia}/albums?limit=1`);
     expect(p1.json.items.map((x: { id: string }) => x.id)).toEqual([c.id]);

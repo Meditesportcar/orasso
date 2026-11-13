@@ -97,7 +97,13 @@ describe("reprise des galeries", () => {
       .returning();
 
     const totals = async () => {
-      const r = await db.execute<{ galleries: number; links: number; deleted: number; albums: number; photos: number }>(sql`
+      const r = await db.execute<{
+        galleries: number;
+        links: number;
+        deleted: number;
+        albums: number;
+        photos: number;
+      }>(sql`
         select
           (select count(*) from media_contents where kind = 'gallery' and deleted_at is null)::int as galleries,
           (select count(*) from media_contents where kind = 'link' and deleted_at is null)::int as links,
@@ -116,7 +122,13 @@ describe("reprise des galeries", () => {
 
     const now = await totals();
     // Galeries non supprimées = albums repris ; photos = somme des clés ; liens intacts ; les galeries reprises sont marquées supprimées.
-    expect(now).toEqual({ galleries: 0, links: was.links, deleted: was.deleted + was.galleries, albums: was.galleries, photos: keysSum });
+    expect(now).toEqual({
+      galleries: 0,
+      links: was.links,
+      deleted: was.deleted + was.galleries,
+      albums: was.galleries,
+      photos: keysSum,
+    });
     expect(l1[0]?.deletedAt).toBeNull();
 
     const albums = await db.select().from(eventAlbums);
@@ -133,19 +145,27 @@ describe("reprise des galeries", () => {
     expect(albums.filter((x) => x.officialAt !== null && x.eventId === a.id)).toHaveLength(1);
 
     // Clés réutilisées sur place, dans l'ordre ; état « inconnu » ; dimensions inconnues.
-    const photos = await db.select().from(eventAlbumPhotos).orderBy(eventAlbumPhotos.albumId, eventAlbumPhotos.position);
+    const photos = await db
+      .select()
+      .from(eventAlbumPhotos)
+      .orderBy(eventAlbumPhotos.albumId, eventAlbumPhotos.position);
     const of = (id: string) => photos.filter((p) => p.albumId === id);
     expect(of(g1.id).map((p) => p.storageKey)).toEqual(g1.photoKeys);
     expect(of(g1.id).map((p) => p.position)).toEqual([0, 1, 2, 3]);
     expect(of(g2.id).map((p) => p.storageKey)).toEqual(g2.photoKeys);
-    expect(photos.every((p) => p.plateState === "unknown" && p.plateRects === null && p.width === null && p.height === null)).toBe(true);
+    expect(
+      photos.every((p) => p.plateState === "unknown" && p.plateRects === null && p.width === null && p.height === null),
+    ).toBe(true);
     expect(of(g4.id)).toHaveLength(0);
 
     // Rejouée : plus rien ne bouge (lignes identiques).
     const snapshot = JSON.stringify({ albums, photos });
     expect(await adoptLegacyGalleries(db)).toBe(0);
     const albumsAgain = await db.select().from(eventAlbums);
-    const photosAgain = await db.select().from(eventAlbumPhotos).orderBy(eventAlbumPhotos.albumId, eventAlbumPhotos.position);
+    const photosAgain = await db
+      .select()
+      .from(eventAlbumPhotos)
+      .orderBy(eventAlbumPhotos.albumId, eventAlbumPhotos.position);
     expect(JSON.stringify({ albums: albumsAgain, photos: photosAgain })).toBe(snapshot);
     expect(await totals()).toEqual(now);
   });

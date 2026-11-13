@@ -21,23 +21,8 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
-import {
-  assertAccredited,
-  assertWritable,
-  isUniqueViolation,
-  lockOwnAlbum,
-  mediaOfUser,
-  requireMedia,
-} from "./guards";
-import {
-  type AlbumJoin,
-  albumBase,
-  albumPhotos,
-  albumVisibleSql,
-  loadAlbum,
-  photoView,
-  summariesOf,
-} from "./view";
+import { assertAccredited, assertWritable, isUniqueViolation, lockOwnAlbum, mediaOfUser, requireMedia } from "./guards";
+import { type AlbumJoin, albumBase, albumPhotos, albumVisibleSql, loadAlbum, photoView, summariesOf } from "./view";
 
 /** L'album ouvert : le résumé et toutes ses photos. */
 export async function albumViewOf(join: AlbumJoin, viewerId: string | null): Promise<AlbumView> {

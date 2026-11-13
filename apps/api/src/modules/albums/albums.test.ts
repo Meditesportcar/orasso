@@ -8,7 +8,6 @@ import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/he
 import { db, pool } from "../../db/client";
 import { eventAlbums, reports, uploads } from "../../db/schema";
 import { storage } from "../../lib/storage";
-import { purgeDrafts } from "./publish";
 import {
   accredit,
   addPhoto,
@@ -24,6 +23,7 @@ import {
   sendUpload,
   spread,
 } from "./albums-test-helpers";
+import { purgeDrafts } from "./publish";
 
 afterAll(async () => {
   await pool.end();
@@ -261,10 +261,7 @@ describe("POST /me/albums/:id/photos : une photo à la fois", () => {
     const album = await draftOf(leo, eventId);
     await db.update(eventAlbums).set({ photosCount: 199 }).where(eq(eventAlbums.id, album.id));
     const [a, b] = await Promise.all([sendUpload(leo), sendUpload(leo)]);
-    const results = await Promise.all([
-      addPhoto(leo, album.id, { upload: a }),
-      addPhoto(leo, album.id, { upload: b }),
-    ]);
+    const results = await Promise.all([addPhoto(leo, album.id, { upload: a }), addPhoto(leo, album.id, { upload: b })]);
     expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
     expect((await albumRow(album.id))?.photosCount).toBe(200);
     expect(await photoRows(album.id)).toHaveLength(1);
@@ -398,9 +395,15 @@ describe("tâche albums.draft-purge", () => {
     const published = await publishedAlbum(other.user, eventId, 1);
     // Six jours et demi : encore là ; sept jours : purgé.
     const at = new Date("2026-11-20T10:00:00Z");
-    await db.execute(sql`update event_albums set updated_at = ${new Date("2026-11-13T10:00:00Z").toISOString()}::timestamptz where id = ${old.id}`);
-    await db.execute(sql`update event_albums set updated_at = ${new Date("2026-11-13T10:00:01Z").toISOString()}::timestamptz where id = ${fresh.id}`);
-    await db.execute(sql`update event_albums set updated_at = ${new Date("2026-11-01T10:00:00Z").toISOString()}::timestamptz where id = ${published.id}`);
+    await db.execute(
+      sql`update event_albums set updated_at = ${new Date("2026-11-13T10:00:00Z").toISOString()}::timestamptz where id = ${old.id}`,
+    );
+    await db.execute(
+      sql`update event_albums set updated_at = ${new Date("2026-11-13T10:00:01Z").toISOString()}::timestamptz where id = ${fresh.id}`,
+    );
+    await db.execute(
+      sql`update event_albums set updated_at = ${new Date("2026-11-01T10:00:00Z").toISOString()}::timestamptz where id = ${published.id}`,
+    );
     expect(await purgeDrafts(at)).toBe(1);
     expect(await albumRow(old.id)).toBeUndefined();
     expect(await storage.get(oldKey)).toBeNull();
@@ -434,7 +437,11 @@ describe("signalement d'une photo (cible album_photo)", () => {
     });
     expect(hidden.status).toBe(404);
     // Un motif qui n'existe pas pour ce type est refusé.
-    const wrong = await call(fan, "POST", "/reports", { targetType: "album_photo", targetId: photo?.id, reason: "scam" });
+    const wrong = await call(fan, "POST", "/reports", {
+      targetType: "album_photo",
+      targetId: photo?.id,
+      reason: "scam",
+    });
     expect(wrong.status).toBe(400);
   });
 });
@@ -452,7 +459,18 @@ describe("GET /media/:id : compteurs d'albums", () => {
     const after = await call(fan, "GET", `/media/${leoMedia}`);
     expect(after.json).toMatchObject({ albumsCount: 1, photosCount: 3 });
     // Les champs d'avant sont toujours là.
-    for (const key of ["id", "name", "formats", "description", "website", "instagram", "youtube", "logoUrl", "departments", "verified"]) {
+    for (const key of [
+      "id",
+      "name",
+      "formats",
+      "description",
+      "website",
+      "instagram",
+      "youtube",
+      "logoUrl",
+      "departments",
+      "verified",
+    ]) {
       expect(after.json).toHaveProperty(key);
     }
     expect((await call(null, "GET", `/media/${leoMedia}`)).status).toBe(401);

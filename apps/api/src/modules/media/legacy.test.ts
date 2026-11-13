@@ -8,6 +8,7 @@ import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/he
 import { db, pool } from "../../db/client";
 import { eventAlbumPhotos, eventAlbums, events, mediaContents, mediaProfiles, notifications } from "../../db/schema";
 import { storage } from "../../lib/storage";
+import { withTx } from "../../lib/tx";
 import {
   accredit,
   mediaUser,
@@ -18,10 +19,9 @@ import {
   sendUpload,
 } from "../albums/albums-test-helpers";
 import { adoptLegacyGalleries } from "../albums/reprise";
-import { withTx } from "../../lib/tx";
 import { anonymizeMediaForDeletedAccount } from "./anonymize";
-import { resetMediaViews } from "./service";
 import { contentView } from "./serializers";
+import { resetMediaViews } from "./service";
 
 afterAll(async () => {
   await pool.end();
@@ -153,7 +153,20 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
     });
     expect(res.status).toBe(201);
     expect(Object.keys(res.json).sort()).toEqual(
-      ["event", "eventId", "featured", "id", "kind", "media", "photos", "platform", "publishedAt", "title", "url", "views"].sort(),
+      [
+        "event",
+        "eventId",
+        "featured",
+        "id",
+        "kind",
+        "media",
+        "photos",
+        "platform",
+        "publishedAt",
+        "title",
+        "url",
+        "views",
+      ].sort(),
     );
     expect(res.json).toMatchObject({
       eventId,
@@ -201,11 +214,19 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
     expect(refused.status).toBe(403);
     expect(refused.json.error.message).toMatch(/accrédité/);
     expect(
-      (await call(leo, "POST", "/me/media-contents", { eventId, kind: "gallery", title: "Galerie", photoKeys: [] })).status,
+      (await call(leo, "POST", "/me/media-contents", { eventId, kind: "gallery", title: "Galerie", photoKeys: [] }))
+        .status,
     ).toBe(400);
     const tooMany = Array.from({ length: 31 }, () => `media-contents/${crypto.randomUUID()}.webp`);
     expect(
-      (await call(leo, "POST", "/me/media-contents", { eventId, kind: "gallery", title: "Galerie", photoKeys: tooMany })).status,
+      (
+        await call(leo, "POST", "/me/media-contents", {
+          eventId,
+          kind: "gallery",
+          title: "Galerie",
+          photoKeys: tooMany,
+        })
+      ).status,
     ).toBe(400);
     expect(
       (
@@ -219,7 +240,12 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
     ).toBe(400);
     expect(await db.select().from(eventAlbums)).toHaveLength(0);
     await db.update(events).set({ status: "cancelled" }).where(eq(events.id, eventId));
-    const cancelled = await call(leo, "POST", "/me/media-contents", { eventId, kind: "gallery", title: "Galerie", photoKeys: [a.key] });
+    const cancelled = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: [a.key],
+    });
     expect(cancelled.status).toBe(409);
   });
 
@@ -264,7 +290,9 @@ describe("modifier, supprimer, mettre en avant, compter les vues d'une galerie (
     expect(set.status).toBe(200);
     expect(set.json).toMatchObject({ id: first.id, featured: true });
     expect((await db.select().from(eventAlbums).where(eq(eventAlbums.id, first.id)))[0]?.officialAt).not.toBeNull();
-    const swap = await call(orga, "PATCH", `/events/${eventId}/media-contents/${second.id}/feature`, { featured: true });
+    const swap = await call(orga, "PATCH", `/events/${eventId}/media-contents/${second.id}/feature`, {
+      featured: true,
+    });
     expect(swap.status).toBe(200);
     const officials = (await db.select().from(eventAlbums)).filter((a) => a.officialAt !== null);
     expect(officials.map((a) => a.id)).toEqual([second.id]);
@@ -273,11 +301,19 @@ describe("modifier, supprimer, mettre en avant, compter les vues d'une galerie (
     expect(facade.json.map((c: { id: string }) => c.id)).toEqual([second.id, first.id]);
     const un = await call(orga, "PATCH", `/events/${eventId}/media-contents/${second.id}/feature`, { featured: false });
     expect(un.json.featured).toBe(false);
-    const notified = await db.select().from(notifications).where(eq(notifications.type, "media_content_featured")).orderBy(desc(notifications.createdAt));
+    const notified = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.type, "media_content_featured"))
+      .orderBy(desc(notifications.createdAt));
     expect(notified.length).toBeGreaterThanOrEqual(2);
     // Un passionné ou un autre média ne met rien en avant.
-    expect((await call(kenji, "PATCH", `/events/${eventId}/media-contents/${first.id}/feature`, { featured: true })).status).toBe(403);
-    expect((await call(leo, "PATCH", `/events/${eventId}/media-contents/${first.id}/feature`, { featured: true })).status).toBe(403);
+    expect(
+      (await call(kenji, "PATCH", `/events/${eventId}/media-contents/${first.id}/feature`, { featured: true })).status,
+    ).toBe(403);
+    expect(
+      (await call(leo, "PATCH", `/events/${eventId}/media-contents/${first.id}/feature`, { featured: true })).status,
+    ).toBe(403);
   });
 
   it("POST /media-contents/:id/view compte la vue d'un album (une par session et par heure, jamais le média lui-même)", async () => {

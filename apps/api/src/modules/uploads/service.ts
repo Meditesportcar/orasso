@@ -215,12 +215,12 @@ export const uploadsService = {
         : purpose === "album_photo"
           ? "albumPhotoUpload"
           : purpose === "crew_post"
-          ? "crewPhotoUpload"
-          : purpose === "feed_post"
-            ? "feedPhotoUpload"
-            : purpose === "story_video" || purpose === "story_poster"
-              ? "storyVideoUpload"
-              : "fileUpload",
+            ? "crewPhotoUpload"
+            : purpose === "feed_post"
+              ? "feedPhotoUpload"
+              : purpose === "story_video" || purpose === "story_poster"
+                ? "storyVideoUpload"
+                : "fileUpload",
       v.user.id,
     );
     // Photo d'annonce (lot 20) : seulement un organisateur qui peut publier.

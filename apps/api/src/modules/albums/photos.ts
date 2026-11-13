@@ -26,13 +26,7 @@ import { UUID_RE } from "../feed/access";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions } from "../vehicles/photos-blur";
 import { assertAccredited, assertWritable, lockOwnAlbum, requireMedia } from "./guards";
-import {
-  ALBUM_PHOTO_NAME_RE,
-  ALBUM_UPLOAD_FOLDER,
-  albumPhotoKey,
-  loadAlbum,
-  photoView,
-} from "./view";
+import { ALBUM_PHOTO_NAME_RE, ALBUM_UPLOAD_FOLDER, albumPhotoKey, loadAlbum, photoView } from "./view";
 
 /** `POST /me/albums/:id/photos` : ajoute une photo. `created: false` pour un rejeu. */
 export async function addPhoto(

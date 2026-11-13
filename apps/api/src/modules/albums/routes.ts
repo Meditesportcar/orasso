@@ -21,12 +21,7 @@ import { addPhoto, type PhotoFile, photoFile } from "./photos";
 import { publishAlbum } from "./publish";
 import { albumsService } from "./service";
 
-const fileResponse = (
-  c: Context<AppEnv>,
-  photo: PhotoFile,
-  cache: string,
-  extra: Record<string, string> = {},
-) => {
+const fileResponse = (c: Context<AppEnv>, photo: PhotoFile, cache: string, extra: Record<string, string> = {}) => {
   // Jamais gardée sans revalidation (une photo retirée, un média dont l'accréditation tombe) ; `ETag` : un 304 léger tant que l'accès tient.
   const headers = { "cache-control": cache, etag: photo.etag, ...extra };
   if (photo.status === 304) return c.body(null, 304, headers);
@@ -39,7 +34,10 @@ export const albumsRoutes = new Hono<AppEnv>()
   .use("/media/:id", async (c, next) => {
     await next();
     if (c.req.method !== "GET" || c.res.status !== 200) return;
-    const raw = (await c.res.clone().json().catch(() => null)) as Record<string, unknown> | null;
+    const raw = (await c.res
+      .clone()
+      .json()
+      .catch(() => null)) as Record<string, unknown> | null;
     if (!raw || typeof raw.id !== "string") return;
     const counts = await albumsService.countsForMedia(raw.id);
     const headers = new Headers(c.res.headers);

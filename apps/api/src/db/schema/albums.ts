@@ -63,9 +63,7 @@ export const eventAlbums = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex("event_albums_official_key")
-      .on(t.eventId)
-      .where(sql`${t.officialAt} is not null`),
+    uniqueIndex("event_albums_official_key").on(t.eventId).where(sql`${t.officialAt} is not null`),
     uniqueIndex("event_albums_legacy_key").on(t.legacyMediaContentId),
     uniqueIndex("event_albums_client_key").on(t.mediaProfileId, t.clientId),
     index("event_albums_event_idx")
@@ -104,9 +102,7 @@ export const eventAlbumPhotos = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex("event_album_photos_position_key")
-      .on(t.albumId, t.position)
-      .where(sql`${t.deletedAt} is null`),
+    uniqueIndex("event_album_photos_position_key").on(t.albumId, t.position).where(sql`${t.deletedAt} is null`),
     uniqueIndex("event_album_photos_client_key").on(t.albumId, t.clientId),
     index("event_album_photos_album_idx").on(t.albumId),
     // Floutée ou gardée telle quelle : les cadres sont conservés ; aucune plaque ou photo reprise : pas de cadre.

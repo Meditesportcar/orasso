@@ -5,13 +5,7 @@
 // tout autre le voit seulement s'il est publié, non supprimé, d'un média en règle **accrédité (`accepted`) maintenant** à
 // l'événement (règle V6, gardée dans la durée), sur un événement non brouillon et pas sur invitation, et si le compte du média
 // n'est ni suspendu ni banni ni supprimé.
-import {
-  ALBUM_COVER_PHOTOS,
-  type AlbumPhotoView,
-  type AlbumSummary,
-  albumTitle,
-  authorKeyOf,
-} from "@orasso/shared";
+import { ALBUM_COVER_PHOTOS, type AlbumPhotoView, type AlbumSummary, albumTitle, authorKeyOf } from "@orasso/shared";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -95,7 +89,10 @@ export async function loadAlbum(
 
 export const mediaKey = (mediaProfileId: string) => authorKeyOf("media", mediaProfileId);
 
-export const photoView = (albumId: string, p: Pick<AlbumPhotoRow, "id" | "storageKey" | "width" | "height" | "position">): AlbumPhotoView => ({
+export const photoView = (
+  albumId: string,
+  p: Pick<AlbumPhotoRow, "id" | "storageKey" | "width" | "height" | "position">,
+): AlbumPhotoView => ({
   id: p.id,
   url: albumPhotoUrl(albumId, p.storageKey),
   width: p.width,

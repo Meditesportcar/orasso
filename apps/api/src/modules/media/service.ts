@@ -684,7 +684,11 @@ export const mediaService = {
     if (!profile) return [];
     // Lot R9e : les galeries sont des albums (façade `albumsLegacy`), les liens restent ici.
     const links = await loadContents(
-      and(eq(mediaContents.mediaProfileId, profile.id), isNull(mediaContents.deletedAt), eq(mediaContents.kind, "link")),
+      and(
+        eq(mediaContents.mediaProfileId, profile.id),
+        isNull(mediaContents.deletedAt),
+        eq(mediaContents.kind, "link"),
+      ),
     );
     const rows = [...links, ...(await albumsLegacy.mine(profile.id))];
     return rows.sort(

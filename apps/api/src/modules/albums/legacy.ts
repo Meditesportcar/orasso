@@ -3,11 +3,11 @@
 // officiel). Une galerie reprise garde l'identifiant de son ancien contenu (la migration pose `event_albums.id = media_contents.id`) :
 // un appareil qui garde l'ancienne liste continue de modifier, supprimer et compter ses vues. Une façade se retire à la vague suivante.
 import {
+  albumTitle,
   MEDIA_GALLERY_MAX_PHOTOS,
   type MediaContentCreate,
   type MediaContentUpdate,
   type MediaContentView,
-  albumTitle,
   mediaLabels,
 } from "@orasso/shared";
 import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
@@ -22,7 +22,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
-import { type MediaContentRow, contentView } from "../media/serializers";
+import { contentView, type MediaContentRow } from "../media/serializers";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
 import { assertWritable, isAccredited, isUniqueViolation, mediaOfUser, requireMedia } from "./guards";
@@ -58,11 +58,13 @@ function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[]): MediaConte
   };
   return {
     ...contentView(row, e, m),
-    photos: photos.slice(0, MEDIA_GALLERY_MAX_PHOTOS).map((p) =>
-      isPrivateAlbumKey(p.storageKey)
-        ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
-        : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
-    ),
+    photos: photos
+      .slice(0, MEDIA_GALLERY_MAX_PHOTOS)
+      .map((p) =>
+        isPrivateAlbumKey(p.storageKey)
+          ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
+          : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
+      ),
   };
 }
 
@@ -266,7 +268,13 @@ export const albumsLegacy = {
         await tx
           .update(eventAlbums)
           .set({ officialAt: null })
-          .where(and(eq(eventAlbums.eventId, eventId), sql`${eventAlbums.officialAt} is not null`, sql`${eventAlbums.id} <> ${id}`));
+          .where(
+            and(
+              eq(eventAlbums.eventId, eventId),
+              sql`${eventAlbums.officialAt} is not null`,
+              sql`${eventAlbums.id} <> ${id}`,
+            ),
+          );
       }
       await tx
         .update(eventAlbums)

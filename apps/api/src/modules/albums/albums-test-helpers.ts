@@ -154,7 +154,11 @@ export const INSIDE = { left: 120, top: 70, width: 160, height: 60 };
 export const OUTSIDE = { left: 0, top: 0, width: 80, height: 40 };
 
 export async function photoRows(albumId: string) {
-  return db.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.albumId, albumId)).orderBy(eventAlbumPhotos.position);
+  return db
+    .select()
+    .from(eventAlbumPhotos)
+    .where(eq(eventAlbumPhotos.albumId, albumId))
+    .orderBy(eventAlbumPhotos.position);
 }
 
 export async function albumRow(id: string) {
