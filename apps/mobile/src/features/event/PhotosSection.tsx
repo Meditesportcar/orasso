@@ -82,7 +82,11 @@ export function PhotosSection({
           <SmButton
             kind="s"
             icon="next"
-            onPress={() => router.push(`/album/${a.id}` as never)}
+            onPress={() => {
+              // R9e : « voir les vues » ne disparaît pas : une vue à chaque ouverture de l'album depuis la fiche (un échec est sans suite).
+              void api.viewMediaContent(a.id).catch(() => undefined);
+              router.push(`/album/${a.id}` as never);
+            }}
             testID="event-photos-open"
             accessibilityLabel={`${L.seeAlbum} : ${a.title}`}
           >

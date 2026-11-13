@@ -10,6 +10,18 @@ import { useRevalidator } from "react-router";
 import "../../styles/albums.css";
 import { AlbumCover } from "../albums/AlbumCover";
 
+/**
+ * Une vue de l'album à son ouverture depuis la fiche (R9e : « voir les vues » ne disparaît pas) : une par ouverture, la navigation ne l'annule pas
+ * (`keepalive`), un échec est sans suite (la prochaine ouverture réessaie ; le serveur dédoublonne par session et par heure).
+ */
+function countView(albumId: string) {
+  void fetch(`/api/media-contents/${albumId}/view`, {
+    method: "POST",
+    credentials: "same-origin",
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 export function PhotosSection({ albums, manager }: { albums: readonly AlbumSummary[]; manager: boolean }) {
   const revalidator = useRevalidator();
   const [menu, setMenu] = useState<string | null>(null);
@@ -85,7 +97,13 @@ export function PhotosSection({ albums, manager }: { albums: readonly AlbumSumma
                 <span className="o-t-caption s-muted">{a.official ? L.removeOfficialHint : L.makeOfficialHint}</span>
               </div>
             )}
-            <Button variant="secondary" icon="next" href={`/albums/${a.id}`} data-testid="event-photos-open">
+            <Button
+              variant="secondary"
+              icon="next"
+              href={`/albums/${a.id}`}
+              onClick={() => countView(a.id)}
+              data-testid="event-photos-open"
+            >
               {L.seeAlbum}
             </Button>
           </li>
