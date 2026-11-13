@@ -13,12 +13,13 @@ import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { assertAccredited, assertWritable, lockOwnAlbum, requireMedia } from "./guards";
 import { albumsService, removeFiles } from "./service";
+import { sendTaggedNotifications } from "./tags-notify";
 
 /** `POST /me/albums/:id/publish` : `status published`, `published_at`. Rejoué sur un album publié : rien ne bouge. */
 export async function publishAlbum(v: Viewer, id: string): Promise<AlbumView> {
   assertWritable(v);
   rateLimit("mediaWrite", v.user.id);
-  await withTx(async (tx) => {
+  await withTx(async (tx, after) => {
     const profile = await requireMedia(tx, v);
     const album = await lockOwnAlbum(tx, id, profile.id);
     if (album.status === "published") return;
@@ -31,6 +32,8 @@ export async function publishAlbum(v: Viewer, id: string): Promise<AlbumView> {
       .returning({ id: eventAlbums.id });
     // Rien n'a été modifié (album retiré entre-temps) : on ne répond pas « publié ».
     if (!done.length) throw notFound(albumLabels.notFound);
+    // Lot R9f (T40) : les identifications posées en brouillon sont annoncées maintenant, une notification par personne.
+    await sendTaggedNotifications(tx, album.id, { after });
   });
   return albumsService.getOwn(v, id);
 }
