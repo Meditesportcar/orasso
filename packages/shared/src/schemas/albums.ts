@@ -1,5 +1,5 @@
 import { z } from "zod";
-
+import type { AlbumTagView } from "./albumTags";
 import type { FeedAttachView, FeedAuthorView } from "./feed";
 import { plateRectsSchema } from "./vehicle";
 
@@ -94,6 +94,12 @@ export type AlbumPhotoView = {
   width: number | null;
   height: number | null;
   position: number;
+  /**
+   * Lot R9f : les identifications visibles de cette photo (`GET /albums/:id` seulement, jamais dans une liste ni sans session).
+   * Seulement celles que la personne connectée a le droit de voir (`canSeeTag`) ; **absent** hors de l'album ouvert et sur une photo sans
+   * identification visible (la forme de R9e est gardée).
+   */
+  tags?: AlbumTagView[];
 };
 
 /**
@@ -120,7 +126,11 @@ export type AlbumSummary = {
 };
 
 /** `GET /albums/:id` : l'album ouvert. */
-export type AlbumView = AlbumSummary & { photos: AlbumPhotoView[] };
+export type AlbumView = AlbumSummary & {
+  photos: AlbumPhotoView[];
+  /** Lot R9f : le nombre de photos de cet album avec au moins une identification visible de moi (« N sur M photos identifiées ») ; absent si zéro. */
+  tagsCount?: number;
+};
 
 /** `GET /me/albums`, `GET /events/:id/albums`, `GET /media/:id/albums`. */
 export type AlbumsList = { items: AlbumSummary[]; nextCursor: string | null };

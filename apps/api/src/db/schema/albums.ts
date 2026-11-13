@@ -3,7 +3,7 @@
 // Le floutage de plaque est **proposé** photo par photo (D28) : l'état de chaque photo est gardé (`plate_state`,
 // `plate_rects`) pour qu'un repartage en story ou une reprise au journal puisse flouter la copie ; ces champs ne sont
 // jamais servis à un autre que le média (liste blanche des vues).
-import { albumPlateStates, albumStatuses } from "@orasso/shared";
+import { albumPlateStates, albumStatuses, albumTaggers, albumTagRemovedReasons, albumTagTargets } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -24,9 +24,14 @@ import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { events } from "./events";
 import { mediaContents, mediaProfiles } from "./media";
+import { vehicles } from "./vehicles";
 
 export const albumStatusEnum = pgEnum("album_status", albumStatuses);
 export const albumPlateStateEnum = pgEnum("album_plate_state", albumPlateStates);
+/** Lot R9f : ce qu'une identification désigne (une voiture, ou une personne par son pseudo), qui l'a posée, pourquoi elle est retirée. */
+export const albumTagTargetEnum = pgEnum("album_tag_target", albumTagTargets);
+export const albumTaggerEnum = pgEnum("album_tagger", albumTaggers);
+export const albumTagRemovedReasonEnum = pgEnum("album_tag_removed_reason", albumTagRemovedReasons);
 
 /** Cadre de plaque, en fractions de la photo (même forme que `PlateRect`). */
 export type StoredPlateRect = { x: number; y: number; w: number; h: number; angle?: number };
@@ -133,3 +138,47 @@ export const legacyFileBlocks = pgTable("legacy_file_blocks", {
   key: text("key").primaryKey(),
   createdAt: tstz("created_at").notNull().defaultNow(),
 });
+
+/**
+ * Identification sur une photo d'album (lot R9f) : une voiture du plateau (`vehicle`) ou une personne par son pseudo (`user`).
+ * `user_id` est le propriétaire de la voiture **au moment de l'identification**, ou la personne identifiée par son pseudo.
+ *
+ * **Jamais supprimée** par un retrait : la ligne reste (`removed_at`, `removed_by`, `removed_reason`) et les index uniques n'ont
+ * **aucun filtre sur `removed_at`** : une identification retirée par l'intéressé (`not_mine`, `withdraw`) ne peut pas être reposée par
+ * un autre (invariant) ; elle peut l'être par l'intéressé lui-même (la ligne est réactivée), ou, retirée par celui qui l'avait posée
+ * (`tagger`), par un poseur. `notified_at` : posé quand la notification de l'album est partie (une par album et par personne).
+ *
+ * L'unicité d'une personne ne vaut que pour `target_kind = 'user'` : un propriétaire peut avoir deux voitures sur la même photo
+ * (deux lignes `vehicle` de même `user_id`).
+ */
+export const albumPhotoTags = pgTable(
+  "album_photo_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    photoId: uuid("photo_id")
+      .notNull()
+      .references(() => eventAlbumPhotos.id, { onDelete: "cascade" }),
+    targetKind: albumTagTargetEnum("target_kind").notNull(),
+    vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    taggedBy: text("tagged_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    taggedAs: albumTaggerEnum("tagged_as").notNull(),
+    removedAt: tstz("removed_at"),
+    removedBy: text("removed_by").references(() => user.id, { onDelete: "set null" }),
+    removedReason: albumTagRemovedReasonEnum("removed_reason"),
+    notifiedAt: tstz("notified_at"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("album_photo_tags_vehicle_key").on(t.photoId, t.vehicleId),
+    uniqueIndex("album_photo_tags_user_key").on(t.photoId, t.userId).where(sql`${t.targetKind} = 'user'`),
+    index("album_photo_tags_user_idx").on(t.userId, t.removedAt),
+    index("album_photo_tags_photo_idx").on(t.photoId),
+    check("album_photo_tags_target_check", sql`(${t.targetKind} = 'vehicle') = (${t.vehicleId} is not null)`),
+    check("album_photo_tags_removed_check", sql`(${t.removedAt} is null) = (${t.removedReason} is null)`),
+  ],
+);

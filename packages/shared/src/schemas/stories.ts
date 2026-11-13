@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { StoryAudience, StoryPersona, StoryRing, StoryTagKind } from "../rules/audience";
 import { STORY_CAPTION_MAX, STORY_PLACE_MAX, STORY_TAGS_MAX, storyAudiences, storyPersonas } from "../rules/audience";
 import { STORY_OFFSET_MAX, STORY_SCALE_MAX, STORY_SCALE_MIN } from "../rules/storyFrame";
+import type { StoryCredit } from "./albumTags";
 import { MAX_PLATE_RECTS, plateRectSchema } from "./vehicle";
 
 export const storyMediaKinds = ["photo", "video"] as const;
@@ -230,6 +231,11 @@ export type StoryView = {
   crewName: string | null;
   /** Lot R7h : le crédit d'une copie = l'identité publique de l'originale (personne, structure ou pro), avec son lien. */
   sharedFrom: StoryTagView | null;
+  /**
+   * Lot R9f : une story reprise d'une photo d'album (« En story ») porte le crédit du média (« Photos : <média> »), **non retirable** ;
+   * `null` sinon. Toujours servi par l'API (optionnel dans le type : une copie plus ancienne ne l'a pas).
+   */
+  credit?: StoryCredit | null;
   /**
    * Lot R7h : ce que je peux faire d'une story où je suis identifié (moi, ou une structure / un pro que je gère) ;
    * `null` si je ne suis pas identifié, pour ma propre story et pour une copie. Décidé par l'API, jamais par l'écran.
