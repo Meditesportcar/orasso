@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { albumTagLabels as L } from "../labels/albumTags.fr";
+import type { Taggable } from "../schemas/albumTags";
 import {
   albumViewerRoleOf,
   appendTaggablePage,
   createOperationGate,
-  createPagedReads,
+  createTaggablePicker,
   mentionsSummary,
   myPhotoTaggedBy,
   reviewButtonsOf,
@@ -151,33 +152,82 @@ describe("createOperationGate", () => {
   });
 });
 
-describe("createPagedReads (« Voir plus » pendant une nouvelle lecture de liste)", () => {
-  const list = (from: number, n: number, next: number | null) => ({ vehicles: Array.from({ length: n }, (_, i) => ({ vehicleId: `v${from + i}` })), people: [], nextCursor: next }) as never;
-  it("la nouvelle puce lue pendant « Voir plus » : la liste fraîche est gardée, la page de l'ancien curseur est jetée", () => {
-    const reads = createPagedReads();
-    let shown = list(0, 60, 60);
-    const oldList = reads.startList();
-    const page = reads.startPage();
-    const fresh = reads.startList();
-    // La liste de la nouvelle puce répond d'abord : appliquée.
-    expect(fresh()).toBe(true);
-    shown = list(100, 5, null);
-    // La page de l'ancien filtre répond ensuite : jetée, jamais ajoutée au nouveau résultat.
-    expect(page()).toBe(false);
-    expect(oldList()).toBe(false);
-    expect((shown as { vehicles: unknown[] }).vehicles).toHaveLength(5);
+describe("createTaggablePicker (liste + « Voir plus »)", () => {
+  const taggable = (from: number, n: number, nextCursor: number | null) =>
+    ({
+      role: "media",
+      vehicles: Array.from({ length: n }, (_, i) => ({ vehicleId: `v${from + i}`, label: `V${from + i}` })),
+      people: [],
+      categories: [],
+      fallback: false,
+      nextCursor,
+    }) as never as Taggable;
+  const ids = (t: Taggable | null) => t?.vehicles.map((v) => v.vehicleId) ?? [];
+
+  it("« Coupé » puis « Voir plus » : la liste fraîche est gardée, la page de l'ancien filtre est jetée", () => {
+    const ctrl = createTaggablePicker();
+    const all = ctrl.startList();
+    ctrl.applyList(all, {}, taggable(0, 3, 3));
+    const more = ctrl.startMore();
+    expect(more?.query).toEqual({});
+    expect(more?.cursor).toBe(3);
+    // La puce « Coupé » démarre pendant la page : la liste fraîche répond d'abord, la page de « Toutes » arrive ensuite.
+    const coupe = ctrl.startList();
+    expect(ctrl.state().canMore).toBe(false);
+    ctrl.applyList(coupe, { category: "coupe" }, taggable(100, 2, null));
+    expect(ctrl.applyMore(more?.live as () => boolean, taggable(3, 3, null))).toBeNull();
+    expect(ids(ctrl.state().data)).toEqual(["v100", "v101"]);
+    expect(ctrl.state().loadingMore).toBe(false);
   });
-  it("une page ne périme pas la lecture de liste ; seule la dernière page démarrée est appliquée", () => {
-    const reads = createPagedReads();
-    const l = reads.startList();
-    const p1 = reads.startPage();
-    const p2 = reads.startPage();
-    expect(l()).toBe(true);
-    expect(p1()).toBe(false);
-    expect(p2()).toBe(true);
-    reads.invalidate();
-    expect(p2()).toBe(false);
-    expect(l()).toBe(false);
+
+  it("« Voir plus » pendant une lecture de liste est refusé ; la page lit avec les paramètres du résultat montré", () => {
+    const ctrl = createTaggablePicker();
+    ctrl.applyList(ctrl.startList(), { q: "ab", category: "gt" }, taggable(0, 3, 3));
+    ctrl.startList();
+    expect(ctrl.startMore()).toBeNull();
+  });
+
+  it("pages en ordre inverse : seule la dernière page démarrée s'applique, une seule à la fois", () => {
+    const ctrl = createTaggablePicker();
+    ctrl.applyList(ctrl.startList(), { q: "ab" }, taggable(0, 3, 3));
+    const first = ctrl.startMore();
+    expect(first?.query).toEqual({ q: "ab" });
+    // Une seconde page ne part pas tant que la première est en route.
+    expect(ctrl.startMore()).toBeNull();
+    const state = ctrl.applyMore(first?.live as () => boolean, taggable(3, 3, 6));
+    expect(ids(state?.data ?? null)).toEqual(["v0", "v1", "v2", "v3", "v4", "v5"]);
+    expect(state?.data?.nextCursor).toBe(6);
+    // Réouverture pendant une page : elle est périmée, jamais ajoutée au résultat suivant.
+    const second = ctrl.startMore();
+    ctrl.reset();
+    ctrl.applyList(ctrl.startList(), {}, taggable(50, 1, null));
+    expect(ctrl.applyMore(second?.live as () => boolean, taggable(6, 3, null))).toBeNull();
+    expect(ids(ctrl.state().data)).toEqual(["v50"]);
+  });
+
+  it("échec de la lecture d'un autre filtre : « Voir plus » est masqué, jamais lu avec l'ancien curseur", () => {
+    const ctrl = createTaggablePicker();
+    ctrl.applyList(ctrl.startList(), {}, taggable(0, 3, 3));
+    expect(ctrl.state().hasMore).toBe(true);
+    const coupe = ctrl.startList();
+    const failed = ctrl.failList(coupe, "Pas de connexion");
+    expect(failed?.loadError).toBe("Pas de connexion");
+    expect(failed?.hasMore).toBe(false);
+    expect(ctrl.startMore()).toBeNull();
+    // Le filtre suivant se lit : l'erreur disparaît, « Voir plus » revient avec son résultat.
+    ctrl.applyList(ctrl.startList(), { category: "gt" }, taggable(10, 3, 13));
+    expect(ctrl.state().loadError).toBeNull();
+    expect(ctrl.startMore()?.query).toEqual({ category: "gt" });
+  });
+
+  it("fermeture puis réouverture : plus rien du plateau précédent, les réponses en route sont jetées", () => {
+    const ctrl = createTaggablePicker();
+    const l = ctrl.startList();
+    ctrl.reset();
+    expect(ctrl.applyList(l, {}, taggable(0, 3, null))).toBeNull();
+    expect(ctrl.state().data).toBeNull();
+    const after = ctrl.startList();
+    expect(ctrl.applyList(after, {}, taggable(1, 1, null))?.data?.vehicles).toHaveLength(1);
   });
 });
 

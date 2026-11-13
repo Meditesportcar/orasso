@@ -6683,6 +6683,11 @@ Aucune dépendance native. Aucune migration. Une route d'API ajoutée (« Contac
 - **« Voir plus »** : deux compteurs (`createPagedReads`, `packages/shared`) : la lecture de liste (recherche, puce, album, réouverture) et les pages. Une page ne périme plus la lecture de liste ; une nouvelle lecture de liste périme les pages en route ; « Voir plus » est désactivé pendant une lecture de liste (appli et site).
 - **Relecture après un retrait** : appli : `view.reload()` (garde de compte et ordre des lectures de `useApi`), sortie sur 404 seulement si l'écran est monté et a le focus (sinon à son retour) ; site : une seule lecture de `my-photos` (la liste lue sert, plus de `revalidate`), aucune navigation si la page a été quittée.
 
+#### Lot R9f, partie 2, tour 4 (14/11/2026) : corrections de la relecture Opus du tour 3
+- **Site, relectures de « Tes photos » ordonnées** : un ticket (`createOperationGate`) avant chaque relecture ; `setFresh`, `setRemoved` et `navigate` seulement si ce ticket est encore le dernier (une réponse plus ancienne ne vide plus les retraits). `key={albumId}` dans la route du site (et `key={id}` dans la route de l'appli) : passer d'un album à l'autre remonte l'écran.
+- **Plateau : un contrôleur partagé** `createTaggablePicker` (`packages/shared`, remplace `createPagedReads` du tour 3) utilisé par les deux `TagPicker` : il applique les réponses, décide de « Voir plus » et de son état. La page suivante se lit avec les paramètres et le curseur de la lecture qui a produit le résultat montré ; « Voir plus » est masqué tant que la lecture d'un autre filtre a échoué.
+- Le test du tour 3 (liste fraîche réaffectée à la main, `toHaveLength(5)`) est remplacé par des tests du contrôleur : « Coupé » puis « Voir plus », pages en ordre inverse, échec de liste puis « Voir plus », fermeture puis réouverture.
+
 #### À revoir avec Damien (lot R9f, partie 2)
 - **Contacter un média** : voir « À faire » ci-dessus (conversation de page).
 - **La liste des identifiés dans une feuille** et non sous la photo : la visionneuse de R9e/R9g est partagée ; à l'aligner sur la maquette à la fusion de R9g si Damien y tient.

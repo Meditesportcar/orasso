@@ -109,25 +109,95 @@ export function createOperationGate() {
   };
 }
 
+/** Les paramètres d'une lecture du plateau (recherche, puce de catégorie). */
+export type PickerQuery = { q?: string; category?: string };
+
+export type TaggablePickerState = {
+  data: Taggable | null;
+  /** Le message de la dernière lecture de liste, si elle a échoué (effacé au départ de la suivante). */
+  loadError: string | null;
+  listLoading: boolean;
+  loadingMore: boolean;
+  /** « Voir plus » s'affiche : une page reste à lire pour le résultat montré, et aucune lecture d'un autre filtre n'a échoué. */
+  hasMore: boolean;
+  /** « Voir plus » est actif : aucune lecture en cours. */
+  canMore: boolean;
+};
+
 /**
- * Les lectures du plateau : la lecture de liste (recherche, puce, album, réouverture) et les pages « Voir plus » ont chacune leur
- * compteur. Une nouvelle lecture de liste périme les pages en route ; une page ne périme jamais la lecture de liste, et seule la
- * dernière page démarrée, lancée sur la même liste, est appliquée.
+ * Le plateau à choisir, côté logique : la lecture de liste (recherche, puce, album, réouverture) et les pages « Voir plus » ont chacune
+ * leur compteur. Une nouvelle lecture de liste périme les pages en route ; une page ne périme jamais la lecture de liste ; seule la
+ * dernière page, lancée sur la même liste, s'applique. La page suivante se lit avec les paramètres de la lecture qui a produit le résultat
+ * montré (jamais ceux d'un filtre dont la lecture est en cours ou a échoué). Les deux écrans (appli, site) l'utilisent tel quel.
+ * Chaque méthode d'application rend le nouvel état, ou `null` si la réponse est périmée (à jeter).
  */
-export function createPagedReads() {
+export function createTaggablePicker() {
   let list = 0;
   let page = 0;
+  let data: Taggable | null = null;
+  let dataQuery: PickerQuery = {};
+  let loadError: string | null = null;
+  let listLoading = false;
+  let loadingMore = false;
+  const state = (): TaggablePickerState => {
+    const hasMore = data !== null && data.nextCursor !== null && loadError === null;
+    return { data, loadError, listLoading, loadingMore, hasMore, canMore: hasMore && !listLoading && !loadingMore };
+  };
   return {
+    state,
+    /** Départ d'une lecture de liste : périme les pages en route ; le résultat déjà montré reste jusqu'à la réponse. */
     startList(): () => boolean {
       const id = ++list;
       page += 1;
+      loadError = null;
+      loadingMore = false;
+      listLoading = true;
       return () => list === id;
     },
-    startPage(): () => boolean {
+    applyList(live: () => boolean, query: PickerQuery, res: Taggable): TaggablePickerState | null {
+      if (!live()) return null;
+      data = res;
+      dataQuery = query;
+      listLoading = false;
+      return state();
+    },
+    failList(live: () => boolean, message: string): TaggablePickerState | null {
+      if (!live()) return null;
+      loadError = message;
+      listLoading = false;
+      return state();
+    },
+    /** « Voir plus » : `null` s'il n'est pas permis ; sinon les paramètres et le curseur de la lecture qui a produit le résultat montré. */
+    startMore(): { query: PickerQuery; cursor: number; live: () => boolean } | null {
+      if (!data || data.nextCursor === null || !state().canMore) return null;
+      loadingMore = true;
       const l = list;
       const p = ++page;
-      return () => list === l && page === p;
+      return { query: dataQuery, cursor: data.nextCursor, live: () => list === l && page === p };
     },
+    applyMore(live: () => boolean, res: Taggable): TaggablePickerState | null {
+      if (!live()) return null;
+      if (data) data = appendTaggablePage(data, res);
+      loadingMore = false;
+      return state();
+    },
+    failMore(live: () => boolean): TaggablePickerState | null {
+      if (!live()) return null;
+      loadingMore = false;
+      return state();
+    },
+    /** Fermeture (ou départ de l'écran) : tout est vidé, aucune réponse en route ne revient. */
+    reset(): TaggablePickerState {
+      list += 1;
+      page += 1;
+      data = null;
+      dataQuery = {};
+      loadError = null;
+      listLoading = false;
+      loadingMore = false;
+      return state();
+    },
+    /** Effet qui se termine (dépendances changées, démontage) : les réponses en route sont jetées, l'état est gardé. */
     invalidate() {
       list += 1;
       page += 1;

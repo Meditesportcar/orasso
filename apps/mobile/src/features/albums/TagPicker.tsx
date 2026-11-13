@@ -7,11 +7,9 @@ import { Button, Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme }
 import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
-  appendTaggablePage,
-  createPagedReads,
+  createTaggablePicker,
   albumTagLabels as L,
   showPeopleTab,
-  type Taggable,
   type TaggablePerson,
   type TaggableVehicle,
 } from "@orasso/shared";
@@ -57,26 +55,21 @@ export function TagPicker({
   const [text, setText] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [tab, setTab] = useState<"cars" | "people">("cars");
-  const [data, setData] = useState<Taggable | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const q = useDebounced(text.trim());
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Une lecture de liste est en route : « Voir plus » est désactivé (il porterait un curseur de l'ancien résultat).
-  const [listLoading, setListLoading] = useState(false);
-  const gate = useRef(createPagedReads());
+  // La logique liste + pages (résultat montré, « Voir plus », lectures périmées) est partagée avec le site.
+  const picker = useRef(createTaggablePicker());
+  const [view, setView] = useState(picker.current.state());
+  const { data, loadError, listLoading, loadingMore } = view;
   // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
   const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
   // Une feuille fermée vide tout : recherche, puce, plateau lu et opérations en cours (aucune page lue ne revient à la réouverture).
   useEffect(() => {
     if (visible) return;
-    gate.current.invalidate();
-    setLoadingMore(false);
-    setListLoading(false);
-    setData(null);
+    setView(picker.current.reset());
     setText("");
     setCategory(null);
     setTab("cars");
@@ -87,22 +80,20 @@ export function TagPicker({
   useEffect(() => {
     if (!visible) return;
     // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
-    const current = gate.current.startList();
-    setLoadError(null);
-    setLoadingMore(false);
-    setListLoading(true);
+    const current = picker.current.startList();
+    setView(picker.current.state());
+    const query = { q: q || undefined, category: category ?? undefined };
     api
-      .albumTaggable(albumId, { q: q || undefined, category: category ?? undefined })
+      .albumTaggable(albumId, query)
       .then((res) => {
-        if (current()) setData(res);
+        const next = picker.current.applyList(current, query, res);
+        if (next) setView(next);
       })
       .catch((e) => {
-        if (current()) setLoadError(errorMessage(e));
-      })
-      .finally(() => {
-        if (current()) setListLoading(false);
+        const next = picker.current.failList(current, errorMessage(e));
+        if (next) setView(next);
       });
-    return () => gate.current.invalidate();
+    return () => picker.current.invalidate();
   }, [visible, albumId, q, category]);
 
   useEffect(() => {
@@ -118,22 +109,21 @@ export function TagPicker({
 
   /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
   async function more() {
-    if (!data || data.nextCursor === null || loadingMore || listLoading) return;
-    setLoadingMore(true);
-    // Une page n'arrête jamais la lecture de liste ; une nouvelle lecture de liste la périme.
-    const current = gate.current.startPage();
+    // Les paramètres et le curseur sont ceux de la lecture qui a produit le résultat montré (pas ceux de la recherche en cours de frappe).
+    const start = picker.current.startMore();
+    if (!start) return;
+    setView(picker.current.state());
     try {
-      const next = await api.albumTaggable(albumId, {
-        q: q || undefined,
-        category: category ?? undefined,
-        cursor: data.nextCursor,
-      });
+      const next = await api.albumTaggable(albumId, { ...start.query, cursor: start.cursor });
       // Recherche, puce, album ou réouverture changés pendant le chargement : la page est jetée.
-      if (current()) setData((cur) => (cur ? appendTaggablePage(cur, next) : next));
+      const applied = picker.current.applyMore(start.live, next);
+      if (applied) setView(applied);
     } catch (e) {
-      if (current()) setError(errorMessage(e));
-    } finally {
-      if (current()) setLoadingMore(false);
+      const failed = picker.current.failMore(start.live);
+      if (failed) {
+        setView(failed);
+        setError(errorMessage(e));
+      }
     }
   }
 
@@ -229,7 +219,7 @@ export function TagPicker({
                 />
               ))}
             </View>
-            {data.nextCursor !== null ? (
+            {view.hasMore ? (
               <Button
                 variant="secondary"
                 icon="down"

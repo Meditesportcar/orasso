@@ -4,7 +4,14 @@
 // principal**. « Enregistrer » télécharge le fichier crédité (inerte, avec sa raison, si le média ne l'autorise pas) ; « En story » reprend
 // la photo avec le crédit du média, qui ne se retire pas. Aucune règle ici : tout vient de l'API.
 import { Button, Chip, Icon } from "@orasso/design-system/web";
-import { albumLabels, albumTagLabels as L, type MyPhoto, type MyPhotosView, myPhotoTaggedBy } from "@orasso/shared";
+import {
+  albumLabels,
+  createOperationGate,
+  albumTagLabels as L,
+  type MyPhoto,
+  type MyPhotosView,
+  myPhotoTaggedBy,
+} from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 
@@ -13,13 +20,24 @@ import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
 
-export function MyPhotos({ view: loaded, albumId, myUserId }: { view: MyPhotosView; albumId: string; myUserId: string }) {
+export function MyPhotos({
+  view: loaded,
+  albumId,
+  myUserId,
+}: {
+  view: MyPhotosView;
+  albumId: string;
+  myUserId: string;
+}) {
   // La liste lue par la relecture d'après un retrait prime sur celle du chargement de la page, jusqu'au prochain chargement.
   const [fresh, setFresh] = useState<MyPhotosView | null>(null);
   const view = fresh ?? loaded;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: un nouveau chargement de la page (`loaded`) remplace la liste relue
   useEffect(() => setFresh(null), [loaded]);
   // Page quittée (retour, autre lien) pendant la relecture : ni navigation ni mise à jour.
   const alive = useRef(true);
+  // Relectures ordonnées : seule la dernière lancée s'applique (une réponse plus ancienne n'écrase ni la liste fraîche ni les retraits).
+  const reads = useRef(createOperationGate());
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -51,8 +69,9 @@ export function MyPhotos({ view: loaded, albumId, myUserId }: { view: MyPhotosVi
     setRemoved((cur) => new Set([...cur, photo.tagId]));
     // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album ; sinon la liste est relue.
     // Une seule lecture de `my-photos` : la relecture elle-même (pas de lecture puis `revalidate`) ; page quittée entre-temps : rien.
+    const latest = reads.current.start();
     const next = await apiFetch(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
-    if (!alive.current) return;
+    if (!alive.current || !latest()) return;
     if (!next.ok && next.status === 404) navigate(`/albums/${albumId}`);
     else if (next.ok) {
       setFresh(next.data as MyPhotosView);

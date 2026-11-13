@@ -7,8 +7,7 @@ import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
   ALBUM_TAG_SEARCH_MIN,
   type AlbumTagCreate,
-  appendTaggablePage,
-  createPagedReads,
+  createTaggablePicker,
   albumTagLabels as L,
   showPeopleTab,
   type Taggable,
@@ -41,15 +40,13 @@ export function TagPicker({
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [tab, setTab] = useState<"cars" | "people">("cars");
-  const [data, setData] = useState<Taggable | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
-  const [loadingMore, setLoadingMore] = useState(false);
-  const gate = useRef(createPagedReads());
-  // Une lecture de liste est en route : « Voir plus » est désactivé (il porterait un curseur de l'ancien résultat).
-  const [listLoading, setListLoading] = useState(false);
+  // La logique liste + pages (résultat montré, « Voir plus », lectures périmées) est partagée avec l'appli.
+  const picker = useRef(createTaggablePicker());
+  const [view, setView] = useState(picker.current.state());
+  const { data, loadError, listLoading, loadingMore } = view;
   // L'onglet « Personnes » : dès deux caractères, ou dès que l'API rend « moi » sans recherche (identifiable par mon seul pseudo).
   const peopleTab = showPeopleTab(canSearchPeople, data?.people.length ?? 0);
 
@@ -64,10 +61,7 @@ export function TagPicker({
   // Une fenêtre fermée vide tout : recherche, puce, plateau lu et opérations en cours (aucune page lue ne revient à la réouverture).
   useEffect(() => {
     if (open) return;
-    gate.current.invalidate();
-    setLoadingMore(false);
-    setListLoading(false);
-    setData(null);
+    setView(picker.current.reset());
     setText("");
     setQ("");
     setCategory(null);
@@ -84,22 +78,20 @@ export function TagPicker({
 
   useEffect(() => {
     if (!open) return;
-    // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
-    const current = gate.current.startList();
+    const current = picker.current.startList();
+    const query = { q: q || undefined, category: category || undefined };
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
     const suffix = params.size ? `?${params}` : "";
-    setLoadError(null);
-    setLoadingMore(false);
-    setListLoading(true);
+    setView(picker.current.state());
     void apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable${suffix}`).then((res) => {
-      if (!current()) return;
-      setListLoading(false);
-      if (res.ok) setData(res.data);
-      else setLoadError(res.error.message);
+      const next = res.ok
+        ? picker.current.applyList(current, query, res.data)
+        : picker.current.failList(current, res.error.message);
+      if (next) setView(next);
     });
-    return () => gate.current.invalidate();
+    return () => picker.current.invalidate();
   }, [open, albumId, q, category]);
 
   useEffect(() => {
@@ -115,19 +107,19 @@ export function TagPicker({
 
   /** « Voir plus » : la page suivante du plateau (60 voitures par page), ajoutée à celles déjà lues. */
   async function more() {
-    if (!data || data.nextCursor === null || loadingMore || listLoading) return;
-    setLoadingMore(true);
-    // Une page n'arrête jamais la lecture de liste ; une nouvelle lecture de liste la périme.
-    const current = gate.current.startPage();
-    const params = new URLSearchParams({ cursor: String(data.nextCursor) });
-    if (q) params.set("q", q);
-    if (category) params.set("category", category);
+    // Les paramètres et le curseur sont ceux de la lecture qui a produit le résultat montré (pas ceux de la recherche en cours de frappe).
+    const start = picker.current.startMore();
+    if (!start) return;
+    setView(picker.current.state());
+    const params = new URLSearchParams({ cursor: String(start.cursor) });
+    if (start.query.q) params.set("q", start.query.q);
+    if (start.query.category) params.set("category", start.query.category);
     const res = await apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable?${params}`);
     // Recherche, puce, album ou réouverture changés pendant le chargement : la page est jetée.
-    if (!current()) return;
-    setLoadingMore(false);
-    if (res.ok) setData((cur) => (cur ? appendTaggablePage(cur, res.data) : res.data));
-    else setError(res.error.message);
+    const next = res.ok ? picker.current.applyMore(start.live, res.data) : picker.current.failMore(start.live);
+    if (!next) return;
+    setView(next);
+    if (!res.ok) setError(res.error.message);
   }
 
   async function pick(key: string, result: PickResult) {
@@ -247,7 +239,7 @@ export function TagPicker({
                 ))}
               </ul>
             )}
-            {data.nextCursor !== null && (
+            {view.hasMore && (
               <Button
                 type="button"
                 variant="secondary"

@@ -28,5 +28,12 @@ export default function MesPhotos({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  return <MyPhotos view={loaderData.view} albumId={loaderData.albumId} myUserId={loaderData.myUserId} />;
+  return (
+    <MyPhotos
+      key={loaderData.albumId}
+      view={loaderData.view}
+      albumId={loaderData.albumId}
+      myUserId={loaderData.myUserId}
+    />
+  );
 }

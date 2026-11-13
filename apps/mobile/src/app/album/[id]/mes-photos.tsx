@@ -5,5 +5,5 @@ import { MyPhotosScreen } from "@/features/albums/MyPhotosScreen";
 
 export default function MyPhotosRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  return <MyPhotosScreen id={String(id)} />;
+  return <MyPhotosScreen key={String(id)} id={String(id)} />;
 }
