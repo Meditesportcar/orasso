@@ -55,7 +55,14 @@ import { askedPageUnavailable, storyAuthorFor, storyHeaderPlain } from "./author
 import { Capture } from "./Capture";
 import { commercialText, useCommercialLine } from "./CommercialLine";
 import { Details } from "./Details";
-import { audienceLost, audienceOption, type DetailsState, initialDetails, settleAudience } from "./detailsModel";
+import {
+  audienceLost,
+  audienceOption,
+  type DetailsState,
+  eventStickerFor,
+  initialDetails,
+  settleAudience,
+} from "./detailsModel";
 import { Fit } from "./Fit";
 import {
   newStoryDraft,
@@ -141,10 +148,19 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // jamais remplacée en silence par la casquette active ni par « Moi ».
   const frozen = useRef<{ author: StoryAuthor; key: string; lostAtOpen: boolean; account: string } | null>(null);
   if (frozen.current === null && me) {
+    // Page demandée perdue à l'ouverture : l'auteur reste celui demandé (sa clé), jamais la casquette active : ni en-tête, ni lien
+    // « Publication » vers une autre casquette ; l'auteur affiché est la personne (seul choix possible : « Publier en mon nom »).
+    const lostAtOpen = askedPageUnavailable(auteur, choice);
     frozen.current = {
-      author: resolved,
-      key: choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me"),
-      lostAtOpen: askedPageUnavailable(auteur, choice),
+      author: lostAtOpen ? { persona: "fan" } : resolved,
+      key: lostAtOpen
+        ? (auteur?.trim() ?? "me")
+        : choice?.kind === "me"
+          ? "me"
+          : choice?.kind === "page"
+            ? choice.key
+            : (actor ?? "me"),
+      lostAtOpen,
       account: me.user.id,
     };
   }
@@ -215,6 +231,12 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // Le public choisi n'existe plus (crew quitté ou supprimé, casquette changée) : il reste affiché comme invalide et rien
   // ne part avant un nouveau choix (jamais de bascule d'office vers « Mes abonnés »).
   const lost = audienceLost(options, details.audienceKey);
+  // L'auteur change (« Publier en mon nom » : une page publique devient la personne, d'un compte privé) : un événement collé que
+  // l'autocollant n'autorise plus quitte le corps (l'API le refuserait).
+  const stickerAllowed = eventStickerFor(author, visibility, chosen?.audience ?? "followers").allowed;
+  useEffect(() => {
+    if (!stickerAllowed) setDetails((d) => (d.eventId === null ? d : { ...d, eventId: null }));
+  }, [stickerAllowed]);
 
   const access: "unknown" | "granted" | "denied" | "unavailable" =
     Platform.OS === "web"
@@ -688,7 +710,13 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   return (
     <FlowScreen
       title={L.title}
-      facts={storyHeaderPlain(author, persona.kind) ? L.subtitle : casquettesLabels.publishAs(authorName)}
+      facts={
+        frozen.current?.lostAtOpen && !asPerson
+          ? undefined
+          : storyHeaderPlain(author, persona.kind)
+            ? L.subtitle
+            : casquettesLabels.publishAs(authorName)
+      }
       onClose={() => void leave()}
       footer={
         primary ? (

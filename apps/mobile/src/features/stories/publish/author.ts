@@ -61,10 +61,5 @@ export const storyPublishHref = (actor: string | null, activeKind: string): stri
 export const storyHeaderPlain = (author: StoryAuthor, activeKind: string): boolean =>
   author.persona === "fan" && (activeKind === "fan" || activeKind === "visitor" || activeKind === "admin");
 
-/**
- * `?auteur=` demande une page (`s:`, `p:`, `v:`, `m:`) que le compte ne tient pas (ou plus) : l'écran ne la remplace pas en silence
- * par la casquette active ni par la personne, il bloque l'envoi avec un choix explicite (« Publier en mon nom »). `me` et l'absence
- * de paramètre ne sont jamais « indisponibles ».
- */
-export const askedPageUnavailable = (auteur: string | null | undefined, choice: StoryAuthorChoice | null): boolean =>
-  choice === null && /^[spvm]:./.test(auteur?.trim() ?? "");
+/** Une page demandée par `?auteur=` que le compte ne tient pas (règle partagée avec le site). */
+export { askedPageUnavailable } from "@orasso/shared";

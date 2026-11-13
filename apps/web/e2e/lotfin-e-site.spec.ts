@@ -302,3 +302,30 @@ test.describe("partie B1", () => {
     });
   });
 });
+
+test.describe("partie B1, tour 1 : page demandée que le compte ne tient pas", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("site : ?auteur= d'une page non tenue : message et choix explicite, aucun repli sur « Moi »", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await setTheme(page, "beton");
+    await loginInBrowser(
+      page,
+      "damien@orasso.local",
+      undefined,
+      "/app/story/publier?auteur=s%3A11111111-1111-4111-8111-111111111111",
+    );
+    await expect(page.getByTestId("story-author-lost")).toBeVisible();
+    await expect(page.getByTestId("story-author-lost")).toContainText("Tu n'as plus accès à cette page");
+    // Aucun formulaire de publication : la photo ne peut pas partir.
+    await expect(page.getByTestId("story-choose")).toHaveCount(0);
+    await expect(page.getByTestId("story-publish")).toHaveCount(0);
+    await shot(page, "story-page-perdue-390");
+    // Le choix explicite ouvre l'écran de la personne.
+    await page.getByTestId("story-author-lost-me").click();
+    await page.waitForURL(/auteur=me/);
+    await expect(page.getByTestId("story-author-lost")).toHaveCount(0);
+  });
+});

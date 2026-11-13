@@ -178,11 +178,40 @@ test("une page demandée que le compte ne tient pas : l'envoi est bloqué, « Pu
   await expect(page.getByTestId("story-author-lost")).toBeVisible();
   await expect(page.getByTestId("story-author-lost")).toContainText("Tu n'as plus accès à cette page");
   await expect(page.getByTestId("story-plate-validate")).toBeDisabled();
+  // Aucune autre casquette n'est proposée : pas de « en tant que … » (l'en-tête est neutre).
+  await expect(page.getByText(/en tant que/i)).toHaveCount(0);
   await shot(page, "03-page-perdue-beton-384-x1");
   // Le choix explicite : la story est alors celle de la personne.
   await page.getByTestId("story-author-lost-me").click();
   await expect(page.getByTestId("story-author-lost")).toHaveCount(0);
   await validatePlate(page);
   expect(posts, "rien n'est parti avant le choix").toEqual([]);
+  await ctx.close();
+});
+
+test("page perdue à l'ouverture sous une casquette active : l'écran ne garde pas la casquette active", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  // Damien porte la casquette de MéditeSportCar (Profil → « Changer de casquette »).
+  await page.goto("/moi");
+  await afterOpening(page);
+  await page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).first().click();
+  await page.waitForURL((u) => !/\/(moi|profil)(\?|$)/.test(u.pathname), { timeout: 30_000 });
+  await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
+  const LOST = "s%3A11111111-1111-4111-8111-111111111111";
+  await page.goto(`/story/publier?auteur=${LOST}`);
+  await afterOpening(page);
+  await expect(page.getByTestId("story-author-lost")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("story-author-lost")).toContainText("Tu n'as plus accès à cette page");
+  // Ni « en tant que MéditeSportCar » en en-tête, ni lien « Publication » vers la casquette active.
+  await expect(page.getByText(/en tant que/i)).toHaveCount(0);
+  await expect(page.getByText("MéditeSportCar")).toHaveCount(0);
+  await page.getByTestId("story-publish-kind").getByText("Publication", { exact: true }).click();
+  await page.waitForURL(/\/fil\/publier/, { timeout: 30_000 });
+  const asked = new URL(page.url()).searchParams.get("auteur");
+  expect(asked, "le lien garde la page demandée").toBe(decodeURIComponent(LOST));
+  await shot(page, "04-page-perdue-casquette-active-beton-384-x1");
   await ctx.close();
 });

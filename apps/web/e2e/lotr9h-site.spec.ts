@@ -175,11 +175,17 @@ for (const theme of ["beton", "sable"] as const) {
   });
 }
 
-test("« Publier » et la story : une clé inconnue est ignorée, la personne publie en son nom", async ({ browser }) => {
+test("« Publier » et la story : `me` et une clé mal formée donnent la personne ; une page non tenue est bloquée (jamais « Moi »)", async ({
+  browser,
+}) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
-  for (const auteur of ["s%3A00000000-0000-0000-0000-000000000000", "me", "zz%3Ax"]) {
+  // Petit lot de fin, B1 : une page (`s:`, `p:`, `v:`, `m:`) que le compte ne tient pas n'est plus remplacée par « Moi ».
+  await open(page, "sarah@orasso.local", "/app/story/publier?auteur=s%3A00000000-0000-0000-0000-000000000000");
+  await expect(page.getByTestId("story-author-lost")).toBeVisible();
+  await expect(page.getByTestId("story-file")).toHaveCount(0);
+  for (const auteur of ["me", "zz%3Ax"]) {
     await open(page, "sarah@orasso.local", `/app/story/publier?auteur=${auteur}`);
     await page.getByTestId("story-file").setInputFiles(landscape());
     await expect(page.getByTestId("story-fit")).toBeVisible({ timeout: 30_000 });
