@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  actorKeyOfPublishAuthor,
   authorFichePath,
   canHideFrom,
   eventTargetKey,
@@ -164,6 +165,42 @@ describe("publishStartChoice : « Publier pour cet événement »", () => {
       eventId: null,
     });
     expect(publishStartChoice({}, authors).eventId).toBeNull();
+  });
+  it("R9n : `auteur` traduit la clé d'auteur de la casquette (s:, p:, v:, m:) en auteur de « Publier »", () => {
+    const all = [
+      { key: "me" },
+      { key: "structure:" + S, structureId: S },
+      { key: "pro:p1" },
+      { key: "provider:v1" },
+      { key: "media:m1" },
+    ];
+    expect(publishStartChoice({ auteur: `s:${S}` }, all).authorKey).toBe(`structure:${S}`);
+    expect(publishStartChoice({ auteur: "p:p1" }, all).authorKey).toBe("pro:p1");
+    expect(publishStartChoice({ auteur: "v:v1" }, all).authorKey).toBe("provider:v1");
+    expect(publishStartChoice({ auteur: "m:m1" }, all).authorKey).toBe("media:m1");
+    expect(publishStartChoice({ auteur: "m:m1", evenement: E }, all)).toMatchObject({
+      authorKey: "media:m1",
+      eventId: E,
+    });
+  });
+  it("R9n : `auteur` = me, vide, inconnu ou d'une page qui n'est pas la mienne : « Moi »", () => {
+    expect(publishStartChoice({ auteur: "me" }, authors).authorKey).toBe("me");
+    expect(publishStartChoice({ auteur: "" }, authors).authorKey).toBe("me");
+    expect(publishStartChoice({ auteur: "x:1" }, authors).authorKey).toBe("me");
+    expect(publishStartChoice({ auteur: "sans-deux-points" }, authors).authorKey).toBe("me");
+    expect(publishStartChoice({ auteur: "s:11111111-2222-4333-8444-000000000000" }, authors).authorKey).toBe("me");
+    expect(publishStartChoice({ auteur: "u:quelquun" }, authors).authorKey).toBe("me");
+  });
+  it("R9n : actorKeyOfPublishAuthor est l'inverse (et « Moi » reste me)", () => {
+    expect(actorKeyOfPublishAuthor("structure:abc")).toBe("s:abc");
+    expect(actorKeyOfPublishAuthor("pro:abc")).toBe("p:abc");
+    expect(actorKeyOfPublishAuthor("provider:abc")).toBe("v:abc");
+    expect(actorKeyOfPublishAuthor("media:abc")).toBe("m:abc");
+    expect(actorKeyOfPublishAuthor("me")).toBe("me");
+    expect(actorKeyOfPublishAuthor("inconnu:abc")).toBe("me");
+  });
+  it("R9n : `?structure=` de R8d continue de marcher à côté de `auteur`", () => {
+    expect(publishStartChoice({ structure: S, auteur: "p:p1" }, authors).authorKey).toBe(`structure:${S}`);
   });
   it("un événement mal formé est ignoré, la structure reste", () => {
     expect(publishStartChoice({ structure: S, evenement: "x" }, authors)).toMatchObject({

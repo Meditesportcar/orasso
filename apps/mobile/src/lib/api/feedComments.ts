@@ -14,12 +14,13 @@ import { request } from "../http";
 import { qs } from "./qs";
 
 export const feedCommentsApi = {
-  feedComments: (postId: string, cursor?: string | null) =>
-    request<FeedCommentPage>(`/api/feed-posts/${postId}/comments${qs({ cursor })}`),
+  // Lot R9n (liste blanche, T19) : lire et commenter au nom de la casquette active (`actor`, T7).
+  feedComments: (postId: string, cursor?: string | null, actor?: string | null) =>
+    request<FeedCommentPage>(`/api/feed-posts/${postId}/comments${qs({ cursor })}`, { actor }),
   feedCommentReplies: (commentId: string, cursor?: string | null) =>
     request<FeedCommentPage>(`/api/feed-comments/${commentId}/replies${qs({ cursor })}`),
-  createFeedComment: (postId: string, body: FeedCommentCreateInput) =>
-    request<FeedCommentCreated>(`/api/feed-posts/${postId}/comments`, { method: "POST", body }),
+  createFeedComment: (postId: string, body: FeedCommentCreateInput, actor?: string | null) =>
+    request<FeedCommentCreated>(`/api/feed-posts/${postId}/comments`, { method: "POST", body, actor }),
   // 204 ; une réponse supprimée rend 200 avec le compteur de son parent (version comprise).
   removeFeedComment: (commentId: string) =>
     request<{ parent?: ParentCount } | null | undefined>(`/api/feed-comments/${commentId}`, { method: "DELETE" }),

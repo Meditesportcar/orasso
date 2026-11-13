@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
+import { applyCommentsOff } from "@/features/fil/comments/lateResponse";
 import { postLive } from "@/features/fil/comments/live";
 import { forgetMyPublished, markFeedDirty } from "@/features/fil/feedSignal";
 import { SetRow } from "@/features/profil/parts";
@@ -96,12 +97,14 @@ export function PostMenu({
   async function toggleComments(target: FeedPostView) {
     setError(null);
     const off = !postLive.apply(target).commentsOff;
+    // R1 à R3 (R9n, tour 5) : le ticket est pris au geste ; la réponse tardive d'une autre casquette s'écrit dans son magasin, sans fermer le
+    // menu ni afficher d'erreur ici.
+    const t = postLive.ticket(target.id);
     try {
       const res = await api.setFeedCommentsOff(target.id, off);
-      postLive.set(target, { ...postLive.apply(target), commentsOff: res.commentsOff });
-      onClose();
+      if (applyCommentsOff(postLive, target, res.commentsOff, t)) onClose();
     } catch (e) {
-      setError(errorMessage(e));
+      if (postLive.isCurrent(t)) setError(errorMessage(e));
     }
   }
 

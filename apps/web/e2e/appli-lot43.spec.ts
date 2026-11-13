@@ -232,7 +232,9 @@ const HOMES = [
     kind: "provider",
     email: "sofia@orasso.local",
     choose: "provider",
-    texts: ["Mon accès prestataire", "Emplacement B2", "Message de l'organisateur", "Missions qui t'attendent"],
+    // Vérification R8-V2 : depuis le seed de R8a1, La Brasa est aussi retenue au Rassemblement du Lydia, en cours : l'Accueil
+    // montre cette sortie (sans emplacement ni message), plus la Nocturne de Canet (emplacement B2).
+    texts: ["Mon accès prestataire", "Rassemblement du Lydia", "Retenue", "Missions qui t'attendent"],
     hero: "poster",
   },
   {
@@ -272,7 +274,8 @@ for (const home of HOMES) {
       if (home.hero === "poster") {
         // Le compte à rebours et l'heure sont cernés sur la photo (huit copies + le texte), en haut à droite (lot C1).
         await expect(page.getByTestId("home-hero-art")).toBeVisible();
-        await expect(page.getByTestId("home-countdown")).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
+        // Vérification R8-V2 : « En cours · jour N sur M » pour la sortie en cours du seed de R8a1 (Rassemblement du Lydia).
+        await expect(page.getByTestId("home-countdown")).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+|En cours/);
         await expect(page.getByTestId("home-hour")).toContainText(/· (ouverture|installation)/);
         await expect(page.getByTestId("home-hero").getByText("Structure validée · organisateur")).toBeVisible();
         for (const label of ["Maps", "Waze", "Sur la carte"]) {

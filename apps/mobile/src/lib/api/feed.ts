@@ -37,11 +37,15 @@ export type FeedPostBody = {
 };
 
 export const feedApi = {
-  /** Le curseur est opaque : renvoyé tel quel. */
-  feed: (filter: FeedFilter, cursor?: string | null) => request<FeedPage>(`/api/fil${qs({ filter, cursor })}`),
+  /**
+   * Le curseur est opaque : renvoyé tel quel. Lot R9n (liste blanche, T19) : `actor` = la clé d'auteur de la casquette active
+   * (`useActor`) ; sans lui, c'est la personne qui lit.
+   */
+  feed: (filter: FeedFilter, cursor?: string | null, actor?: string | null) =>
+    request<FeedPage>(`/api/fil${qs({ filter, cursor })}`, { actor }),
   /** Nouveautés depuis l'instant du parcours affiché (`FeedPage.ref`) : la pastille « Nouvelles publications » (R8c2). */
-  feedFresh: (filter: FeedFilter, since: string) =>
-    request<{ count: number }>(`/api/fil/fresh${qs({ filter, since })}`),
+  feedFresh: (filter: FeedFilter, since: string, actor?: string | null) =>
+    request<{ count: number }>(`/api/fil/fresh${qs({ filter, since })}`, { actor }),
   /** Les cartes vues, ouvertes ou partagées (lots de 50 au plus, 204 sans corps). */
   feedSeen: (cards: SeenEntry[]) =>
     request<unknown>("/api/me/fil/seen", { method: "POST", body: { cards }, timeout: 15_000 }),

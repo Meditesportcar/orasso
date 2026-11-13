@@ -7,12 +7,14 @@
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   acceptEvents,
+  actorKeyOfPublishAuthor,
   attachableQuery,
   attachLeadOf,
   coauthorLabels as CO,
   type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
+  casquettesLabels,
   chooseAuthor,
   chooseEvent,
   coAuthorInputOf,
@@ -58,7 +60,8 @@ import { randomUUID } from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
-
+import { confirmSwitchToStory } from "@/features/casquettes/confirmSwitch";
+import { shouldLeave, switchToStory } from "@/features/casquettes/switchRule";
 import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
@@ -134,7 +137,13 @@ export function PublishScreen({ start }: { start?: PublishStart } = {}) {
 }
 
 /** Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis (`?structure=&evenement=`). */
-export type PublishStart = { structure?: string; evenement?: string; fiche?: string; etiquette?: string };
+export type PublishStart = {
+  structure?: string;
+  evenement?: string;
+  auteur?: string;
+  fiche?: string;
+  etiquette?: string;
+};
 
 function PublishForm({ start }: { start?: PublishStart }) {
   const { t } = useTheme();
@@ -497,7 +506,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       if (!guard.current()) return;
       setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
-      markFeedDirty(post);
+      markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       // La confirmation d'une offre : « Publié : <fiche> · offre du 10 au 30 nov. » (maquette R9.2b).
       setDoneOffer(post.offer ? OF.published(author.name, offerDatesPhrase(post.offer)) : null);
       // Les JPEG temporaires sont ceux de ce formulaire : s'il n'existe plus, ce sont peut-être ceux du suivant.
@@ -569,7 +578,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
     try {
       const post = await api.feedPostByClient(uncertain.clientId);
       if (!guard.current()) return;
-      markFeedDirty(post);
+      markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       if (mounted.current) discardTempPhotos();
       setUncertain(null);
       setFound(true);
@@ -651,7 +660,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
   return (
     <FlowScreen
       title={L.publishTitle}
-      facts={L.publishSubtitle}
+      facts={author.destination === "me" ? L.publishSubtitle : casquettesLabels.publishAs(author.name)}
       onClose={close}
       footer={
         <View style={styles.footer}>
@@ -698,6 +707,36 @@ function PublishForm({ start }: { start?: PublishStart }) {
       }
     >
       <View style={styles.block} testID="fil-publish">
+        {/* Lot R9n (T18) : un seul geste pour publier ; « Story » ouvre l'écran de story au nom de la même casquette. */}
+        <Seg
+          value="post"
+          onChange={(kind) => {
+            if (kind !== "story") return;
+            // Un envoi incertain garde la main (verrou) ; un brouillon en cours demande confirmation avant d'être abandonné.
+            const rule = switchToStory({
+              photos: photos.length,
+              caption,
+              eventId: choice.eventId,
+              offerOn: offer.on,
+              busy: busy || checking || working,
+              uncertain: uncertain !== null,
+            });
+            if (rule === "locked") return;
+            void (async () => {
+              // « Rester » garde le brouillon (rien ne bouge) ; « Passer à la story » l'abandonne.
+              if (!shouldLeave(rule, rule === "confirm" ? await confirmSwitchToStory() : true)) return;
+              router.replace(
+                `/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never,
+              );
+            })();
+          }}
+          disabled={busy || checking || working || uncertain !== null}
+          options={[
+            { value: "post", label: casquettesLabels.publishKindPost, icon: "gallery" },
+            { value: "story", label: casquettesLabels.publishKindStory, icon: "camera" },
+          ]}
+          testID="fil-publish-kind"
+        />
         <Label text={L.publishPhotos} hint={L.publishPhotosCount(photos.length, FEED_POST_PHOTOS_MAX)} />
         {posterVisual && event ? <PosterVisual event={event} /> : null}
         <View style={styles.grid}>

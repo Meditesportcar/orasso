@@ -42,6 +42,15 @@ test("le Fil : trois filtres, une raison par carte, menu « ⋯ », flamme", asy
   // Menu : pourquoi, moins de ce genre puis annuler, signaler.
   // R8c2 : « Abonnements » contient mes propres publications (R8c1) : le menu « Moins de ce genre » est celui d'une carte d'un autre.
   const post = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
+  // Vérification R8-V2 : avec le seed de la livraison 2, la première publication d'une personne suivie peut tomber à la page
+  // suivante d'« Abonnements » (cartes d'événement des structures suivies d'abord) : « Voir plus » jusqu'à elle.
+  for (let i = 0; i < 3 && (await post.count()) === 0 && (await page.getByTestId("fil-more").count()) > 0; i++) {
+    await page.getByTestId("fil-more").click();
+    await expect(page.getByTestId("fil-more"))
+      .toBeEnabled({ timeout: 30_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(1500);
+  }
   await post.getByTestId("feed-card-more").click();
   await expect(page.getByTestId("feed-menu-why")).toBeVisible();
   await expect(page.getByTestId("feed-menu-less")).toBeVisible();

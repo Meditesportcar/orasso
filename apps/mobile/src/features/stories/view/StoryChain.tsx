@@ -24,7 +24,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { barFor } from "../chainBar";
+import { useActor } from "@/lib/useActor";
+import { barFor, barScope } from "../chainBar";
 import { AuthorViewer } from "./StoryViewer";
 
 const { space2, space3 } = tokens.spacing;
@@ -44,11 +45,15 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const myId = me?.user.id ?? null;
+  // Lot R9n (tour 1) : la barre est lue, et mémorisée, au nom de la casquette active ; « ma » story est celle de la page.
+  const actor = useActor();
+  const scope = barScope(myId, actor);
+  const mineKey = actor ?? (myId ? `u:${myId}` : null);
   // La chaîne est figée AVANT la première lecture (donc avant que la vue de la première story soit enregistrée) : depuis la barre
   // déjà affichée par `StoriesBar` (mémoire), sinon la barre est lue et la visionneuse attend. Une panne : l'auteur seul.
-  const stored = followBar ? barFor(myId) : null;
+  const stored = followBar ? barFor(scope) : null;
   const [chain, setChain] = useState<string[]>(() =>
-    stored ? storyChain(stored.authors, authorKey, stored.mine && myId ? `u:${myId}` : null) : [authorKey],
+    stored ? storyChain(stored.authors, authorKey, stored.mine ? mineKey : null) : [authorKey],
   );
   const [chainReady, setChainReady] = useState(!followBar || Boolean(stored));
   const replyKeys = useRef(createReplyKeys(randomUUID)).current;
@@ -63,9 +68,9 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
     if (chainReady) return;
     let alive = true;
     api
-      .storiesBar()
+      .storiesBar(actor)
       .then((bar) => {
-        if (alive) setChain(storyChain(bar.authors, authorKey, bar.mine && myId ? `u:${myId}` : null));
+        if (alive) setChain(storyChain(bar.authors, authorKey, bar.mine ? mineKey : null));
       })
       .catch(() => undefined)
       .finally(() => {
@@ -74,7 +79,7 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
     return () => {
       alive = false;
     };
-  }, [chainReady, authorKey, myId]);
+  }, [chainReady, authorKey, mineKey, actor]);
 
   // Lecture d'avance de l'auteur suivant (jamais d'effet de vue : la vue n'est posée que par la story réellement affichée).
   const ahead = useRef(new Map<string, { at: number; promise: Promise<StoriesByAuthor> }>());

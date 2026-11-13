@@ -55,33 +55,34 @@ export const tabSets = {
   // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur (Sorties passe dans l'Accueil, le Garage et le
   // Passeport dans le Profil, la place libérée devient Crew).
   visitor: exhibitorTabs,
+  // Lot R9n (maquette R9.1) : « Le Fil » et « Page » dans chaque groupe ; le compte personnel est dans « Mes casquettes ».
   pro: [
     { id: "scanner", label: "Scanner", icon: "qr" },
-    { id: "card", label: "Ma fiche", icon: "plate" },
+    { id: "feed", label: "Le Fil", icon: "feed" },
     { id: "home", label: "Accueil", icon: "o", center: true, o: true },
     { id: "stats", label: "Stats", icon: "live" },
-    { id: "profile", label: "Profil", icon: "profile" },
+    { id: "page", label: "Page", icon: "cards" },
   ],
   provider: [
     { id: "missions", label: "Missions", icon: "briefcase" },
-    { id: "applications", label: "Candidatures", icon: "list" },
+    { id: "feed", label: "Le Fil", icon: "feed" },
     { id: "home", label: "Accueil", icon: "o", center: true, o: true },
-    { id: "showcase", label: "Vitrine", icon: "shop" },
-    { id: "profile", label: "Profil", icon: "profile" },
+    { id: "applications", label: "Candidatures", icon: "list" },
+    { id: "page", label: "Page", icon: "cards" },
   ],
   media: [
     { id: "explore", label: "Explorer", icon: "explore" },
-    { id: "press", label: "Presse", icon: "press" },
+    { id: "feed", label: "Le Fil", icon: "feed" },
     { id: "home", label: "Accueil", icon: "o", center: true, o: true },
-    { id: "contents", label: "Contenus", icon: "gallery" },
-    { id: "profile", label: "Profil", icon: "profile" },
+    { id: "press", label: "Presse", icon: "press" },
+    { id: "page", label: "Page", icon: "cards" },
   ],
   organizer: [
     { id: "events", label: "Événements", icon: "calendar" },
     { id: "sort", label: "Tri", icon: "check" },
     { id: "live", label: "Direct", icon: "live", center: true, o: true },
-    { id: "team", label: "Équipe", icon: "staff" },
-    { id: "structure", label: "Structure", icon: "badge" },
+    { id: "feed", label: "Le Fil", icon: "feed" },
+    { id: "page", label: "Page", icon: "cards" },
   ],
   /**
    * L'ancien passionné = l'exposant.
@@ -90,40 +91,3 @@ export const tabSets = {
   fan: exhibitorTabs,
 } as const;
 export type TabSetName = keyof typeof tabSets;
-
-/**
- * Barres v1 des quatre casquettes (lot 16) : encore branchées dans l'appli et sur le site jusqu'au lot 40, qui passe aux
- * six barres v2 (`tabSets`).
- * @deprecated Remplacées par `tabSets` (DA v2, lot 38) ; retirées au lot 58.
- */
-export const legacyTabSets = {
-  fan: [
-    { id: "home", label: "Accueil", icon: "home" },
-    { id: "explore", label: "Explorer", icon: "explore" },
-    { id: "access", label: "Accès", icon: "qr", center: true },
-    { id: "garage", label: "Garage", icon: "vehicle" },
-    { id: "inbox", label: "Boîte", icon: "inbox" },
-  ],
-  organizer: [
-    { id: "live", label: "Direct", icon: "live" },
-    { id: "events", label: "Événements", icon: "calendar" },
-    { id: "sort", label: "Tri", icon: "check", center: true },
-    { id: "inbox", label: "Boîte", icon: "inbox" },
-    { id: "staff", label: "Staff", icon: "staff" },
-  ],
-  pro: [
-    { id: "card", label: "Fiche", icon: "plate" },
-    { id: "publish", label: "Publier", icon: "chat" },
-    { id: "scanner", label: "Scanner", icon: "qr", center: true },
-    { id: "stats", label: "Stats", icon: "live" },
-    { id: "inbox", label: "Boîte", icon: "inbox" },
-  ],
-  // Casquette Prestataire (lot 16, ARCHITECTURE-SUITE § 7.1) : trois onglets, aucun au centre (pas d'action
-  // principale qui mérite la pastille inclinée).
-  provider: [
-    { id: "applications", label: "Candidatures", icon: "list" },
-    { id: "profile", label: "Profil", icon: "profile" },
-    { id: "inbox", label: "Boîte", icon: "inbox" },
-  ],
-} as const;
-export type LegacyTabSetName = keyof typeof legacyTabSets;

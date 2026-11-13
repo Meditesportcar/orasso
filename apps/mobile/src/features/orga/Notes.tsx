@@ -255,7 +255,7 @@ export function NotesScreen() {
   const [error, setError] = useState<unknown>(null);
 
   // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
-  const close = useCloseTo("/(orga)/structure");
+  const close = useCloseTo("/(orga)/page");
   const groups = groupNotesByPerson(notes.data?.items ?? []);
   const writable = !isSuspended(structure.data);
 

@@ -35,7 +35,12 @@ registerOrganizerBadge(pendingApplicationsBadge);
 
 async function organizerPersonas(v: Viewer): Promise<PersonaEntry[]> {
   const rows = await db
-    .select({ id: structures.id, name: structures.name, logoKey: structures.logoKey })
+    .select({
+      id: structures.id,
+      name: structures.name,
+      logoKey: structures.logoKey,
+      verification: structures.verification,
+    })
     .from(structureMembers)
     .innerJoin(structures, eq(structures.id, structureMembers.structureId))
     .where(
@@ -54,6 +59,8 @@ async function organizerPersonas(v: Viewer): Promise<PersonaEntry[]> {
       label: s.name,
       logoUrl: storage.url(s.logoKey),
       badge: (await Promise.all(organizerBadgeHooks.map((hook) => hook(s.id, v)))).reduce((a, b) => a + b, 0),
+      // Lot R9n (tour 1) : une structure suspendue reste une casquette (Direct, Tri), mais on ne lit pas « en tant que » elle.
+      ...(s.verification === "suspended" ? { suspended: true } : {}),
     })),
   );
 }

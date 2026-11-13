@@ -32,7 +32,7 @@ export const providersApi = {
     request<ProviderApplicationView>(`/api/events/${eventId}/provider-applications`, { method: "POST", body }),
   // Lot 54 (API du lot 46) : missions autour de moi, vitrine publique d'un prestataire et ses avis.
   missions: (query: { trade?: string; radiusKm?: number }) => request<MissionsResult>(`/api/missions${qs(query)}`),
-  providerPublic: (id: string) => request<ProviderPublic>(`/api/providers/${id}`),
+  providerPublic: (id: string, actor?: string | null) => request<ProviderPublic>(`/api/providers/${id}`, { actor }),
   providerReviews: (id: string) => request<ProviderReviewsSummary>(`/api/providers/${id}/reviews`),
   eventProviders: (slug: string) =>
     request<EventProviderPublic[]>(`/api/events/by-slug/${encodeURIComponent(slug)}/providers`),

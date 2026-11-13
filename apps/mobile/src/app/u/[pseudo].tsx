@@ -13,6 +13,7 @@ import { StyleSheet } from "react-native";
 
 import { PublicProfile } from "@/features/profil/PublicProfile";
 import { api } from "@/lib/api";
+import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -24,7 +25,8 @@ export default function UserProfile() {
   const { t } = useTheme();
   const router = useRouter();
   const { pseudo } = useLocalSearchParams<{ pseudo: string }>();
-  const profile = useApi(() => api.userProfile(pseudo), [pseudo]);
+  const actor = useActor();
+  const profile = useApi(() => api.userProfile(pseudo, actor), [pseudo, actor]);
   const p = profile.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));

@@ -491,38 +491,42 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
 
     // Publications : création, modification, suppression avec confirmation.
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
-    await page.getByRole("tab", { name: "Ma fiche", exact: true }).click();
-    await page.getByText("Publications", { exact: true }).click();
-    await page.getByTestId("pro-new-post").click();
+    await page.getByRole("tab", { name: "Page", exact: true }).click();
+    await page.getByText("Publications", { exact: true }).locator("visible=true").first().click();
+    await page.getByTestId("pro-new-post").locator("visible=true").first().click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
+    // Vérification R8-V2 : depuis R9c, l'écran n'a plus de formulaire titre + texte (journal des choix, lot R9c) : une offre
+    // se publie depuis « Publier » (photo obligatoire, pas de modification après l'envoi), couverte par appli-lotr9c.
+    await expect(page.getByTestId("pro-publish-offer")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Publier", exact: true })).toBeVisible();
     if (first) {
-      await page.getByLabel("Titre").fill("Offre de rentrée");
-      await page.getByLabel("Texte").fill("Vidange offerte pour les membres Orasso.");
-      await page.getByRole("button", { name: "Publier", exact: true }).click();
-      await expect(page.getByTestId("pro-post")).toHaveCount(1, { timeout: 20_000 });
+      // Les anciennes offres (« Anciennes offres », `features/pro/Posts.tsx`) restent modifiables et supprimables : seule la création suit le
+      // nouveau parcours (R9c). On part d'une ancienne offre posée par l'API (la route d'avant reste), puis modification, suppression avec
+      // confirmation et persistance côté API.
+      const made = await apiCall(cookie, "POST", `/pros/${pro.id}/posts`, {
+        title: "Offre de rentrée",
+        body: "Vidange offerte pour les membres Orasso.",
+      });
+      expect(made.status).toBeLessThan(300);
+      await page.goto("/publier");
+      await expect(page.getByTestId("pro-post")).toHaveCount(1, { timeout: 30_000 });
       await page.getByTestId("pro-post-edit").click();
       await page.getByTestId("pro-post-title").fill("Offre de rentrée prolongée");
       await shot(page, "07-pro-publication-modifier", theme);
       await page.getByTestId("pro-post-save").click();
       await expect(page.getByTestId("pro-post")).toContainText("Offre de rentrée prolongée", { timeout: 20_000 });
-      const posts = await apiCall<{ posts: { title: string; body: string }[]; postsUsed: number }>(
-        cookie,
-        "GET",
-        "/me/pro",
-      );
+      const posts = await apiCall<{ posts: { title: string; body: string }[] }>(cookie, "GET", "/me/pro");
       expect(posts.data.posts[0]).toMatchObject({
         title: "Offre de rentrée prolongée",
         body: "Vidange offerte pour les membres Orasso.",
       });
-      expect(posts.data.postsUsed).toBe(1);
       await shot(page, "08-pro-publications", theme);
       await page.getByTestId("pro-post-delete").click();
       await page.getByTestId("orga-confirm").click();
       await expect(page.getByTestId("pro-post")).toHaveCount(0, { timeout: 20_000 });
       expect((await apiCall<{ posts: unknown[] }>(cookie, "GET", "/me/pro")).data.posts).toHaveLength(0);
-    } else {
-      await shot(page, "08-pro-publications", theme);
     }
+    await shot(page, "08-pro-publications", theme);
     await ctx.close();
   }
 });

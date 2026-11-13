@@ -147,15 +147,15 @@ test("galerie paysage → ajustée → plaque → détails → aperçu → publi
   await ctx.close();
 });
 
-test("« Publier » du Fil : une feuille demande où (en story, dans le Fil)", async ({ browser }) => {
+test("« Publier » du Fil : un seul geste, le segment « Publication | Story » (R9n, T18)", async ({ browser }) => {
   test.setTimeout(120_000);
   const { ctx, page } = await open(browser, (await who("StFil")).email);
   await go(page, "/fil");
   await page.getByTestId("fil-publish-open").click();
-  await expect(page.getByTestId("fil-publish-choose-story")).toBeVisible();
-  await expect(page.getByTestId("fil-publish-choose-post")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-choose-story")).toHaveCount(0);
+  await expect(page.getByTestId("fil-publish-kind")).toBeVisible({ timeout: 30_000 });
   await shot(page, "09-feuille-publier");
-  await page.getByTestId("fil-publish-choose-story").click();
+  await page.getByTestId("fil-publish-kind").getByText("Story").click();
   await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
   // Le bouton principal de l'écran est la galerie ; l'appareil n'existe pas dans le navigateur (dit sans bloquer).
   await expect(page.getByTestId("story-pick-gallery")).toBeVisible();
