@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetBoundary } from "@/ui/Overlay";
 import { AlbumPhoto } from "./AlbumPhoto";
 import { type AlbumViewerRole, actionsFor } from "./actions/registry";
 
@@ -59,73 +60,75 @@ export function AlbumPhotoViewer({
       onDismiss={onDismiss}
       transparent={false}
     >
-      <View
-        style={[styles.root, { backgroundColor: t.color.night, paddingTop: insets.top + space2 }]}
-        testID="album-viewer"
-      >
-        <View style={styles.head}>
-          <Text variant="bodyStrong" color={t.color.nightInk} style={styles.fill} testID="album-viewer-count">
-            {index === null ? "" : L.photoOf(Math.min(at, photos.length - 1) + 1, photos.length)}
-          </Text>
-          {role !== "media" && current ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={L.report}
-              onPress={() => onReport?.(current)}
-              hitSlop={8}
-              testID="album-viewer-report"
-            >
-              <Icon name="flag" size={22} color={t.color.nightInk} />
-            </Pressable>
-          ) : null}
-          <Button variant="close" label={L.closeViewer} onPress={onClose} testID="album-viewer-close" />
-        </View>
-        <FlatList
-          ref={list}
-          data={photos}
-          horizontal
-          pagingEnabled
-          keyExtractor={(p) => p.id}
-          showsHorizontalScrollIndicator={false}
-          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-          onMomentumScrollEnd={(e) => {
-            setAt(Math.round(e.nativeEvent.contentOffset.x / width));
-          }}
-          style={styles.pages}
-          renderItem={({ item, index: i }) => (
-            <View style={{ width, height: height * 0.72, justifyContent: "center" }}>
-              <AlbumPhoto photo={item} style={styles.photo} label={L.openPhoto(i + 1, photos.length)} />
-            </View>
-          )}
-        />
-        <View style={[styles.foot, { paddingBottom: insets.bottom + space3 }]}>
-          <Text variant="caption" color={t.color.nightInk} testID="album-viewer-credit">
-            {L.creditLine(album.media.name)}
-          </Text>
-          {/* Emplacement des actions de R9f et R9g. */}
-          <View style={styles.actions} testID="album-viewer-actions">
-            {current
-              ? registered.map((a) => (
-                  <Button
-                    key={a.id}
-                    variant="secondary"
-                    icon={a.icon}
-                    onPress={() => void a.run({ album, photo: current, role })}
-                    testID={`album-action-${a.id}`}
-                  >
-                    {a.label}
-                  </Button>
-                ))
-              : null}
-            {role === "media" && current && onRemove ? (
-              <Button variant="secondary" icon="trash" onPress={() => onRemove(current)} testID="album-viewer-remove">
-                {L.photoRemove}
-              </Button>
+      <SheetBoundary>
+        <View
+          style={[styles.root, { backgroundColor: t.color.night, paddingTop: insets.top + space2 }]}
+          testID="album-viewer"
+        >
+          <View style={styles.head}>
+            <Text variant="bodyStrong" color={t.color.nightInk} style={styles.fill} testID="album-viewer-count">
+              {index === null ? "" : L.photoOf(Math.min(at, photos.length - 1) + 1, photos.length)}
+            </Text>
+            {role !== "media" && current ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={L.report}
+                onPress={() => onReport?.(current)}
+                hitSlop={8}
+                testID="album-viewer-report"
+              >
+                <Icon name="flag" size={22} color={t.color.nightInk} />
+              </Pressable>
             ) : null}
-            {actions}
+            <Button variant="close" label={L.closeViewer} onPress={onClose} testID="album-viewer-close" />
+          </View>
+          <FlatList
+            ref={list}
+            data={photos}
+            horizontal
+            pagingEnabled
+            keyExtractor={(p) => p.id}
+            showsHorizontalScrollIndicator={false}
+            getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+            onMomentumScrollEnd={(e) => {
+              setAt(Math.round(e.nativeEvent.contentOffset.x / width));
+            }}
+            style={styles.pages}
+            renderItem={({ item, index: i }) => (
+              <View style={{ width, height: height * 0.72, justifyContent: "center" }}>
+                <AlbumPhoto photo={item} style={styles.photo} label={L.openPhoto(i + 1, photos.length)} />
+              </View>
+            )}
+          />
+          <View style={[styles.foot, { paddingBottom: insets.bottom + space3 }]}>
+            <Text variant="caption" color={t.color.nightInk} testID="album-viewer-credit">
+              {L.creditLine(album.media.name)}
+            </Text>
+            {/* Emplacement des actions de R9f et R9g. */}
+            <View style={styles.actions} testID="album-viewer-actions">
+              {current
+                ? registered.map((a) => (
+                    <Button
+                      key={a.id}
+                      variant="secondary"
+                      icon={a.icon}
+                      onPress={() => void a.run({ album, photo: current, role })}
+                      testID={`album-action-${a.id}`}
+                    >
+                      {a.label}
+                    </Button>
+                  ))
+                : null}
+              {role === "media" && current && onRemove ? (
+                <Button variant="secondary" icon="trash" onPress={() => onRemove(current)} testID="album-viewer-remove">
+                  {L.photoRemove}
+                </Button>
+              ) : null}
+              {actions}
+            </View>
           </View>
         </View>
-      </View>
+      </SheetBoundary>
     </Modal>
   );
 }
