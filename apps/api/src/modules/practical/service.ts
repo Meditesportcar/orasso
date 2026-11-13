@@ -7,6 +7,7 @@
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
   departmentsAround,
+  type LatLng,
   distanceKm,
   homeLabels,
   myWeatherPlaces,
@@ -15,7 +16,12 @@ import {
   type PracticalKind,
   type PracticalOrigin,
   type PracticalPlace,
+  type PracticalZone,
   placesAround,
+  placesInZone,
+  zoneContains,
+  departmentsInZone,
+  zoneCenter,
   practicalPlaceId,
   practicalTexts,
   type WeatherCell,
@@ -36,6 +42,7 @@ import type { Viewer } from "../../lib/session";
 export type PracticalTarget =
   | { near: "position"; cell: WeatherCell }
   | { near: "city" }
+  | { near: "zone"; zone: PracticalZone }
   | { near: "outing"; eventId?: string };
 
 type OutingEvent = { id: string; title: string; lat: number | null; lng: number | null; startsMs: number };
@@ -51,6 +58,8 @@ type Attribution = { wash: string; fuel: string };
 
 export const practicalService = {
   async get(v: Viewer, target: PracticalTarget, budgetMs = EXTERNAL_BUDGET_MS): Promise<PracticalData> {
+    // Une zone de carte : pas d'origine (aucune position), les lieux DANS la zone (plus de rayon de 30 km pour ce mode).
+    if (target.near === "zone") return { origin: null, ...(await this.placesAround(zoneCenter(target.zone), budgetMs, target.zone)) };
     const origin = await this.origin(v, target);
     if (!origin) return { origin: null, places: [], partial: false, attribution: baseAttribution };
     return { origin, ...(await this.placesAround(origin, budgetMs)) };
@@ -70,6 +79,7 @@ export const practicalService = {
       const first = myWeatherPlaces({ saved, departments: v.profile.departments })[0];
       return first ? { kind: "city", label: first.label, lat: first.lat, lng: first.lng } : null;
     }
+    if (target.near === "zone") return null;
     const event = await this.outing(v, target.eventId);
     if (target.eventId && !event) throw notFound("Événement introuvable");
     if (!event || event.lat === null || event.lng === null) return null;
@@ -141,11 +151,13 @@ export const practicalService = {
    * répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
    */
   async placesAround(
-    origin: PracticalOrigin,
+    origin: LatLng,
     budgetMs: number,
+    zone?: PracticalZone,
   ): Promise<{ places: PracticalPlace[]; partial: boolean; loading?: true; attribution: Attribution }> {
-    // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
-    const departments = departmentsAround(origin);
+    // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches ; en mode zone,
+    // ceux qui coupent la zone demandée (les sources ne reçoivent toujours qu'un code de département).
+    const departments = zone ? departmentsInZone(zone) : departmentsAround(origin);
     type Place = { name: string; address: string | null; lat: number; lng: number };
     // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
     const loads = departments.map(async (d) => {
@@ -208,7 +220,7 @@ export const practicalService = {
     // Tous les rapprochements se font ICI, sur les listes de tous les départements réunis (pas par département) et sur les lieux de la
     // zone seulement : deux points voisins de part et d'autre d'une limite départementale se rapprochent comme les autres.
     const near = <T extends Place>(list: readonly T[]) =>
-      list.filter((p) => distanceKm(origin, p) <= PRACTICAL_RADIUS_KM + 2);
+      list.filter((p) => (zone ? zoneContains(zone, p, 0.02, 0.03) : distanceKm(origin, p) <= PRACTICAL_RADIUS_KM + 2));
     const nearOsm = near(osm);
     const merged = mergeStations(near(gov), nearOsm.filter(isOsmFuel));
     const washes = washPlaces(nearOsm, merged.groups);
@@ -228,7 +240,7 @@ export const practicalService = {
       return fuel;
     });
     const all: PracticalPlace[] = [...washes.map((p) => place("wash", p)), ...fuels];
-    const places = placesAround(all, origin);
+    const places = zone ? placesInZone(all, zone) : placesAround(all, origin);
     // Les deux sources sont citées quand les deux ont servi une station de la réponse.
     const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
     const usedGov = served.some((x) => x?.gov);

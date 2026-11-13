@@ -67,6 +67,7 @@ export * from "./points";
 export * from "./positionStore";
 export * from "./poster";
 export * from "./practical";
+export * from "./practicalZone";
 export * from "./practicalRetry";
 export * from "./presence";
 export * from "./pro";
