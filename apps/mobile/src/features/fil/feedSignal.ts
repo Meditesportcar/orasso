@@ -4,12 +4,18 @@
 import { type FeedCard, type FeedPostView, publishedCard } from "@orasso/shared";
 
 let dirty = false;
-let mine: FeedCard[] = [];
+/** Lot R9n (tour 1) : chaque publication est rangée avec l'acteur au nom duquel elle est partie (`null` : la personne). */
+let mine: { actor: string | null; card: FeedCard }[] = [];
 
 /** Une publication vient de partir : `post` est la réponse de `POST /me/feed-posts` (sa carte passera en tête du Fil). */
-export function markFeedDirty(post?: FeedPostView): void {
+export function markFeedDirty(post?: FeedPostView, actor: string | null = null): void {
   dirty = true;
-  if (post) mine = [publishedCard(post), ...mine.filter((c) => c.id !== `feed_post:${post.id}`)];
+  if (post) {
+    mine = [
+      { actor, card: publishedCard(post) },
+      ...mine.filter((m) => m.card.id !== `feed_post:${post.id}`),
+    ];
+  }
 }
 
 /** Vrai une seule fois après `markFeedDirty`. */
@@ -19,10 +25,14 @@ export function takeFeedDirty(): boolean {
   return was;
 }
 
-/** Mes publications de cette session, la plus récente d'abord (cartes prêtes pour `withMyPublished`). */
-export const myPublishedCards = (): FeedCard[] => mine;
+/**
+ * Mes publications de cette session pour ce Fil, la plus récente d'abord (cartes prêtes pour `withMyPublished`) : un Fil ne reprend
+ * que celles de son acteur (le Fil de la structure n'affiche jamais une publication personnelle, ni l'inverse).
+ */
+export const myPublishedCards = (actor: string | null = null): FeedCard[] =>
+  mine.filter((m) => m.actor === actor).map((m) => m.card);
 
 /** Une publication supprimée, ou un autre compte : elle ne reste pas en tête. */
 export function forgetMyPublished(id?: string): void {
-  mine = id ? mine.filter((c) => c.id !== id) : [];
+  mine = id ? mine.filter((m) => m.card.id !== id) : [];
 }

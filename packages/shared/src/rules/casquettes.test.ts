@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { casquetteRows, isPageCasquette } from "./casquettes";
+import { casquetteRows, isPageCasquette, resolveStoryAuthor } from "./casquettes";
 
 const kindLabel = (kind: string) =>
   ({ organizer: "Organisateur", pro: "Pro", provider: "Prestataire", media: "Média" })[kind] ?? kind;
@@ -57,5 +57,44 @@ describe("casquetteRows : les lignes de la feuille « Mes casquettes »", () => 
   it("isPageCasquette : quatre types", () => {
     expect(["organizer", "pro", "provider", "media"].every(isPageCasquette)).toBe(true);
     expect(["fan", "visitor", "admin"].some(isPageCasquette)).toBe(false);
+  });
+});
+
+describe("resolveStoryAuthor : l'auteur d'une story lancée depuis « Publier » (R9n, tour 1)", () => {
+  const two = [
+    { kind: "organizer", id: "s1", label: "Roues Libres 66" },
+    { kind: "organizer", id: "s2", label: "MéditeSportCar" },
+    { kind: "pro", id: "p1", label: "Atelier" },
+    { kind: "provider", id: "v1", label: "La Brasa" },
+    { kind: "media", id: "m1", label: "Sud Cars" },
+    { kind: "organizer", id: "survol", label: "Survolée", assisted: true },
+  ];
+  it("deux structures du même compte : la clé choisie, pas la casquette active", () => {
+    expect(resolveStoryAuthor("s:s2", two)).toEqual({
+      kind: "page",
+      persona: "organizer",
+      id: "s2",
+      name: "MéditeSportCar",
+      key: "s:s2",
+    });
+    expect(resolveStoryAuthor("s:s1", two)).toMatchObject({ id: "s1", name: "Roues Libres 66" });
+  });
+  it("pro, prestataire et média : la ligne du compte", () => {
+    expect(resolveStoryAuthor("p:p1", two)).toMatchObject({ persona: "pro", id: "p1" });
+    expect(resolveStoryAuthor("v:v1", two)).toMatchObject({ persona: "provider", name: "La Brasa" });
+    expect(resolveStoryAuthor("m:m1", two)).toMatchObject({ persona: "media" });
+  });
+  it("passionné actif avec ?structure= : la clé de la structure se résout contre les casquettes du compte", () => {
+    expect(resolveStoryAuthor("s:s1", two)).not.toBeNull();
+  });
+  it("me : la personne ; vide, inconnu, d'un autre compte, survolé : null (la casquette active)", () => {
+    expect(resolveStoryAuthor("me", two)).toEqual({ kind: "me" });
+    expect(resolveStoryAuthor(undefined, two)).toBeNull();
+    expect(resolveStoryAuthor("", two)).toBeNull();
+    expect(resolveStoryAuthor("s:autre", two)).toBeNull();
+    expect(resolveStoryAuthor("v:autre", two)).toBeNull();
+    expect(resolveStoryAuthor("s:survol", two)).toBeNull();
+    expect(resolveStoryAuthor("u:quelquun", two)).toBeNull();
+    expect(resolveStoryAuthor("sans-deux-points", two)).toBeNull();
   });
 });

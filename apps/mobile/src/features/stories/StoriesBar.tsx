@@ -18,7 +18,7 @@ import { useSession } from "@/lib/session";
 import { useActor } from "@/lib/useActor";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
-import { rememberBar } from "./chainBar";
+import { barOfActor, barScope, rememberBar } from "./chainBar";
 
 const { space2, space3, space4 } = tokens.spacing;
 const ITEM_W = 68;
@@ -44,17 +44,19 @@ export function StoriesBar() {
   // Lot R9n : en casquette, `mine` = les stories de la page (R9a) et « Ta story » porte le logo de la casquette (maquette `storiesCas`).
   const actor = useActor();
   const { active } = usePersona();
-  const bar = useApi(() => api.storiesBar(actor), [actor]);
+  // Lot R9n (tour 1) : la réponse porte l'acteur pour lequel elle a été lue ; une réponse d'une autre casquette (retardée, ou ancienne
+  // pendant le rechargement) n'est jamais affichée : vide ou chargement, jamais l'ancienne barre.
+  const bar = useApi(async () => ({ actor, bar: await api.storiesBar(actor) }), [actor]);
   const reload = bar.reload;
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
     if (event.type === "story.ready") void reload();
   });
 
-  const data = bar.data;
+  const data = barOfActor(bar.data, actor);
   // La barre affichée est gardée en mémoire : la lecture enchaînée y fige sa chaîne avant la première vue.
   useEffect(() => {
-    rememberBar(me?.user.id, data);
-  }, [me?.user.id, data]);
+    rememberBar(barScope(me?.user.id, actor), data);
+  }, [me?.user.id, actor, data]);
   const mine = data?.mine ?? null;
   const mineState = mineRingState(mine);
   const display = barDisplay(data?.authors ?? []);

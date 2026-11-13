@@ -73,6 +73,7 @@ import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
+import { confirmSwitchToStory } from "@/features/casquettes/confirmSwitch";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -505,7 +506,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
       if (!guard.current()) return;
       setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
-      markFeedDirty(post);
+      markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       // La confirmation d'une offre : « Publié : <fiche> · offre du 10 au 30 nov. » (maquette R9.2b).
       setDoneOffer(post.offer ? OF.published(author.name, offerDatesPhrase(post.offer)) : null);
       // Les JPEG temporaires sont ceux de ce formulaire : s'il n'existe plus, ce sont peut-être ceux du suivant.
@@ -577,7 +578,7 @@ function PublishForm({ start }: { start?: PublishStart }) {
     try {
       const post = await api.feedPostByClient(uncertain.clientId);
       if (!guard.current()) return;
-      markFeedDirty(post);
+      markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       if (mounted.current) discardTempPhotos();
       setUncertain(null);
       setFound(true);
@@ -710,13 +711,15 @@ function PublishForm({ start }: { start?: PublishStart }) {
         <Seg
           value="post"
           onChange={(kind) => {
-            if (kind === "story") {
-              router.replace(
-                `/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never,
-              );
-            }
+            if (kind !== "story") return;
+            // Un envoi incertain garde la main (verrou) ; un brouillon en cours demande confirmation avant d'être abandonné.
+            const draft = photos.length > 0 || caption.trim() !== "" || choice.eventId !== null || offer.on;
+            void (async () => {
+              if (draft && !(await confirmSwitchToStory())) return;
+              router.replace(`/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never);
+            })();
           }}
-          disabled={busy || checking || working}
+          disabled={busy || checking || working || uncertain !== null}
           options={[
             { value: "post", label: casquettesLabels.publishKindPost, icon: "gallery" },
             { value: "story", label: casquettesLabels.publishKindStory, icon: "camera" },

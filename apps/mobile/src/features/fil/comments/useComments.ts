@@ -67,6 +67,9 @@ export type CommentsController = {
   setOff: (off: boolean) => Promise<void>;
 };
 
+/** L'acteur de chaque envoi, pris au moment du geste et gardé pour tous ses essais (jamais celui d'au moment de « Réessayer »). */
+const sendActors = new Map<string, string | null>();
+
 export function useComments(
   post: FeedPostView,
   active: boolean,
@@ -196,8 +199,9 @@ export function useComments(
         const created = await api.createFeedComment(
           id,
           { text: p.text.trim(), parentId: p.parentId, clientId },
-          actorRef.current,
+          sendActors.has(clientId) ? (sendActors.get(clientId) ?? null) : actorRef.current,
         );
+        sendActors.delete(clientId);
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
@@ -233,6 +237,7 @@ export function useComments(
   const send = useCallback(
     (text: string, parentId: string | null) => {
       const clientId = randomUUID();
+      sendActors.set(clientId, actorRef.current);
       update(
         (s) =>
           pendingStart(parentId ? sheetToggleReplies(s, parentId, true) : s, { clientId, text: text.trim(), parentId }),
@@ -252,7 +257,10 @@ export function useComments(
   );
 
   const discard = useCallback(
-    (clientId: string) => update((s) => pendingDrop(s, clientId), postLive.ticket(id)),
+    (clientId: string) => {
+      sendActors.delete(clientId);
+      update((s) => pendingDrop(s, clientId), postLive.ticket(id));
+    },
     [update, id],
   );
 

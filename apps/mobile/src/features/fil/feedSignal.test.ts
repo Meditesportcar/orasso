@@ -48,6 +48,16 @@ describe("ma publication juste après l'envoi", () => {
     expect(myPublishedCards()).toEqual([]);
   });
 
+  it("R9n : un Fil ne reprend que les publications de son acteur (personnelle publiée depuis le Fil d'une structure)", () => {
+    markFeedDirty(post("perso"), null);
+    markFeedDirty(post("struct"), "s:abc");
+    expect(myPublishedCards(null).map((c) => c.id)).toEqual(["feed_post:perso"]);
+    expect(myPublishedCards("s:abc").map((c) => c.id)).toEqual(["feed_post:struct"]);
+    expect(myPublishedCards("s:autre")).toEqual([]);
+    forgetMyPublished("feed_post:struct");
+    expect(myPublishedCards("s:abc")).toEqual([]);
+  });
+
   it("sans publication, le signal relit seulement le Fil", () => {
     markFeedDirty();
     expect(takeFeedDirty()).toBe(true);

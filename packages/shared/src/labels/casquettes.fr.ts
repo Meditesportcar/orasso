@@ -28,6 +28,11 @@ export const casquettesLabels = {
   publishKindPost: "Publication",
   publishKindStory: "Story",
   publishAs: (name: string) => `en tant que ${name}`,
+  /** Basculer vers la story avec un brouillon en cours : on confirme avant de l'abandonner. */
+  switchTitle: "Passer à la story ?",
+  switchBody: "Ta publication en cours (photos, légende, rattachement) sera abandonnée.",
+  switchStay: "Rester",
+  switchGo: "Passer à la story",
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",

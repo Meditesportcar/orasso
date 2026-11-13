@@ -59,13 +59,14 @@ function useAppActive(): boolean {
 }
 
 export function useFeed() {
+  const actor = useActor();
   const [filter, setFilterState] = useState<FeedFilter>("for_you");
   const [list, setList] = useState<FeedListState | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** D'où vient l'erreur affichée : « Réessayer » relance l'actualisation, ou « Voir plus », selon l'échec. */
   const [errorSource, setErrorSource] = useState<FeedErrorSource | null>(null);
   /** Mes publications juste envoyées, gardées en tête de la liste affichée tant que je suis sur le Fil. */
-  const [mine, setMine] = useState<FeedCard[]>(() => myPublishedCards());
+  const [mine, setMine] = useState<FeedCard[]>(() => myPublishedCards(actor));
   const [loadingMore, setLoadingMore] = useState(false);
   /** Un compteur : change à chaque `reset` de l'API (l'écran remonte en haut). */
   const [scrollTop, setScrollTop] = useState(0);
@@ -77,7 +78,6 @@ export function useFeed() {
   const [round, setRound] = useState(0);
   // Lot R9n : en casquette, le Fil est lu « en tant que » la page (en-tête `X-Orasso-Actor`) et sa copie hors ligne est à part
   // (T20). Changer de casquette = Fil neuf : les lectures en cours sont jetées (`gate.invalidate`, règle `requestGate`).
-  const actor = useActor();
   const actorRef = useRef(actor);
   actorRef.current = actor;
   const { entries } = usePersona();
@@ -268,7 +268,7 @@ export function useFeed() {
       lastOk: lastOk.current,
     };
     // Une publication vient de partir : elle passe en tête, et le Fil se relit tout de suite.
-    setMine(myPublishedCards());
+    setMine(myPublishedCards(actorRef.current));
     if (takeFeedDirty() || shouldRevalidate(s, Date.now())) void reload();
   }, [ready, reload]);
   useFocusEffect(revalidate);

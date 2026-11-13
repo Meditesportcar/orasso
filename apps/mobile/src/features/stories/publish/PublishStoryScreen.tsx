@@ -127,15 +127,25 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const { persona, active } = usePersona();
   const visibility = me?.profile.visibility ?? "public";
   const actor = useActor();
-  // Lot R9n : `?auteur=me` = une story personnelle, même depuis une casquette (« Moi · Damien_66 ») ; absent ou clé de la casquette
-  // active : la casquette active, comme avant ; toute autre clé est ignorée (l'API revérifie les droits de toute façon).
-  const asMe = auteur === "me";
-  const author = useMemo(
-    () => (asMe ? ({ persona: "fan" } as StoryAuthor) : authorOf(persona, active.label)),
-    [asMe, persona, active.label],
-  );
-  // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran de publication au nom de la même casquette.
-  const kindKey = asMe || !actor ? "me" : actor;
+  // Lot R9n (tour 1) : `?auteur=` est résolu contre les casquettes du compte (`resolveStoryAuthor`) : `me` = une story personnelle,
+  // une clé `s:`, `p:`, `v:`, `m:` tenue par le compte = cette page (même si une autre casquette est active), sinon la casquette
+  // active. Une clé qui n'est pas au compte est ignorée (l'API revérifie les droits de toute façon).
+  const choice = useMemo(() => resolveStoryAuthor(auteur, me?.personas ?? []), [auteur, me?.personas]);
+  const author = useMemo<StoryAuthor>(() => {
+    if (choice?.kind === "me") return { persona: "fan" };
+    if (choice?.kind === "page") {
+      return {
+        persona: choice.persona,
+        ...(choice.persona === "organizer" ? { structureId: choice.id } : {}),
+        ...(choice.persona === "pro" ? { proId: choice.id } : {}),
+        name: choice.name,
+      };
+    }
+    return authorOf(persona, active.label);
+  }, [choice, persona, active.label]);
+  // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
+  const kindKey = choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me");
+  const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
 
   const [step, setStep] = useState<StoryStep>("media");
   const [draft, setDraft] = useState<StoryDraft | null>(null);
@@ -622,7 +632,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   return (
     <FlowScreen
       title={L.title}
-      facts={L.subtitle}
+      facts={author.persona === "fan" && !choice ? L.subtitle : casquettesLabels.publishAs(authorName)}
       onClose={() => void leave()}
       footer={
         primary ? (

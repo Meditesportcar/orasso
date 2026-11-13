@@ -67,3 +67,38 @@ export function casquetteRows(
     );
   return [me, ...pages];
 }
+
+// --- L'auteur d'une story lancée depuis « Publier » (lot R9n, tour 1, point 1) ------------------------------------------
+
+export type StoryAuthorChoice =
+  | { kind: "me" }
+  | { kind: "page"; persona: "organizer" | "pro" | "provider" | "media"; id: string; name: string; key: string };
+
+/** Les préfixes de clé d'auteur (`X-Orasso-Actor`) → la casquette. */
+const PERSONA_OF_PREFIX: Record<string, "organizer" | "pro" | "provider" | "media"> = {
+  s: "organizer",
+  p: "pro",
+  v: "provider",
+  m: "media",
+};
+
+/**
+ * L'auteur d'une story d'après `?auteur=` : `me` (la personne), une clé `s:`, `p:`, `v:`, `m:` **tenue par le compte** (une
+ * casquette de `GET /me` → `personas`, comme `publishAuthors`), sinon `null` : l'appelant prend alors la casquette active. Une clé
+ * qui n'est pas une casquette du compte n'est jamais crue (l'API revérifie les droits de toute façon). Prestataire et média : un
+ * seul par compte, l'identifiant de la clé doit être celui de la ligne.
+ */
+export function resolveStoryAuthor(
+  auteur: string | null | undefined,
+  entries: readonly Pick<SheetEntryInput, "kind" | "id" | "label" | "assisted">[],
+): StoryAuthorChoice | null {
+  const raw = auteur?.trim();
+  if (!raw) return null;
+  if (raw === "me") return { kind: "me" };
+  const at = raw.indexOf(":");
+  const persona = at < 1 ? undefined : PERSONA_OF_PREFIX[raw.slice(0, at)];
+  if (!persona) return null;
+  const id = raw.slice(at + 1);
+  const entry = entries.find((e) => !e.assisted && e.kind === persona && e.id === id);
+  return entry ? { kind: "page", persona, id, name: entry.label, key: raw } : null;
+}
