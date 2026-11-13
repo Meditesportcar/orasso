@@ -4,6 +4,7 @@ import {
   createFollowTracker,
   createReadGate,
   createSingleTimer,
+  nextPracticalRead,
   PRACTICAL_MIN_GAP_MS,
   practicalPendingDelay,
   practicalReadAllowed,
@@ -104,5 +105,36 @@ describe("une lecture à la fois sans en perdre (suite R8q, tour 3)", () => {
     // La lecture relancée est seule : à sa fin, rien n'attend.
     expect(gate.enter()).toBe(true);
     expect(gate.leave()).toBe(false);
+  });
+});
+
+describe("suite d'une lecture (suite R8q, tour 4)", () => {
+  it("réseau : relance espacée et bornée ; 403 et 429 : aucune relance", () => {
+    let step = nextPracticalRead("network", 0, 0);
+    expect(step).toEqual({ delay: 15_000, calendarStep: 0, networkAttempt: 1 });
+    step = nextPracticalRead("network", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(30_000);
+    // Un refus (4xx) n'est jamais relancé, quel que soit l'état.
+    expect(nextPracticalRead("refused", 0, 0).delay).toBeNull();
+    expect(nextPracticalRead("refused", 2, 3).delay).toBeNull();
+  });
+
+  it("partielle puis panne réseau : le calendrier continue ; au bout de la série il s'arrête", () => {
+    let step = nextPracticalRead("partial", 0, 0);
+    expect(step).toEqual({ delay: 3_000, calendarStep: 1, networkAttempt: 0 });
+    step = nextPracticalRead("network", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(6_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(12_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBe(24_000);
+    step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
+    expect(step.delay).toBeNull();
+  });
+
+  it("complète puis partielle : les compteurs repartent de 0", () => {
+    const done = nextPracticalRead("complete", 3, 2);
+    expect(done).toEqual({ delay: null, calendarStep: 0, networkAttempt: 0 });
+    expect(nextPracticalRead("partial", done.calendarStep, done.networkAttempt).delay).toBe(3_000);
   });
 });

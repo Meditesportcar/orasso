@@ -1,29 +1,23 @@
-// Emprises des départements (rectangles lat/lng : sud, ouest, nord, est), lot R8q « Pratique » (suite, tour 3).
+// Fichier généré : ne pas modifier à la main. Régénérer : `node --experimental-strip-types packages/shared/scripts/departmentBounds.mjs --write`
+// puis `biome check --write` (le test `departmentBounds.test.ts` vérifie que la table régénérée est identique).
+//
+// Emprises des départements (rectangles lat/lng : sud, ouest, nord, est), lot R8q « Pratique ».
 // Sert à « quels départements coupent la zone de recherche » (`departmentsAround`) : un département est lu si son emprise coupe le carré
 // qui enferme le cercle de recherche. Un rectangle contient tout le département (il peut déborder sur un voisin : on lit alors un
 // département de trop, jamais un de moins).
 //
 // Origine : les tracés des départements de métropole (96, Corse 2A et 2B comprises) déjà présents dans le dépôt,
 // `packages/design-system/src/france/departments.ts` (@svg-maps/france.departments de Victor Cazanave, Creative Commons Attribution 4.0,
-// voir `LICENSE-france-departments.md` : crédit à conserver). L’emprise de chaque tracé a été convertie en latitude et longitude par une
-// projection de Mercator ajustée sur les centres de `departmentCentroids` (écart moyen 0,7 km, pire 2,9 km sur les 96 départements) ;
-// `BOUNDS_MARGIN_KM` couvre cet écart. Les cinq départements d’outre-mer ne figurent pas sur cette carte : leurs rectangles sont
+// voir `LICENSE-france-departments.md` : crédit à conserver). L'emprise de chaque tracé est convertie en latitude et longitude par une
+// projection de Mercator ajustée sur les centres de `departmentCentroids` (écart quadratique 0,7 km, pire 2,9 km) ; `BOUNDS_MARGIN_KM`
+// couvre cet écart (vérifié à 1 à 2 km près). Les cinq départements d'outre-mer ne figurent pas sur cette carte : leurs rectangles sont
 // des valeurs approchées saisies à la main (marge large). Aucun fichier téléchargé, aucune donnée externe nouvelle.
 export type DepartmentBounds = readonly [south: number, west: number, north: number, east: number];
 
-/** Marge ajoutée à chaque emprise (km) : l’écart de la conversion des tracés. */
+/** Marge ajoutée à chaque emprise (km) : l'écart de la conversion des tracés. */
 export const BOUNDS_MARGIN_KM = 3;
 
 export const departmentBounds: Readonly<Record<string, DepartmentBounds>> = {
-  "01": [45.61, 4.73, 46.52, 6.17],
-  "02": [48.84, 2.96, 50.07, 4.26],
-  "03": [45.93, 2.28, 46.8, 4],
-  "04": [43.67, 5.5, 44.66, 6.97],
-  "05": [44.19, 5.42, 45.12, 7.08],
-  "06": [43.47, 6.63, 44.36, 7.71],
-  "07": [44.26, 3.86, 45.36, 4.89],
-  "08": [49.23, 4.02, 50.17, 5.4],
-  "09": [42.57, 0.83, 43.31, 2.17],
   "10": [47.92, 3.38, 48.72, 4.86],
   "11": [42.65, 1.69, 43.46, 3.24],
   "12": [43.69, 1.84, 44.94, 3.45],
@@ -43,8 +37,6 @@ export const departmentBounds: Readonly<Record<string, DepartmentBounds>> = {
   "27": [48.67, 0.3, 49.48, 1.8],
   "28": [47.95, 0.76, 48.94, 1.99],
   "29": [47.76, -5.18, 48.75, -3.39],
-  "2A": [41.37, 8.54, 42.38, 9.41],
-  "2B": [41.83, 8.57, 43.01, 9.56],
   "30": [43.46, 3.26, 44.46, 4.84],
   "31": [42.69, 0.44, 43.92, 2.05],
   "32": [43.31, -0.28, 44.08, 1.2],
@@ -116,4 +108,15 @@ export const departmentBounds: Readonly<Record<string, DepartmentBounds>> = {
   "973": [2.1, -54.6, 5.8, -51.6],
   "974": [-21.4, 55.2, -20.85, 55.85],
   "976": [-13.05, 44.98, -12.6, 45.3],
+  "01": [45.61, 4.73, 46.52, 6.17],
+  "02": [48.84, 2.96, 50.07, 4.26],
+  "03": [45.93, 2.28, 46.8, 4],
+  "04": [43.67, 5.5, 44.66, 6.97],
+  "05": [44.19, 5.42, 45.12, 7.08],
+  "06": [43.47, 6.63, 44.36, 7.71],
+  "07": [44.26, 3.86, 45.36, 4.89],
+  "08": [49.23, 4.02, 50.17, 5.4],
+  "09": [42.57, 0.83, 43.31, 2.17],
+  "2A": [41.37, 8.54, 42.38, 9.41],
+  "2B": [41.83, 8.57, 43.01, 9.56],
 };

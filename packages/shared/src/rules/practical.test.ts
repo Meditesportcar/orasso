@@ -229,3 +229,20 @@ describe("emprises des départements et plafond (suite R8q, tour 3)", () => {
     }
   });
 });
+
+describe("le département qui contient le point n'est jamais écarté (suite R8q, tour 4)", () => {
+  it("un point dense, au plafond : 75 reste lu même avec un rayon qui dépasse 12 départements", () => {
+    const paris = { lat: 48.8566, lng: 2.3522 };
+    for (const radius of [30, 80, 150, 300]) {
+      const around = departmentsAround(paris, radius);
+      expect(around.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+      expect(around, `rayon ${radius}`).toContain("75");
+    }
+  });
+
+  it("un point à l'intérieur de l'emprise d'un département le lit, même si le centre d'un voisin est plus proche", () => {
+    // Le 94 (Val-de-Marne) : un point à l'est de Vincennes, dans son emprise.
+    const point = { lat: 48.79, lng: 2.5 };
+    expect(departmentsAround(point, 5)).toContain("94");
+  });
+});

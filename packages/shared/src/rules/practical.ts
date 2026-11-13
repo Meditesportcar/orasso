@@ -79,7 +79,7 @@ export function nearestDepartments(point: LatLng, count = PRACTICAL_DEPARTMENTS)
  * Les départements qui coupent la zone recherchée : un département est lu si son emprise (rectangle lat/lng, `departmentBounds`, plus
  * `BOUNDS_MARGIN_KM`) coupe le carré qui enferme le cercle de `radiusKm` autour du point. Un rectangle contient tout le département :
  * on peut en lire un de trop (une emprise déborde sur un voisin), jamais un de moins. Plafond de `PRACTICAL_DEPARTMENTS_MAX`, les plus
- * proches du point d'abord (distance au rectangle, 0 s'il y est). Le département du point (le plus proche par son centre) y est toujours.
+ * proches du point d'abord (distance au rectangle, 0 s'il y est). Un département dont l'emprise contient le point n'est jamais écarté par le plafond.
  */
 export function departmentsAround(point: LatLng, radiusKm = PRACTICAL_RADIUS_KM): string[] {
   const kmPerDegLat = 111.2;
@@ -109,9 +109,11 @@ export function departmentsAround(point: LatLng, radiusKm = PRACTICAL_RADIUS_KM)
     const clampedLng = Math.min(Math.max(point.lng, bw), be);
     found.push({ code, km: distanceKm(point, { lat: clampedLat, lng: clampedLng }) });
   }
-  // Le département du point, même hors table ou hors rectangle (position en mer, imprécision) : le plus proche par son centre.
-  const own = nearestDepartment(point);
-  if (own && !found.some((f) => f.code === own)) found.push({ code: own, km: 0 });
+  // Aucune emprise ne contient le point (position en mer, imprécision) : le département dont le centre est le plus proche.
+  if (!found.some((f) => f.km === 0)) {
+    const own = nearestDepartment(point);
+    if (own && !found.some((f) => f.code === own)) found.push({ code: own, km: 0 });
+  }
   return found
     .sort((x, y) => x.km - y.km || x.code.localeCompare(y.code))
     .slice(0, PRACTICAL_DEPARTMENTS_MAX)

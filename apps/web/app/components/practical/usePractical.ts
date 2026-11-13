@@ -6,11 +6,12 @@ import {
   createReadGate,
   createSessionGuard,
   createSingleTimer,
+  nextPracticalRead,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  type PracticalReadOutcome,
   practicalPendingDelay,
-  practicalRetryDelay,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -64,6 +65,8 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   const reload = useRef<() => void>(() => undefined);
   const retry = useCallback(() => reload.current(), []);
   const failed = useRef(false);
+  // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée (changement de compte ou d'entrées).
+  const latest = useRef<() => Promise<void>>(async () => undefined);
   const retried = useRef(0);
   // Le composant est monté : plus aucune lecture ni relance après son démontage (tour 2 de la suite).
   const alive = useRef(true);
@@ -94,56 +97,54 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     }
     let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
     try {
-      res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near } });
+      res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near }, timeoutMs: 15_000 });
     } finally {
       // Une demande attendait : on relit pour la session courante (la réponse qui vient d'arriver est laissée de côté).
       if (gate.leave() && alive.current) {
-        void load();
+        void latest.current();
       }
     }
     // Une réponse devenue étrangère (autre compte, autre génération de session) ou arrivée après le démontage est jetée.
     if (!alive.current || !guard.valid(ticket)) return;
-    if (!res.ok) {
+    // La suite d'une lecture : réseau (relance espacée), refus (jamais relancé), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
+    const outcome: PracticalReadOutcome = res.ok
+      ? res.data.partial
+        ? "partial"
+        : "complete"
+      : res.status === 0
+        ? "network"
+        : "refused";
+    const step = nextPracticalRead(outcome, retried.current, attempts.current);
+    retried.current = step.calendarStep;
+    attempts.current = step.networkAttempt;
+    if (res.ok) {
+      failed.current = false;
+      memory.set(`${ticket.who}|${near}`, res.data);
+      setState({ data: res.data, loading: false, offline: false });
+    } else {
       failed.current = true;
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
-      // Panne réseau (statut 0) : relance espacée, seulement page visible ; sans données, le retour en ligne la reprend aussi.
-      // Un échec pendant le calendrier des chargements en cours (3, 6, 12, 24 s) ne l'arrête pas : la relecture suivante part à son heure.
-      const pendingNext = retried.current > 0 ? practicalPendingDelay(retried.current) : null;
-      if (pendingNext !== null) {
-        retried.current += 1;
-        partialTimer.schedule(() => {
-          if (alive.current) void load();
-        }, pendingNext);
-      } else if (res.status === 0) {
-        retryTimer.schedule(
-          () => {
-            if (alive.current && (typeof document === "undefined" || document.visibilityState === "visible"))
-              void load();
-          },
-          practicalRetryDelay(attempts.current++),
-        );
-      }
-      return;
     }
-    attempts.current = 0;
-    failed.current = false;
-    memory.set(`${ticket.who}|${near}`, res.data);
-    setState({ data: res.data, loading: false, offline: false });
-    // Des chargements sont en cours côté API : relectures espacées (3, 6, 12, 24 s), puis arrêt ; jamais après le démontage.
-    const pending = res.data.partial ? practicalPendingDelay(retried.current) : null;
-    if (pending !== null) {
-      retried.current += 1;
-      partialTimer.schedule(() => {
-        if (alive.current) void load();
-      }, pending);
+    if (step.delay !== null) {
+      // Jamais la relance d'un onglet masqué : elle reprend au retour sur la page (`failed` : voir la reprise plus bas).
+      (outcome === "partial" ? partialTimer : retryTimer).schedule(() => {
+        if (!alive.current) return;
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+          failed.current = true;
+          return;
+        }
+        void latest.current();
+      }, step.delay);
     }
   }, [enabled, near, who, partialTimer, retryTimer, gate]);
+  latest.current = load;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture par changement de `load` (entrées ou compte).
   useEffect(() => {
     retried.current = 0;
     attempts.current = 0;
     retryTimer.cancel();
+    partialTimer.cancel();
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return undefined;

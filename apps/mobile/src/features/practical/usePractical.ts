@@ -7,12 +7,13 @@ import {
   createSessionGuard,
   createSingleTimer,
   type LatLng,
+  nextPracticalRead,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
+  type PracticalReadOutcome,
   practicalPendingDelay,
   practicalReadAllowed,
-  practicalRetryDelay,
   shouldRetryPractical,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
@@ -77,6 +78,11 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   const attempts = useRef(0);
   const lastStart = useRef(0);
   const focused = useRef(false);
+  // Un refus (4xx) n'est jamais relancé ; une relance tombée sans focus ou en arrière-plan reprend au retour.
+  const refused = useRef(false);
+  const resumePending = useRef(false);
+  // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée.
+  const latest = useRef<() => Promise<void>>(async () => undefined);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -92,10 +98,11 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     const ticket = guard.begin();
     if (!ticket) {
       // Identité inconnue : rien ne part ; on réessaie dès qu'elle l'est.
-      waitTimer.schedule(() => void load(), WAIT_IDENTITY_MS);
+      waitTimer.schedule(() => void latest.current(), WAIT_IDENTITY_MS);
       return;
     }
     lastStart.current = Date.now();
+    let outcome: PracticalReadOutcome;
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
@@ -103,39 +110,40 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
-      attempts.current = 0;
+      refused.current = false;
       setState({ data, loading: false, offline: false });
-      // Des chargements sont en cours côté API : relectures espacées (3, 6, 12, 24 s), puis arrêt.
-      const pending = data.partial ? practicalPendingDelay(retried.current) : null;
-      if (pending !== null) {
-        retried.current += 1;
-        retryTimer.schedule(() => {
-          if (alive.current) void load();
-        }, pending);
-      }
+      outcome = data.partial ? "partial" : "complete";
     } catch (error) {
       if (!alive.current || !guard.valid(ticket)) return;
-      // Seule une erreur réseau est « hors ligne » et se relance ; un refus (403, 404, 429) n'est jamais relancé.
+      // Seule une erreur réseau est « hors ligne » et se relance ; un refus (403, 404, 429) n'est jamais relancé, ni au retour sur l'écran.
       const network = error instanceof ApiRequestError && error.isNetwork;
+      refused.current = !network;
       setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: network }));
-      // Un échec pendant le calendrier des chargements en cours (3, 6, 12, 24 s) ne l'arrête pas.
-      const pendingNext = retried.current > 0 ? practicalPendingDelay(retried.current) : null;
-      if (pendingNext !== null) {
-        retried.current += 1;
-        retryTimer.schedule(() => {
-          if (alive.current) void load();
-        }, pendingNext);
-      } else if (network) {
-        retryTimer.schedule(
-          () => {
-            const foreground = AppState.currentState === "active";
-            if (shouldRetryPractical({ network: true, focused: focused.current, foreground })) void load();
-          },
-          practicalRetryDelay(attempts.current++),
-        );
-      }
+      outcome = network ? "network" : "refused";
+    }
+    // La suite : réseau (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
+    const step = nextPracticalRead(outcome, retried.current, attempts.current);
+    retried.current = step.calendarStep;
+    attempts.current = step.networkAttempt;
+    if (step.delay !== null) {
+      retryTimer.schedule(() => {
+        if (!alive.current) return;
+        // Jamais de relance écran sans focus ou appli en arrière-plan : elle reprend au retour (`refresh`).
+        if (
+          !shouldRetryPractical({
+            network: true,
+            focused: focused.current,
+            foreground: AppState.currentState === "active",
+          })
+        ) {
+          resumePending.current = true;
+          return;
+        }
+        void latest.current();
+      }, step.delay);
     }
   }, [enabled, near, eventId, waitTimer, retryTimer]);
+  latest.current = load;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `load` change avec ses entrées ; une lecture par changement.
   useEffect(() => {
@@ -143,6 +151,8 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     fetchedAt.current = 0;
     attempts.current = 0;
     lastStart.current = 0;
+    refused.current = false;
+    resumePending.current = false;
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return;
@@ -165,9 +175,14 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   // Retour sur l'écran et retour de l'appli au premier plan : relit quand la réponse a plus d'une minute, ou quand aucune lecture
   // n'a encore réussi (premier échec réseau).
   const refresh = useCallback(() => {
-    if (!enabled) return;
-    // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran, refus relu à chaque focus).
+    if (!enabled || refused.current) return;
+    // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran).
     if (!practicalReadAllowed(lastStart.current, Date.now())) return;
+    if (resumePending.current) {
+      resumePending.current = false;
+      void load();
+      return;
+    }
     if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
   }, [enabled, load]);
   useFocusEffect(

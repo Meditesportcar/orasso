@@ -111,3 +111,33 @@ export function createReadGate() {
     },
   };
 }
+
+/** Ce qu'une lecture a donné, pour décider de la suite. */
+export type PracticalReadOutcome = "complete" | "partial" | "network" | "refused";
+
+/**
+ * La suite d'une lecture de « Pratique » : `calendarStep` (relectures 3/6/12/24 s tant que des chargements sont en cours) et `networkAttempt`
+ * (relances d'une panne réseau : 15 s, 30 s, 60 s, 2 min). Une réponse complète remet les deux compteurs à 0 ; un refus (403, 404, 429…)
+ * n'est jamais relancé ; une panne réseau poursuit le calendrier s'il est commencé, sinon relance espacée ; une réponse partielle avance le
+ * calendrier. `delay: null` : rien à relancer.
+ */
+export function nextPracticalRead(
+  outcome: PracticalReadOutcome,
+  calendarStep: number,
+  networkAttempt: number,
+): { delay: number | null; calendarStep: number; networkAttempt: number } {
+  if (outcome === "complete") return { delay: null, calendarStep: 0, networkAttempt: 0 };
+  if (outcome === "refused") return { delay: null, calendarStep, networkAttempt };
+  const pending = outcome === "partial" || calendarStep > 0 ? practicalPendingDelay(calendarStep) : null;
+  if (pending !== null) {
+    return {
+      delay: pending,
+      calendarStep: calendarStep + 1,
+      networkAttempt: outcome === "partial" ? 0 : networkAttempt,
+    };
+  }
+  if (outcome === "network" && calendarStep === 0) {
+    return { delay: practicalRetryDelay(networkAttempt), calendarStep, networkAttempt: networkAttempt + 1 };
+  }
+  return { delay: null, calendarStep, networkAttempt };
+}
