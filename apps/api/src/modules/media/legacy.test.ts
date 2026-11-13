@@ -500,6 +500,17 @@ describe("tour 3 : finition", () => {
     expect(await db.select().from(eventAlbums)).toHaveLength(1);
   });
 
+  it("la réponse d'une modification (PATCH) rend `photos: []` quand l'album du titulaire est invisible (événement sur invitation), les photos reviennent ensuite", async () => {
+    const album = await publishedAlbum(leo, eventId, 2);
+    await db.execute(sql`update events set admission = 'invite_only' where id = ${eventId}`);
+    const hidden = await call(leo, "PATCH", `/me/media-contents/${album.id}`, { title: "Nouveau titre" });
+    expect(hidden.status).toBe(200);
+    expect(hidden.json).toMatchObject({ id: album.id, title: "Nouveau titre", photos: [] });
+    await db.execute(sql`update events set admission = 'open' where id = ${eventId}`);
+    const shown = await call(leo, "PATCH", `/me/media-contents/${album.id}`, { title: "Titre revenu" });
+    expect(shown.json.photos).toHaveLength(2);
+  });
+
   it("la page presse ne montre que les albums visibles ; « Mes contenus » garde l'album du titulaire avec des adresses qu'il peut lire", async () => {
     const album = await publishedAlbum(leo, eventId, 1);
     const orgaList = () =>
