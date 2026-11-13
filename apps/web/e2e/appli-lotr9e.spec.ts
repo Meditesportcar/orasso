@@ -178,6 +178,9 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("page-count-accreditations")).toHaveCount(0);
 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), l'album sans gestion, la Page de Sud Cars.
+    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : la passe repart d'un Fil neuf.
+    await sql("delete from feed_seen");
+    await sql("delete from feed_seen_floor");
     const damien = await open(browser, DAMIEN);
     const d = damien.page;
     await go(d, "/fil");
@@ -374,16 +377,17 @@ test("réponse perdue après « telle quelle » : « Changer » ne rouvre rien, 
     await page.getByTestId("album-tile").first().click();
     await expect(page.getByTestId("album-decision-frozen")).toBeVisible();
     await expect(page.getByTestId("album-frame-editor")).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    // On ferme la feuille en touchant l'arrière-plan, au-dessus d'elle.
+    await page.mouse.click(195, 30);
+    await expect(page.getByTestId("album-decision-frozen")).toHaveCount(0);
     // La reprise rejoue le même clientId avec la même décision.
-    await expect(page.getByTestId("album-step2-continue")).toBeVisible();
-    await page.getByTestId("album-step2-continue").click({ force: true });
+    await page.getByTestId("album-step2-continue").click();
     await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
     const rows = await sql<{ plate_state: string }>(
       "select p.plate_state from event_album_photos p join event_albums a on a.id = p.album_id join events e on e.id = a.event_id where e.slug = 'beziers-night-2026' and a.status = 'draft' and p.deleted_at is null",
     );
     expect(rows.map((r) => r.plate_state)).toEqual(["kept"]);
-    await expect(page.getByTestId("album-line-photos")).not.toContainText("floutée");
+    await expect(page.getByTestId("album-line-photos")).toContainText("0 plaque floutée");
   } finally {
     await leo.ctx.close();
     await sql(DROP_BEZIERS_DRAFTS);

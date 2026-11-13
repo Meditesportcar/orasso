@@ -602,7 +602,7 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   // Photo retirée : l'ajout est défait côté serveur (la place du quota n'est pas en cause : l'envoi a été consommé).
   const deleted = page.waitForResponse((r) => r.url().includes("/photos/") && r.request().method() === "DELETE");
   await page.getByTestId("album-remove").click();
-  expect((await deleted).status()).toBe(200);
+  expect((await deleted).status()).toBe(204);
   await expect(page.getByTestId("album-tile")).toHaveCount(0);
   expect(
     (

@@ -131,6 +131,9 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), puis la fiche sans gestion.
     const damien = await browser.newContext({ viewport: { width: 390, height: 900 } });
     const dpage = await damien.newPage();
+    // Les cartes déjà montrées à Damien par une passe précédente ne reviennent pas (« Déjà vu ») : la passe repart d'un Fil neuf.
+    await sql("delete from feed_seen");
+    await sql("delete from feed_seen_floor");
     await loginInBrowser(dpage, DAMIEN, undefined, "/app/fil");
     await expect(dpage.getByTestId("fil-list")).toBeVisible({ timeout: 30_000 });
     const card = dpage.getByTestId("feed-card-album").filter({ hasText: title });
@@ -300,7 +303,7 @@ test("réponse perdue après « telle quelle » : « Changer » ne rouvre rien, 
     expect(rows.map((r) => r.plate_state)).toEqual(["kept"]);
     // L'étape 3 compte 0 plaque floutée : jamais « floutée » devant une photo qui part lisible.
     await expect(page.getByTestId("album-line-photos")).toContainText("1 photo");
-    await expect(page.getByTestId("album-line-photos")).not.toContainText("floutée");
+    await expect(page.getByTestId("album-line-photos")).toContainText("0 plaque floutée");
   } finally {
     await sql(DROP_BEZIERS_DRAFTS);
   }
