@@ -28,7 +28,7 @@ export async function notifyApplicationReceived(
     "application_received",
     {
       title,
-      body: title,
+      body: "", // le titre dit tout : un corps identique s'afficherait deux fois
       data: { eventId: event.id, kind, eventName: event.title, applicationId: application.id, screen: "triage" },
       eventId: event.id,
       eventStartsAt: event.startsAt,

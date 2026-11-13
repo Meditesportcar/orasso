@@ -122,7 +122,7 @@ async function withLiveTitles(page: ActivityPage): Promise<ActivityPage> {
           n === 0
             ? structureNotificationTexts.applicationAllSorted(d.eventName)
             : structureNotificationTexts.applicationVehicle(n, d.eventName);
-        return { ...i, count: n, title, body: title };
+        return { ...i, count: n, title, body: "" };
       }),
     })),
   };

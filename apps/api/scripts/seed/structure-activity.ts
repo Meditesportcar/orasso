@@ -48,7 +48,7 @@ export async function seedStructureActivity() {
   for (let i = 0; i < 2; i++) {
     await emit(db, msc.id, "application_received", {
       title: T.applicationVehicle(1, nocturne.title),
-      body: T.applicationVehicle(1, nocturne.title),
+      body: "",
       eventId: nocturne.id,
       data: { eventId: nocturne.id, kind: "vehicle", eventName: nocturne.title, screen: "triage" },
       groupKey: `applications:${nocturne.id}:vehicle`,
