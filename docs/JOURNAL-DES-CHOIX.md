@@ -6484,6 +6484,26 @@ Trois recettes de l'appli périmées par des changements voulus (R8d, R9n), remi
 ### Vérifié
 Pile de recette seule (base seedée à neuf, API, appli compilée), chaque fichier relancé seul après `seed --reset` : voir le rapport du lot.
 
+## Petit lot de fin, partie E (haut de Crew, option B choisie par Damien le 13/11)
+
+Le haut de l'onglet Crew devient compact, « Comme le Profil » (maquette `maquettes-crew`, option B). Appli et site, aucune migration, aucun changement d'API.
+
+- **Ce qui est fait.** Vignette carrée de la couverture (76 px) avec le logo dans son coin, qui ouvre la couverture en grand avec la description, l'Instagram et, pour un membre, « Signaler » (il n'est plus au bas de l'espace) ; le nom à droite, qui passe à la ligne et ne se tronque jamais (▾ quand j'ai plusieurs crews, il ouvre « Mes crews ») ; dessous « N membres · tu es le chef » (le rôle reste sous le nom : « 2 autres crews » a disparu) ; la description sur une ligne avec « plus », qui la déplie sur place avec l'Instagram ; Inviter et Réglages empilés à droite (chef) ; Discussion en bouton secondaire pleine largeur (sur le site à 1 280 px elle monte sur la ligne) ; onglets soulignés collants avec « Publier » en icône moutarde au bout (le composeur « Une photo, un mot… » est retiré du haut du fil). Fichiers : `apps/mobile/src/features/crews/tab/{CrewHead,CrewScroll,CrewSpace,CrewSelector,CrewTab}.tsx`, `crews/feed/CrewFeed.tsx`, `apps/web/app/components/crew-page/{CrewTop,CrewSpaceView}.tsx`, `crew-feed/CrewFeed.tsx`, `styles/{crew-page,crew-feed,profile}.css`, `packages/shared/src/labels/crewPage.fr.ts`.
+- **Mesure (recette `appli-lotfin-e`, 384 × 844, y du haut de `crew-feed`).** Avant : 507 px à ×1, 524 px à ×1,3. Après : **284 px à ×1** et **303 px à ×1,3** (chef et membre ; 270 px à 390 px pour un membre), contre 286 et 305 dans la maquette ; plafonds de la recette 300 et 320.
+- **Nom du crew à 19 px** (la maquette) : aucun jeton n'a cette taille (`posterM` 17, `posterL` 24) ; on prend `posterL` à 19 px, comme le Profil prend `posterL` à 18 px. Le nom passe à la ligne, il ne rapetisse pas.
+- **« plus » : libellé puis chevron** (comme `ProfileBio` du Profil), alors que la maquette met le chevron avant. Raison : une seule brique pour le Profil et le crew.
+- **`ProfileBio` (appli et site) reçoit une prop facultative `extra`** (ce que « plus » dévoile sous la bio : l'Instagram). Avec `extra`, « plus » est toujours là (sans cela un crew dont la description tient sur une ligne ne montrerait jamais son Instagram). Sans `extra`, rien ne change pour le Profil. Sans description, l'Instagram est montré tel quel sous le rôle.
+- **`UnderTabs` de l'appli reçoit `fade`** (prop facultative, faux par défaut) : le bord droit de la rangée s'efface tant qu'il reste des onglets à découvrir (×1,3 : quatre onglets et « Publier »). Sur le site, la même chose par un masque CSS posé quand la rangée déborde (`CrewTabsBar`).
+- **Collant dans l'appli.** Le défilement ne colle que ses enfants directs : `CrewSpace` possède désormais la zone qui défile (`CrewScroll`, même `testID` `crew-tab`) et pose à plat ses blocs ; `CrewTab` garde le tirer-pour-recharger et la position (pastille « nouvelle publication »). Le sélecteur de crew n'est plus une carte au-dessus de l'espace : sa feuille « Mes crews » (`CrewSwitchSheet`, mêmes `testID`) s'ouvre par le nom.
+- **« Publier » sur tous les onglets** (comme la maquette). Appli : même route `/crew/publier`. Site : sur l'onglet Fil il ouvre la fenêtre de publication du fil ; sur un autre onglet c'est un lien vers le Fil avec `?publier=1` qui ouvre la fenêtre, puis l'adresse perd le paramètre. Un crew dissous n'a ni onglets ni « Publier » (comme avant).
+- **Les nombres des onglets** restent masqués à zéro (« Sorties », pas « Sorties · 0 »), comme avant ; le nombre de demandes n'est montré qu'au chef.
+- **Site, grand écran** : l'onglet « Sorties » reste masqué (les sorties sont à droite) par une règle CSS sur le `data-testid` de l'onglet, pour ne pas toucher à l'`UnderTabs` partagé ; la pastille « nouvelle publication » du fil se cale sous la rangée collée ; la description dépliée garde ses retours à la ligne.
+- **Libellés** : `crewTabLabels.coverA11y` (« Voir la couverture et la description du crew ») et `publishA11y` (« Publier dans le crew »). Réglages garde l'icône `gear` du kit (la partie C la redessine). `crewFeedLabels.composerHint` n'est plus lu (laissé en place).
+- **Recettes existantes** : voir le rapport du lot (celles qui visaient « Signaler » au bas de l'espace du crew, ou le composeur, s'adaptent).
+
+### À revoir avec Damien
+- Le chevron du nom (plusieurs crews) se range à droite du nom quand celui-ci passe sur deux lignes (le texte prend toute la largeur) ; dans la maquette il le suit de près. Rien de bloquant.
+
 ## Réponses de Damien du 13/11/2026 (points « À revoir » des lots R9e et R9f)
 
 - **Plaque lisible dans un album public (D28, « Envoyer telle quelle »)** : Damien : « proposé le floutage de plaque ». Le flou reste **proposé** au média pour chaque lot de photos (« Flouter et ajouter » | « Envoyer telle quelle »), jamais imposé : c'est le fonctionnement de R9e. Point fermé. Ce qui **sort** d'Orasso (téléchargement « Enregistrer », story reprise) reste flouté (décision du coordinateur, lot R9f).
