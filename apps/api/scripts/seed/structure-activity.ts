@@ -14,10 +14,11 @@ const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
 
 export async function seedStructureActivity() {
+  // Le marqueur est celui de ce seed (`data.seed`) : d'autres seeds posent déjà des lignes de structure (demandes de staff…).
   const [already] = await db
     .select({ id: t.notifications.id })
     .from(t.notifications)
-    .where(isNotNull(t.notifications.structureId))
+    .where(sql`${t.notifications.structureId} is not null and ${t.notifications.data} ->> 'seed' = 'r9d'`)
     .limit(1);
   if (already) {
     console.log("Activité de structure : lignes déjà présentes.");
@@ -38,8 +39,9 @@ export async function seedStructureActivity() {
     data: { actor: { pseudo: who, avatarUrl: null }, link: "/app/fil" },
   });
   let lines = 0;
-  const emit = async (...args: Parameters<typeof notifyStructure>) => {
-    lines += (await notifyStructure(...args)).length;
+  const emit = async (...[ex, structureId, type, input, opts]: Parameters<typeof notifyStructure>) => {
+    const marked = { ...input, data: { ...input.data, seed: "r9d" } };
+    lines += (await notifyStructure(ex, structureId, type, marked, opts)).length;
   };
 
   // Deux candidatures à trier sur la Nocturne (une ligne regroupée, compteur à 2).
