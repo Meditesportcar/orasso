@@ -99,8 +99,7 @@ async function audit(page: Page): Promise<Audit> {
         // Lot R9b : la bio du haut d'une Page tient sur une ligne par construction (« plus » la déroule), comme celle du Profil
         // (même exemption que `audit.ts`, lot R8b1) : seulement si « plus » existe.
         .filter(
-          (el) =>
-            !el.closest('[data-testid="page-bio"]') || !document.querySelector('[data-testid="page-bio-toggle"]'),
+          (el) => !el.closest('[data-testid="page-bio"]') || !document.querySelector('[data-testid="page-bio-toggle"]'),
         )
         .filter(
           (el) =>

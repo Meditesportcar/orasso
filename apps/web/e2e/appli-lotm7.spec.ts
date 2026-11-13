@@ -435,7 +435,9 @@ const CLOSINGS: Record<
   pro: {
     tab: ["Page", "page"],
     open: async (page) => {
-      await page.getByText("Publications", { exact: true }).first().click();
+      // Lot R9b : Ma fiche s'ouvre par le chip « Modifier ma fiche » de la Page ; « Publications » est un de ses segments.
+      await page.getByTestId("page-gest-fiche").first().click();
+      await page.getByTestId("pro-segments").getByText("Publications", { exact: true }).click();
       await page.getByTestId("pro-new-post").first().click();
     },
     page: /\/publier/,
