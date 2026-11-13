@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authorOf, storyAuthorFor, storyPublishHref } from "./author";
+import { authorOf, storyAuthorFor, storyHeaderPlain, storyPublishHref } from "./author";
 
 const orga = { kind: "organizer", structureId: "s-1" } as const;
 
@@ -40,5 +40,16 @@ describe("storyPublishHref : la barre des stories", () => {
     expect(href).toBe("/story/publier?auteur=me");
     const orga = { kind: "organizer", structureId: "s-1" } as const;
     expect(storyAuthorFor({ kind: "me" }, null, orga, "Suspendue")).toEqual({ persona: "fan" });
+  });
+});
+
+describe("storyHeaderPlain : l'en-tête de l'écran de story", () => {
+  it("passionné (casquette de base) qui passe par Publication → Story (auteur=me) : « Visible 24 h » comme avant", () => {
+    expect(storyHeaderPlain({ persona: "fan" }, "fan")).toBe(true);
+    expect(storyHeaderPlain({ persona: "fan" }, "visitor")).toBe(true);
+  });
+  it("une page, ou la personne sous une casquette de page : « en tant que »", () => {
+    expect(storyHeaderPlain({ persona: "organizer", structureId: "s", name: "X" }, "organizer")).toBe(false);
+    expect(storyHeaderPlain({ persona: "fan" }, "organizer")).toBe(false);
   });
 });

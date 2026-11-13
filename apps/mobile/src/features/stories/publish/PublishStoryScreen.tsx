@@ -48,7 +48,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { withDetection } from "../../fil/publish/model";
-import { storyAuthorFor } from "./author";
+import { storyAuthorFor, storyHeaderPlain } from "./author";
 import { Capture } from "./Capture";
 import { commercialText, useCommercialLine } from "./CommercialLine";
 import { Details } from "./Details";
@@ -625,7 +625,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   return (
     <FlowScreen
       title={L.title}
-      facts={author.persona === "fan" && !choice ? L.subtitle : casquettesLabels.publishAs(authorName)}
+      facts={storyHeaderPlain(author, persona.kind) ? L.subtitle : casquettesLabels.publishAs(authorName)}
       onClose={() => void leave()}
       footer={
         primary ? (

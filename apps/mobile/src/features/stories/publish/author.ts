@@ -53,3 +53,10 @@ export const storyPublishHref = (actor: string | null, activeKind: string): stri
     : activeKind === "fan" || activeKind === "visitor" || activeKind === "admin"
       ? "/story/publier"
       : "/story/publier?auteur=me";
+
+/**
+ * L'en-tête de l'écran de story : « Visible 24 h » (le sous-titre d'avant) quand l'auteur est la personne **et** que la casquette active
+ * est celle de base (le passionné qui passe par Publication → Story garde son écran) ; « en tant que <nom> » sinon (R9n, tour 4, I2).
+ */
+export const storyHeaderPlain = (author: StoryAuthor, activeKind: string): boolean =>
+  author.persona === "fan" && (activeKind === "fan" || activeKind === "visitor" || activeKind === "admin");

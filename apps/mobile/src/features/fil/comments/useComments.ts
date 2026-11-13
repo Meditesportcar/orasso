@@ -68,6 +68,9 @@ export type CommentsController = {
   setOff: (off: boolean) => Promise<void>;
 };
 
+/** R3 : seule la casquette active a des effets visibles (message, relance, carte). */
+const isCurrent = (t: LiveTicket): boolean => postLive.isCurrent(t as never);
+
 export function useComments(
   post: FeedPostView,
   active: boolean,
@@ -97,14 +100,18 @@ export function useComments(
     };
   }, []);
   const id = post.id;
+  /** R1 : toute écriture va dans le magasin du ticket. */
   const update = useCallback(
     (fn: (s: SheetState) => SheetState, ticket: LiveTicket) => postLive.updateSheet(id, fn, ticket),
     [id],
   );
   /** Une réponse de l'API d'un autre compte n'écrit ni la feuille ni la carte. */
-  const emitPost = useCallback((next: FeedPostView, ticket: LiveTicket) => {
-    // La carte affichée est celle de la casquette active : une réponse d'une autre casquette n'y touche pas (tour 3).
-    if (postLive.alive(ticket) && postLive.isCurrent(ticket as never)) onPostRef.current(next);
+  const emitPost = useCallback((change: (post: FeedPostView) => FeedPostView, ticket: LiveTicket) => {
+    if (!postLive.alive(ticket)) return;
+    // R1/R3 : la carte affichée est celle de la casquette active ; pour une autre, la modification est calculée depuis ses données et
+    // écrite dans son magasin (elle la retrouve à son retour), sans toucher à la carte affichée (C3).
+    if (isCurrent(ticket)) onPostRef.current(change(postRef.current));
+    else postLive.changePost(postRef.current.id, ticket as never, change);
   }, []);
   /**
    * 404 d'une **route de la publication** (première page, couper, envoi sans `parentId`) : la publication n'est plus lisible, tout ce qu'on
@@ -123,7 +130,7 @@ export function useComments(
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
-      const since = repliesMark(postLive.sheetOf(id), parentId);
+      const since = repliesMark(postLive.sheetOf(id, t as never), parentId);
       try {
         const page = await api.feedCommentReplies(parentId, from);
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
@@ -134,36 +141,37 @@ export function useComments(
         // Parent introuvable (supprimé) : on retire le parent et son état de réponses (ses lectures en cours sont invalidées), les envois en
         // attente restent, et la publication se revalide une seule fois.
         if (statusOf(e) === 404) {
-          parentGoneRef.current?.(parentId);
+          parentGoneRef.current?.(parentId, t);
           return;
         }
-        if (mounted.current) setActionError(errorMessage(e));
+        if (mounted.current && isCurrent(t)) setActionError(errorMessage(e));
       }
     },
     [update, id],
   );
   const loadTopRef = useRef<(() => Promise<void>) | null>(null);
-  const parentGoneRef = useRef<((parentId: string) => void) | null>(null);
+  const parentGoneRef = useRef<((parentId: string, t: LiveTicket) => void) | null>(null);
 
   const loadTop = useCallback(
     async (from?: string | null) => {
       const t = from ? postLive.followRead(id, "top") : postLive.beginRead(id, "top");
       // La marque se prend au départ de **chaque** lecture, pagination comprise.
-      const since = sheetMark(postLive.sheetOf(id));
+      const since = sheetMark(postLive.sheetOf(id, t as never));
       try {
         const page = await api.feedComments(id, from, actorRef.current);
         if (!postLive.fresh(t)) return;
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
         const next = update((s) => sheetWithTopPage(s, page.items, page.nextCursor, !from, since), t);
-        if (mounted.current && postLive.isCurrent(t as never)) setLoadError(null);
+        if (mounted.current && isCurrent(t)) setLoadError(null);
         // Les réponses restées dépliées se revalident (elles ont pu être supprimées ou devenir privées entre deux ouvertures).
-        if (!from) {
+        // R3 : la relance des réponses ne part que pour la casquette active.
+        if (!from && isCurrent(t)) {
           for (const [pid, r] of Object.entries(next.replies)) if (r.open && !r.loaded) void loadReplies(pid);
         }
       } catch (e) {
         if (!postLive.fresh(t) || postGone(e, t)) return;
-        if (mounted.current && postLive.isCurrent(t as never)) setLoadError(errorMessage(e));
+        if (mounted.current && isCurrent(t)) setLoadError(errorMessage(e));
       }
     },
     [id, update, postGone, loadReplies],
@@ -208,8 +216,8 @@ export function useComments(
           counted = r.counted;
           return r.state;
         }, t);
-        emitPost(postWithCommentAdded(postRef.current, created, p.parentId, counted), t);
-        if (p.parentId && !next.replies[p.parentId]?.loaded) void loadReplies(p.parentId);
+        emitPost((post) => postWithCommentAdded(post, created, p.parentId, counted), t);
+        if (p.parentId && !next.replies[p.parentId]?.loaded && isCurrent(t)) void loadReplies(p.parentId);
       } catch (e) {
         if (!postLive.alive(t)) return;
         const status = statusOf(e);
@@ -221,11 +229,11 @@ export function useComments(
             return;
           }
           update((s) => pendingFail(s, clientId, L.commentGone), t);
-          void loadTop();
+          if (isCurrent(t)) void loadTop();
           return;
         }
         if (status === 409 && e instanceof ApiRequestError && e.code === "comments_off") {
-          emitPost({ ...postRef.current, commentsOff: true }, t);
+          emitPost((post) => ({ ...post, commentsOff: true }), t);
         }
         update((s) => pendingFail(s, clientId, status === 0 ? L.notSent : errorMessage(e)), t);
       }
@@ -265,19 +273,25 @@ export function useComments(
 
   const dropRemoved = useCallback(
     (commentId: string, t: LiveTicket) => {
-      const { state, removed } = sheetRemoveComment(postLive.sheetOf(id), commentId);
-      update(() => state, t);
-      emitPost(postWithCommentRemoved(postRef.current, commentId, removed, state), t);
+      // R2 : l'état à retirer est celui du magasin du ticket, lu dans le rappel (jamais celui de la casquette active).
+      let removedIds: ReturnType<typeof sheetRemoveComment>["removed"] | null = null;
+      const state = update((s) => {
+        const r = sheetRemoveComment(s, commentId);
+        removedIds = r.removed;
+        return r.state;
+      }, t);
+      const removed = removedIds;
+      if (removed) emitPost((post) => postWithCommentRemoved(post, commentId, removed, state), t);
     },
-    [id, update, emitPost],
+    [update, emitPost],
   );
 
-  parentGoneRef.current = (parentId: string) => {
-    postLive.beginRead(id, `r:${parentId}`);
-    const t = postLive.ticket(id);
-    if (!postLive.sheetOf(id).items.some((c) => c.id === parentId)) return;
+  parentGoneRef.current = (parentId: string, t: LiveTicket) => {
+    // R1 : les lectures du fil de réponses sont rendues périmées dans le magasin du ticket ; R2 : le parent se cherche dans ce magasin.
+    postLive.dropReads(id, `r:${parentId}`, t as never);
+    if (!postLive.sheetOf(id, t as never).items.some((c) => c.id === parentId)) return;
     dropRemoved(parentId, t);
-    void loadTop();
+    if (isCurrent(t)) void loadTop();
   };
 
   const remove = useCallback(
@@ -297,9 +311,9 @@ export function useComments(
           // 204 sans `parent` (parent devenu illisible, déjà supprimé) : rien ne met son compteur à jour. La première page est relue
           // d'abord (le compteur du parent est celui du serveur), puis sa discussion, si le parent y est encore (un 404 le retire
           // comme `parentGoneRef`, qui relit lui-même la première page : jamais deux fois, ni avec l'ancien compteur).
-          if (replyParent && !done?.parent) {
+          if (replyParent && !done?.parent && isCurrent(t)) {
             void loadTop().then(() => {
-              if (postLive.alive(t) && postLive.sheetOf(id).items.some((c) => c.id === replyParent))
+              if (isCurrent(t) && postLive.sheetOf(id, t as never).items.some((c) => c.id === replyParent))
                 void loadReplies(replyParent);
             });
           }
@@ -309,8 +323,8 @@ export function useComments(
         // Déjà retiré (404 d'un commentaire) : seule la ligne part de l'écran ; la publication se revalide.
         if (statusOf(e) === 404) {
           dropRemoved(comment.id, t);
-          void loadTop();
-        } else if (mounted.current) setActionError(errorMessage(e));
+          if (isCurrent(t)) void loadTop();
+        } else if (mounted.current && isCurrent(t)) setActionError(errorMessage(e));
       }
     },
     [
@@ -327,7 +341,7 @@ export function useComments(
       const t = postLive.ticket(id);
       const current = sheetFind(postLive.sheetOf(id), comment.id) ?? comment;
       void flames.fire(
-        `${t.g}|${t.p}|${id}|${comment.id}`,
+        `${t.g}|${t.p}|${(t as { s?: string | null }).s ?? ""}|${(t as { i?: number }).i ?? 0}|${id}|${comment.id}`,
         { reactionsCount: current.reactionsCount, reactedByMe: current.reactedByMe },
         {
           send: (on) => api.fireFeedComment(comment.id, on),
@@ -347,10 +361,10 @@ export function useComments(
       setActionError(null);
       try {
         const res = await api.setFeedCommentsOff(id, off);
-        emitPost({ ...postRef.current, commentsOff: res.commentsOff }, t);
+        emitPost((post) => ({ ...post, commentsOff: res.commentsOff }), t);
       } catch (e) {
         if (!postLive.alive(t) || postGone(e, t)) return;
-        if (mounted.current) setActionError(errorMessage(e));
+        if (mounted.current && isCurrent(t)) setActionError(errorMessage(e));
       }
     },
     [id, emitPost, postGone],

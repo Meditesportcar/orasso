@@ -467,8 +467,13 @@ test("Story depuis « Publier » : casquette A active, auteur B choisi → la st
   );
   try {
     expect(made, "une story au nom de MéditeSportCar, pas de la casquette active").toHaveLength(1);
+    // Aucune story de Sarah (le compte) ni de Roues Libres 66 (la casquette active) créée pendant le pas.
     const wrong = await sql<{ id: string }>(
-      "select id from stories where created_at >= $1 and (structure_id is distinct from $2)",
+      `select s.id from stories s
+        where s.created_at >= $1
+          and (s.author_id = (select id from "user" where email = 'sarah@orasso.local')
+               or s.structure_id = (select id from structures where slug = 'roues-libres-66'))
+          and s.structure_id is distinct from $2`,
       [startedAt.toISOString(), other],
     );
     expect(wrong, "aucune story publiée sous une autre identité").toHaveLength(0);

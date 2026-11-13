@@ -1,7 +1,13 @@
 // Un magasin de commentaires par compte **et** par casquette, conservés au changement de casquette (R9n, tours 2 et 3) : voir le modèle
 // en tête de `scope.ts`. La façade a la forme d'un `PostLiveStore` : `postLive.xxx` agit sur le magasin de la casquette active, sauf
 // les écritures portées par un ticket (elles vont au magasin du ticket) et l'état d'écran commun (`opening`, `hosts`).
-import { createPostLiveStore, type LiveTicket, type PostLiveStore, type ReadTicket } from "@orasso/shared";
+import {
+  createPostLiveStore,
+  type FeedPostView,
+  type LiveTicket,
+  type PostLiveStore,
+  type ReadTicket,
+} from "@orasso/shared";
 
 /** Le compte d'une portée `compte|acteur` (`commentsScope`). */
 const accountOf = (scope: string): string => scope.split("|")[0] ?? scope;
@@ -17,8 +23,10 @@ export function createPostLiveSet() {
   let uids = 0;
   let currentUid = 0;
   /** L'état d'écran commun à toutes les casquettes du compte : la feuille ouverte et les hôtes montés. */
-  let shared = createPostLiveStore();
+  const shared = createPostLiveStore();
   const listeners = new Set<() => void>();
+  /** La publication telle que l'API l'a rendue, par portée : base de la modification d'une carte écrite pour une casquette qui n'est plus active (C3). */
+  const servers = new Map<string, Map<string, FeedPostView>>();
   let scope: string | null | undefined;
   let epoch = 0;
   let current: PostLiveStore = createPostLiveStore();
@@ -51,13 +59,15 @@ export function createPostLiveSet() {
       scope = next;
       if (next === null) {
         stores.clear();
+        servers.clear();
         current = createPostLiveStore();
         currentUid = ++uids;
-        shared = createPostLiveStore();
+        shared.close();
       } else {
         if (previous && accountOf(previous) !== accountOf(next)) {
           stores.clear();
-          shared = createPostLiveStore();
+          servers.clear();
+          shared.close();
         }
         let entry = stores.get(next);
         if (!entry) {
@@ -84,10 +94,11 @@ export function createPostLiveSet() {
     /** Déconnexion : tout s'en va, tous les magasins. */
     clear(silent = false) {
       stores.clear();
+      servers.clear();
       scope = undefined;
       current = createPostLiveStore();
       currentUid = ++uids;
-      shared = createPostLiveStore();
+      shared.close();
       epoch += 1;
       attach();
       if (!silent) notify();
@@ -117,7 +128,41 @@ export function createPostLiveSet() {
     },
     markGone(postId: string, t?: ScopedTicket) {
       const store = t ? storeOf(t) : current;
-      if (store) store.markGone(postId, t);
+      if (!store) return;
+      store.markGone(postId, t);
+      // La feuille ouverte est un état d'écran commun : elle se ferme (404 de la casquette active, ou sans ticket), jamais pour la réponse tardive d'une autre casquette.
+      if ((!t || t.s === scope) && shared.opening()?.postId === postId) shared.close();
+    },
+    /** Le fil d'un ticket : l'état à lire pour calculer une écriture vers ce même magasin (R2). Sans ticket : la casquette active. */
+    sheetOf(postId: string, t?: ScopedTicket) {
+      const store = t ? storeOf(t) : current;
+      return (store ?? current).sheetOf(postId);
+    },
+    /** Rend périmées les lectures en cours d'un fil dans le magasin du ticket (un parent disparu). */
+    /** La publication affichée pour la casquette active : on retient ce que l'API a rendu, pour pouvoir modifier la carte d'une autre casquette. */
+    apply(server: FeedPostView): FeedPostView {
+      if (scope) {
+        let map = servers.get(scope);
+        if (!map) {
+          map = new Map();
+          servers.set(scope, map);
+        }
+        map.set(server.id, server);
+      }
+      return current.apply(server);
+    },
+    /**
+     * C3 : la modification d'une carte (`commentsOff`, compteurs, aperçus) pour une casquette qui n'est plus active : calculée depuis
+     * **ses** données (l'API + ses modifications) et écrite dans **son** magasin ; elle la retrouve à son retour.
+     */
+    changePost(postId: string, t: ScopedTicket, fn: (post: FeedPostView) => FeedPostView) {
+      const store = storeOf(t);
+      const server = t.s ? servers.get(t.s)?.get(postId) : undefined;
+      if (!store || !server) return;
+      store.set(server, fn(store.apply(server)), t);
+    },
+    dropReads(postId: string, channel: string, t: ScopedTicket) {
+      storeOf(t)?.beginRead(postId, channel);
     },
     clearGone(t: ScopedReadTicket) {
       storeOf(t)?.clearGone(t);
@@ -130,8 +175,12 @@ export function createPostLiveSet() {
       const value = (store as unknown as Record<PropertyKey, unknown>)[key];
       return typeof value === "function" ? value.bind(store) : value;
     },
-  }) as unknown as PostLiveStore & {
+  }) as unknown as Omit<PostLiveStore, "sheetOf" | "ticket" | "apply"> & {
     ticket: typeof facade.ticket;
     isCurrent: typeof facade.isCurrent;
+    sheetOf: typeof facade.sheetOf;
+    dropReads: typeof facade.dropReads;
+    changePost: typeof facade.changePost;
+    apply: typeof facade.apply;
   };
 }

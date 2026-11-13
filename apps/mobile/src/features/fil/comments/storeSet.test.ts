@@ -1,4 +1,4 @@
-import { pendingFail, pendingStart } from "@orasso/shared";
+import { pendingFail, pendingStart, sheetRemoveComment } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
 import { commentsScope } from "./scope";
@@ -144,5 +144,136 @@ describe("un magasin de commentaires par compte et par casquette", () => {
     set.setAccount(B);
     expect(set.version()).not.toBe(v);
     expect(n).toBe(1);
+  });
+
+  it("B1 : un 404 de la casquette active ferme la feuille (état d'écran commun) ; celui d'une autre casquette, reçu plus tard, ne la ferme pas", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    set.open("p", true);
+    // 404 tardif d'A pendant que B montre la feuille : A est marquée disparue chez elle, la feuille de B reste ouverte.
+    set.markGone("p", tA as never);
+    expect(set.opening()).toEqual({ postId: "p", focus: true });
+    expect(set.isGone("p")).toBe(false);
+    // 404 de B (casquette active) : la feuille se ferme.
+    set.markGone("p", set.ticket("p") as never);
+    expect(set.opening()).toBeNull();
+    expect(set.isGone("p")).toBe(true);
+    // Sans ticket (compat) : la feuille se ferme aussi.
+    set.open("q", false);
+    set.markGone("q");
+    expect(set.opening()).toBeNull();
+  });
+
+  it("R2 : une suppression sous A se calcule sur le magasin d'A, même reçue sous B (B intact)", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    const item = { id: "k1", repliesCount: 0 } as never;
+    set.updateSheet("p", (s) => ({ ...s, items: [item] }), tA as never);
+    set.setAccount(B, true);
+    // B a sa propre liste.
+    const other = { id: "k2", repliesCount: 0 } as never;
+    set.updateSheet("p", (s) => ({ ...s, items: [other] }), set.ticket("p") as never);
+    // La réponse de la suppression d'A arrive sous B : l'état lu est celui du ticket.
+    expect(set.sheetOf("p", tA as never).items.map((c: { id: string }) => c.id)).toEqual(["k1"]);
+    set.updateSheet("p", (s) => sheetRemoveComment(s, "k1").state, tA as never);
+    expect(set.sheetOf("p").items.map((c: { id: string }) => c.id)).toEqual(["k2"]);
+    set.setAccount(A, true);
+    expect(set.sheetOf("p").items).toHaveLength(0);
+  });
+
+  it("R3 : isCurrent dit qui a des effets visibles ; une réponse tardive d'A n'en a pas sous B", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    expect(set.isCurrent(tA as never)).toBe(true);
+    set.setAccount(B, true);
+    expect(set.isCurrent(tA as never)).toBe(false);
+    expect(set.alive(tA as never)).toBe(true);
+  });
+
+  it("m1 : au changement de compte seule la feuille ouverte est remise à zéro, les hôtes montés restent", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.register("p", "inst");
+    set.open("p", true);
+    set.setAccount(commentsScope("u2", "s:a"), true);
+    expect(set.opening()).toBeNull();
+    expect(set.host("p")).toBe("inst");
+  });
+
+  it("dropReads : un parent disparu rend périmées les lectures de réponses du magasin du ticket seulement", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    const read = set.beginRead("p", "r:x");
+    set.setAccount(B, true);
+    const readB = set.beginRead("p", "r:x");
+    set.dropReads("p", "r:x", tA as never);
+    expect(set.fresh(read as never)).toBe(false);
+    expect(set.fresh(readB as never)).toBe(true);
+  });
+
+  it("m2 : le compteur de la carte d'A, reçu sous B, s'écrit dans le magasin d'A (B garde la carte du serveur)", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    const server = { id: "p", commentsCount: 2, commentsOff: false, lastComments: [] } as never;
+    set.set(server, { id: "p", commentsCount: 3, commentsOff: false, lastComments: [] } as never, tA as never);
+    expect((set.apply(server) as { commentsCount: number }).commentsCount).toBe(2);
+    set.setAccount(A, true);
+    expect((set.apply(server) as { commentsCount: number }).commentsCount).toBe(3);
+  });
+});
+
+describe("C2 et C3 : la réponse tardive d'A, reçue sous B", () => {
+  const server = { id: "p", commentsCount: 2, commentsOff: false, lastComments: [] } as never;
+
+  it("C3 : « Couper les commentaires » réussi sous A, reçu sous B : la carte d'A est conservée dans son magasin (calculée depuis ses données)", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server); // A affiche la publication
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    set.apply(server);
+    set.changePost("p", tA as never, (post) => ({ ...post, commentsOff: true }));
+    // B garde la carte du serveur ; A retrouve la sienne.
+    expect((set.apply(server) as { commentsOff: boolean }).commentsOff).toBe(false);
+    set.setAccount(A, true);
+    expect((set.apply(server) as { commentsOff: boolean }).commentsOff).toBe(true);
+  });
+
+  it("C3 : les compteurs d'un commentaire ajouté sous A partent de la carte d'A, pas de celle de B", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    set.setAccount(B, true);
+    set.apply(server);
+    set.set(server, { ...(server as object), commentsCount: 9 } as never, set.ticket("p") as never); // B : 9
+    set.changePost("p", tA as never, (post) => ({ ...post, commentsCount: post.commentsCount + 1 }));
+    set.setAccount(A, true);
+    expect((set.apply(server) as { commentsCount: number }).commentsCount).toBe(3);
+  });
+
+  it("C2 : un 404 tardif sur les réponses d'A prend le ticket d'A (dropReads) : les lectures de B restent fraîches et son fil intact", () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const tA = set.ticket("p");
+    const item = { id: "parent", repliesCount: 1 } as never;
+    set.updateSheet("p", (s) => ({ ...s, items: [item] }), tA as never);
+    set.setAccount(B, true);
+    set.updateSheet("p", (s) => ({ ...s, items: [item] }), set.ticket("p") as never);
+    const readB = set.beginRead("p", "r:parent");
+    // Le traitement du parent disparu reçoit le ticket d'A.
+    set.dropReads("p", "r:parent", tA as never);
+    expect(set.sheetOf("p", tA as never).items).toHaveLength(1);
+    set.updateSheet("p", (s) => sheetRemoveComment(s, "parent").state, tA as never);
+    expect(set.sheetOf("p", tA as never).items).toHaveLength(0);
+    expect(set.sheetOf("p").items).toHaveLength(1);
+    expect(set.fresh(readB as never)).toBe(true);
   });
 });
