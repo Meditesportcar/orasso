@@ -35,6 +35,7 @@ type Summary = {
   unreadMessages: number;
   unseenActivity: number;
   pendingRequests: number;
+  pendingCoauthors?: number;
   requests: { contact: number };
 };
 const summaryOf = async (page: Page) => (await (await page.request.get("/api/me/inbox/summary")).json()) as Summary;
@@ -327,7 +328,9 @@ test("Kenji_66 t'invite : la page Demandes de Damien_66 (seed) montre l'invitati
   ).toBeVisible();
   const sum = await summaryOf(page);
   const cards = await page.getByTestId("request-list").locator("> li").count();
-  expect(cards).toBe(sum.pendingRequests - sum.requests.contact);
+  // Vérification R8-V2 : depuis R8o, les demandes de co-auteur sont des cartes de la page, comptées à part
+  // (`pendingCoauthors`, hors `pendingRequests`).
+  expect(cards).toBe(sum.pendingRequests + (sum.pendingCoauthors ?? 0) - sum.requests.contact);
   await shot(page, "demandes-kenji-invite-390");
   await ctx.close();
 });
