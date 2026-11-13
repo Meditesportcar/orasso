@@ -72,7 +72,8 @@ export function ContentsScreen({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<MediaContentView | null>(null);
 
-  const list = (contents.data ?? []).filter((c) => !linksOnly || c.kind === "link");
+  const all = contents.data ?? [];
+  const list = all.filter((c) => !linksOnly || c.kind === "link");
   const groups = groupByEvent(list);
   // Les événements où l'on peut publier : ceux où l'accréditation est donnée (l'API refuse les autres).
   const accredited = (accreditations.data ?? []).filter((a) => a.status === "accepted");
@@ -110,15 +111,14 @@ export function ContentsScreen({
   const body = (
     <>
       {/* Lot C4b (artefact `s-contenus`) : deux tuiles `.dir-big`, la première crème. */}
-      {linksOnly ? null : (
-        <DirBig
-          testID="media-stats"
-          items={[
-            { value: formatCount(totalViews(list)), label: L.views },
-            { value: formatCount(list.length), label: L.contents },
-          ]}
-        />
-      )}
+      {/* Les chiffres comptent tous les contenus (liens et albums), même quand seuls les liens sont listés. */}
+      <DirBig
+        testID="media-stats"
+        items={[
+          { value: formatCount(totalViews(all)), label: L.views },
+          { value: formatCount(all.length), label: L.contents },
+        ]}
+      />
 
       <Button
         variant={linksOnly ? "secondary" : "primary"}

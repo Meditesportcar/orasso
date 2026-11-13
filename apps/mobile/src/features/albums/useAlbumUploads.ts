@@ -102,6 +102,9 @@ export function useAlbumUploads(albumId: string | null) {
     [update],
   );
 
+  /** Règle à la main les cadres de plaque d'une photo (le détecteur peut en rater une) ; un envoi déjà fait pour d'autres cadres repart. */
+  const setRects = useCallback((clientId: string, rects: PlateRect[]) => patch(clientId, { rects }), [patch]);
+
   /** Envoie les photos qui restent ; vrai quand tout est ajouté à l'album. */
   const send = useCallback(async (): Promise<boolean> => {
     if (!albumId) return false;
@@ -135,6 +138,7 @@ export function useAlbumUploads(albumId: string | null) {
     setBatch,
     pick,
     remove,
+    setRects,
     send,
     sending,
     progress,

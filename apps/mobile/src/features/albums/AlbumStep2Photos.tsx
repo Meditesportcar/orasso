@@ -4,11 +4,13 @@
 // une (« 37 / 48 ») puis passe aux détails ; une coupure laisse les photos faites et propose « Reprendre l'envoi ».
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { albumLabels as L } from "@orasso/shared";
+import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { UploadProgress } from "@/ui/PhotoGrid";
+import { AlbumPhotoSheet } from "./AlbumPhotoSheet";
 import type { useAlbumUploads } from "./useAlbumUploads";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -26,6 +28,7 @@ export function AlbumStep2Photos({
   onContinue: () => void;
 }) {
   const { t } = useTheme();
+  const [editing, setEditing] = useState<string | null>(null);
   const { items, batch, setBatch, plated, detecting, pending, sending, progress, error } = uploads;
   const ready = inAlbum + items.length;
   const needsDecision = plated > 0 && batch === null;
@@ -103,9 +106,9 @@ export function AlbumStep2Photos({
           <Pressable
             key={i.clientId}
             accessibilityRole="button"
-            accessibilityLabel={L.photoRemove}
+            accessibilityLabel={L.plateSheetTitle}
             disabled={sending || Boolean(i.photoId)}
-            onPress={() => uploads.remove(i.clientId)}
+            onPress={() => setEditing(i.clientId)}
             style={[styles.tile, { backgroundColor: t.color.surface }]}
             testID="album-tile"
           >
@@ -117,6 +120,12 @@ export function AlbumStep2Photos({
         ))}
       </View>
 
+      <AlbumPhotoSheet
+        item={items.find((i) => i.clientId === editing) ?? null}
+        onChange={uploads.setRects}
+        onRemove={uploads.remove}
+        onClose={() => setEditing(null)}
+      />
       {progress ? <UploadProgress current={progress.current} total={progress.total} /> : null}
       {sending && progress ? (
         <Muted variant="meta" testID="album-progress">
