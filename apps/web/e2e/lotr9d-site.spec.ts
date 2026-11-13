@@ -123,9 +123,20 @@ test("POST /seen en échec : la page se rafraîchit quand même, le vu est reten
   });
   expect(applied.status).toBe(201);
   await expect.poll(async () => lines.first().innerText(), { timeout: 30_000 }).not.toBe(before);
-  // Le POST est rétabli : la lecture suivante repose le « vu ».
+  // Le POST est rétabli, la page reste montée (aucun rechargement) : une nouvelle candidature envoie `inbox.changed`, la page se
+  // relit avec le même compte de non-vus et repose le « vu » (échoue avec les anciennes dépendances `[unseen]`).
   failing = false;
-  await page.reload();
+  const again = await signUpApi(`Cand_${unique()}`);
+  const car = await addVehicleApi(again, randomPlate());
+  const second = await apiCall(again, "POST", `/events/${nocturne.data.id}/applications`, {
+    vehicleIds: [car],
+    rulesAccepted: true,
+    followStructure: true,
+    newsletterOptIn: false,
+    companions: 0,
+    arrivalSeen: true,
+  });
+  expect(second.status).toBe(201);
   const summary = async () =>
     (
       await apiCall<{ unseen: number }>(

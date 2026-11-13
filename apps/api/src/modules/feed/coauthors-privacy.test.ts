@@ -23,6 +23,7 @@ import { db, pool } from "../../db/client";
 import { feedPostCoauthors, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { notificationsService } from "../notifications/service";
 import { fil, follow, person } from "./fil-test-helpers";
 
 afterAll(async () => {
@@ -364,5 +365,22 @@ describe("notifications", () => {
     expect(((forStructure as { data: unknown }).data as { link?: string }).link).toBe(
       `/orga/${structure.slug}/activite?vue=demandes`,
     );
+    // Parcours complet : l'événement `notification` du canal du responsable (le bandeau de l'appli ouverte) porte l'écran et la
+    // structure de l'invitation, comme le push (`structureRequestsTarget` les lit dans l'appli).
+    const { realtime } = await import("../../lib/realtime");
+    const events: { channel: string; type: string; payload: { data?: Record<string, unknown> } }[] = [];
+    const original = realtime.publish;
+    realtime.publish = ((channel: string, type: string, payload: never) => {
+      events.push({ channel, type, payload });
+    }) as never;
+    try {
+      await notificationsService.deliverDue();
+      await publishWith(kenji, { kind: "structure", id: structure.id });
+      await notificationsService.flush();
+    } finally {
+      realtime.publish = original;
+    }
+    const banner = events.find((e) => e.type === "notification" && e.channel === `user:${owner.id}`);
+    expect(banner?.payload.data).toMatchObject({ screen: "structure-requests", structureId: structure.id });
   });
 });

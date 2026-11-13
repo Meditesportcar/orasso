@@ -60,7 +60,7 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
   // Le survol en assistance garde l'ancien geste (retour par la bannière) : jamais « Mes casquettes » au nom d'une structure survolée.
   const isPage = isPageKind && !active.assisted;
   const showPersona = isPageKind || persona.kind === "admin";
-  // Organisateur : la Boîte de la structure (messages de participants, discussions du staff, demandes non traités).
+  // Organisateur : les compteurs de sa structure (Activité : nouveautés et demandes ; Messages : conversations).
   const structureId = persona.kind === "organizer" ? persona.structureId : null;
   const orgInbox = useApi(() => api.orgInboxSummary(structureId ?? ""), [structureId], {
     enabled: structureId !== null && !active.assisted,
@@ -71,8 +71,8 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
   // dernière lecture (demande de staff acceptée, message lu) : une seule requête par changement, pas une par onglet.
   const seen = useRef(mutationCount());
   const reloadInbox = orgInbox.reload;
-  // Lot R7c2 : la cloche et la bulle sont celles de la personne, quelle que soit sa casquette (sauf l'organisateur, qui a
-  // la Boîte de sa structure). Les deux pastilles viennent du résumé (`GET /me/inbox/summary`), relu quand les compteurs
+  // Lot R7c2 : la cloche et la bulle sont celles de la personne, quelle que soit sa casquette (R9d : l'organisateur a celles de
+  // sa structure, lues dans `orgInbox`). Les deux pastilles viennent du résumé (`GET /me/inbox/summary`), relu quand les compteurs
   // du profil changent (message lu, demande traitée, Activité ouverte), au retour sur le groupe d'onglets et à chaque
   // événement du compte (`inbox.changed`, `conversation.updated`, `notification`).
   const personal = persona.kind !== "organizer";

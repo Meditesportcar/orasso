@@ -164,9 +164,14 @@ describe("livraison et signaux", () => {
   });
 
   it("un responsable retiré entre deux envois d'une même passe ne reçoit pas le second", async () => {
+    // Émis en heures calmes (rien ne part en arrière-plan à l'émission), livré quand l'horloge avance : la passe est la nôtre.
+    const clock = useClock(fromWallTime({ year: 2026, month: 11, day: 12, hour: 23, minute: 0 }));
+    quietHours(true);
     await withTx((tx, after) =>
       notifyStructure(tx, structureId, "staff_request", { title: "Demande", body: "B", after }),
     );
+    await notificationsService.flush();
+    clock.set(fromWallTime({ year: 2026, month: 11, day: 13, hour: 8, minute: 30 }));
     const original = realtime.publish;
     const { push } = await import("../../lib/push");
     const originalTokens = push.tokensOf;

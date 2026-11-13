@@ -2,7 +2,7 @@
 // `notifyStructure` : pour MéditeSportCar (Damien_66, propriétaire, et Sarah_66, co-organisatrice) deux candidatures à trier sur
 // la Nocturne, une mention de Kenji_66, un commentaire de Lea_11 sous une publication, la demande de collaboration de Kenji_66
 // déjà dans le seed, les demandes de staff en attente ; pour Roues Libres 66 (Sarah_66) une mention et un commentaire.
-// Rejouable : rien si une ligne de structure existe déjà.
+// Rejouable : rien si une ligne de ce seed (`data.seed = "r9d"`) existe déjà.
 import { structureNotificationTexts as T } from "@orasso/shared";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
@@ -75,7 +75,12 @@ export async function seedStructureActivity() {
     await emit(db, msc.id, "coauthor_invited", {
       title: `${kenji.pseudo} t'invite à publier ensemble`,
       body: `${kenji.pseudo} t'invite à co-signer une publication.`,
-      data: { actor: { pseudo: kenji.pseudo, avatarUrl: null }, postId: invite.postId, link: "/app/activite/demandes" },
+      data: {
+        actor: { pseudo: kenji.pseudo, avatarUrl: null },
+        postId: invite.postId,
+        screen: "structure-requests",
+      },
+      link: { label: "Répondre", path: `/orga/${msc.slug}/activite?vue=demandes` },
     });
   }
   // Une demande de staff en attente.

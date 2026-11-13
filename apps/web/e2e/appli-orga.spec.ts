@@ -309,6 +309,13 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
     await tab(page, name).click();
     await expect(page.getByTestId("orga-two-factor").last()).toBeVisible({ timeout: 20_000 });
   }
+  // Lot R9d : la cloche (Activité) et la bulle (Messages) de la structure sont gardées de la même façon (la Boîte a disparu).
+  for (const name of [/^Activité/, /^Messages/]) {
+    await tab(page, "Événements").click();
+    await page.getByRole("button", { name }).first().click();
+    await expect(page.getByTestId("orga-two-factor").last()).toBeVisible({ timeout: 20_000 });
+    await page.goBack();
+  }
   await page.screenshot({ path: `${DIR}/41-garde-2fa-staff-sable.png` });
   await ctx.close();
 });

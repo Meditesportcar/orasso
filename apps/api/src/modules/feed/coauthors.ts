@@ -271,7 +271,8 @@ export async function writeInvite(
       {
         title: content.title,
         body: content.body,
-        data: rest,
+        // `screen` + `structureId` (posé par `notifyStructure`) : le bandeau (appli ouverte) et le push mènent au même endroit.
+        data: { ...rest, screen: "structure-requests" },
         link: { label: "Répondre", path: `/orga/${target?.slug ?? ""}/activite?vue=demandes` },
         after: input.after,
       },
