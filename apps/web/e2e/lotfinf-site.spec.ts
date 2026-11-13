@@ -52,7 +52,7 @@ async function open(browser: Browser, opts: { width?: number; theme?: string } =
   // Les statuts HTTP de /api/practical sont enregistrés : un 429 (limite de débit) ou un 5xx ne peut pas se cacher derrière un test vert.
   const statuses: number[] = [];
   page.on("response", (r) => {
-    if (r.request().method() === "POST" && //api/practical$/.test(r.url())) statuses.push(r.status());
+    if (r.request().method() === "POST" && /\/api\/practical$/.test(r.url())) statuses.push(r.status());
   });
   page.on("request", (r: Request) => {
     if (r.method() === "POST" && /\/api\/practical$/.test(r.url())) {
@@ -274,6 +274,8 @@ test("1280 px : trop dézoomée, « Zoome sur un secteur pour voir ses lieux. »
   expect(zoneCalls()).toHaveLength(0);
   await shot(page, "site-dezoom-sable-1280");
   // Toulouse : un département jamais lu ; le faux service met 6 s à répondre : l'API répond partielle avec `loading`.
+  // Précondition explicite : le cache de ce département est vidé (une passe précédente l'a peut-être rempli).
+  await clearPlacesCache();
   await fetch(`${STUB}/__stub?slow=6000`);
   await page.getByTestId("practical-search").fill("toul");
   await page.getByTestId("practical-suggest-city-0").click();
