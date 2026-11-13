@@ -113,6 +113,12 @@ test("Léo identifie la voiture de Damien ; Damien : Tes photos, en story, ce n'
   await expect(dam.getByTestId("story-done")).toBeVisible({ timeout: 60_000 });
   await shot(dam, "damien-en-story-1280");
   await dam.keyboard.press("Escape");
+  // Rejouée : la story est déjà en ligne, l'écran le dit.
+  await dam.getByTestId("my-photo").first().getByTestId("my-photo-story").click();
+  await dam.getByTestId("story-publish").click();
+  await expect(dam.getByTestId("story-done")).toContainText("Déjà en story · Tout le monde", { timeout: 60_000 });
+  await dam.keyboard.press("Escape");
+  await expect(dam.getByTestId("my-photos-contact")).toHaveCount(0);
 
   // « Enregistrer » : le fichier part (ou inerte avec sa raison).
   if (await dam.getByTestId("my-photo-save-off").count()) {

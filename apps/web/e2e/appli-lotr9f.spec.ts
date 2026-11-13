@@ -184,11 +184,22 @@ test("Léo identifie la voiture de Damien, Damien reçoit « Tes photos », en s
   const stories = await sql<{ n: string }>(
     'select count(*)::text as n from stories s join event_album_photos p on p.id = s.source_album_photo_id where s.author_id = (select id from "user" where email = $1)',
     [DAMIEN],
-  ).catch(() => [{ n: "1" }]);
-  expect(Number(stories[0]?.n ?? 1)).toBeGreaterThanOrEqual(1);
+  );
+  expect(Number(stories[0]?.n)).toBeGreaterThanOrEqual(1);
   await dam.page.getByTestId("story-see").click();
   await expect(dam.page.getByTestId("story-photo-credit")).toBeVisible({ timeout: 30_000 });
   await shot(dam.page, "damien-story-credit-beton");
+
+  // Rejouée : la story de cette photo est déjà en ligne, l'écran le dit (ni public ni légende ne la modifient).
+  await dam.page.getByTestId("my-photo-story").first().click();
+  await dam.page.getByTestId("story-publish").click();
+  await expect(dam.page.getByTestId("story-done")).toContainText("Déjà en story · Tout le monde", { timeout: 60_000 });
+  await dam.page
+    .getByTestId("story-done")
+    .press("Escape")
+    .catch(() => undefined);
+  await go(dam.page, `/album/${s.albumId}/mes-photos`);
+  await expect(dam.page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
 
   // « Enregistrer » : actif quand le média l'autorise (le fichier part), sinon inerte avec sa raison.
   await go(dam.page, `/album/${s.albumId}/mes-photos`);
@@ -212,7 +223,9 @@ test("Léo identifie la voiture de Damien, Damien reçoit « Tes photos », en s
   await expect(dam.page.getByTestId("photo-sheet-not-mine")).toContainText(
     "Sud Cars en est prévenu ; l'identification disparaît",
   );
-  await expect(dam.page.getByTestId("photo-sheet-contact")).toContainText("Contacter Sud Cars");
+  // Plus de « Contacter » : la conversation de page du média est un lot à part (elle ne doit pas révéler le compte derrière la page).
+  await expect(dam.page.getByTestId("photo-sheet-contact")).toHaveCount(0);
+  await expect(dam.page.getByTestId("my-photos-contact")).toHaveCount(0);
   await shot(dam.page, "damien-feuille-pas-ma-voiture-beton");
   await dam.page.getByTestId("photo-sheet-not-mine").click();
   await expect(dam.page.getByTestId("my-photo")).toHaveCount(n - 1, { timeout: 30_000 });
@@ -308,14 +321,14 @@ test("la fiche de la voiture, la sortie passée et le souvenir ; Béton et Sable
     await expect(dam.page.getByTestId("album-mention-title").first()).toHaveText("Photos de ma voiture");
     await shot(dam.page, `damien-sortie-passee-${theme}`);
 
-    // Le souvenir de l'événement de l'album (le seed y pointe la voiture de Damien il y a un an).
+    // Le souvenir de l'événement de l'album (le seed y pointe la voiture de Damien il y a un an) : ses photos sont **exigées**.
     const memory = await apiCall<{ albumPhotos?: Mention[] }>(s.damien, "GET", `/me/memories/${s.album.event.id}`);
-    if (memory.data.albumPhotos?.length) {
-      await go(dam.page, `/souvenir/${s.album.event.id}`);
-      await expect(dam.page.getByTestId("memory-album")).toContainText(/photos? de ta .+ · Sud Cars/);
-      await expect(dam.page.getByTestId("memory-album-open")).toContainText("Revoir mes photos");
-      await shot(dam.page, `damien-souvenir-${theme}`);
-    }
+    expect(memory.status).toBe(200);
+    expect(memory.data.albumPhotos?.length ?? 0).toBeGreaterThan(0);
+    await go(dam.page, `/souvenir/${s.album.event.id}`);
+    await expect(dam.page.getByTestId("memory-album")).toContainText(/photos? de ta .+ · Sud Cars/);
+    await expect(dam.page.getByTestId("memory-album-open")).toContainText("Revoir mes photos");
+    await shot(dam.page, `damien-souvenir-${theme}`);
     await dam.ctx.close();
   }
 });
@@ -347,4 +360,34 @@ test("la police ×1,3 : la visionneuse, le plateau et « Tes photos » tiennent 
   await noOverflow(dam.page);
   await shot(dam.page, "damien-tes-photos-police-1.3");
   await dam.ctx.close();
+});
+
+test("Kenji retire sa seule identification : la ligne disparaît, il quitte « Tes photos » sans erreur de chargement", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = await scenario();
+  const kenji = await login(KENJI);
+  // Une seule identification à son nom : les autres sont retirées par l'API (le geste de l'intéressé).
+  const mine = await apiCall<{ photos: { tagId: string }[] }>(kenji, "GET", `/me/albums/${s.albumId}/my-photos`);
+  for (const p of mine.data.photos.slice(1)) await apiCall(kenji, "DELETE", `/me/album-tags/${p.tagId}`, {});
+  const one = await apiCall<{ photos: unknown[] }>(kenji, "GET", `/me/albums/${s.albumId}/my-photos`);
+  expect(one.data.photos).toHaveLength(1);
+  const k = await open(browser, KENJI);
+  await go(k.page, `/album/${s.albumId}/mes-photos`);
+  await expect(k.page.getByTestId("my-photo")).toHaveCount(1, { timeout: 30_000 });
+  await k.page.getByTestId("my-photo-more").click();
+  // Selon qui a posé l'identification restante : « Retirer mon identification » (lui) ou « Ce n'est pas ma voiture » (le média).
+  await k.page.getByTestId(/^photo-sheet-(withdraw|not-mine)$/).click();
+  // On quitte l'écran : plus de « Tes photos », jamais une erreur de chargement.
+  await expect(k.page.getByTestId("my-photos")).toHaveCount(0, { timeout: 30_000 });
+  await expect(k.page.getByTestId("my-photos-error")).toHaveCount(0);
+  const after = await apiCall(kenji, "GET", `/me/albums/${s.albumId}/my-photos`);
+  expect(after.status).toBe(404);
+  // Rouverte directement : l'écran dit qu'il n'y a plus rien, sans bouton « Réessayer ».
+  await go(k.page, `/album/${s.albumId}/mes-photos`);
+  await expect(k.page.getByText("Aucune photo n'est identifiée à ton nom dans cet album.")).toBeVisible({
+    timeout: 30_000,
+  });
+  await k.ctx.close();
 });
