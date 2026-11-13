@@ -99,3 +99,54 @@ for (const theme of ["beton", "sable"] as const) {
     await ctx2.close();
   });
 }
+
+async function expectBottomSheet(page: Page, name: string) {
+  const sheet = page.getByTestId("share-sheet");
+  await expect(sheet).toBeVisible({ timeout: 15_000 });
+  const box = await sheet.boundingBox();
+  expect((box?.y ?? -1) >= 0).toBe(true);
+  expect(Math.abs((box?.y ?? 0) + (box?.height ?? 0) - HEIGHT)).toBeLessThan(40);
+  await shot(page, name);
+  await page.getByTestId("share-close").click();
+  await expect(sheet).toHaveCount(0, { timeout: 10_000 });
+}
+
+test("Partager depuis la Page (Garage du Port › Publications)", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "garage@orasso.local");
+  await go(page, "/moi");
+  await page.getByTestId("casquette-pro").first().click();
+  await page.waitForURL((u) => !/\/(moi|profil)(\?|$)/.test(u.pathname), { timeout: 30_000 });
+  await page.getByTestId("persona-tabbar").getByRole("tab", { name: "Page", exact: true }).click();
+  await page.getByTestId("page-tab-publications").first().click();
+  const share = page.getByTestId("feed-post-share").first();
+  await expect(share).toBeVisible({ timeout: 30_000 });
+  await share.scrollIntoViewIfNeeded();
+  await share.click();
+  await expectBottomSheet(page, "page-partager");
+  await ctx.close();
+});
+
+test("Tri (feuille dans un Modal natif) : un motif de refus s'ouvre, se coche et se ferme, le contenu est cliquable", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "damien@orasso.local");
+  await go(page, "/moi");
+  await page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
+  await page.waitForURL(/\/direct/, { timeout: 20_000 });
+  await page.getByRole("tab", { name: "Tri", exact: true }).click();
+  await page.getByTestId("triage-event-picker").click();
+  await page.getByTestId("triage-event-choice").filter({ hasText: "Nocturne de Canet" }).click();
+  await expect(page.getByTestId("triage-counters")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("triage-refuse").click();
+  await expect(page.getByTestId("triage-refusal-confirm")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("checkbox", { name: /Hors thème/ }).click();
+  await expect(page.getByRole("checkbox", { name: /Hors thème/ })).toBeChecked();
+  await shot(page, "tri-motifs");
+  await page.getByRole("button", { name: "Annuler" }).last().click();
+  await expect(page.getByTestId("triage-refusal-confirm")).toHaveCount(0, { timeout: 10_000 });
+  await ctx.close();
+});

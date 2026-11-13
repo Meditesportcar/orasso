@@ -45,7 +45,7 @@ import { FicheHeader } from "./FicheHeader";
 import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
-import { OverlayProvider, OverlaySlot } from "./Overlay";
+import { OverlayProvider, OverlaySlot, SheetBoundary } from "./Overlay";
 import { usePageFooter } from "./pageFooter";
 import { revealOffset, type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
 import { endReached } from "./scrollEnd";
@@ -192,7 +192,7 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays }:
               ) : null}
             </KeyboardSafe>
           </SwipeEntry>
-          {overlays}
+          <SheetBoundary>{overlays}</SheetBoundary>
           <OverlaySlot />
         </Ground>
       </OverlayProvider>
@@ -221,7 +221,7 @@ export function TabStage({
         <Ground still={still} paused={!focused} style={styles.fill}>
           <TopBar />
           <SwipeEntry>{children}</SwipeEntry>
-          {overlays}
+          <SheetBoundary>{overlays}</SheetBoundary>
           <OverlaySlot />
         </Ground>
       </OverlayProvider>
@@ -342,7 +342,7 @@ export function FlowScreen({
             </Body>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>
-          {overlays}
+          <SheetBoundary>{overlays}</SheetBoundary>
           <OverlaySlot />
           {inInbox ? <JournalSheet visible={journal} onClose={() => setJournal(false)} /> : null}
         </Ground>

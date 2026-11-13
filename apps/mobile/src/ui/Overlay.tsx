@@ -64,3 +64,12 @@ export function SheetPortal({ children }: { children: ReactNode }) {
   if (inSlot || !set) return <>{children}</>;
   return <Overlay>{children}</Overlay>;
 }
+
+/**
+ * Frontière des feuilles : ce qui est dedans garde ses feuilles sur place, sans passer par la zone de l’écran. À poser
+ * dans tout `Modal` natif qui contient des feuilles (la fenêtre native couvre l’écran et prend les appuis : une feuille
+ * rendue hors d’elle serait cachée dessous) et autour des `overlays` de l’écran, qui sont déjà à leur place.
+ */
+export function SheetBoundary({ children }: { children: ReactNode }) {
+  return <InSlotContext.Provider value>{children}</InSlotContext.Provider>;
+}

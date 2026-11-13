@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { openReport } from "@/features/ReportSheet";
 import { mediaSource } from "@/lib/media";
+import { SheetBoundary } from "@/ui/Overlay";
 
 const { space3 } = tokens.spacing;
 
@@ -33,56 +34,58 @@ export function PhotoViewer({
   }, [start]);
   return (
     <Modal visible={start !== null} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={[styles.fill, { backgroundColor: t.color.groundDeep }]}>
-        {start !== null ? (
-          <FlatList
-            data={photos}
-            horizontal
-            pagingEnabled
-            keyExtractor={(p) => p.id}
-            initialScrollIndex={Math.min(start, Math.max(0, photos.length - 1))}
-            getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
-            renderItem={({ item, index }) => (
-              <View style={{ width, height, justifyContent: "center" }}>
-                {/* L'image entière dans l'écran (portrait, panorama) : jamais recadrée, même sans dimensions fiables. */}
-                <Image
-                  source={mediaSource(item.url)}
-                  resizeMode="contain"
-                  style={{ width, height }}
-                  accessibilityRole="image"
-                  accessibilityLabel={`Photo ${index + 1} sur ${photos.length}`}
-                />
-              </View>
-            )}
-          />
-        ) : null}
-        <View style={[styles.bar, { top: insets.top + space3 }]}>
-          <Text variant="meta" color={t.color.ink}>
-            {start !== null ? `${index + 1} / ${photos.length}` : ""}
-          </Text>
-          <Button variant="close" label="Fermer la photo" onPhoto onPress={onClose} />
-        </View>
-        {reportable && start !== null && photos[index] ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={moderationLabels.reportTitle("cette photo")}
-            onPress={() => {
-              const id = photos[index]?.id;
-              onClose();
-              if (id) openReport({ type: "photo", id });
-            }}
-            style={[styles.report, { bottom: insets.bottom + space3 }]}
-            testID="photo-report"
-          >
-            <Icon name="flag" size={18} color={t.color.ink} />
+      <SheetBoundary>
+        <View style={[styles.fill, { backgroundColor: t.color.groundDeep }]}>
+          {start !== null ? (
+            <FlatList
+              data={photos}
+              horizontal
+              pagingEnabled
+              keyExtractor={(p) => p.id}
+              initialScrollIndex={Math.min(start, Math.max(0, photos.length - 1))}
+              getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
+              renderItem={({ item, index }) => (
+                <View style={{ width, height, justifyContent: "center" }}>
+                  {/* L'image entière dans l'écran (portrait, panorama) : jamais recadrée, même sans dimensions fiables. */}
+                  <Image
+                    source={mediaSource(item.url)}
+                    resizeMode="contain"
+                    style={{ width, height }}
+                    accessibilityRole="image"
+                    accessibilityLabel={`Photo ${index + 1} sur ${photos.length}`}
+                  />
+                </View>
+              )}
+            />
+          ) : null}
+          <View style={[styles.bar, { top: insets.top + space3 }]}>
             <Text variant="meta" color={t.color.ink}>
-              {moderationLabels.report}
+              {start !== null ? `${index + 1} / ${photos.length}` : ""}
             </Text>
-          </Pressable>
-        ) : null}
-      </View>
+            <Button variant="close" label="Fermer la photo" onPhoto onPress={onClose} />
+          </View>
+          {reportable && start !== null && photos[index] ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={moderationLabels.reportTitle("cette photo")}
+              onPress={() => {
+                const id = photos[index]?.id;
+                onClose();
+                if (id) openReport({ type: "photo", id });
+              }}
+              style={[styles.report, { bottom: insets.bottom + space3 }]}
+              testID="photo-report"
+            >
+              <Icon name="flag" size={18} color={t.color.ink} />
+              <Text variant="meta" color={t.color.ink}>
+                {moderationLabels.report}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </SheetBoundary>
     </Modal>
   );
 }
