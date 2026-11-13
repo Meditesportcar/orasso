@@ -8,6 +8,7 @@ import {
   creditLine,
   repostCaptionDefault,
   repostRefusal,
+  repostWindowOpen,
   showPhotosSection,
 } from "./eventPhotos";
 
@@ -78,5 +79,18 @@ describe("eventPhotos : règles pures (R9g)", () => {
     expect(L.publishedTitle("Objectif 66", 48, "Rassemblement JDM")).toBe(
       "Objectif 66 a publié un album de 48 photos · Rassemblement JDM",
     );
+  });
+});
+
+describe("repostWindowOpen : 30 jours après la publication de l'album", () => {
+  const published = "2026-10-01T10:00:00Z";
+  it("ouverte jusqu'à 30 jours (borne comprise), fermée au-delà, fermée sans date", () => {
+    expect(repostWindowOpen(published, new Date("2026-10-31T10:00:00Z"))).toBe(true);
+    expect(repostWindowOpen(published, new Date("2026-10-31T10:00:01Z"))).toBe(false);
+    expect(repostWindowOpen(new Date(published), new Date("2026-10-30T10:00:00Z"))).toBe(true);
+    expect(repostWindowOpen(null, new Date("2026-10-02T10:00:00Z"))).toBe(false);
+  });
+  it("le refus de l'API a son texte", () => {
+    expect(repostRefusal("repost_expired")).toBe("Cet album a plus de 30 jours : la reprise n'est plus possible.");
   });
 });

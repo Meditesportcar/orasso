@@ -33,10 +33,21 @@ export function canRepost(plateState: AlbumPlateState): boolean {
   return plateState !== "unknown";
 }
 
+/** La reprise reste permise 30 jours après la publication de l'album (contenu frais), quelle que soit la date de l'événement. */
+export const REPOST_WINDOW_DAYS = 30;
+
+/** La reprise est-elle encore permise ? `publishedAt` : la publication de l'album ; bornes comprises, `now` passé explicitement. */
+export function repostWindowOpen(publishedAt: string | Date | null | undefined, now: Date): boolean {
+  if (!publishedAt) return false;
+  const at = typeof publishedAt === "string" ? new Date(publishedAt) : publishedAt;
+  return now.getTime() - at.getTime() <= REPOST_WINDOW_DAYS * 86_400_000;
+}
+
 /** Le texte d'un refus de reprise, d'après le code de l'API. */
 export function repostRefusal(code: string | undefined): string | null {
   if (code === "plate_unknown") return eventPhotosLabels.repostUnknownPlate;
   if (code === "already_reposted") return eventPhotosLabels.repostAlready;
+  if (code === "repost_expired") return eventPhotosLabels.errors.repostExpired;
   return null;
 }
 

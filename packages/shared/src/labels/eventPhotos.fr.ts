@@ -52,6 +52,7 @@ export const eventPhotosLabels = {
   errors: {
     plateUnknown: "Cette photo d'une ancienne galerie ne peut pas être reprise.",
     alreadyReposted: "Déjà reprise dans le journal.",
+    repostExpired: "Cet album a plus de 30 jours : la reprise n'est plus possible.",
     albumNotFound: "Album introuvable",
     photoNotFound: "Photo introuvable",
     notOrganizer: "Seul l'organisateur de l'événement peut le faire.",

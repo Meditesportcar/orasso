@@ -5,12 +5,13 @@
 // La visionneuse est un `Modal` natif : la feuille de reprise s'ouvre **après** sa fermeture (`leaveViewer`, comme « Signaler »). Les actions
 // du registre n'ont pas d'interface : elles passent par `OrganizerHost`, monté par l'écran de l'album, qui tient les feuilles.
 import { Button, tokens } from "@orasso/design-system/native";
-import { type AlbumPhotoView, type AlbumView, eventPhotosLabels as L } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, eventPhotosLabels as L, repostWindowOpen } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
+import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
@@ -23,9 +24,19 @@ import type { AlbumViewerAction, AlbumViewerActionContext } from "./registry";
 const { space3 } = tokens.spacing;
 
 type Request = { kind: "repost" | "official"; ctx: AlbumViewerActionContext };
-let listener: ((r: Request) => void) | null = null;
-/** L'album ouvert est-il déjà l'officiel ? Lu au rendu de la visionneuse pour dire « Choisir… » ou « Retirer… » (posé par l'hôte). */
-let isOfficial = false;
+/**
+ * Un hôte par écran d'album monté. Les actions du registre (module) parlent à **l'hôte du dessus** (le dernier monté encore là) : avec deux
+ * albums dans la pile, le démontage du second laisse le premier intact (un `listener` unique serait remis à `null`).
+ */
+type Host = {
+  listener: (r: Request) => void;
+  /** L'album de l'hôte est-il déjà l'officiel ? Lu au rendu de la visionneuse (« Choisir… » ou « Retirer… »). */
+  official: boolean;
+  /** La reprise est-elle encore permise (30 jours après la publication de l'album) ? Sinon l'action n'est pas proposée. */
+  repostOpen: boolean;
+};
+const hosts: Host[] = [];
+const topHost = (): Host | null => hosts[hosts.length - 1] ?? null;
 
 /** La casquette courante est l'organisateur de l'événement de l'album ? (lit la fiche de l'événement, déjà en cache de l'écran). */
 export function useIsEventOrganizer(album: AlbumView | null): boolean {
@@ -41,17 +52,19 @@ export const organizerActions: AlbumViewerAction[] = [
     id: "repost",
     label: L.repostAction,
     icon: "send",
-    roles: ["organizer"],
-    run: (ctx) => listener?.({ kind: "repost", ctx }),
+    get roles() {
+      return topHost()?.repostOpen ? (["organizer"] as const) : ([] as const);
+    },
+    run: (ctx) => topHost()?.listener({ kind: "repost", ctx }),
   },
   {
     id: "official",
     get label() {
-      return isOfficial ? L.removeOfficial : L.makeOfficial;
+      return topHost()?.official ? L.removeOfficial : L.makeOfficial;
     },
     icon: "star",
     roles: ["organizer"],
-    run: (ctx) => listener?.({ kind: "official", ctx }),
+    run: (ctx) => topHost()?.listener({ kind: "official", ctx }),
   },
 ];
 
@@ -72,9 +85,19 @@ export function OrganizerHost({
   const [repost, setRepost] = useState<{ album: AlbumView; photo: AlbumPhotoView } | null>(null);
   const [done, setDone] = useState<{ structure: string; media: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  isOfficial = album?.official ?? false;
+  const host = useRef<Host>({ listener: () => undefined, official: false, repostOpen: false }).current;
+  host.official = album?.official ?? false;
+  host.repostOpen = repostWindowOpen(album?.publishedAt, now());
+  // Monté une fois : l'ordre de la pile est celui des écrans ; le démontage retire cet hôte-là seulement.
   useEffect(() => {
-    listener = (r) => {
+    hosts.push(host);
+    return () => {
+      const i = hosts.indexOf(host);
+      if (i >= 0) hosts.splice(i, 1);
+    };
+  }, [host]);
+  useEffect(() => {
+    host.listener = (r) => {
       if (r.kind === "repost") {
         leaveViewer(() => setRepost({ album: r.ctx.album, photo: r.ctx.photo }));
         return;
@@ -88,10 +111,7 @@ export function OrganizerHost({
         }
       })();
     };
-    return () => {
-      listener = null;
-    };
-  }, [leaveViewer, onChanged]);
+  }, [host, leaveViewer, onChanged]);
   return (
     <>
       <RepostSheet

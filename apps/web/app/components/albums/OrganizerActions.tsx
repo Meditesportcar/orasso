@@ -3,7 +3,13 @@
 // comme « officiel » » / « Retirer « officiel » ». Les appels partent du navigateur vers l'API (même origine, cookie de session) ; les
 // refus de l'API (déjà reprise, ancienne galerie…) s'affichent dans la fenêtre.
 import { Button } from "@orasso/design-system/web";
-import { type AlbumView, eventPhotosLabels as L, repostCaptionDefault, repostRefusal } from "@orasso/shared";
+import {
+  type AlbumView,
+  eventPhotosLabels as L,
+  repostCaptionDefault,
+  repostRefusal,
+  repostWindowOpen,
+} from "@orasso/shared";
 import { useState } from "react";
 import { useRevalidator } from "react-router";
 
@@ -58,53 +64,60 @@ export function OrganizerActions({ album, photo }: { album: AlbumView; photo: { 
     setBusy(false);
   }
 
+  // Contenu frais : la reprise n'est proposée que 30 jours après la publication de l'album (l'API refuse au-delà).
+  const repostOpen = repostWindowOpen(album.publishedAt, new Date());
+
   return (
     <div className="alb-org" data-testid="album-organizer-actions">
-      <Button
-        variant="secondary"
-        icon="send"
-        type="button"
-        onClick={() => {
-          setOpen(!open);
-          setDone(null);
-        }}
-        aria-expanded={open}
-        data-testid="album-repost-open"
-      >
-        {L.repostAction}
-      </Button>
-      <span className="o-t-caption s-muted">{L.repostHint(album.media.name)}</span>
-      {open && (
-        <div className="alb-repost" data-testid="album-repost-form">
-          <label className="o-t-label" htmlFor="album-repost-caption">
-            {L.repostCaption}
-          </label>
-          <textarea
-            id="album-repost-caption"
-            className="s-input"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            maxLength={2000}
-            rows={2}
-            data-testid="album-repost-caption"
-          />
-          <span className="o-t-caption s-muted">{L.repostCaptionHint}</span>
-          <p className="o-t-caption s-muted">{L.repostWhatOthersSee}</p>
-          <div className="alb-repost__preview">
-            <img src={photo.url} alt="" />
-            <span className="credit-overlay o-t-caption">{L.creditOnPhoto(album.media.name)}</span>
-          </div>
-          <span className="o-t-caption s-muted">{L.repostedFoot}</span>
+      {repostOpen && (
+        <>
           <Button
+            variant="secondary"
             icon="send"
             type="button"
-            disabled={busy}
-            onClick={() => void publish()}
-            data-testid="album-repost-publish"
+            onClick={() => {
+              setOpen(!open);
+              setDone(null);
+            }}
+            aria-expanded={open}
+            data-testid="album-repost-open"
           >
-            {busy ? L.repostPublishing : L.repostPublish}
+            {L.repostAction}
           </Button>
-        </div>
+          <span className="o-t-caption s-muted">{L.repostHint(album.media.name)}</span>
+          {open && (
+            <div className="alb-repost" data-testid="album-repost-form">
+              <label className="o-t-label" htmlFor="album-repost-caption">
+                {L.repostCaption}
+              </label>
+              <textarea
+                id="album-repost-caption"
+                className="s-input"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                maxLength={2000}
+                rows={2}
+                data-testid="album-repost-caption"
+              />
+              <span className="o-t-caption s-muted">{L.repostCaptionHint}</span>
+              <p className="o-t-caption s-muted">{L.repostWhatOthersSee}</p>
+              <div className="alb-repost__preview">
+                <img src={photo.url} alt="" />
+                <span className="credit-overlay o-t-caption">{L.creditOnPhoto(album.media.name)}</span>
+              </div>
+              <span className="o-t-caption s-muted">{L.repostedFoot}</span>
+              <Button
+                icon="send"
+                type="button"
+                disabled={busy}
+                onClick={() => void publish()}
+                data-testid="album-repost-publish"
+              >
+                {busy ? L.repostPublishing : L.repostPublish}
+              </Button>
+            </div>
+          )}
+        </>
       )}
       <Button
         variant="secondary"
