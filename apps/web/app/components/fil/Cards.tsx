@@ -16,6 +16,7 @@ import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
 import { FoldedCaption } from "../publications/FoldedCaption";
 import { OfferLine, OfferTag } from "../publications/OfferLine";
+import { AlbumCard } from "./AlbumCard";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
@@ -329,8 +330,8 @@ export const cardRegistry: { [K in FeedCardKind]: (props: CardProps<any>) => Rea
   feed_post: FeedPostCard,
   memory: MemoryCard,
   sponsored: SponsoredCard,
-  // Lot R9e (partie 1) : le genre existe dans l'API ; `AlbumCard` (partie 2) remplace cette ligne. L'API ne sert la carte qu'à qui envoie `?cards=album`.
-  album: UnknownCard,
+  // Lot R9e : la carte « album » (l'API ne la sert qu'à qui envoie `?cards=album`, ce que fait ce site).
+  album: AlbumCard,
 };
 
 /** Le composant d'un genre ; `UnknownCard` pour un genre que ce registre ne connaît pas. */

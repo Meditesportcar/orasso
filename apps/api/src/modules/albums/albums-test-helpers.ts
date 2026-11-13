@@ -65,7 +65,8 @@ export async function organizerEvent(over: Parameters<typeof createEvent>[1] = {
   const orga = await signUp("Damien_66", { twoFactor: true });
   const structure = await createStructure(orga.id);
   const event = await createEvent(structure.id, {
-    slug: "rassemblement-du-lydia",
+    // Unique à chaque appel : un reste d'une remise à zéro sous charge ne peut pas faire doublon (`events_slug_key`).
+    slug: `rassemblement-du-lydia-${randomBytes(3).toString("hex")}`,
     title: "Rassemblement du Lydia",
     startsAt: paris(11, 9, 10),
     endsAt: paris(11, 9, 18),

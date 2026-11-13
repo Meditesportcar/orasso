@@ -14,8 +14,10 @@ vi.mock("expo-secure-store", () => ({
   deleteItemAsync: async (key: string) => void store.delete(key),
 }));
 
+import { createAlbumTurn } from "@orasso/shared";
 import {
   accountGuard,
+  accountTicket,
   bindCacheScope,
   CACHE_KEY_PREFIXES,
   cacheGetJson,
@@ -145,6 +147,51 @@ describe("caches de lecture par compte", () => {
     expect(guard.scope).toBeNull();
     await bindCacheScope("compte-a");
     expect(guard.current()).toBe(true);
+  });
+});
+
+describe("billet de compte : la mort d'un formulaire est définitive (tour 5)", () => {
+  it("A, puis B, puis A : le billet pris sous A reste faux (la garde de lecture, elle, revient)", async () => {
+    await bindCacheScope("compte-a");
+    const ticket = accountTicket();
+    const guard = accountGuard();
+    await purgeCaches();
+    await bindCacheScope("compte-b");
+    expect(ticket.current()).toBe(false);
+    await purgeCaches();
+    await bindCacheScope("compte-a");
+    expect(ticket.current()).toBe(false);
+    expect(guard.current()).toBe(true);
+    // Un billet pris après le retour est valable.
+    expect(accountTicket().current()).toBe(true);
+  });
+
+  it("deux liaisons simultanées du même compte : un billet pris entre les deux reste valable", async () => {
+    const first = bindCacheScope("compte-a");
+    const second = bindCacheScope("compte-a");
+    await first;
+    const ticket = accountTicket();
+    await second;
+    expect(ticket.current()).toBe(true);
+    // Une vraie liaison d'un autre compte, elle, invalide.
+    await bindCacheScope("compte-b");
+    expect(ticket.current()).toBe(false);
+  });
+
+  it("le tour d'un album : changement de compte pendant une opération, puis retour au compte d'origine : toujours mort, aucun tour", async () => {
+    await bindCacheScope("compte-a");
+    const ticket = accountTicket();
+    const turn = createAlbumTurn(ticket.current);
+    const op = turn.take();
+    expect(op).not.toBeNull();
+    await purgeCaches();
+    await bindCacheScope("compte-b");
+    expect(turn.alive()).toBe(false);
+    await purgeCaches();
+    await bindCacheScope("compte-a");
+    expect(turn.alive()).toBe(false);
+    turn.end(op);
+    expect(turn.take()).toBeNull();
   });
 });
 

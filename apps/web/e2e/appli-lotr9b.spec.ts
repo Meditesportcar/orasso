@@ -53,9 +53,9 @@ const CAS: Record<
     testId: "casquette-media",
     name: "Sud Cars",
     gest: ["media"],
-    tabs: ["publications", "contents", "mentions"],
+    tabs: ["publications", "albums", "mentions"],
     label: "Sud Cars",
-    first: "contents",
+    first: "albums",
   },
 };
 
@@ -188,7 +188,7 @@ test("« Publier » depuis la Page : « Publier en tant que <page> » ; un seul 
   await ctx.close();
 });
 
-test("le visiteur : La Brasa (« Suivre » → « Suivi », compteur +1, « Prestations ») et Sud Cars (« Contenus »)", async ({
+test("le visiteur : La Brasa (« Suivre » → « Suivi », compteur +1, « Prestations ») et Sud Cars (« Albums »)", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -229,10 +229,13 @@ test("le visiteur : La Brasa (« Suivre » → « Suivi », compteur +1, « Pres
   // Retour (le ✕ de l'écran), puis la page du média.
   await go(page, `/m/${sud?.id}`);
   await expect(page.getByTestId("page-name")).toContainText("Sud Cars", { timeout: 30_000 });
-  await expect(page.getByTestId("page-count-accreditations")).toBeVisible();
-  await page.getByTestId("page-tab-contents").click();
-  await expect(page.getByTestId("page-contents")).toBeVisible({ timeout: 30_000 });
-  await shot(page, "visiteur-media-contenus");
+  // Lot R9e (T22 remplacé) : « abonnés · albums · photos » (plus de compteur d'accréditations).
+  await expect(page.getByTestId("page-count-albums")).toBeVisible();
+  await expect(page.getByTestId("page-count-photos")).toBeVisible();
+  await expect(page.getByTestId("page-count-accreditations")).toHaveCount(0);
+  await page.getByTestId("page-tab-albums").click();
+  await expect(page.getByTestId("page-albums")).toBeVisible({ timeout: 30_000 });
+  await shot(page, "visiteur-media-albums");
   await ctx.close();
 });
 

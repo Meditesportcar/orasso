@@ -61,11 +61,15 @@ export default [
       route("app/media/nouveau", "routes/media-nouveau.tsx"),
       route("app/media/fil", "routes/casquette-fil.tsx", { id: "media-fil" }),
       route("app/media/page", "routes/casquette-page.tsx", { id: "media-page" }),
+      // Lot R9e : la création d'un album, dans l'espace du média.
+      route("app/media/albums/nouveau", "routes/app-album-nouveau.tsx"),
       route("app/prestataire", "routes/prestataire.tsx"),
       route("app/prestataire/fil", "routes/casquette-fil.tsx", { id: "prestataire-fil" }),
       route("app/prestataire/page", "routes/casquette-page.tsx", { id: "prestataire-page" }),
     ]),
     route("m/:id", "routes/m.tsx"),
+    // Lot R9e : un album des médias, ouvert (`/albums/:id`, page publique, hors du bloc de casquette).
+    route("albums/:id", "routes/album.tsx"),
     route("providers/:id", "routes/prestataires.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),

@@ -4,6 +4,7 @@
 import { type FeedCardKind, feedCardKinds } from "@orasso/shared";
 import type { ComponentType } from "react";
 
+import { AlbumCard } from "./AlbumCard";
 import { AnnouncementCard } from "./AnnouncementCard";
 import { EventRecommendedCard } from "./EventRecommendedCard";
 import { FeedPostCard } from "./FeedPostCard";
@@ -29,8 +30,8 @@ export const cardRegistry: { [K in FeedCardKind]: ComponentType<CardProps<any>> 
   feed_post: FeedPostCard,
   memory: MemoryCard,
   sponsored: SponsoredCard,
-  // Lot R9e (partie 1) : le genre existe dans l'API ; `AlbumCard` (partie 2) remplace cette ligne. L'API ne sert la carte qu'à qui envoie `?cards=album`.
-  album: UnknownCard,
+  // Lot R9e : la carte « album » (l'API ne la sert qu'à qui envoie `?cards=album`, ce que fait cette appli).
+  album: AlbumCard,
 };
 
 /** Le composant d'un genre ; `UnknownCard` pour un genre que ce registre ne connaît pas. */

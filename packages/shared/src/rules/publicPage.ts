@@ -1,6 +1,7 @@
 // Les règles d'écran de la page d'une structure et de la fiche d'un pro, vues par un visiteur (vague R8, lot R8g, maquettes R8.6
 // `pu-publi` et R9.3 `n-page`). Pures : le site et l'appli les lisent, aucune n'est écrite dans un écran. `now` n'intervient pas ici.
 
+import { albumLabels } from "../labels/albums.fr";
 import { attachPhraseOf } from "../labels/feedPublish.fr";
 import { pagesLabels as L } from "../labels/pages.fr";
 import { proOffersLabels } from "../labels/proOffers.fr";
@@ -12,10 +13,10 @@ import { FEED_ASPECT_RATIOS, type FeedAspect, feedAspects } from "./feed";
 export type PageKind = "structure" | "pro" | "provider" | "media";
 
 /**
- * Les onglets d'une page : « Événements » (structure), « Présentation » (pro), « Prestations » (prestataire) ou « Contenus »
- * (média, R9b), puis « Publications », « Offres » (fiche pro, R9c) et « Mentions ».
+ * Les onglets d'une page : « Événements » (structure), « Présentation » (pro), « Prestations » (prestataire) ou « Albums »
+ * (média, R9e ; « Contenus » en R9b), puis « Publications », « Offres » (fiche pro, R9c) et « Mentions ».
  */
-export type PageTab = "events" | "presentation" | "publications" | "offers" | "services" | "contents" | "mentions";
+export type PageTab = "events" | "presentation" | "publications" | "offers" | "services" | "albums" | "mentions";
 
 /** Le paramètre d'adresse qui porte l'onglet ouvert (`?onglet=`) : un lien partagé ouvre le bon. */
 export const PAGE_TAB_PARAM = "onglet";
@@ -26,7 +27,7 @@ const SLUG: Record<PageTab, string> = {
   publications: "publications",
   offers: "offres",
   services: "prestations",
-  contents: "contenus",
+  albums: "albums",
   mentions: "mentions",
 };
 
@@ -41,7 +42,7 @@ const LABEL: Record<PageTab, string> = {
   publications: L.tabPublications,
   offers: proOffersLabels.tab,
   services: L.tabServices,
-  contents: L.tabContents,
+  albums: albumLabels.albums,
   mentions: L.tabMentions,
 };
 
@@ -50,7 +51,7 @@ const FIRST: Record<PageKind, PageTab> = {
   structure: "events",
   pro: "presentation",
   provider: "services",
-  media: "contents",
+  media: "albums",
 };
 
 /**
@@ -58,7 +59,7 @@ const FIRST: Record<PageKind, PageTab> = {
  * « Publications », « Offres » (R9c, avec une session), « Mentions · N ». Prestataire (R9b) : « Publications », « Prestations »,
  * « Mentions · N ». Média : « Publications », « Contenus », « Mentions · N ». **Sans session** : pas de « Mentions » (l'API ne les
  * sert qu'à un membre connecté) et, hors structure, pas de « Publications » non plus (T4 : un visiteur ne voit que les publications
- * d'un organisateur) : un pro n'a que « Présentation », un prestataire que « Prestations », un média que « Contenus ».
+ * d'un organisateur) : un pro n'a que « Présentation », un prestataire que « Prestations », un média que « Albums ».
  * **`owner`** : le propriétaire d'une fiche pro n'a pas « Présentation » (sa fiche s'ouvre par « Modifier ma fiche ») :
  * « Publications · Offres · Mentions · N ». `count` : le nombre de la rangée (« Mentions · N ») ; `null` quand il n'est pas connu
  * (jamais « · 0 » à la place d'une panne).
@@ -81,7 +82,7 @@ export function pageTabs(
     case "provider":
       return [item("publications"), item("services"), mentions];
     case "media":
-      return [item("publications"), item("contents"), mentions];
+      return [item("publications"), item("albums"), mentions];
   }
 }
 
@@ -157,13 +158,23 @@ export function pageEmptyText(filter: AuthorPostsFilter, name: string): string {
 // --- L'en-tête ----------------------------------------------------------------------------------------------------------
 
 export type PageCounter = {
-  key: "followers" | "events" | "offers" | "partners" | "organizers" | "missions" | "accreditations" | "publications";
+  key:
+    | "followers"
+    | "events"
+    | "offers"
+    | "partners"
+    | "organizers"
+    | "missions"
+    | "accreditations"
+    | "publications"
+    | "albums"
+    | "photos";
   value: number | null;
   label: string;
 };
 
 /**
- * La bande de compteurs (R9b : prestataire « abonnés · missions · organisateurs », média « abonnés · accréditations · publications »).
+ * La bande de compteurs (R9b : prestataire « abonnés · missions · organisateurs », média « abonnés · albums · photos »).
  * Structure : « abonnés », « événements », « partenaires » (les pros partenaires). Pro : « abonnés », puis
  * « offres en cours » (R9c), « partenaires » (les passionnés à partenariat actif : servis aux connectés seulement) et « organisateurs » (les organisateurs
  * partenaires) **seulement quand ils existent** : une case à zéro n'est pas montrée, un nombre non servi non plus. Un nombre
@@ -178,9 +189,10 @@ export function pageCounters(
     organizers?: number | null;
     /** Les offres en cours d'une fiche pro (R9c) : servies aux connectés seulement. */
     offers?: number | null;
-    /** Lot R9b : les missions et les organisateurs d'un prestataire (T24), les accréditations et les publications d'un média (T22). */
+    /** Lot R9b : les missions et les organisateurs d'un prestataire (T24) ; lot R9e : les albums et les photos d'un média (T22 remplacé). */
     missions?: number | null;
-    accreditations?: number | null;
+    albums?: number | null;
+    photos?: number | null;
     publications?: number | null;
   },
 ): PageCounter[] {
@@ -194,10 +206,11 @@ export function pageCounters(
     return cells;
   }
   if (kind === "media") {
-    const accreditations = input.accreditations ?? null;
-    const publications = input.publications ?? null;
-    cells.push({ key: "accreditations", value: accreditations, label: L.accreditations(accreditations ?? 2) });
-    cells.push({ key: "publications", value: publications, label: L.publicationsCount(publications ?? 2) });
+    // R9e : « abonnés · albums · photos » (lus dans `albumsCount` et `photosCount` de `GET /media/:id`).
+    const albums = input.albums ?? null;
+    const photos = input.photos ?? null;
+    cells.push({ key: "albums", value: albums, label: L.albumsCount(albums ?? 2) });
+    cells.push({ key: "photos", value: photos, label: L.photosCount(photos ?? 2) });
     return cells;
   }
   if (kind === "structure") {
