@@ -6,16 +6,21 @@ import {
   type FeedAuthorView,
   type FeedCommentPreview,
   type FeedPerson,
+  type FeedPhotoCredit,
   type FeedPostView,
 } from "@orasso/shared";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import {
+  eventAlbumPhotos,
+  eventAlbums,
   eventAnnouncements,
+  events,
   feedPostCoauthors,
   feedPostPhotos,
   feedPostReactions,
   feedPosts,
+  mediaProfiles,
   profiles,
   userFollows,
   vehicles,
@@ -23,6 +28,7 @@ import {
 import { managedPageKeys } from "../../lib/authorship";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
+import { albumVisibleSql } from "../albums/view";
 import { commercialViews } from "../partnerships/commercial";
 import type { Profile } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -87,6 +93,40 @@ export const feedPhotoUrl = (postId: string, storageKey: string) =>
 
 /** Nom de fichier accepté dans l'adresse d'une photo. */
 export const FEED_PHOTO_NAME_RE = /^[0-9a-f]{32}\.webp$/;
+
+/**
+ * Lot R9g (T45) : le crédit des photos reprises d'un album (une seule requête jointe, seulement s'il y en a). Liste blanche : la page du
+ * média (`m:<id>`), son nom, l'album d'origine — `null` quand cet album n'est plus visible (retiré, accréditation tombée) : l'écran
+ * cache alors « Voir l'album ». Jamais le compte derrière le média.
+ */
+async function loadPhotoCredits(
+  ex: Executor,
+  photos: readonly { id: string; creditMediaId: string | null; sourceAlbumPhotoId: string | null }[],
+  at: Date,
+): Promise<Map<string, FeedPhotoCredit>> {
+  const out = new Map<string, FeedPhotoCredit>();
+  const ids = photos.filter((p) => p.creditMediaId !== null).map((p) => p.id);
+  if (!ids.length) return out;
+  const rows = await ex
+    .select({
+      photoId: feedPostPhotos.id,
+      mediaId: mediaProfiles.id,
+      name: mediaProfiles.name,
+      albumId: sql<
+        string | null
+      >`case when ${eventAlbumPhotos.deletedAt} is null and ${albumVisibleSql(at)} then ${eventAlbums.id} else null end`,
+    })
+    .from(feedPostPhotos)
+    .innerJoin(mediaProfiles, eq(mediaProfiles.id, feedPostPhotos.creditMediaId))
+    .leftJoin(eventAlbumPhotos, eq(eventAlbumPhotos.id, feedPostPhotos.sourceAlbumPhotoId))
+    .leftJoin(eventAlbums, eq(eventAlbums.id, eventAlbumPhotos.albumId))
+    .leftJoin(events, eq(events.id, eventAlbums.eventId))
+    .where(inArray(feedPostPhotos.id, ids));
+  for (const r of rows) {
+    out.set(r.photoId, { mediaKey: authorKeyOf("media", r.mediaId), mediaName: r.name, albumId: r.albumId });
+  }
+  return out;
+}
 
 /**
  * Publications visibles de `viewerId` parmi `ids`, dans l'ordre de `ids`. Les publications absentes, retirées, d'un
@@ -154,6 +194,7 @@ export async function loadPostViews(
     .from(feedPostPhotos)
     .where(inArray(feedPostPhotos.postId, postIds))
     .orderBy(asc(feedPostPhotos.position));
+  const credits = await loadPhotoCredits(ex, photos, at);
   const mine = new Set(
     (
       await ex
@@ -212,7 +253,13 @@ export async function loadPostViews(
     const attached = attaches.get(r.post.id);
     const own = photos
       .filter((p) => p.postId === r.post.id)
-      .map((p) => ({ url: feedPhotoUrl(r.post.id, p.storageKey), width: p.width, height: p.height }));
+      .map((p) => ({
+        url: feedPhotoUrl(r.post.id, p.storageKey),
+        width: p.width,
+        height: p.height,
+        // Lot R9g : le crédit d'une photo reprise ; **absent** d'une photo ordinaire (la forme d'avant est gardée).
+        ...(credits.has(p.id) ? { credit: credits.get(p.id) } : {}),
+      }));
     // Sans photo propre : l'affiche de l'événement (une référence, jamais une copie). Sans affiche non plus, ou sans
     // événement, la publication n'est pas servie.
     const poster = !own.length && attached ? eventVisualUrl(attached.event) : null;

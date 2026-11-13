@@ -4,6 +4,7 @@
 // telle qu'elle a été publiée (ni floutage ni signature, décision de Damien du 09/11) ; refusé pour un contenu de crew.
 // Un fichier de sortie est un JPEG (lu partout) généré à la demande, jamais stocké.
 import {
+  eventPhotosLabels,
   partnershipLabels,
   type ShareFileFormat,
   STORY_H,
@@ -15,7 +16,7 @@ import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPosts } from "../../db/schema";
+import { feedPostPhotos, feedPosts, mediaProfiles } from "../../db/schema";
 import { canManagePost } from "../../lib/authorship";
 import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -107,12 +108,24 @@ export const exportService = {
       .limit(1);
     const photo = first ? await storage.get(first.storageKey) : await postEventVisual(id);
     if (!photo) throw notFound("Publication introuvable");
-    return {
-      data: await signFile(
-        await toPortrait(photo),
-        { width: CANVAS_W, height: CANVAS_H },
+    // Lot R9g (T45) : une photo reprise d'un album sort avec le crédit du média (« Photo : <média> »), sous la signature.
+    const credited = first?.creditMediaId
+      ? (
+          await db
+            .select({ name: mediaProfiles.name })
+            .from(mediaProfiles)
+            .where(eq(mediaProfiles.id, first.creditMediaId))
+        )[0]
+      : undefined;
+    const mention =
+      [
         await commercialMention(post.commercialPartnerId),
-      ),
+        credited ? eventPhotosLabels.creditOnPhoto(credited.name) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null;
+    return {
+      data: await signFile(await toPortrait(photo), { width: CANVAS_W, height: CANVAS_H }, mention),
       ...jpeg("publication"),
     };
   },
