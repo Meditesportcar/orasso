@@ -157,10 +157,13 @@ export function createPracticalZone(deps: ZoneDeps) {
           return { places: merged, cover: [...sameZone, ...covered] };
         }
         // Impossible : rien n'est déclaré couvert, on repart de la première page.
+        pageState = null;
         return { places: replaceInStore(new Map(), () => true, incoming), cover: [], restart: true };
       }
       // Le plafond est dépassé : des lieux sortiraient. On ne garde que ce que cette réponse apporte et sa couverture, tout le reste (lieux
-      // et couverture) est évincé ensemble : jamais une zone « chargée » dont les lieux manquent.
+      // et couverture) est évincé ensemble : jamais une zone « chargée » dont les lieux manquent. La suite d'une zone coupée n'a plus ses
+      // pages précédentes : elle ne se lit plus (la recherche repart de la première page).
+      pageState = null;
       return { places: replaceInStore(new Map(), () => true, incoming), cover: [...covered] };
     }
     return { places, cover: [...state.cover, ...covered] };
@@ -193,18 +196,24 @@ export function createPracticalZone(deps: ZoneDeps) {
         // Une page suivante (curseur) AJOUTE ses lieux à ceux des pages précédentes de la même zone : rien n'est remplacé.
         if (cursor === undefined) seriesIds = new Set();
         for (const p of data.places) seriesIds.add(p.id);
-        const next = store(
-          (p) => coverContains(covered, p) && !seriesIds.has(p.id),
-          data.places,
-          covered,
-          cursor !== undefined ? zone : undefined,
-        );
+        // Une page suivante déclare couvertes toutes les cases complètes de la série, pages d'avant comprises : si la couverture de la
+        // zone du curseur n'est plus en mémoire (éviction par une autre lecture), ces pages sont perdues : rien n'est déclaré couvert.
+        const lost = cursor !== undefined && !state.cover.some((c) => c.t === "rect" && zoneEquals(c.zone, zone));
+        const next: ReturnType<typeof store> = lost
+          ? { ...store(() => false, data.places, []), restart: true }
+          : store(
+              (p) => coverContains(covered, p) && !seriesIds.has(p.id),
+              data.places,
+              covered,
+              cursor !== undefined ? zone : undefined,
+            );
         if (next.restart) pageState = null;
         if (!away && !next.restart) pageState = cut && data.nextCursor ? { zone, token: data.nextCursor } : null;
         // Toujours coupé après un resserrement : des cases de la vue ne seront jamais complètes à ce zoom.
         // (Seulement si la réponse concerne toujours la recherche et la vue courantes, et s'il n'y a plus de page suivante.)
+        // (Pas après une reprise forcée par l'éviction : la lecture repart de la première page, ce n'est pas « trop de lieux ».)
         const crowded =
-          !away && cut && !data.nextCursor && askedTight && view !== null && !viewCovered(next.cover, view);
+          !away && !next.restart && cut && !data.nextCursor && askedTight && view !== null && !viewCovered(next.cover, view);
         set({
           ...next,
           loading: false,
@@ -217,7 +226,9 @@ export function createPracticalZone(deps: ZoneDeps) {
         return;
       }
       // Lieux encore partiels : gardés, mais la zone n'est pas « chargée ».
-      const kept = store(() => false, data.places, []);
+      // Une page suivante partielle garde la zone du curseur : ses pages précédentes ne sortent pas de la mémoire.
+      const kept = store(() => false, data.places, [], cursor !== undefined ? zone : undefined);
+      if (kept.restart) pageState = null;
       if (away) {
         // La vue est ailleurs : plus de relecture de cette zone, le bouton est libre pour la zone regardée.
         cycle.manual();
@@ -237,8 +248,14 @@ export function createPracticalZone(deps: ZoneDeps) {
       if (!alive || !cycle.current(token)) return;
       const status = deps.statusOf(error);
       if (status === 409 && cursor !== undefined && asked === zone) {
-        // Les données ont changé entre deux pages : on repart de la première page de la même zone (les lieux lus remplacent les anciens).
+        // Les données ont changé entre deux pages : on repart de la première page de la même zone. Les lieux et la couverture de l'ancienne
+        // version sont invalidés d'abord (une case autrefois complète peut avoir grossi : elle ne reste pas « chargée » sur l'ancien état) ;
+        // les lieux que couvre encore une autre lecture (ouverture) restent.
+        const cover = state.cover.filter((c) => !(c.t === "rect" && zoneEquals(c.zone, zone)));
+        const places = new Map([...state.places].filter(([, p]) => !zoneContains(zone, p) || coverContains(cover, p)));
+        seriesIds = new Set();
         pageState = null;
+        set({ places, cover });
         cursorUsed = undefined;
         void load();
         return;
