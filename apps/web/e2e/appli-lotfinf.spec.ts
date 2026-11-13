@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
-import pg from "pg";
 import { type Browser, expect, type Page, type Request, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
@@ -35,7 +35,12 @@ const stub = async (): Promise<Stub> => (await fetch(`${STUB}/__stub`)).json() a
 async function open(
   browser: Browser,
   opts: { scale?: number; theme?: string; width?: number; geo?: boolean } = {},
-): Promise<{ page: Page; ctx: Awaited<ReturnType<Browser["newContext"]>>; zoneCalls: () => Record<string, unknown>[]; allCalls: () => number }> {
+): Promise<{
+  page: Page;
+  ctx: Awaited<ReturnType<Browser["newContext"]>>;
+  zoneCalls: () => Record<string, unknown>[];
+  allCalls: () => number;
+}> {
   const { scale = 1, theme = "beton", width = 384, geo = false } = opts;
   const ctx = await browser.newContext({
     viewport: { width, height: 900 },
@@ -97,6 +102,8 @@ async function panSouth(page: Page, times: number) {
     await page.mouse.move(x, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(x, box.y + 50, { steps: 8 });
+    // Le doigt reste posé un instant avant de se lever : pas d'élan, la carte s'arrête où on la lâche.
+    await page.waitForTimeout(300);
     await page.mouse.up();
     await page.waitForTimeout(350);
   }
@@ -123,11 +130,15 @@ test.afterAll(async () => {
   await fetch(`${STUB}/__stub?down=0&slow=0`).catch(() => null);
 });
 
-test("ouverture : la liste et le compteur disent la zone (8 km), la ville, aucun appel de zone", async ({ browser }) => {
+test("ouverture : la liste et le compteur disent la zone (8 km), la ville, aucun appel de zone", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser);
   await page.goto("/pratique");
   await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("practical-count")).toContainText(/\d+ stations? · \d+ lavages? dans la zone|\d+ stations? dans la zone|\d+ lavages? dans la zone/);
+  await expect(page.getByTestId("practical-count")).toContainText(
+    /\d+ stations? · \d+ lavages? dans la zone|\d+ stations? dans la zone|\d+ lavages? dans la zone/,
+  );
   await expect(page.getByTestId("practical-hint")).toContainText("Autour de Perpignan, ta ville.");
   await expect(page.getByTestId("practical-search")).toHaveAttribute("placeholder", "Ville, lieu ou enseigne");
   await expect(page.getByTestId("practical-row-0")).toBeVisible();
@@ -169,13 +180,15 @@ test("carte : regroupement, feuille « 2 lieux ici », filtre local sans réseau
   await ctx.close();
 });
 
-test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et élargie, aucune position", async ({ browser }) => {
+test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et élargie, aucune position", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser, { geo: true });
   // Les sources sont relues depuis le faux service : leurs appels sont comptés depuis ici.
   await clearPlacesCache();
   await fetch(`${STUB}/__stub?reset=1`);
   await openMap(page);
-  await panSouth(page, 9);
+  await panSouth(page, 11);
   const button = page.getByTestId("practical-search-here");
   await expect(button).toBeVisible({ timeout: 10_000 });
   await expect(button).toContainText("Rechercher dans cette zone");
@@ -187,7 +200,8 @@ test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et �
   await expect(button).toHaveCount(0, { timeout: 30_000 });
   expect(zoneCalls()).toHaveLength(1);
   const body = zoneCalls()[0] as { south: number; west: number; north: number; east: number };
-  for (const v of [body.south, body.west, body.north, body.east]) expect(Math.abs(v * 10 - Math.round(v * 10))).toBeLessThan(1e-9);
+  for (const v of [body.south, body.west, body.north, body.east])
+    expect(Math.abs(v * 10 - Math.round(v * 10))).toBeLessThan(1e-9);
   expect(body.north - body.south).toBeGreaterThan(0.1);
   expect(Object.keys(body).sort()).toEqual(["east", "near", "north", "south", "west"]);
   const sent = JSON.stringify(body);
@@ -204,7 +218,9 @@ test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et �
   await ctx.close();
 });
 
-test("ville cherchée : recentre, « Autour d'… la ville cherchée », distances depuis la ville, ✕ revient", async ({ browser }) => {
+test("ville cherchée : recentre, « Autour d'… la ville cherchée », distances depuis la ville, ✕ revient", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser);
   await openMap(page);
   const search = page.getByTestId("practical-search");
@@ -232,7 +248,9 @@ test("ville hors du chargé : la zone est lue tout de suite, une seule fois", as
   const search = page.getByTestId("practical-search");
   await search.fill("banyu");
   await page.getByTestId("practical-suggest-city-0").click();
-  await expect(page.getByTestId("practical-hint")).toContainText("Autour de Banyuls-sur-Mer, la ville cherchée.", { timeout: 30_000 });
+  await expect(page.getByTestId("practical-hint")).toContainText("Autour de Banyuls-sur-Mer, la ville cherchée.", {
+    timeout: 30_000,
+  });
   await expect.poll(() => zoneCalls().length, { timeout: 30_000 }).toBe(1);
   await expect(page.getByTestId("practical-search-here")).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId("practical-count")).toContainText("dans la zone");
@@ -250,7 +268,9 @@ test("enseigne : « La Laveuse » filtre les lieux chargés sur le téléphone, 
   await expect(apply).toContainText("Voir le lieu « laveuse »");
   await shot(page, "appli-enseigne-beton-384");
   await apply.click();
-  await expect(page.getByTestId("practical-count")).toContainText("1 lavage « laveuse » dans la zone", { timeout: 15_000 });
+  await expect(page.getByTestId("practical-count")).toContainText("1 lavage « laveuse » dans la zone", {
+    timeout: 15_000,
+  });
   expect(allCalls()).toBe(before);
   await shot(page, "appli-filtre-beton-384");
   await ctx.close();
@@ -262,7 +282,9 @@ test("aucun résultat : la phrase qui explique qu'une station se trouve par sa r
   await page.getByTestId("practical-search").fill("pneus");
   const empty = page.getByTestId("practical-suggest-empty");
   await expect(empty).toContainText("Aucun résultat. Essaie un autre mot.", { timeout: 15_000 });
-  await expect(empty).toContainText("Les stations-service se cherchent par leur rue : les données publiques ne donnent pas leur enseigne.");
+  await expect(empty).toContainText(
+    "Les stations-service se cherchent par leur rue : les données publiques ne donnent pas leur enseigne.",
+  );
   await shot(page, "appli-aucun-beton-384");
   await ctx.close();
 });
@@ -277,18 +299,22 @@ test("trop dézoomée : « Zoome sur un secteur pour voir ses lieux. », aucun a
     await page.mouse.wheel(0, 400);
     await page.waitForTimeout(200);
   }
-  await expect(page.getByTestId("practical-zoom-note")).toContainText("Zoome sur un secteur pour voir ses lieux.", { timeout: 15_000 });
+  await expect(page.getByTestId("practical-zoom-note")).toContainText("Zoome sur un secteur pour voir ses lieux.", {
+    timeout: 15_000,
+  });
   await expect(page.getByTestId("practical-search-here")).toHaveCount(0);
   expect(zoneCalls()).toHaveLength(0);
   await shot(page, "appli-dezoom-beton-384");
   await ctx.close();
 });
 
-test("hors ligne : le filtre local marche, le bouton dit « Réessayer » avec la phrase hors ligne, la reprise relit", async ({ browser }) => {
+test("hors ligne : le filtre local marche, le bouton dit « Réessayer » avec la phrase hors ligne, la reprise relit", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser);
   await openMap(page);
   await ctx.setOffline(true);
-  await panSouth(page, 9);
+  await panSouth(page, 11);
   // Le filtre « Lavage » marche sans réseau.
   await page.getByRole("tab", { name: "Lavage" }).click();
   await expect(page.getByTestId("practical-count")).toContainText(/lavages? dans la zone|Aucun lieu dans la zone/);
@@ -330,13 +356,17 @@ test("champ loading : le O vivant pendant la lecture, relecture espacée, puis l
   await ctx.close();
 });
 
-test("police ×1,3 à 384 px, Sable : le champ, le compteur et le bouton ne se coupent pas, pas de défilement horizontal", async ({ browser }) => {
+test("police ×1,3 à 384 px, Sable : le champ, le compteur et le bouton ne se coupent pas, pas de défilement horizontal", async ({
+  browser,
+}) => {
   const { ctx, page } = await open(browser, { scale: 1.3, theme: "sable" });
   await openMap(page);
   // La police agrandie grossit la carte du lieu et la plaque : des gestes plus nombreux, partant plus haut.
-  await panSouth(page, 14);
+  await panSouth(page, 16);
   await expect(page.getByTestId("practical-search-here")).toBeVisible({ timeout: 10_000 });
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
   expect(overflow).toBeLessThanOrEqual(1);
   const plaque = await page.getByTestId("practical-count").boundingBox();
   const map = await page.getByTestId("practical-map-canvas").boundingBox();

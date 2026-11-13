@@ -79,23 +79,25 @@ async function panSouth(page: Page, times: number) {
     await page.mouse.move(x, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(x, box.y + 60, { steps: 8 });
+    // Le doigt reste posé un instant avant de se lever : pas d'élan, la carte s'arrête où on la lâche.
+    await page.waitForTimeout(300);
     await page.mouse.up();
     await page.waitForTimeout(350);
   }
 }
 
-/** Glisse la carte de 100 px vers la gauche (environ 2 km vers l'est) : un geste voisin. */
-async function panEastSlightly(page: Page) {
+/** Un zoom avant au centre de la carte : un geste voisin, toujours dans la zone élargie (la vue rétrécit autour du même centre). */
+async function zoomInSlightly(page: Page) {
   const box = await page.getByTestId("practical-map-canvas").boundingBox();
   if (!box) throw new Error("carte absente");
-  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.4);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.7 - 100, box.y + box.height * 0.4, { steps: 6 });
-  await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.4);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(600);
 }
 
-test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, le champ, la ville", async ({ browser }) => {
+test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, le champ, la ville", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser, { width: 1280 });
   await openPage(page, 1280);
   await shot(page, "site-ouverture-beton-1280");
@@ -121,12 +123,14 @@ test("1280 px : la liste et la carte côte à côte, sans bascule, le compteur, 
   await ctx.close();
 });
 
-test("1280 px : hors du chargé, le bouton, un seul appel (zone arrondie au 0,1°), puis les gestes voisins restent locaux", async ({ browser }) => {
+test("1280 px : hors du chargé, le bouton, un seul appel (zone arrondie au 0,1°), puis les gestes voisins restent locaux", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser, { width: 1280 });
   await clearPlacesCache();
   await fetch(`${STUB}/__stub?reset=1`);
   await openPage(page, 1280);
-  await panSouth(page, 6);
+  await panSouth(page, 9);
   const button = page.getByTestId("practical-search-here");
   await expect(button).toBeVisible({ timeout: 10_000 });
   await expect(button).toContainText("Rechercher dans cette zone");
@@ -145,8 +149,8 @@ test("1280 px : hors du chargé, le bouton, un seul appel (zone arrondie au 0,1�
   expect(seen.received.length).toBeGreaterThan(0);
   for (const c of seen.received) expect(c.department).toMatch(/^[0-9][0-9AB]$/);
   await shot(page, "site-chargee-beton-1280");
-  // Un geste voisin (2 km), dans la zone élargie : plus de bouton, plus d'appel.
-  await panEastSlightly(page);
+  // Un geste voisin (un zoom), dans la zone élargie : plus de bouton, plus d'appel.
+  await zoomInSlightly(page);
   await expect(page.getByTestId("practical-search-here")).toHaveCount(0);
   expect(zoneCalls()).toHaveLength(1);
   await ctx.close();
@@ -192,7 +196,9 @@ test("390 px : bascule Liste | Carte, ville cherchée, enseigne, aucun résultat
   await search.fill("laveuse");
   await expect(page.getByTestId("practical-apply-text")).toContainText("Voir le lieu « laveuse »");
   await page.getByTestId("practical-apply-text").click();
-  await expect(page.getByTestId("practical-count")).toContainText("1 lavage « laveuse » dans la zone", { timeout: 15_000 });
+  await expect(page.getByTestId("practical-count")).toContainText("1 lavage « laveuse » dans la zone", {
+    timeout: 15_000,
+  });
   expect(allCalls()).toBe(before);
   await shot(page, "site-enseigne-sable-390");
   await page.getByTestId("practical-search-clear").click();
@@ -206,11 +212,13 @@ test("390 px : bascule Liste | Carte, ville cherchée, enseigne, aucun résultat
   await ctx.close();
 });
 
-test("1280 px : hors ligne, le filtre local marche, « Réessayer » et la phrase hors ligne, aucune boucle", async ({ browser }) => {
+test("1280 px : hors ligne, le filtre local marche, « Réessayer » et la phrase hors ligne, aucune boucle", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser, { width: 1280 });
   await openPage(page, 1280);
   await ctx.setOffline(true);
-  await panSouth(page, 6);
+  await panSouth(page, 9);
   await page.getByTestId("practical-filter-wash").click();
   await expect(page.getByTestId("practical-count")).toContainText(/lavages? dans la zone|Aucun lieu dans la zone/);
   await page.getByTestId("practical-filter-all").click();
@@ -230,7 +238,9 @@ test("1280 px : hors ligne, le filtre local marche, « Réessayer » et la phras
   await ctx.close();
 });
 
-test("1280 px : trop dézoomée, « Zoome sur un secteur pour voir ses lieux. », aucun appel ; champ loading : le O vivant puis la zone", async ({ browser }) => {
+test("1280 px : trop dézoomée, « Zoome sur un secteur pour voir ses lieux. », aucun appel ; champ loading : le O vivant puis la zone", async ({
+  browser,
+}) => {
   const { ctx, page, zoneCalls } = await open(browser, { width: 1280, theme: "sable" });
   await openPage(page, 1280);
   const box = await page.getByTestId("practical-map-canvas").boundingBox();
@@ -240,7 +250,9 @@ test("1280 px : trop dézoomée, « Zoome sur un secteur pour voir ses lieux. »
     await page.mouse.wheel(0, 400);
     await page.waitForTimeout(200);
   }
-  await expect(page.getByTestId("practical-zoom-note")).toContainText("Zoome sur un secteur pour voir ses lieux.", { timeout: 15_000 });
+  await expect(page.getByTestId("practical-zoom-note")).toContainText("Zoome sur un secteur pour voir ses lieux.", {
+    timeout: 15_000,
+  });
   await expect(page.getByTestId("practical-search-here")).toHaveCount(0);
   expect(zoneCalls()).toHaveLength(0);
   await shot(page, "site-dezoom-sable-1280");

@@ -98,6 +98,8 @@ async function panSouth(page: Page, times: number) {
     await page.mouse.move(x, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(x, box.y + 50, { steps: 8 });
+    // Le doigt reste posé un instant avant de se lever : pas d'élan, la carte s'arrête où on la lâche.
+    await page.waitForTimeout(300);
     await page.mouse.up();
     await page.waitForTimeout(350);
   }
@@ -180,11 +182,16 @@ for (const { theme, width, scale } of COMBOS) {
     await shot(page, `appli-aucun-${tag}`);
     await page.getByTestId("practical-search-clear").click();
     // Retour sur Perpignan (« Recentrer »), puis carte déplacée : le bouton, puis la zone chargée.
-    if (await page.getByTestId("practical-recenter").isVisible().catch(() => false)) {
+    if (
+      await page
+        .getByTestId("practical-recenter")
+        .isVisible()
+        .catch(() => false)
+    ) {
       await page.getByTestId("practical-recenter").click();
       await page.waitForTimeout(1_200);
     }
-    await panSouth(page, scale > 1 ? 14 : 9);
+    await panSouth(page, scale > 1 ? 16 : 11);
     await expect(page.getByTestId("practical-search-here")).toBeVisible({ timeout: 10_000 });
     await shot(page, `appli-deplacee-${tag}`);
     await page.getByTestId("practical-search-here").click();
