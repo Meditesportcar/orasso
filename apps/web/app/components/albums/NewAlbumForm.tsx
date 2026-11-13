@@ -17,6 +17,7 @@ import {
   DEFAULT_PLATE_FRAME,
   decideAll,
   decidedCounts,
+  holdsLeave,
   isPhotoLocked,
   albumLabels as L,
   type MediaAccreditationView,
@@ -182,7 +183,9 @@ export function NewAlbumForm({
   // publication réussie, elle, quitte la page de son propre chef (`leaving`).
   const leaving = useRef(false);
   const [leaveNote, setLeaveNote] = useState(false);
-  const blocker = useBlocker(() => turn.busy() && !leaving.current);
+  // Retenue seulement pendant une opération d'un formulaire vivant : une sortie voulue (`leaving`) ou un formulaire mort ne sont jamais retenus.
+  const holds = () => holdsLeave({ busy: turn.busy(), leaving: leaving.current, alive: turn.alive() });
+  const blocker = useBlocker(holds);
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     blocker.reset();
@@ -192,13 +195,14 @@ export function NewAlbumForm({
     if (!busyState) setLeaveNote(false);
   }, [busyState]);
   useEffect(() => {
+    const held = () => holdsLeave({ busy: turn.busy(), leaving: leaving.current, alive: turn.alive() });
     const guard = (e: BeforeUnloadEvent) => {
-      if (turn.busy() && !leaving.current) e.preventDefault();
+      if (held()) e.preventDefault();
     };
     // Un lien de la page (« Fermer », la barre) pendant une opération : le clic est retenu, le message s'affiche (les liens du site sont des
     // adresses ordinaires, que `useBlocker` ne voit pas).
     const onClick = (e: MouseEvent) => {
-      if (!turn.busy() || leaving.current) return;
+      if (!held()) return;
       const link = (e.target as Element | null)?.closest?.("a[href]");
       if (!link || link.getAttribute("target") === "_blank") return;
       e.preventDefault();
@@ -454,7 +458,9 @@ export function NewAlbumForm({
       window.location.assign(`/albums/${done.id}`);
     } catch (e) {
       if (alive()) setError((e as Error).message);
-      endTurn(token);
+    } finally {
+      // Le tour est rendu dans tous les cas, sauf la publication réussie (la page part) : un formulaire mort ne garde pas le tour pour toujours.
+      if (!leaving.current) endTurn(token);
     }
   }
 

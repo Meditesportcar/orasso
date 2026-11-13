@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAlbumTurn, removalRoute } from "./albumTurn";
+import { createAlbumTurn, holdsLeave, removalRoute } from "./albumTurn";
 
 describe("le tour d'un album : un propriétaire", () => {
   it("une seule opération à la fois ; le tour se rend à son jeton, jamais à un autre", () => {
@@ -66,5 +66,26 @@ describe("la garde de retrait commune", () => {
     expect(removalRoute({}, false)).toBe("local");
     expect(removalRoute({ attempted: true }, false)).toBe("server");
     expect(removalRoute({ photoId: "p" }, false)).toBe("server");
+  });
+});
+
+describe("la sortie de l'écran", () => {
+  it("retenue seulement pendant une opération d'un formulaire vivant ; une sortie voulue ou un formulaire mort passe", () => {
+    expect(holdsLeave({ busy: true, leaving: false, alive: true })).toBe(true);
+    expect(holdsLeave({ busy: false, leaving: false, alive: true })).toBe(false);
+    // La navigation d'une publication réussie (`leaving`) passe, tour tenu.
+    expect(holdsLeave({ busy: true, leaving: true, alive: true })).toBe(false);
+    // Compte changé pendant l'opération : mort, plus rien ne retient la sortie.
+    expect(holdsLeave({ busy: true, leaving: false, alive: false })).toBe(false);
+  });
+
+  it("un formulaire mort pendant la publication rend son tour : la sortie est libre ensuite", () => {
+    let current = true;
+    const turn = createAlbumTurn(() => current);
+    const token = turn.take();
+    current = false;
+    expect(holdsLeave({ busy: turn.busy(), leaving: false, alive: turn.alive() })).toBe(false);
+    turn.end(token);
+    expect(turn.busy()).toBe(false);
   });
 });

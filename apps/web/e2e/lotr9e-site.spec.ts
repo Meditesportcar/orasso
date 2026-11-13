@@ -996,6 +996,63 @@ test("la mort du formulaire est définitive : A, puis B, puis A : toujours mort,
   }
 });
 
+test("compte changé pendant la publication : le formulaire mort rend son tour, « Fermer » et le rechargement ne sont pas retenus (ni lien bloqué, ni invite de fermeture)", async ({
+  browser,
+}) => {
+  test.setTimeout(150_000);
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    locale: "fr-FR",
+    timezoneId: "Europe/Paris",
+  });
+  const a = await ctx.newPage();
+  const b = await ctx.newPage();
+  const dialogs: string[] = [];
+  a.on("dialog", (d) => {
+    dialogs.push(d.type());
+    void d.dismiss();
+  });
+  try {
+    await openBeziersStep2(a);
+    await a.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await a.getByTestId("album-step2-continue").click();
+    await expect(a.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    // « Publier » : l'enregistrement du titre est retardé, le compte change pendant ce temps.
+    await a.route("**/api/me/albums/*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return route.continue();
+    });
+    await a.getByTestId("album-publish").click();
+    await ctx.clearCookies();
+    await loginInBrowser(b, DAMIEN, undefined, "/app");
+    await expect(a.getByTestId("album-session-stale")).toBeVisible({ timeout: 30_000 });
+    // La réponse arrive : rien n'est appliqué, rien n'est publié, et le tour est rendu (plus de blocage de sortie).
+    await a.waitForTimeout(4500);
+    const prevented = await a.evaluate(() => {
+      const e = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    expect(prevented).toBe(false);
+    await expect(a.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3");
+    // « Fermer » n'est pas retenu : la page part.
+    await a.getByRole("link", { name: "Fermer" }).first().click();
+    await expect(a).not.toHaveURL(/albums\/nouveau/, { timeout: 30_000 });
+    expect(dialogs).toEqual([]);
+    expect(
+      (
+        await sql<{ n: number }>(
+          "select count(*)::int n from event_albums where status = 'published' and title like 'Les photos du Béziers%'",
+        )
+      )[0]?.n ?? 0,
+    ).toBe(0);
+  } finally {
+    await ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
 test("visionneuse : après le retrait de la dernière photo de la suite, « précédente » et « suivante » changent bien de photo", async ({
   page,
 }) => {

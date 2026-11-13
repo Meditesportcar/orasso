@@ -2,7 +2,7 @@
 // photos (plaques : une décision pour le lot ; envoi une photo à la fois), 3. les détails et « Publier l'album ». Quitter en cours : le
 // brouillon reste (« Reprendre l'album » à la prochaine ouverture pour le même événement). Un refus de l'API s'affiche, le flux reste.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, albumTitle, holdsLeave, albumLabels as L } from "@orasso/shared";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -57,12 +57,14 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   const uploads = useAlbumUploads(album?.id ?? null);
   // Quitter pendant une opération (✕, retour du système) est bloqué : l'écran dit pourquoi, la sortie se refait après la fin.
   const [leaveNote, setLeaveNote] = useState(false);
-  const isBusy = useRef(uploads.isBusy);
-  isBusy.current = uploads.isBusy;
+  // La sortie voulue (la navigation d'une publication réussie) passe même tour tenu ; un formulaire mort ne retient jamais la sortie.
+  const leaving = useRef(false);
+  const holds = useRef((): boolean => false);
+  holds.current = () => holdsLeave({ busy: uploads.isBusy(), leaving: leaving.current, alive: uploads.alive() });
   useEffect(
     () =>
       navigation.addListener("beforeRemove", (e) => {
-        if (!isBusy.current()) return;
+        if (!holds.current()) return;
         e.preventDefault();
         setLeaveNote(true);
       }),
@@ -161,6 +163,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       const done = await api.publishAlbum(album.id);
       if (!uploads.alive()) return;
       void drafts.reload();
+      leaving.current = true;
       router.replace(`/album/${done.id}` as never);
     } catch (e) {
       if (uploads.alive()) setError(errorMessage(e));
@@ -171,7 +174,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   }
 
   const close = () => {
-    if (uploads.isBusy()) {
+    if (holds.current()) {
       setLeaveNote(true);
       return;
     }

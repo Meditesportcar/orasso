@@ -61,3 +61,12 @@ export function removalRoute(item: Pick<AlbumItem, "attempted" | "photoId">, sen
   if (sending) return "blocked";
   return item.attempted || item.photoId ? "server" : "local";
 }
+
+/**
+ * La sortie de l'écran est-elle retenue ? Seulement tant qu'une opération tient le tour **et** que le formulaire est vivant : une sortie voulue
+ * (la navigation d'une publication réussie, `leaving`) passe toujours, et un formulaire mort (compte changé) ne retient jamais personne
+ * (« Fermer » et « recharge la page » restent possibles).
+ */
+export function holdsLeave(state: { busy: boolean; leaving: boolean; alive: boolean }): boolean {
+  return state.busy && !state.leaving && state.alive;
+}
