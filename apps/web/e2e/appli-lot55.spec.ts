@@ -92,6 +92,8 @@ async function lowContrastButtons(page: Page): Promise<string[]> {
     for (const el of document.querySelectorAll('[role="button"]')) {
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0 || r.right < 0 || r.left > window.innerWidth) continue;
+      // Lot R9b : l'anneau de stories d'une page est un avatar (l'initiale du nom sur la face de l'avatar, pas sur le fond de la page).
+      if (el.closest('[data-testid="page-story-ring"]')) continue;
       if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
       if (el.closest('[aria-hidden="true"]') || el.closest('[role="tablist"]') || r.bottom <= 72) continue;
       const label = el.querySelector("div[dir]");

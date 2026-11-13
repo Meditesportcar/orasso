@@ -179,7 +179,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
 
   const reloadAll = async () => {
     bumpReload();
-    await Promise.all([loaded.reload(), upcoming.reload(), past.reload(), partners.reload()]);
+    // Les listes de la structure ne se relisent que pour l'organisateur (sinon `reload` lirait les événements de tous).
+    await Promise.all([loaded.reload(), ...(organizer ? [upcoming.reload(), past.reload(), partners.reload()] : [])]);
   };
 
   // --- L'en-tête -------------------------------------------------------------------------------------------------------------

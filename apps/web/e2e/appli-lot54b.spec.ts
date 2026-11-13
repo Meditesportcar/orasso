@@ -146,6 +146,8 @@ for (const theme of THEMES) {
     await tab(page, "Page"); // R9n : Ma fiche est l'écran de l'onglet Page ; R9b : ouverte par le chip « Modifier ma fiche » de la Page
     await page.getByTestId("page-gest-fiche").click();
     await expect(page.getByTestId("pro-identity")).toBeVisible({ timeout: 30_000 });
+    // Lot R9b : le chip ouvre le segment « Modifier ma fiche » ; le test part de l'aperçu, « Vue passionné ».
+    await page.getByTestId("pro-segments").getByText("Vue passionné", { exact: true }).click();
 
     // Segments : onglets, sélection annoncée, cible tactile.
     await expect(page.getByTestId("pro-segments")).toHaveAttribute("role", "tablist");
@@ -218,7 +220,9 @@ for (const theme of THEMES) {
     await signIn(page, "garage@orasso.local");
     await page.goto(`/providers/${id}`);
     await afterOpening(page);
-    await expect(page.getByTestId("provider-identity")).toContainText("La Brasa", { timeout: 30_000 });
+    // Lot R9b : la page au gabarit des pages (nom dans l'en-tête) ; les réalisations sont dans l'onglet « Prestations ».
+    await expect(page.getByTestId("page-name")).toContainText("La Brasa", { timeout: 30_000 });
+    await page.getByTestId("page-tab-services").click();
     const grid = page.getByTestId("provider-public-photos");
     await expect(grid).toBeVisible();
     await expect(page.getByText("Réalisations", { exact: true })).toBeVisible();
@@ -250,7 +254,8 @@ for (const theme of THEMES) {
     if (bare[0]) {
       await page.goto(`/providers/${bare[0].id}`);
       await afterOpening(page);
-      await expect(page.getByTestId("provider-identity")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("page-name")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("page-tab-services").click();
       await expect(page.getByTestId("provider-public-photos")).toHaveCount(0);
     }
     await ctx.close();
