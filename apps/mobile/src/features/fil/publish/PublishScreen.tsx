@@ -575,8 +575,10 @@ function PublishForm({ start }: { start?: PublishStart }) {
    * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
+  const uncertainOutcome = useRef<"freed" | "found" | "kept">("kept");
   async function abandonUncertain() {
     if (!uncertain || checking || busy || running.current) return;
+    uncertainOutcome.current = "kept";
     running.current = true;
     const guard = accountGuard();
     setChecking(true);
@@ -586,12 +588,14 @@ function PublishForm({ start }: { start?: PublishStart }) {
       if (!guard.current()) return;
       markFeedDirty(post, author.key === "me" ? null : actorKeyOfPublishAuthor(author.key));
       if (mounted.current) discardTempPhotos();
+      uncertainOutcome.current = "found";
       setUncertain(null);
       setFound(true);
       setDone(true);
     } catch (e) {
       if (!guard.current()) return;
       if (e instanceof ApiRequestError && e.status === 404) {
+        uncertainOutcome.current = "freed";
         setUncertain(null);
         setClientId(randomUUID());
         keys.current = {};
@@ -600,6 +604,19 @@ function PublishForm({ start }: { start?: PublishStart }) {
       running.current = false;
       setChecking(false);
     }
+  }
+
+  /**
+   * « Publier en mon nom » quand la casquette choisie a disparu (R9h, tour 3) : jamais un « Moi » affiché alors que la requête
+   * rejouée porte encore la page. Avec un envoi incertain, le changement passe par la vérification de « Modifier ma publication ».
+   */
+  async function chooseMeAfterLoss() {
+    if (busy || checking || running.current) return;
+    if (uncertain) {
+      await abandonUncertain();
+      if (uncertainOutcome.current !== "freed") return;
+    }
+    setChoice((c) => chooseAuthor(c, authors, "me"));
   }
 
   if (cropping) {
@@ -691,7 +708,8 @@ function PublishForm({ start }: { start?: PublishStart }) {
               kind="s"
               wide
               icon="profile"
-              onPress={() => setChoice((c) => chooseAuthor(c, authors, "me"))}
+              disabled={busy || checking}
+              onPress={() => void chooseMeAfterLoss()}
               testID="fil-publish-author-lost-me"
             >
               {casquettesLabels.authorLostChoice}

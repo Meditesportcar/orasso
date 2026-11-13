@@ -58,56 +58,63 @@ test("Story d'une page : la lecture enchaînée reste dans la barre de la casque
   // personnelle de Sarah (sans acteur) a donc au moins un auteur absent de la barre de la structure.
   const kenji = await userIdOf("Kenji_66");
   const sarah = await userIdOf("Sarah_66");
-  const [src] = await sql<{ storage_key: string }>(
-    "select storage_key from stories where deleted_at is null and media_kind = 'photo' order by created_at limit 1",
-  );
-  await sql(
-    `insert into stories (author_id, persona, audience, storage_key, status, plate_state, caption, expires_at, created_at, updated_at)
+  // Les données qui distinguent les deux réseaux restent en place jusqu'à la fin du parcours (visionneuse et navigation comprises) ;
+  // le nettoyage est dans un `finally` et préserve un abonnement qui existait déjà.
+  const hadFollow =
+    (await sql("select 1 from user_follows where follower_id = $1 and followed_id = $2", [sarah, kenji])).length > 0;
+  try {
+    const [src] = await sql<{ storage_key: string }>(
+      "select storage_key from stories where deleted_at is null and media_kind = 'photo' order by created_at limit 1",
+    );
+    await sql(
+      `insert into stories (author_id, persona, audience, storage_key, status, plate_state, caption, expires_at, created_at, updated_at)
      values ($1, 'fan', 'public', $2, 'ready', 'none_confirmed', 'Recette R9h réseau personnel', now() + interval '20 hours', now(), now())`,
-    [kenji, src?.storage_key],
-  );
-  await sql(
-    "insert into user_follows (follower_id, followed_id, status, accepted_at) values ($1, $2, 'accepted', now()) on conflict do nothing",
-    [sarah, kenji],
-  );
-  const personalBar = (
-    await apiCall<{ authors: { key: string }[] }>(await login("sarah@orasso.local"), "GET", "/stories/bar")
-  ).data;
-  expect(
-    personalBar.authors.some((a) => !keys.includes(a.key)),
-    "la barre personnelle a un auteur absent de celle de la structure",
-  ).toBe(true);
-  await sql("delete from stories where caption = 'Recette R9h réseau personnel'");
-  await sql("delete from user_follows where follower_id = $1 and followed_id = $2", [sarah, kenji]);
-  await bar.locator('[data-testid^="stories-author-"] a').first().click();
-  await page.waitForURL(/\/app\/story\//);
-  // Le contexte de la barre d'origine est dans l'adresse (la page, pas la personne).
-  expect(decodeURIComponent(page.url())).toContain(`barre=${own}`);
-  const keyOfUrl = () => decodeURIComponent(new URL(page.url()).pathname.split("/").pop() ?? "");
-  const visited = [keyOfUrl()];
-  for (let i = 0; i < 6; i++) {
-    const next = page.getByTestId("story-author-next");
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(700);
-    visited.push(keyOfUrl());
+      [kenji, src?.storage_key],
+    );
+    await sql(
+      "insert into user_follows (follower_id, followed_id, status, accepted_at) values ($1, $2, 'accepted', now()) on conflict do nothing",
+      [sarah, kenji],
+    );
+    const personalBar = (
+      await apiCall<{ authors: { key: string }[] }>(await login("sarah@orasso.local"), "GET", "/stories/bar")
+    ).data;
+    expect(
+      personalBar.authors.some((a) => !keys.includes(a.key)),
+      "la barre personnelle a un auteur absent de celle de la structure",
+    ).toBe(true);
+    await bar.locator('[data-testid^="stories-author-"] a').first().click();
+    await page.waitForURL(/\/app\/story\//);
+    // Le contexte de la barre d'origine est dans l'adresse (la page, pas la personne).
+    expect(decodeURIComponent(page.url())).toContain(`barre=${own}`);
+    const keyOfUrl = () => decodeURIComponent(new URL(page.url()).pathname.split("/").pop() ?? "");
+    const visited = [keyOfUrl()];
+    for (let i = 0; i < 6; i++) {
+      const next = page.getByTestId("story-author-next");
+      if (!(await next.isVisible().catch(() => false))) break;
+      await next.click();
+      await page.waitForTimeout(700);
+      visited.push(keyOfUrl());
+    }
+    const personal = (await sql("select id from \"user\" where email = 'sarah@orasso.local'")) as { id: string }[];
+    // Jamais le réseau personnel de la titulaire : ni sa clé `u:`, ni un auteur qui n'est pas dans la barre de la structure.
+    expect(visited).not.toContain(`u:${personal[0]?.id}`);
+    for (const k of visited) expect([...keys, own], `auteur ${k} hors de la barre de la structure`).toContain(k);
+    expect(decodeURIComponent(page.url())).toContain(`barre=${own}`);
+    // Ouverte sans historique, la visionneuse se ferme sur le Fil de la page.
+    await page.goto(`/app/story/${encodeURIComponent(keys[0] ?? "")}?suite=barre&barre=${encodeURIComponent(own)}`);
+    await page.getByTestId("story-close").first().click();
+    await page.waitForURL(/\/orga\/roues-libres-66\/fil/, { timeout: 30_000 });
+    // Une clé de barre qui n'est pas une page tenue : ignorée (retour au Fil du passionné).
+    await page.goto(
+      `/app/story/${encodeURIComponent(keys[0] ?? "")}?suite=barre&barre=s%3A00000000-0000-0000-0000-000000000000`,
+    );
+    await page.getByTestId("story-close").first().click();
+    await page.waitForURL(/\/app\/fil/, { timeout: 30_000 });
+  } finally {
+    await sql("delete from stories where caption = 'Recette R9h réseau personnel'");
+    if (!hadFollow) await sql("delete from user_follows where follower_id = $1 and followed_id = $2", [sarah, kenji]);
+    await ctx.close();
   }
-  const personal = (await sql("select id from \"user\" where email = 'sarah@orasso.local'")) as { id: string }[];
-  // Jamais le réseau personnel de la titulaire : ni sa clé `u:`, ni un auteur qui n'est pas dans la barre de la structure.
-  expect(visited).not.toContain(`u:${personal[0]?.id}`);
-  for (const k of visited) expect([...keys, own], `auteur ${k} hors de la barre de la structure`).toContain(k);
-  expect(decodeURIComponent(page.url())).toContain(`barre=${own}`);
-  // Ouverte sans historique, la visionneuse se ferme sur le Fil de la page.
-  await page.goto(`/app/story/${encodeURIComponent(keys[0] ?? "")}?suite=barre&barre=${encodeURIComponent(own)}`);
-  await page.getByTestId("story-close").first().click();
-  await page.waitForURL(/\/orga\/roues-libres-66\/fil/, { timeout: 30_000 });
-  // Une clé de barre qui n'est pas une page tenue : ignorée (retour au Fil du passionné).
-  await page.goto(
-    `/app/story/${encodeURIComponent(keys[0] ?? "")}?suite=barre&barre=s%3A00000000-0000-0000-0000-000000000000`,
-  );
-  await page.getByTestId("story-close").first().click();
-  await page.waitForURL(/\/app\/fil/, { timeout: 30_000 });
-  await ctx.close();
 });
 
 test("Story : A puis B par revalidation, annonce de session retardée : le brouillon de A ne survit pas et n'est jamais publié sous B", async ({

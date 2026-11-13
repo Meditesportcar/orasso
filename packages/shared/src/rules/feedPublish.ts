@@ -570,18 +570,25 @@ export function draftFromBody(
   offer: OfferForm;
 } {
   const persona = typeof body.persona === "string" ? body.persona : "fan";
-  const author =
-    authors.find(
-      (a) =>
-        a.persona === persona &&
-        (persona !== "organizer" || a.structureId === body.structureId) &&
-        (persona !== "pro" || a.proId === body.proId),
-    ) ?? authors[0];
+  const author = authors.find(
+    (a) =>
+      a.persona === persona &&
+      (persona !== "organizer" || a.structureId === body.structureId) &&
+      (persona !== "pro" || a.proId === body.proId),
+  );
+  // Jamais « Moi » pour une page devenue indisponible (R9h, tour 3) : le corps figé porte la page, c'est elle qui est affichée (par sa
+  // clé, absente des auteurs proposés : `resolvePublishAuthor` la signale « perdue »), pas un repli silencieux sur la personne.
+  const lostId = persona === "organizer" ? body.structureId : persona === "pro" ? body.proId : null;
+  const authorKey =
+    author?.key ??
+    (persona === "fan"
+      ? "me"
+      : `${DESTINATION_OF[persona] ?? persona}:${typeof lostId === "string" && lostId ? lostId : "perdue"}`);
   const important = body.important as { reason?: ImportantReason } | undefined;
   const aspects: readonly string[] = ["portrait_4_5", "square", "landscape"];
   return {
     choice: {
-      authorKey: author?.key ?? "me",
+      authorKey,
       eventId: typeof body.eventId === "string" ? body.eventId : null,
       vehicleId: typeof body.vehicleId === "string" ? body.vehicleId : null,
       placeLabel: typeof body.placeLabel === "string" ? body.placeLabel : "",

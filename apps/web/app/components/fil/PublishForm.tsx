@@ -492,8 +492,10 @@ export function PublishForm({
    * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
    * reste incertain (le formulaire ne se libère jamais sur un doute).
    */
+  const uncertainOutcome = useRef<"freed" | "found" | "kept">("kept");
   async function abandonUncertain() {
     if (!uncertain || running.current) return;
+    uncertainOutcome.current = "kept";
     running.current = "check";
     setChecking(true);
     setError(null);
@@ -506,11 +508,13 @@ export function PublishForm({
       if (after !== "same") return setError(stopMessage(after));
       if (res.ok) {
         rememberPublished(userId, res.data);
+        uncertainOutcome.current = "found";
         setUncertain(null);
         setFound(true);
         return setDone(true);
       }
       if (res.status === 404) {
+        uncertainOutcome.current = "freed";
         setUncertain(null);
         setClientId(crypto.randomUUID());
         keys.current = {};
@@ -521,6 +525,20 @@ export function PublishForm({
       running.current = null;
       setChecking(false);
     }
+  }
+
+  /**
+   * « Publier en mon nom » quand la casquette choisie a disparu (R9h, tour 3) : jamais un « Moi » affiché alors que la requête
+   * rejouée porte encore la page. Avec un envoi incertain, le changement passe par la vérification de « Modifier ma publication » :
+   * retrouvée → confirmation (rien ne change) ; absence confirmée → nouvel auteur, nouvel identifiant ; inconnu → verrou maintenu.
+   */
+  async function chooseMeAfterLoss() {
+    if (busy || checking || running.current) return;
+    if (uncertain) {
+      await abandonUncertain();
+      if (uncertainOutcome.current !== "freed") return;
+    }
+    setChoice((c) => chooseAuthor(c, authors, "me"));
   }
 
   async function publish() {
@@ -1100,7 +1118,8 @@ export function PublishForm({
         <Button
           variant="secondary"
           icon="profile"
-          onClick={() => setChoice((c) => chooseAuthor(c, authors, "me"))}
+          disabled={busy || checking}
+          onClick={() => void chooseMeAfterLoss()}
           data-testid="fil-publish-author-lost-me"
         >
           {casquettesLabels.authorLostChoice}

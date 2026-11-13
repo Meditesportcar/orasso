@@ -142,6 +142,35 @@ describe("une page garde la main sur la conversation de SES publications (tour 2
     expect((await callAs(w.owner, null, "DELETE", `/feed-comments/${hidden.json.id}`)).status).toBe(204);
   });
 
+  it("un responsable sans second facteur : la page lit avec les droits d'une page sans lien, jamais avec le réseau personnel (liste, réponses)", async () => {
+    // `readActor` accepte une structure sans second facteur (lecture seule) ; `managesPost` l'exige : pas de droits de responsable.
+    const owner = await signUp("Orga_Sans2fa");
+    const s = await createStructure(owner.id);
+    const secret = await person("Secret_66", { visibility: "private" });
+    const marie = await person("Marie_66");
+    await follow(owner, secret);
+    const own = await dbPost(owner, {
+      persona: "organizer",
+      structureId: s.id,
+      createdAt: new Date("2026-11-12T11:00:00Z"),
+    });
+    const open = await say(marie, null, own, "Un avis public");
+    const hidden = await say(secret, null, own, "Un avis privé");
+    expect((await say(secret, null, own, "Réponse privée", { parentId: open.json.id })).status).toBe(201);
+    const as = `s:${s.id}`;
+    expect(items((await callAs(owner, as, "GET", `/feed-posts/${own}/comments`)).json).map((i) => i.text)).toEqual([
+      "Un avis public",
+    ]);
+    const replies = await callAs(owner, as, "GET", `/feed-comments/${open.json.id}/replies`);
+    expect(replies.status, replies.text).toBe(200);
+    expect(items(replies.json)).toEqual([]);
+    expect((await callAs(owner, as, "GET", `/feed-comments/${hidden.json.id}/replies`)).status).toBe(404);
+    // À titre personnel (sans en-tête), le réseau de la personne reste le sien.
+    expect(
+      items((await callAs(owner, null, "GET", `/feed-comments/${open.json.id}/replies`)).json).map((i) => i.text),
+    ).toEqual(["Réponse privée"]);
+  });
+
   it("sous une autre page, sur la même publication : rien de privé, rien de supprimable", async () => {
     const w = await structureWorld();
     await say(w.secret, null, w.own, "Un avis privé");

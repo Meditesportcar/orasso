@@ -3,7 +3,7 @@
 // l'espace pose un `ActorProvider` ; les composants partagés (Fil, barre des stories, commentaires) lisent `useActor()`. Hors d'un
 // espace de casquette, il rend `null` et rien ne change. Le serveur ne croit pas l'en-tête (il relit les droits) ; ce fichier ne fait
 // que le poser, sur la liste blanche seulement (`actorRoutes.ts`).
-import { createContext, createElement, type ReactNode, useContext, useEffect, useMemo } from "react";
+import { createContext, createElement, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
 
 import { postLive } from "../components/fil/commentsLive";
 
@@ -25,10 +25,11 @@ export function ActorProvider({ casquette, children }: { casquette: Casquette | 
   // Le magasin des commentaires (brouillons, envois en attente, feuilles lues) est vidé à l'entrée dans un espace, à son démontage et au changement de
   // casquette : une conversation lue au nom d'une page ne reste jamais sous un autre acteur, quel que soit le lien suivi (R9h, tour 1).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` seul déclenche
-  useEffect(() => {
+  useLayoutEffect(() => {
     // À l'entrée aussi (tour 2) : une navigation sans rechargement du Fil personnel vers une casquette ne garde jamais une feuille lue
-    // avec les droits personnels ni un brouillon qui partirait au nom de la page.
-    postLive.clear(true);
+    // avec les droits personnels ni un brouillon qui partirait au nom de la page. Effet de mise en page, non silencieux (tour 3, R1) :
+    // le magasin est vidé avant l'affichage et avant les lectures des enfants, et les cartes déjà montées se redessinent sans image d'un autre acteur.
+    postLive.clear();
     return () => postLive.clear();
   }, [key]);
   return createElement(CasquetteContext.Provider, { value }, children);

@@ -667,7 +667,13 @@ describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
       placeLabel: "Port",
       importantOn: false,
     });
-    expect(draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey).toBe("me");
+    // R9h, tour 3 (décision du coordinateur, R2 d'Opus) : un envoi incertain dont la page a disparu n'est plus affiché sous « Moi » : le
+    // corps figé porte la page, sa clé reste (absente des auteurs proposés) et `resolvePublishAuthor` la signale perdue.
+    const lost = draftFromBody({ persona: "organizer", structureId: "disparue" }, authors).choice.authorKey;
+    expect(lost).toBe("structure:disparue");
+    expect(resolvePublishAuthor(authors, lost).lost).not.toBeNull();
+    expect(draftFromBody({ persona: "media" }, authors).choice.authorKey).toBe("media:m1");
+    expect(draftFromBody({ persona: "fan" }, authors).choice.authorKey).toBe("me");
   });
 });
 

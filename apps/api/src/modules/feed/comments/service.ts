@@ -50,6 +50,7 @@ import {
   commentVisibleSql,
   managesPost,
   managesPostStrict,
+  type PostRow,
   repliesCountsOf,
   requireVisibleComment,
   toViews,
@@ -146,6 +147,22 @@ async function mentionedPeople(
 const readerOf = (v: Viewer, actor?: Actor | null): Viewer =>
   actor && isPageActor(actor) ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v;
 
+/**
+ * La page lit-elle cette publication comme son **responsable** ? Oui seulement si la publication est celle de la page de l'acteur
+ * (`pageKeyOf(post) === actor.key`) **et** que le compte la gère vraiment (`managesPost` : second facteur d'une structure compris,
+ * `readActor` ne l'exige pas). Une seule règle pour `list`, `replies` et `create` (R9h, tour 3) : sans elle, une conversation se lit
+ * avec le réseau personnel du titulaire (comptes privés suivis). Hors casquette : faux.
+ */
+async function ownManaged(
+  v: Viewer,
+  post: PostRow["post"],
+  actor: Actor | null | undefined,
+  ex?: Tx,
+): Promise<boolean> {
+  if (!actor || !isPageActor(actor) || pageKeyOf(post) !== actor.key) return false;
+  return managesPost(v, post, ex);
+}
+
 export const feedCommentsService = {
   /** `GET /feed-posts/:id/comments?cursor=` : le premier niveau, du plus ancien au plus récent, 20 par page. */
   async list(v: Viewer, postId: string, cursor?: string, actor?: Actor | null): Promise<FeedCommentPage> {
@@ -156,8 +173,8 @@ export const feedCommentsService = {
     // Une page garde la main sur la conversation de SES publications (tour 2, décision du coordinateur) : sur une publication de P, la
     // page lit tout comme son responsable (y compris le commentaire d'un compte privé qu'elle ne suit pas) et peut le supprimer ; sur la
     // publication de quelqu'un d'autre, `manages` est faux (droits de la page sans lien, rien de privé dans la liste).
-    const own = asPage && actor ? pageKeyOf(post.post) === actor.key : false;
-    const manages = asPage && !own ? false : await managesPost(v, post.post);
+    // (« Responsable » = `ownManaged` : la publication est celle de la page ET le compte la gère vraiment.)
+    const manages = asPage ? await ownManaged(v, post.post, actor) : await managesPost(v, post.post);
     return page(v, reader.user.id, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
   },
 
@@ -170,7 +187,7 @@ export const feedCommentsService = {
     // est lue d'abord, sans droit de lecture : un commentaire privé ne doit pas être refusé avant qu'on sache à qui est la publication.
     const found = asPage ? await commentRow(commentId) : undefined;
     const ofPost = found ? await postWithAuthor(found.c.postId) : null;
-    const own = asPage && actor && ofPost ? pageKeyOf(ofPost.post) === actor.key : false;
+    const own = ofPost ? await ownManaged(v, ofPost.post, actor) : false;
     const parent = await requireVisibleComment(own ? v : reader, commentId);
     // Un seul niveau : un commentaire qui est lui-même une réponse n'a pas de réponses.
     if (parent.c.parentId) return { items: [], nextCursor: null };
@@ -239,7 +256,7 @@ export const feedCommentsService = {
         let parentId: string | null = null;
         if (input.parentId) {
           // Sur une publication de sa propre page, le commentaire parent se lit comme son responsable le lit (tour 2).
-          const ownPost = page ? pageKeyOf(post.post) === page.key : false;
+          const ownPost = await ownManaged(v, post.post, page, tx);
           const asked = await requireVisibleComment(ownPost ? v : reader, input.parentId, tx).catch(
             (error: unknown) => {
               if (error instanceof AppError && error.status === 404) return null;
