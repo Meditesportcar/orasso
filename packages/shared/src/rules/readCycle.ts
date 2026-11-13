@@ -179,7 +179,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
 }
 
 /** Ce que la relecture d'une position a donné : réponse (même partielle), panne transitoire, refus ou erreur inconnue. */
-export type PositionOutcome = "ok" | "transient" | "refused" | "unknown";
+export type PositionOutcome = "ok" | "loading" | "transient" | "refused" | "unknown";
 
 /**
  * Le calendrier unique des relectures de position (3, 6, 12, 24 s tant que les lieux sont partiels), partagé par tous les écrans montés
@@ -238,7 +238,8 @@ export function createPositionCalendar(deps: {
         if (gen !== generation) return;
         reading = false;
         cycle.settled(outcome === "ok" ? "partial" : outcome);
-        failedShown = cycle.blocked() || cycle.stalledByFailure();
+        // Petit lot de fin F : un chargement (`loading`) qui épuise ses relectures borne le calendrier : « Réessayer ».
+        failedShown = cycle.blocked() || cycle.stalledByFailure() || cycle.exhausted();
         // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
         if (!active()) cycle.dispose();
         notify();

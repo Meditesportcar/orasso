@@ -251,3 +251,69 @@ export function countByKind(places: readonly { kind: PracticalKind }[]): { fuel:
   for (const p of places) if (p.kind === "fuel") fuel += 1;
   return { fuel, wash: places.length - fuel };
 }
+
+/* ---------- Vue de la carte (Web Mercator, tuiles de 512 comme MapLibre) ---------- */
+
+/** Une vue de carte : le centre et le zoom (MapLibre). */
+export type MapViewport = LatLng & { zoom: number };
+
+const TILE = 512;
+const project = (lat: number, lng: number, zoom: number): [number, number] => {
+  const size = TILE * 2 ** zoom;
+  const s = Math.min(Math.max(Math.sin((lat * Math.PI) / 180), -0.9999), 0.9999);
+  return [((lng + 180) / 360) * size, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * size];
+};
+const unproject = (x: number, y: number, zoom: number): LatLng => {
+  const size = TILE * 2 ** zoom;
+  return {
+    lat: (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * y) / size)),
+    lng: (x / size) * 360 - 180,
+  };
+};
+
+/** La zone qu'une vue montre sur une carte de `width` × `height` pixels. */
+export function viewZone(view: MapViewport, width: number, height: number): PracticalZone {
+  const [cx, cy] = project(view.lat, view.lng, view.zoom);
+  const nw = unproject(cx - width / 2, cy - height / 2, view.zoom);
+  const se = unproject(cx + width / 2, cy + height / 2, view.zoom);
+  return { north: nw.lat, west: nw.lng, south: se.lat, east: se.lng };
+}
+
+/** Le zoom qui montre `widthKm` de large sur une carte de `width` pixels, à cette latitude. */
+export function zoomForWidthKm(lat: number, widthKm: number, width: number): number {
+  const metresPerPixelAtZoom0 = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / TILE;
+  return Math.log2((metresPerPixelAtZoom0 * width) / (widthKm * 1000));
+}
+
+/**
+ * La vue qui cadre des points (comme la maquette : `top` px libres en haut pour la plaque du compte, `bottom` en bas pour la carte du lieu,
+ * `side` sur les côtés), au zoom `maxZoom` au plus.
+ */
+export function fitView(
+  points: readonly LatLng[],
+  width: number,
+  height: number,
+  opts: { top?: number; bottom?: number; side?: number; maxZoom?: number; minZoom?: number } = {},
+): MapViewport {
+  const { top = 64, bottom = 104, side = 40, maxZoom = 14.5, minZoom = 7.5 } = opts;
+  const first = points[0];
+  if (!first) return { lat: 46.6, lng: 2.35, zoom: 5 };
+  const b = { n: first.lat, s: first.lat, e: first.lng, w: first.lng };
+  for (const p of points) {
+    b.n = Math.max(b.n, p.lat);
+    b.s = Math.min(b.s, p.lat);
+    b.e = Math.max(b.e, p.lng);
+    b.w = Math.min(b.w, p.lng);
+  }
+  let zoom = maxZoom;
+  for (; zoom > minZoom; zoom -= 0.05) {
+    const a = project(b.n, b.w, zoom);
+    const c = project(b.s, b.e, zoom);
+    if (c[0] - a[0] <= width - 2 * side && c[1] - a[1] <= height - top - bottom) break;
+  }
+  const a = project(b.n, b.w, zoom);
+  const c = project(b.s, b.e, zoom);
+  const mx = (a[0] + c[0]) / 2;
+  const my = (a[1] + c[1]) / 2 - (top + (height - bottom) - height) / 2;
+  return { ...unproject(mx, my, zoom), zoom };
+}

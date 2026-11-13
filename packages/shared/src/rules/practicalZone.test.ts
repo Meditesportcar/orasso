@@ -135,3 +135,22 @@ describe("texte et libellés", () => {
     expect(countByKind([{ kind: "fuel" }, { kind: "wash" }, { kind: "fuel" }])).toEqual({ fuel: 2, wash: 1 });
   });
 });
+
+describe("vue de la carte", () => {
+  it("une carte de 8 km de large autour d'Argelès : la zone a bien 8 km de large et contient son centre", async () => {
+    const { viewZone, zoomForWidthKm, fitView, zoneSizeKm, zoneContains } = await import("./practicalZone");
+    const centre = { lat: 42.5496, lng: 3.0256 };
+    const zoom = zoomForWidthKm(centre.lat, 8, 352);
+    const z = viewZone({ ...centre, zoom }, 352, 400);
+    expect(zoneSizeKm(z).width).toBeGreaterThan(7.8);
+    expect(zoneSizeKm(z).width).toBeLessThan(8.2);
+    expect(zoneContains(z, centre)).toBe(true);
+    // Reprise d'une zone connue : le zoom 11,4 de la maquette montre environ 7,5 km sur 352 px.
+    expect(zoom).toBeGreaterThan(11);
+    expect(zoom).toBeLessThan(12.5);
+    const fit = fitView([{ lat: 42.5, lng: 3.0 }, { lat: 42.55, lng: 3.08 }], 352, 400);
+    const shown = viewZone(fit, 352, 400);
+    expect(zoneContains(shown, { lat: 42.5, lng: 3.0 })).toBe(true);
+    expect(zoneContains(shown, { lat: 42.55, lng: 3.08 })).toBe(true);
+  });
+});
