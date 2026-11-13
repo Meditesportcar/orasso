@@ -109,29 +109,42 @@ export function overpassQuery(department: string): string {
 export const OVERPASS_PARALLEL = 2;
 let generation = 0;
 let running = 0;
-let waiting: (() => void)[] = [];
-async function withSlot<T>(task: () => Promise<T>): Promise<T> {
+type Waiter = (granted: boolean) => void;
+let waiting: Waiter[] = [];
+/**
+ * Exporté pour les tests. Quand un appel finit, sa place passe DIRECTEMENT à la demande qui attend (le compte ne baisse pas puis ne remonte
+ * pas) : une demande qui arrive entre les deux ne peut jamais s'intercaler, il n'y a jamais plus de `OVERPASS_PARALLEL` appels actifs.
+ */
+export async function withOverpassSlot<T>(task: () => Promise<T>): Promise<T> {
   const mine = generation;
-  if (running >= OVERPASS_PARALLEL) await new Promise<void>((resolve) => waiting.push(resolve));
-  running += 1;
+  if (running >= OVERPASS_PARALLEL) {
+    const granted = await new Promise<boolean>((resolve) => waiting.push(resolve));
+    if (!granted) throw new Error("file d'Overpass réinitialisée");
+  } else {
+    running += 1;
+  }
   try {
     return await task();
   } finally {
     // Une remise à zéro (tests) a déjà libéré les places de la génération précédente.
     if (mine === generation) {
-      running -= 1;
-      waiting.shift()?.();
+      const next = waiting.shift();
+      if (next) next(true);
+      else running -= 1;
     }
   }
 }
 
-/** Tests : les places occupées par un appel qui ne répond jamais sont libérées (en production, le délai de 60 s les libère). */
+/**
+ * Tests : les places occupées par un appel qui ne répond jamais sont libérées (en production, le délai de 60 s les libère). Les demandes
+ * qui attendaient sont abandonnées (en échec) : elles ne prennent aucune place et n'appellent pas le bouchon suivant.
+ */
 export function resetOverpassQueue(): void {
   generation += 1;
   running = 0;
   const stuck = waiting;
   waiting = [];
-  for (const release of stuck) release();
+  for (const release of stuck) release(false);
 }
 
 /** Réponse en 200 qui annonce une erreur d'exécution (délai dépassé, mémoire) : la liste est incomplète, donc un échec. */
@@ -155,7 +168,7 @@ export async function osmState(department: string): Promise<SourceState<CachedOs
     maxStaleMs: WASH_MAX_STALE_MS,
     retryAfterMs: OVERPASS_RETRY_AFTER_MS,
     load: () =>
-      withSlot(async () => {
+      withOverpassSlot(async () => {
         const res = await externalRequest(
           env.OVERPASS_URL,
           {

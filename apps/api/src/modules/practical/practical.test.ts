@@ -424,6 +424,8 @@ describe("POST /practical : Overpass un appel à la fois, cache toléré en repl
     ];
     await Promise.all(users.map((u, i) => call(u, "POST", "/practical", { near: "position", ...cells[i] })));
     expect(stub.count("wash")).toBeGreaterThanOrEqual(6);
+    // Un département commun à deux demandes n'est chargé qu'une fois.
+    expect(stub.count("wash", "11")).toBe(1);
     // Petit lot de fin D, tour 2 : l'instance publique accepte deux appels à la fois par adresse (décision du coordinateur) ; jamais plus.
     expect(stub.maxWashInFlight()).toBe(2);
   });

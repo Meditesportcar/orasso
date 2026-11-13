@@ -395,6 +395,44 @@ describe("anciennes lignes `fuel:` (sans référence)", () => {
   });
 });
 
+describe("`fuel2:` toléré quand le jeu public est lent", () => {
+  it("une ligne `fuel2:` de 2 jours (toléré, 7 jours) est servie quand la source ne répond pas dans le budget : stations servies, partiel et chargement", async () => {
+    const old = new Date(NOW.getTime() - 2 * DAY);
+    for (const d of nearestDepartments(PERPIGNAN)) {
+      await db.insert(externalCache).values([
+        { key: `osm:${d}`, fetchedAt: new Date(NOW.getTime() - HOUR), data: [] },
+        {
+          key: `fuel2:${d}`,
+          fetchedAt: old,
+          data:
+            d === "66"
+              ? [
+                  {
+                    ref: "9",
+                    name: "Station-service",
+                    address: "Route du cache, 66000 Perpignan",
+                    lat: 42.7,
+                    lng: 2.9,
+                    prices: {},
+                    updatedAt: null,
+                  },
+                ]
+              : [],
+        },
+      ]);
+    }
+    practicalSources({}, { hang: ["fuel"] });
+    const res = await practicalService.get(
+      await viewerOf(await fan("Fan_Fuel2")),
+      { near: "position", cell: { lat: 42.7, lng: 2.9, key: "42.7,2.9" } },
+      60,
+    );
+    expect(res.places.map((p) => p.address)).toEqual(["Route du cache, 66000 Perpignan"]);
+    expect(res.partial).toBe(true);
+    expect(res.loading).toBe(true);
+  });
+});
+
 describe("chargement lent : deux départements en parallèle, `loading`", () => {
   it("deux départements lents : deux appels Overpass en même temps (jamais trois), `loading` tant que ça charge, puis complet", async () => {
     const stub = practicalSources({}, { delayMs: 400 });
