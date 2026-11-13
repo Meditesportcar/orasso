@@ -97,7 +97,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
     await page.getByRole("tab", { name: "Page", exact: true }).click();
     await page.getByText("Publications", { exact: true }).locator("visible=true").first().click();
-    await page.getByTestId("pro-new-post").click();
+    await page.getByTestId("pro-new-post").locator("visible=true").first().click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {
       // Lot R9c : plus de formulaire de texte ; une offre est une publication avec l'étiquette « Offre » (photo, titre, fin).
