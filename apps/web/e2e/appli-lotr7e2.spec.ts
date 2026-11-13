@@ -74,10 +74,13 @@ test("trois filtres, mémorisés ; chaque carte dit sa raison ; la liste ne ress
   await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("fil-filters")).toBeVisible();
   await loaded(page);
-  // Chaque carte a sa raison en petite ligne et son « ⋯ ».
+  // Chaque carte a sa raison en petite ligne et son « ⋯ ». Vérification R8-V2 : la signature à deux noms et la ligne
+  // « Avec … » d'une collaboration (R8o) portent aussi un identifiant `feed-card-…` sans être des cartes.
   const cards = page
     .getByTestId("fil-list")
-    .locator('[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"])');
+    .locator(
+      '[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"]):not([data-testid="feed-card-signature"]):not([data-testid="feed-card-invite"])',
+    );
   expect(await cards.count()).toBeGreaterThan(2);
   expect(await page.getByTestId("feed-card-reason").count()).toBeGreaterThanOrEqual(await cards.count());
   expect(await page.getByTestId("feed-card-more").count()).toBeGreaterThanOrEqual(await cards.count());

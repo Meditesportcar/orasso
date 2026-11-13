@@ -495,34 +495,11 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     await page.getByText("Publications", { exact: true }).click();
     await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
-    if (first) {
-      await page.getByLabel("Titre").fill("Offre de rentrée");
-      await page.getByLabel("Texte").fill("Vidange offerte pour les membres Orasso.");
-      await page.getByRole("button", { name: "Publier", exact: true }).click();
-      await expect(page.getByTestId("pro-post")).toHaveCount(1, { timeout: 20_000 });
-      await page.getByTestId("pro-post-edit").click();
-      await page.getByTestId("pro-post-title").fill("Offre de rentrée prolongée");
-      await shot(page, "07-pro-publication-modifier", theme);
-      await page.getByTestId("pro-post-save").click();
-      await expect(page.getByTestId("pro-post")).toContainText("Offre de rentrée prolongée", { timeout: 20_000 });
-      const posts = await apiCall<{ posts: { title: string; body: string }[]; postsUsed: number }>(
-        cookie,
-        "GET",
-        "/me/pro",
-      );
-      expect(posts.data.posts[0]).toMatchObject({
-        title: "Offre de rentrée prolongée",
-        body: "Vidange offerte pour les membres Orasso.",
-      });
-      expect(posts.data.postsUsed).toBe(1);
-      await shot(page, "08-pro-publications", theme);
-      await page.getByTestId("pro-post-delete").click();
-      await page.getByTestId("orga-confirm").click();
-      await expect(page.getByTestId("pro-post")).toHaveCount(0, { timeout: 20_000 });
-      expect((await apiCall<{ posts: unknown[] }>(cookie, "GET", "/me/pro")).data.posts).toHaveLength(0);
-    } else {
-      await shot(page, "08-pro-publications", theme);
-    }
+    // Vérification R8-V2 : depuis R9c, l'écran n'a plus de formulaire titre + texte (journal des choix, lot R9c) : une offre
+    // se publie depuis « Publier » (photo obligatoire, pas de modification après l'envoi), couverte par appli-lotr9c.
+    await expect(page.getByTestId("pro-publish-offer")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Publier", exact: true })).toBeVisible();
+    await shot(page, "08-pro-publications", theme);
     await ctx.close();
   }
 });

@@ -60,7 +60,8 @@ for (const theme of ["beton", "sable"] as const) {
         const page = await ctx.newPage();
         await setTheme(page, theme);
         await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
-        await page.goto("/p/garage-du-port");
+        // Vérification R8-V2 : depuis R8g, « Publications » s'ouvre par défaut ; les partenaires sont dans « Présentation ».
+        await page.goto("/p/garage-du-port?onglet=presentation");
         const section = page.getByTestId("pro-member-partners");
         await expect(section.getByTestId("pro-member-partner")).toHaveCount(6);
         await expect(section).toContainText("7 passionnés");
