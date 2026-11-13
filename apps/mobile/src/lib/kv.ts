@@ -122,6 +122,8 @@ export const CACHE_KEY_PREFIXES = [
   "memory.",
   // Lot R8d : le journal d'un événement gardé pour le jour J (une clé par événement, propre au compte).
   "journal.",
+  // Lot R9b : la Page du titulaire d'une casquette (une clé par casquette, propre au compte).
+  "owner-page-",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {
