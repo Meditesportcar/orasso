@@ -70,6 +70,14 @@ describe("publishAuthors", () => {
       "media:m1",
     ]);
   });
+  it("une structure suspendue n'est pas proposée (R9h, tour 1) ; ni, par conséquent, préchoisie par ?auteur=", () => {
+    const withSuspended = publishAuthors(
+      [...personas, { kind: "organizer" as const, id: "s3", label: "Suspendue", logoUrl: null, suspended: true }],
+      "Damien_66",
+    );
+    expect(withSuspended.map((a) => a.key)).toEqual(authors.map((a) => a.key));
+    expect(withSuspended.some((a) => a.key === "structure:s3")).toBe(false);
+  });
   it("les titres et sous-titres de la maquette", () => {
     expect(byKey("me")).toMatchObject({ title: "Moi · Damien_66", hint: "Ta publication personnelle", persona: "fan" });
     expect(byKey("structure:s1")).toMatchObject({

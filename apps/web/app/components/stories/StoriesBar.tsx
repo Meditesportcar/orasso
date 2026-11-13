@@ -19,7 +19,8 @@ const publishHref = (actor: string | null) =>
   actor ? `${PUBLISH_HREF}?auteur=${encodeURIComponent(actor)}` : PUBLISH_HREF;
 
 /** Depuis la barre du Fil (lot R8s) : `?suite=barre`, la lecture enchaîne les auteurs suivants de la barre. */
-export const storyHref = (key: string) => `/app/story/${encodeURIComponent(key)}?suite=barre`;
+export const storyHref = (key: string, barre?: string | null) =>
+  `/app/story/${encodeURIComponent(key)}?suite=barre${barre ? `&barre=${encodeURIComponent(barre)}` : ""}`;
 
 export function StoriesBar({
   userId,
@@ -80,7 +81,7 @@ export function StoriesBar({
           {mineState || casquette ? (
             <>
               <a
-                href={mineState ? storyHref(ownKey) : addHref}
+                href={mineState ? storyHref(ownKey, actor) : addHref}
                 className="stories-bar__link"
                 aria-label={mineState ? L.openMine : L.addStoryHint}
                 data-testid="stories-mine-ring"
@@ -104,7 +105,7 @@ export function StoriesBar({
           return (
             <li key={a.key} className="stories-bar__item" data-testid={`stories-author-${a.key}`}>
               <a
-                href={storyHref(a.key)}
+                href={storyHref(a.key, actor)}
                 className="stories-bar__link"
                 aria-label={`${L.openStories(a.pseudoOrName)}${a.crewName ? `, ${a.crewName}` : ""}`}
               >

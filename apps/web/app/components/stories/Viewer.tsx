@@ -148,12 +148,15 @@ function AuthorButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => v
 function AuthorViewer({
   authorKey,
   userId,
+  back,
   nav,
   session,
   replyKeys,
 }: {
   authorKey: string;
   userId: string;
+  /** Où ✕ ramène quand on arrive sans historique : le Fil d'où l'on vient (celui de la page, R9h). */
+  back: string;
   nav?: AuthorNav;
   session: SessionState;
   replyKeys: ReturnType<typeof createReplyKeys>;
@@ -262,8 +265,8 @@ function AuthorViewer({
     if (muteTimer.current) clearTimeout(muteTimer.current);
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (idx > 0) void navigate(-1);
-    else void navigate("/app/fil", { replace: true });
-  }, [navigate]);
+    else void navigate(back, { replace: true });
+  }, [navigate, back]);
   // Changer d'auteur (fin de série, toucher à gauche sur la première story, glissement, boutons) : une seule fois par auteur lu.
   const leaving = useRef(false);
   const prevKey = nav?.prevKey ?? null;
@@ -1132,7 +1135,20 @@ const PREFETCH_MAX_AGE_MS = 15_000;
  * préchargement est purgé à chaque vérification), et les identifiants d'idempotence des réponses (un aller-retour entre auteurs
  * ne permet pas de renvoyer un texte avec un nouvel identifiant).
  */
-export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId: string; chain?: string[] }) {
+export function Viewer({
+  authorKey,
+  userId,
+  chain,
+  barKey = null,
+  back = "/app/fil",
+}: {
+  authorKey: string;
+  userId: string;
+  chain?: string[];
+  /** Lot R9h (tour 1) : la barre d'origine est celle d'une page (`?barre=<clé>`) ; l'adresse la garde. */
+  barKey?: string | null;
+  back?: string;
+}) {
   const [frozen] = useState<string[]>(() => (chain && chain.length > 0 ? chain : [authorKey]));
   const [current, setCurrent] = useState(authorKey);
   const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
@@ -1270,13 +1286,17 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
       // L'adresse suit l'auteur courant (sans nouvelle entrée d'historique) : au retour d'un profil ouvert depuis la
       // visionneuse, on reprend à cet auteur.
       try {
-        window.history.replaceState(window.history.state, "", `/app/story/${encodeURIComponent(to)}?suite=barre`);
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `/app/story/${encodeURIComponent(to)}?suite=barre${barKey ? `&barre=${encodeURIComponent(barKey)}` : ""}`,
+        );
       } catch {
         // sans effet : l'adresse reste celle du premier auteur
       }
       return true;
     },
-    [walk, current],
+    [walk, current, barKey],
   );
 
   return (
@@ -1284,6 +1304,7 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
       key={current}
       authorKey={current}
       userId={userId}
+      back={back}
       session={{ check, epoch, verify: () => void verifySession() }}
       replyKeys={replyKeys}
       nav={

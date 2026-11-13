@@ -15,6 +15,7 @@ import {
   commercialField,
   commercialIssue,
   eventsWithPlace,
+  feedPublishLabels,
   fillFrame,
   fitDefault,
   frameState,
@@ -39,6 +40,7 @@ import {
   sendIfAlive,
   storyAudienceOptions,
   storyBody,
+  storyEffectiveVisibility,
   storyEventSticker,
   storyPlateDecided,
   storyPublishIssue,
@@ -57,6 +59,8 @@ import "../../styles/fil.css";
 import "../../styles/garage.css";
 import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
+import { latchStale } from "../../lib/sessionGuard";
 import { PublishKind } from "../casquette/PublishKind";
 import { FicheBar } from "../FicheBar";
 import { PREPARE_FAILED } from "../fil/prepare";
@@ -67,6 +71,8 @@ import { prepareStoryPhoto, type StoryPhoto } from "./prepare";
 import { ClipRefused, prepareStoryClip, releaseClip, type StoryClip } from "./prepareVideo";
 
 export type PublishFormProps = {
+  /** Lot R9h (tour 1) : le compte du formulaire ; une session devenue celle d'un autre bloque l'envoi (jamais sous la page d'un autre compte). */
+  userId: string;
   /** Mon réglage de compte : « public » ou « privé » (sous-titre de « Mes abonnés », autocollant d'événement). */
   visibility: "public" | "private";
   crews: { id: string; name: string; membersCount: number }[];
@@ -165,6 +171,7 @@ function uploadWithProgress(
 const PERSON: StoryAuthor = { persona: "fan" };
 
 export function PublishForm({
+  userId,
   visibility,
   crews,
   vehicles,
@@ -174,6 +181,10 @@ export function PublishForm({
   authorKey = "me",
   back = "/app/fil",
 }: PublishFormProps) {
+  // Un autre onglet connecte un autre compte : cet écran (la page, le brouillon de A) est périmé. Il se masque, verrouillé jusqu'au
+  // rechargement ; l'envoi porte de plus le compte attendu (409 `account_changed` si la session n'est plus la sienne).
+  const [sessionStale, setSessionStale] = useState(false);
+  useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
   // Lot R7g : la vidéo choisie (jamais en même temps qu'une photo), ses clés d'envoi gardées pour une reprise.
   const [clip, setClip] = useState<StoryClip | null>(null);
@@ -214,7 +225,7 @@ export function PublishForm({
   const chosen = options.find((o) => o.key === audienceKey);
   const lost = !chosen;
   const audience = chosen?.audience ?? "followers";
-  const sticker = storyEventSticker(visibility, audience);
+  const sticker = storyEventSticker(storyEffectiveVisibility(author, visibility), audience);
 
   // Pendant l'envoi, la page ne se quitte pas (✕, « Annuler », lien, retour du navigateur) : rien ne part après coup. Un
   // changement de page dans l'appli est bloqué ; un lien classique est neutralisé ; fermer l'onglet est signalé.
@@ -340,7 +351,7 @@ export function PublishForm({
 
   /** Vidéo : envoi avec progression, vignette, création (même reprise sans doublon que la photo). */
   async function publishClip(video: StoryClip) {
-    if (busy || issue) return;
+    if (busy || issue || sessionStale) return;
     setBusy(true);
     setError(null);
     const keys = clipKeys.current?.url === video.url ? clipKeys.current : { url: video.url };
@@ -397,7 +408,8 @@ export function PublishForm({
       () => open.current,
       async () => undefined,
       async () => {
-        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const post = () =>
+          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code === "validation_error") return post();
         return first;
@@ -418,7 +430,7 @@ export function PublishForm({
 
   async function publish() {
     if (clip) return publishClip(clip);
-    if (!photo || busy || issue) return;
+    if (!photo || busy || issue || sessionStale) return;
     setBusy(true);
     setError(null);
     let key = uploaded.current?.url === photo.url ? uploaded.current.key : null;
@@ -457,7 +469,8 @@ export function PublishForm({
       () => open.current,
       async () => undefined,
       async () => {
-        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const post = () =>
+          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code !== "plate_decision_required") return post();
         return first;
@@ -475,6 +488,20 @@ export function PublishForm({
     // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
     if (res.status === 400) uploaded.current = null;
     setError(res.error.message);
+  }
+
+  if (sessionStale) {
+    return (
+      <div className="fil" data-testid="story-stale">
+        <FicheBar title={L.title} back={back} />
+        <p className="o-t-body" role="alert">
+          {feedPublishLabels.accountChanged}
+        </p>
+        <Button icon="undo" onClick={() => window.location.reload()} data-testid="story-stale-reload">
+          Recharger la page
+        </Button>
+      </div>
+    );
   }
 
   if (done) {

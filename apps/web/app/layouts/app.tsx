@@ -81,7 +81,7 @@ const HREFS: Record<string, string> = {
 };
 
 /** Onglet actif d'après l'adresse ; l'Activité et les Messages sont une feuille au-dessus de l'écran, sans onglet. */
-function activeTab(pathname: string): string {
+function activeTab(pathname: string, underCasquette = false): string {
   if (pathname.startsWith("/app/activite") || pathname.startsWith("/app/messages")) return "";
   if (pathname === "/app") return "home";
   // Lot R7a1 : Sorties (et ses suites : billets, vote, récap) est dans l'Accueil ; Garage et Passeport, dans le Profil.
@@ -90,6 +90,8 @@ function activeTab(pathname: string): string {
   if (pathname.startsWith("/app/fil")) return "feed";
   // Lot R9h : le Fil et la Page d'une casquette (média, prestataire) ont leur propre sous-navigation : pas d'onglet de la barre du passionné.
   if (/^\/app\/(media|prestataire)\/(fil|page)(\/|$)/.test(pathname)) return "";
+  // Média et Prestataire avec leur casquette : la sous-navigation porte l'onglet actif, pas « Profil » de la barre du passionné (R9h, tour 1).
+  if (underCasquette && /^\/app\/(media|prestataire)(\/|$)/.test(pathname)) return "";
   if (pathname === "/app/crew") return "crew";
   return /^\/app\/(moi|securite|sanctions|aide|reseau|profil-public|crews|garage|passeport|media|prestataire|structure|pro)(\/|$)/.test(
     pathname,
@@ -100,7 +102,11 @@ function activeTab(pathname: string): string {
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const { pathname, search } = useLocation();
-  const fiche = isFiche(useMatches());
+  const matches = useMatches();
+  const fiche = isFiche(matches);
+  const underCasquette = matches.some(
+    (m) => m.id === "layouts/casquette" && Boolean((m.loaderData as { casquette?: unknown } | undefined)?.casquette),
+  );
   const revalidator = useRevalidator();
   const { setDepartment } = useTheme();
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
@@ -122,7 +128,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     href: HREFS[tab.id],
   }));
   // Un onglet absent de la barre de la casquette tombe sur Profil.
-  const raw = activeTab(pathname);
+  const raw = activeTab(pathname, underCasquette);
   const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
   // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Profil ; lot R7a1 : ni sur Le Fil ni sur
   // Crew ; lot M7 : ni sur une fiche ou un parcours (mode B).

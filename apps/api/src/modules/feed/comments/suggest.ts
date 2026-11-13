@@ -30,7 +30,8 @@ export async function mentionSuggestions(
   /** Lot R9a : en casquette, la conversation et les comptes publics que la page suit, rien du réseau de la personne. */
   page: Actor | null = null,
 ): Promise<MentionSuggestion[]> {
-  const row = await requireVisiblePost(v, postId);
+  // Lot R9h (tour 1) : la publication elle-même se lit avec les droits de la page (404 pour une publication que seule la personne voit).
+  const row = await requireVisiblePost(page ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v, postId);
   const at = now();
   const viewerId = page ? PAGE_VIEWER_ID : v.user.id;
   const manages = page ? false : await managesPost(v, row.post);

@@ -67,7 +67,7 @@ const DESTINATION_OF: Record<string, PublishDestination> = {
  * pages. L'API vérifie les droits : cette liste ne fait que proposer.
  */
 export function publishAuthors(
-  personas: readonly Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl">[],
+  personas: readonly (Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl"> & { suspended?: boolean })[],
   pseudo: string,
   avatarUrl: string | null = null,
 ): PublishAuthor[] {
@@ -82,7 +82,8 @@ export function publishAuthors(
     logoUrl: avatarUrl,
   };
   const pages = personas
-    .filter((p) => p.kind in DESTINATION_OF)
+    // Une page suspendue ne se propose pas (R9h, tour 1) : l'API refuserait l'envoi, la personne n'a pas à le découvrir à l'envoi.
+    .filter((p) => p.kind in DESTINATION_OF && !p.suspended)
     .map((p, index) => ({ p, index }))
     .sort((a, b) => (RANK[a.p.kind] ?? 9) - (RANK[b.p.kind] ?? 9) || a.index - b.index)
     .map(({ p }): PublishAuthor => {

@@ -17,6 +17,9 @@ export const ACTOR_ROUTES: readonly ActorRoute[] = [
   { method: "GET", path: "/stories/bar" },
   { method: "GET", path: "/feed-posts/:id/comments" },
   { method: "POST", path: "/feed-posts/:id/comments" },
+  // Lot R9h (tour 1) : les réponses et les suggestions « @ » se lisent aussi avec les droits de la page.
+  { method: "GET", path: "/feed-comments/:id/replies" },
+  { method: "GET", path: "/feed-posts/:id/mention-suggestions" },
   // Les pages vues d'une casquette : « suivi » est l'état de la page qui regarde.
   { method: "GET", path: "/structures/by-slug/:slug" },
   { method: "GET", path: "/pros/by-slug/:slug" },

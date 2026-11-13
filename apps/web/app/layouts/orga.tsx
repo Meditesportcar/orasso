@@ -136,7 +136,11 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
   const counts = useLiveCounts(
     loaderData.userId,
     loaderData.counts,
-    () => loadCounts<OrganizerInboxSummary>(`/structures/${structure.id}/inbox/summary`, structureTopBarCounts),
+    // Un simple staff n'a pas la cloche de la structure : aucune lecture (la route lui est refusée).
+    () =>
+      isOrganizer
+        ? loadCounts<OrganizerInboxSummary>(`/structures/${structure.id}/inbox/summary`, structureTopBarCounts)
+        : Promise.resolve(null),
     structure.id,
   );
   const { pathname } = useLocation();

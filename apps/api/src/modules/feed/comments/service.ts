@@ -72,6 +72,8 @@ function readCursor(raw: string | undefined) {
 /** Une page de commentaires, du plus ancien au plus récent : `where` choisit premier niveau ou réponses. */
 async function page(
   v: Viewer,
+  /** Celui dont les droits décident de ce qui se lit : `v` lui-même, ou le lecteur sans lien d'une page (R9h). */
+  readerId: string,
   where: ReturnType<typeof and>,
   manages: boolean,
   cursor: string | undefined,
@@ -86,7 +88,7 @@ async function page(
       and(
         where,
         isNull(c.deletedAt),
-        commentVisibleSql(v.user.id, manages, at),
+        commentVisibleSql(readerId, manages, at),
         after
           ? sql`(${c.createdAt}, ${c.id}) > (${after.createdAt.toISOString()}::timestamptz, ${after.id}::uuid)`
           : undefined,
@@ -136,22 +138,35 @@ async function mentionedPeople(
   return people.sort((x, y) => (order.get(x.pseudo.toLowerCase()) ?? 0) - (order.get(y.pseudo.toLowerCase()) ?? 0));
 }
 
+/**
+ * Le lecteur d'une conversation (lot R9h, tour 1, décision du coordinateur) : sous une casquette, commentaires, réponses et
+ * suggestions de mentions se lisent avec les droits de la page — un membre sans aucun lien, comme à l'écriture —, jamais avec le
+ * réseau personnel du titulaire (comptes privés qu'il suit). Sans page, c'est le compte lui-même.
+ */
+const readerOf = (v: Viewer, actor?: Actor | null): Viewer =>
+  actor && isPageActor(actor) ? { ...v, user: { ...v.user, id: PAGE_VIEWER_ID } } : v;
+
 export const feedCommentsService = {
   /** `GET /feed-posts/:id/comments?cursor=` : le premier niveau, du plus ancien au plus récent, 20 par page. */
-  async list(v: Viewer, postId: string, cursor?: string): Promise<FeedCommentPage> {
+  async list(v: Viewer, postId: string, cursor?: string, actor?: Actor | null): Promise<FeedCommentPage> {
     rateLimit("feedRead", v.user.id);
-    const post = await requireVisiblePost(v, postId);
-    const manages = await managesPost(v, post.post);
-    return page(v, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
+    const asPage = Boolean(actor && isPageActor(actor));
+    const reader = readerOf(v, actor);
+    const post = await requireVisiblePost(reader, postId);
+    // Une page ne modère pas par la personne qui la tient : `manages` est faux, la suppression repasse par `requireAuthorship`.
+    const manages = asPage ? false : await managesPost(v, post.post);
+    return page(v, reader.user.id, and(eq(c.postId, post.post.id), isNull(c.parentId)), manages, cursor);
   },
 
   /** `GET /feed-comments/:id/replies?cursor=` : les réponses d'un commentaire de premier niveau. */
-  async replies(v: Viewer, commentId: string, cursor?: string): Promise<FeedCommentPage> {
+  async replies(v: Viewer, commentId: string, cursor?: string, actor?: Actor | null): Promise<FeedCommentPage> {
     rateLimit("feedRead", v.user.id);
-    const parent = await requireVisibleComment(v, commentId);
+    const asPage = Boolean(actor && isPageActor(actor));
+    const reader = readerOf(v, actor);
+    const parent = await requireVisibleComment(reader, commentId);
     // Un seul niveau : un commentaire qui est lui-même une réponse n'a pas de réponses.
     if (parent.c.parentId) return { items: [], nextCursor: null };
-    return page(v, eq(c.parentId, parent.c.id), parent.manages, cursor);
+    return page(v, reader.user.id, eq(c.parentId, parent.c.id), asPage ? false : parent.manages, cursor);
   },
 
   /** `POST /feed-posts/:id/comments` */

@@ -1,5 +1,7 @@
 /* Les espaces de casquette du site (lot R9h) : la barre du haut d'un espace, la pastille « Tu lis en tant que », la sous-navigation
-   Média et Prestataire, le segment « Publication | Story ». Jetons seulement, aucune valeur en dur. */
+   Média et Prestataire, le segment « Publication | Story ». Jetons seulement (tour 1 : typographie et rayons). Seules restent des
+   mesures de mise en page sans jeton, reprises telles quelles des écrans voisins : 600 px (colonne du Fil, `.fil`), 880 px
+   (`.app__body`), 860 px et 560 px (point de rupture et base de `.orga`, `site.css`), 40 px (rangée d'onglets, `under-tabs.css`). */
 
 /* Un espace à barre latérale (`/orga`, `/pro`) : la barre du haut au-dessus du contenu, pas de son retrait. */
 .orga__col {
@@ -52,8 +54,8 @@
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 11px;
-  font-weight: 900;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-button-weight);
 }
 .cas-line__logo > img {
   width: 100%;
@@ -71,7 +73,7 @@
   color: var(--ink-muted);
 }
 .cas-line__name {
-  font-weight: 800;
+  font-weight: var(--type-button-weight);
   overflow-wrap: anywhere;
 }
 .cas-line__change {
@@ -93,7 +95,7 @@
   text-decoration: none;
 }
 .cas-tabs__who .cas-line__name {
-  font-size: 14px;
+  font-size: var(--type-button-size);
 }
 .cas-tabs .utabs {
   margin-inline: var(--space-4);
@@ -117,8 +119,8 @@
   min-height: 40px;
   border-radius: calc(var(--radius-md) - 2px);
   color: var(--ink-muted);
-  font-size: 13.5px;
-  font-weight: 800;
+  font-size: var(--type-button-size);
+  font-weight: var(--type-button-weight);
   text-decoration: none;
 }
 .cas-kind__tab.is-on {

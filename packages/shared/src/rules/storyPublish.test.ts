@@ -19,6 +19,7 @@ import {
   sendIfAlive,
   storyAudienceOptions,
   storyBody,
+  storyEffectiveVisibility,
   storyEventSticker,
   storyPlaceText,
   storyPlateDecided,
@@ -339,5 +340,23 @@ describe("envoi d'une story", () => {
       ),
     ).rejects.toThrow("hors ligne");
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("storyEffectiveVisibility : la confidentialité qui compte pour l'auteur (R9h, tour 1)", () => {
+  it("un compte privé : l'autocollant d'événement reste permis pour un média et un prestataire (pages publiques), pas pour la personne", () => {
+    const sticker = (persona: "fan" | "organizer" | "pro" | "provider" | "media") =>
+      storyEventSticker(storyEffectiveVisibility({ persona }, "private"), "public").allowed;
+    expect(sticker("media")).toBe(true);
+    expect(sticker("provider")).toBe(true);
+    expect(sticker("fan")).toBe(false);
+    // Une structure et une fiche pro suivent le réglage du compte, comme `canTag` de l'API.
+    expect(sticker("organizer")).toBe(false);
+    expect(sticker("pro")).toBe(false);
+  });
+  it("un compte public : permis partout", () => {
+    for (const persona of ["fan", "organizer", "pro", "provider", "media"] as const) {
+      expect(storyEventSticker(storyEffectiveVisibility({ persona }, "public"), "public").allowed).toBe(true);
+    }
   });
 });

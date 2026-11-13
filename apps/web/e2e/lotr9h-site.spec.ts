@@ -42,6 +42,8 @@ const WHITELIST = [
   /^GET \/fil\/fresh$/,
   /^GET \/stories\/bar$/,
   /^(GET|POST) \/feed-posts\/[^/]+\/comments$/,
+  /^GET \/feed-comments\/[^/]+\/replies$/,
+  /^GET \/feed-posts\/[^/]+\/mention-suggestions$/,
 ];
 
 async function noHorizontalScroll(page: Page) {
@@ -116,6 +118,11 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(mine).toBeVisible({ timeout: 30_000 });
     await expect(mine.locator("b").first()).toHaveText("Roues Libres 66");
     await shot(page, `orga-commentaire-${theme}`);
+    // Les suggestions « @ » se lisent avec les droits de la page (R9h, tour 1) : l'en-tête part aussi sur cette lecture.
+    const suggest = page.waitForRequest((r) => r.url().includes("/mention-suggestions"));
+    await page.getByTestId("feed-comment-input").fill("@");
+    expect((await (await suggest).allHeaders())["x-orasso-actor"]).toMatch(/^s:/);
+    await page.getByTestId("feed-comment-input").fill("");
     await page.getByTestId("feed-comments-close").click();
 
     // « Publier » : un seul geste (plus de liste « En story | Dans le Fil »), au nom de la structure, puis le segment « Story ».

@@ -141,7 +141,9 @@ export function useComments(
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
       const since = repliesMark(postLive.sheetOf(id), parentId);
       try {
-        const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`);
+        const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`, {
+          actor: actorRef.current,
+        });
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
         if (!postLive.fresh(t)) return;
         update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from, since), t);
@@ -398,6 +400,8 @@ export function useComments(
 export function useMentionSuggestions(postId: string, draft: MentionDraft | null): MentionSuggestion[] {
   const [items, setItems] = useState<MentionSuggestion[]>([]);
   const query = draft ? draft.query : null;
+  // Lot R9h (tour 1) : sous une casquette, les suggestions suivent les droits de la page (jamais le réseau de la personne).
+  const actor = useActor();
   // Un autre compte : la liste du précédent s'en va.
   useEffect(() => onAccountChange(() => setItems([])), []);
   useEffect(() => {
@@ -409,6 +413,7 @@ export function useMentionSuggestions(postId: string, draft: MentionDraft | null
     const timer = setTimeout(() => {
       call<MentionSuggestion[]>(
         `/feed-posts/${postId}/mention-suggestions${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+        { actor },
       )
         .then((list) => {
           if (alive) setItems(list);
@@ -421,6 +426,6 @@ export function useMentionSuggestions(postId: string, draft: MentionDraft | null
       alive = false;
       clearTimeout(timer);
     };
-  }, [postId, query]);
+  }, [postId, query, actor]);
   return query === null ? [] : items;
 }

@@ -3,6 +3,7 @@ import { feedScreenLabels as L } from "@orasso/shared";
 import { ficheHandle } from "../components/FicheBar";
 import { PublishForm } from "../components/fil/PublishForm";
 import { api, requireMe } from "../lib/api.server";
+import { filHrefOfAuthor } from "../lib/casquetteFil";
 import type { Route } from "./+types/app-fil-publier";
 
 // « Publier au Fil » (lot R7e2, D38, maquette R7.24 ; lot R8p, maquette R8.4) : photos (fichiers), recadrage 4:5 par défaut
@@ -29,35 +30,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     userId: me.user.id,
     pseudo: me.profile.pseudo,
     avatarUrl: me.profile.avatarUrl,
-    personas: (me.personas ?? []).map((p) => ({ kind: p.kind, id: p.id, label: p.label, logoUrl: p.logoUrl })),
+    // Une casquette suspendue ne se choisit pas (R9h, tour 1) : l'API refuserait l'envoi.
+    personas: (me.personas ?? [])
+      .filter((p) => !p.suspended)
+      .map((p) => ({ kind: p.kind, id: p.id, label: p.label, logoUrl: p.logoUrl })),
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
       : [],
     optionsFailed: !vehicles.ok,
   };
-}
-
-/** Le Fil où revenir : celui de la casquette qu'on tient (`?auteur=`), sinon le Fil du passionné. */
-function filHrefOfAuthor(auteur: string | null, me: Awaited<ReturnType<typeof requireMe>>): string {
-  const at = auteur ? auteur.indexOf(":") : -1;
-  if (!auteur || at < 1) return "/app/fil";
-  const id = auteur.slice(at + 1);
-  switch (auteur.slice(0, at)) {
-    case "s": {
-      const slug = me.memberships.find(
-        (m) => m.structureId === id && m.status === "active" && m.role !== "staff",
-      )?.structureSlug;
-      return slug ? `/orga/${slug}/fil` : "/app/fil";
-    }
-    case "p":
-      return me.pro?.id === id ? `/pro/${me.pro.slug}/fil` : "/app/fil";
-    case "m":
-      return me.personas.some((p) => p.kind === "media" && p.id === id) ? "/app/media/fil" : "/app/fil";
-    case "v":
-      return me.personas.some((p) => p.kind === "provider" && p.id === id) ? "/app/prestataire/fil" : "/app/fil";
-    default:
-      return "/app/fil";
-  }
 }
 
 export function meta() {

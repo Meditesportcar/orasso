@@ -56,10 +56,15 @@ describe("carriesActor : seules les routes de la liste portent l'acteur", () => 
     expect(carriesActor("POST", "/feed-posts/p1/comments")).toBe(true);
     expect(carriesActor("GET", "/feed-posts/p1/comments?cursor=c")).toBe(true);
     expect(carriesActor("PUT", "/me/page-follows/v%3Av1")).toBe(true);
+    // R9h, tour 1 : la conversation se lit avec les droits de la page (réponses, suggestions « @ »), pas seulement les commentaires.
+    expect(carriesActor("GET", "/feed-comments/c1/replies?cursor=x")).toBe(true);
+    expect(carriesActor("GET", "/feed-posts/p1/mention-suggestions?q=ma")).toBe(true);
     expect(carriesActor("DELETE", "/structures/s1/follow")).toBe(true);
   });
   it("jamais la flamme, le signalement, les cartes vues, les messages, « Publier » ni une route voisine", () => {
     expect(carriesActor("POST", "/feed-posts/p1/flame")).toBe(false);
+    expect(carriesActor("PUT", "/feed-comments/c1/reaction")).toBe(false);
+    expect(carriesActor("DELETE", "/feed-comments/c1")).toBe(false);
     expect(carriesActor("PUT", "/feed-posts/p1/flame")).toBe(false);
     expect(carriesActor("POST", "/me/feed-posts")).toBe(false);
     expect(carriesActor("POST", "/me/stories")).toBe(false);

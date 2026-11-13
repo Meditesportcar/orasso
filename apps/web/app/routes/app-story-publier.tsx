@@ -3,6 +3,7 @@ import { storyPublishLabels as L, resolveStoryAuthor, type StoryAuthor } from "@
 import { ficheHandle } from "../components/FicheBar";
 import { PublishForm } from "../components/stories/PublishForm";
 import { api, requireMe } from "../lib/api.server";
+import { filHrefOfAuthor } from "../lib/casquetteFil";
 import type { Route } from "./+types/app-story-publier";
 
 // « Publier une story » (lot R7f3, D38, maquettes R7.8 et R7.22) : une photo en 9:16 (fichier, pas d'appareil : il vit dans
@@ -37,9 +38,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       : { persona: "fan" };
   const authorKey = choice?.kind === "page" ? choice.key : "me";
   return {
+    userId: me.user.id,
     author,
     authorKey,
-    back: backOf(choice?.kind === "page" ? choice : null, me),
+    back: filHrefOfAuthor(authorKey, me),
     visibility: me.profile.visibility,
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
@@ -53,24 +55,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-/** Le Fil de la casquette d'où l'on vient (`/orga/<slug>/fil`…), sinon le Fil du passionné. */
-function backOf(
-  page: { persona: StoryAuthor["persona"]; id: string } | null,
-  me: Awaited<ReturnType<typeof requireMe>>,
-): string {
-  if (!page) return "/app/fil";
-  if (page.persona === "organizer") {
-    const slug = me.memberships.find((m) => m.structureId === page.id && m.status === "active")?.structureSlug;
-    return slug ? `/orga/${slug}/fil` : "/app/fil";
-  }
-  if (page.persona === "pro") return me.pro?.id === page.id ? `/pro/${me.pro.slug}/fil` : "/app/fil";
-  return page.persona === "media"
-    ? "/app/media/fil"
-    : page.persona === "provider"
-      ? "/app/prestataire/fil"
-      : "/app/fil";
-}
-
 export function meta() {
   return [{ title: `${L.title} · Orasso` }, { name: "robots", content: "noindex" }];
 }
@@ -78,6 +62,7 @@ export function meta() {
 export default function AppStoryPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      userId={loaderData.userId}
       visibility={loaderData.visibility}
       crews={loaderData.crews}
       vehicles={loaderData.vehicles}
