@@ -388,7 +388,7 @@ test("fiche événement : une galerie sans adresse est un album de la section «
     // R9g : la fiche ne montre l'album que d'un média accrédité maintenant à l'événement (la galerie d'avant n'avait pas cette condition).
     const accreditation = await client.query<{ id: string }>(
       `insert into applications (event_id, user_id, kind, media_profile_id, media_formats, status, rules_accepted_at, follow_structure)
-       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) returning id`,
+       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) on conflict do nothing returning id`,
       [ev.data.id, media.rows[0]?.user_id, mediaId],
     );
     accreditationId = accreditation.rows[0]?.id ?? "";
@@ -445,7 +445,7 @@ test("fiche événement : la vue de l'album est comptée à l'ouverture depuis l
     if (!mediaId) throw new Error("Aucun profil média dans le seed");
     const accreditation = await client.query<{ id: string }>(
       `insert into applications (event_id, user_id, kind, media_profile_id, media_formats, status, rules_accepted_at, follow_structure)
-       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) returning id`,
+       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) on conflict do nothing returning id`,
       [ev.data.id, media.rows[0]?.user_id, mediaId],
     );
     accreditationId = accreditation.rows[0]?.id ?? "";
