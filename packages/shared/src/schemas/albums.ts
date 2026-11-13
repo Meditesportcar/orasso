@@ -41,7 +41,7 @@ export type AlbumCreate = z.infer<typeof albumCreateSchema>;
 /** `PATCH /me/albums/:id` : le titre (vide = le titre par défaut) et l'option « Enregistrer ». */
 export const albumPatchSchema = z
   .object({
-    title: title.nullish().transform((v) => (v ? v : null)),
+    title: title.nullish().transform((v) => (v === undefined ? undefined : v ? v : null)),
     allowSave: z.boolean().optional(),
   })
   .refine((v) => v.title !== undefined || v.allowSave !== undefined, "Rien à modifier");
