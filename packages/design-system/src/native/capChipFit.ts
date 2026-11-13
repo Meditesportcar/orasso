@@ -55,10 +55,13 @@ export function capChipTextWidth(role: string, fontScale = 1): number {
   return em * FONT_SIZE * Math.min(Math.max(fontScale, 1), CAPCHIP_MAX_FONT_SCALE);
 }
 
-/** Place laissée à la pastille entière : l'écran moins le logotype, Recherche, Boîte (et ✕), les écarts et les marges. */
-export function capChipRoom(width: number, withClose = false): number {
+/**
+ * Place laissée à la pastille entière : l'écran moins le logotype, les boutons de droite (Recherche et Boîte : 2 ; Recherche,
+ * Activité et Messages : 3, `actions`), le ✕ s'il y en a un, les écarts et les marges.
+ */
+export function capChipRoom(width: number, withClose = false, buttons = 2): number {
   const logo = width < LOGO_NARROW_BELOW ? LOGO_WIDTH_NARROW : LOGO_WIDTH;
-  const actions = withClose ? 3 : 2;
+  const actions = buttons + (withClose ? 1 : 0);
   return width - BAR_PAD_LEFT - BAR_PAD_RIGHT - logo - actions * BAR_ACTION - (actions + 1) * BAR_GAP;
 }
 
@@ -71,9 +74,11 @@ export function capChipCompact(input: {
   fontScale?: number;
   role?: string;
   withClose?: boolean;
+  /** Nombre de boutons d'action à droite, hors ✕ (2 par défaut ; 3 avec Activité et Messages, barre de la casquette organisateur). */
+  buttons?: number;
 }): boolean {
   if (!input.role) return true;
   const chip =
     CAPCHIP_PAD_LEFT + CAPCHIP_LOGO + CAPCHIP_GAP + capChipTextWidth(input.role, input.fontScale) + CAPCHIP_PAD_RIGHT;
-  return chip + CAPCHIP_SAFETY > capChipRoom(input.width, input.withClose);
+  return chip + CAPCHIP_SAFETY > capChipRoom(input.width, input.withClose, input.buttons);
 }

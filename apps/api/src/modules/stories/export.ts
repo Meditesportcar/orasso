@@ -32,6 +32,7 @@ import {
   inspect,
   LinkedError,
   loadLinked,
+  postEventVisual,
   renderLinkedCard,
   renderLinkedGround,
 } from "./linked";
@@ -104,7 +105,7 @@ export const exportService = {
       .where(eq(feedPostPhotos.postId, id))
       .orderBy(asc(feedPostPhotos.position))
       .limit(1);
-    const photo = first ? await storage.get(first.storageKey) : null;
+    const photo = first ? await storage.get(first.storageKey) : await postEventVisual(id);
     if (!photo) throw notFound("Publication introuvable");
     return {
       data: await signFile(

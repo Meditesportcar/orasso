@@ -125,7 +125,22 @@ async function audit(page: Page): Promise<Audit> {
   });
 }
 
-const results: Record<string, Audit> = {};
+// Les relevés sont propres à chaque test (remis à zéro avant chacun) et chaque test vérifie les quatre règles sur ses écrans : un
+// relevé d'un parcours n'est jamais jugé par un autre, et aucun parcours n'échappe au contrôle.
+let results: Record<string, Audit> = {};
+test.beforeEach(() => {
+  results = {};
+});
+/** Les quatre règles du système de design, sur chaque écran relevé par le test en cours. */
+function checkAudit() {
+  expect(Object.keys(results).length, "aucun écran relevé").toBeGreaterThan(0);
+  for (const [name, r] of Object.entries(results)) {
+    expect(r.greens, `${name} : pas de vert`).toEqual([]);
+    expect(r.truncated, `${name} : rien de tronqué`).toEqual([]);
+    expect(r.horizontalScroll, `${name} : pas de défilement horizontal`).toBe(false);
+    expect(r.noIcon, `${name} : aucun bouton sans icône`).toEqual([]);
+  }
+}
 const shotter = (page: Page) => async (name: string) => {
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${DIR}/${name}.png` });
@@ -364,6 +379,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   await page.getByTestId("clock-reset").click();
   await page.getByTestId("orga-confirm").click();
   await expect(page.getByTestId("clock-offset")).toContainText("Aucun décalage", { timeout: 20_000 });
+  checkAudit();
   await a.ctx.close();
 
   writeFileSync(`${DIR}/audit-super-admin.json`, JSON.stringify(results, null, 2));
@@ -489,6 +505,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   await expect(org.page.getByText("Demande fermée.")).toBeVisible({ timeout: 20_000 });
   const after = await apiCall<{ current: unknown }>(ownerCookie, "GET", `/structures/${sid}/assistance`);
   expect(after.data.current).toBeNull();
+  checkAudit();
   await org.ctx.close();
   await admin.ctx.close();
 });
@@ -542,6 +559,7 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
   await go(fan.page, "/administration");
   await expect(fan.page.getByTestId("tile-structuresPending")).toHaveCount(0);
   await fan.ctx.close();
+  checkAudit();
 });
 
 test("les mêmes écrans dans le thème Sable (contrôle du système de design)", async ({ browser }) => {
@@ -588,10 +606,5 @@ test("les mêmes écrans dans le thème Sable (contrôle du système de design)"
   await b.ctx.close();
 
   writeFileSync(`${DIR}/audit-sable.json`, JSON.stringify(results, null, 2));
-  for (const [name, r] of Object.entries(results)) {
-    expect(r.greens, `${name} : pas de vert`).toEqual([]);
-    expect(r.truncated, `${name} : rien de tronqué`).toEqual([]);
-    expect(r.horizontalScroll, `${name} : pas de défilement horizontal`).toBe(false);
-    expect(r.noIcon, `${name} : aucun bouton sans icône`).toEqual([]);
-  }
+  checkAudit();
 });

@@ -5,13 +5,16 @@ import type { SheetProps } from "@orasso/design-system/native";
 import { Modal, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
+import { SheetBoundary } from "@/ui/Overlay";
 
 export function ScreenSheet({ visible, onClose, ...rest }: SheetProps & { maxHeight?: number }) {
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <View style={{ flex: 1 }}>
-        <AppSheet visible onClose={onClose} {...rest} />
-      </View>
+      <SheetBoundary>
+        <View style={{ flex: 1 }}>
+          <AppSheet visible onClose={onClose} {...rest} />
+        </View>
+      </SheetBoundary>
     </Modal>
   );
 }

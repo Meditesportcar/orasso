@@ -13,6 +13,9 @@ import { RELAIS } from "./relais";
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-22-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
+// Sans délai d'action, un clic sur un élément absent attend jusqu'à la fin du test (8 min) avant d'échouer : la recette « lente » du
+// 13/11 n'était pas lente, elle attendait un bouton qui n'arrivait pas. Avec 30 s, l'étape fautive échoue tout de suite et se nomme.
+test.use({ actionTimeout: 30_000 });
 
 type Theme = "beton" | "sable";
 
