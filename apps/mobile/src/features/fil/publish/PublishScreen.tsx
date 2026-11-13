@@ -60,7 +60,8 @@ import { randomUUID } from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
-
+import { confirmSwitchToStory } from "@/features/casquettes/confirmSwitch";
+import { switchToStory } from "@/features/casquettes/switchRule";
 import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
@@ -73,7 +74,6 @@ import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
-import { confirmSwitchToStory } from "@/features/casquettes/confirmSwitch";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -713,10 +713,20 @@ function PublishForm({ start }: { start?: PublishStart }) {
           onChange={(kind) => {
             if (kind !== "story") return;
             // Un envoi incertain garde la main (verrou) ; un brouillon en cours demande confirmation avant d'être abandonné.
-            const draft = photos.length > 0 || caption.trim() !== "" || choice.eventId !== null || offer.on;
+            const rule = switchToStory({
+              photos: photos.length,
+              caption,
+              eventId: choice.eventId,
+              offerOn: offer.on,
+              busy: busy || checking || working,
+              uncertain: uncertain !== null,
+            });
+            if (rule === "locked") return;
             void (async () => {
-              if (draft && !(await confirmSwitchToStory())) return;
-              router.replace(`/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never);
+              if (rule === "confirm" && !(await confirmSwitchToStory())) return;
+              router.replace(
+                `/story/publier?auteur=${encodeURIComponent(actorKeyOfPublishAuthor(author.key))}` as never,
+              );
             })();
           }}
           disabled={busy || checking || working || uncertain !== null}

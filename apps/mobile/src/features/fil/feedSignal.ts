@@ -11,10 +11,7 @@ let mine: { actor: string | null; card: FeedCard }[] = [];
 export function markFeedDirty(post?: FeedPostView, actor: string | null = null): void {
   dirty = true;
   if (post) {
-    mine = [
-      { actor, card: publishedCard(post) },
-      ...mine.filter((m) => m.card.id !== `feed_post:${post.id}`),
-    ];
+    mine = [{ actor, card: publishedCard(post) }, ...mine.filter((m) => m.card.id !== `feed_post:${post.id}`)];
   }
 }
 

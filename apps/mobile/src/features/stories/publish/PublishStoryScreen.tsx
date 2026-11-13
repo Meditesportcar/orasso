@@ -35,7 +35,6 @@ import { api } from "@/lib/api";
 import { isUploadCancelled, isUploadTimeout } from "@/lib/api/storiesVideo";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
-import type { Persona } from "@/lib/personaModel";
 import { fitStory, type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
@@ -48,6 +47,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { withDetection } from "../../fil/publish/model";
+import { storyAuthorFor } from "./author";
 import { Capture } from "./Capture";
 import { commercialText, useCommercialLine } from "./CommercialLine";
 import { Details } from "./Details";
@@ -71,22 +71,6 @@ import { markStoryPublished } from "./publishSignal";
 import { settleRawTake, withRawShot } from "./shotFiles";
 
 const { space2, space3 } = tokens.spacing;
-
-/** La casquette active → sous quelle casquette la story part (un visiteur ou l'administration publient en passionné). */
-export function authorOf(persona: Persona, name: string): StoryAuthor {
-  switch (persona.kind) {
-    case "organizer":
-      return { persona: "organizer", structureId: persona.structureId, name };
-    case "pro":
-      return { persona: "pro", proId: persona.proProfileId, name };
-    case "provider":
-      return { persona: "provider", name };
-    case "media":
-      return { persona: "media", name };
-    default:
-      return { persona: "fan" };
-  }
-}
 
 async function uploadStoryPhoto(photo: PickedPhoto): Promise<string> {
   const form = new FormData();
@@ -132,18 +116,10 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // une clé `s:`, `p:`, `v:`, `m:` tenue par le compte = cette page (même si une autre casquette est active), sinon la casquette
   // active. Une clé qui n'est pas au compte est ignorée (l'API revérifie les droits de toute façon).
   const choice = useMemo(() => resolveStoryAuthor(auteur, me?.personas ?? []), [auteur, me?.personas]);
-  const author = useMemo<StoryAuthor>(() => {
-    if (choice?.kind === "me") return { persona: "fan" };
-    if (choice?.kind === "page") {
-      return {
-        persona: choice.persona,
-        ...(choice.persona === "organizer" ? { structureId: choice.id } : {}),
-        ...(choice.persona === "pro" ? { proId: choice.id } : {}),
-        name: choice.name,
-      };
-    }
-    return authorOf(persona, active.label);
-  }, [choice, persona, active.label]);
+  const author = useMemo<StoryAuthor>(
+    () => storyAuthorFor(choice, actor, persona, active.label),
+    [choice, actor, persona, active.label],
+  );
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
   const kindKey = choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");

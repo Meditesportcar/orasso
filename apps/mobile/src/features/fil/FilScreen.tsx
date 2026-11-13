@@ -385,6 +385,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                   </>
                 ) : null}
                 <View
+                  nativeID={`fil-card-${card.id}`}
                   style={frontier >= 0 && i >= frontier ? styles.seenCard : undefined}
                   testID={frontier >= 0 && i >= frontier ? "fil-card-seen" : undefined}
                 >

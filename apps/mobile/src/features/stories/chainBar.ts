@@ -19,5 +19,7 @@ export const barScope = (userId: string | null | undefined, actor: string | null
   userId ? `${userId}|${actor ?? ""}` : null;
 
 /** La barre lue pour cet acteur ; la lecture d'un autre acteur (ancienne, ou retardée) ne s'affiche jamais. */
-export const barOfActor = (read: { actor: string | null; bar: StoryBar } | null | undefined, actor: string | null): StoryBar | null =>
-  read && read.actor === actor ? read.bar : null;
+export const barOfActor = (
+  read: { actor: string | null; bar: StoryBar } | null | undefined,
+  actor: string | null,
+): StoryBar | null => (read && read.actor === actor ? read.bar : null);

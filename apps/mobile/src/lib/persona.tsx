@@ -144,12 +144,18 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
   // posé), on y reste. Tour 1, point 5 : un 403 tardif d'une casquette déjà quittée (autre acteur actif) ne touche pas la casquette en cours.
   const personaRef = useRef(persona);
   personaRef.current = persona;
+  const forbiddenRefresh = useRef(false);
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   useEffect(() => {
     setActorForbiddenListener((refused) => {
       if (!forbiddenIsCurrent(refused, personaRef.current, entriesRef.current)) return;
-      void refreshMe();
+      // Une rafale de 403 (Fil, stories, commentaires) ne relit `GET /me` qu'une fois.
+      if (forbiddenRefresh.current) return;
+      forbiddenRefresh.current = true;
+      void refreshMe().finally(() => {
+        forbiddenRefresh.current = false;
+      });
     });
     return () => setActorForbiddenListener(null);
   }, [refreshMe]);

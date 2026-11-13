@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { cutWords } from "./cutWords";
 import { SEED_PASSWORD } from "./helpers";
 import { sql } from "./lotr7f2-setup";
+import { landscape } from "./lotr7f3-setup";
 import { RELAIS } from "./relais";
 
 // Lot R9n (D40, maquette R9.1 `n-barres`, R9.2 `n-fil`, R9.2b `n-publier`), côté appli (version web compilée de recette,
@@ -110,6 +111,11 @@ async function expectActiveTab(page: Page, name: string) {
   }).toPass({ timeout: 30_000 });
 }
 
+/** Les identifiants des cartes du Fil affiché (`nativeID` `fil-card-<id>`), dans l'ordre ; vide si le Fil est vide. */
+async function cardIds(page: Page): Promise<string[]> {
+  return page.locator('[id^="fil-card-"]').evaluateAll((els) => els.map((e) => e.id));
+}
+
 const tabs = (page: Page) => page.getByTestId("persona-tabbar").getByRole("tab");
 const tab = (page: Page, name: string) => page.getByTestId("persona-tabbar").getByRole("tab", { name, exact: true });
 
@@ -189,7 +195,7 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await page.getByTestId("fil-filters-following").click();
   await expect(page.getByTestId("fil-phrase")).toContainText("Ceux que tu suis");
   await expect(page.getByTestId("fil-list").or(page.getByTestId("fil-empty")).first()).toBeVisible({ timeout: 30_000 });
-  const personOnline = await page.getByTestId("fil-list").innerText();
+  const personOnline = await cardIds(page);
   await shot(page, "n-fil-passionne-abonnements");
 
   await wear(page, "casquette-organizer", "Roues Libres 66");
@@ -210,6 +216,8 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   const privates = (await sql("select p.pseudo from profiles p where p.visibility = 'private'")) as {
     pseudo: string;
   }[];
+  const casquetteOnline = await cardIds(page);
+  expect(casquetteOnline.length, "le Fil de Roues Libres 66 a des cartes (La Brasa, seed R9a)").toBeGreaterThan(0);
   const text = await page.getByTestId("fil-list").innerText();
   expect(text).toContain("La Brasa");
   for (const p of privates) expect(text, `compte privé ${p.pseudo}`).not.toContain(p.pseudo);
@@ -221,10 +229,12 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await ctx.setOffline(true);
   await page.getByTestId("fil-filters-following").click();
   await expect(page.getByTestId("fil-offline")).toBeVisible({ timeout: 30_000 });
-  const offline = await page.getByTestId("fil-list").innerText();
-  expect(offline).toContain("La Brasa");
-  // La copie de la casquette n'est pas celle de la personne : deux copies, deux contenus (celle de la personne n'a pas la même liste).
-  expect(personOnline).not.toBe(offline);
+  // Les identifiants des cartes (jamais le texte : « il y a 59 min » devient « 1 h », l'encart « Tu es à jour »…) : la copie de la
+  // casquette est exactement ce que la casquette avait en ligne, et ne reprend rien de la personne.
+  const offline = await cardIds(page);
+  expect(offline.length).toBeGreaterThan(0);
+  expect(offline).toEqual(casquetteOnline);
+  expect(offline.filter((id) => personOnline.includes(id))).toEqual([]);
   await ctx.setOffline(false);
 
   // « Changer » → « Moi · Sarah_66 » → le Fil de la personne (sans pastille).
@@ -240,9 +250,10 @@ test("Roues Libres 66 : le Fil « en tant que », Abonnements, Changer → Moi, 
   await ctx.setOffline(true);
   await page.getByTestId("fil-filters-following").click();
   await expect(page.getByTestId("fil-offline")).toBeVisible({ timeout: 30_000 });
-  const personOffline = await page.getByTestId("fil-list").innerText();
-  expect(personOffline).toBe(personOnline);
-  expect(personOffline).not.toBe(offline);
+  // La copie de la personne est la sienne : ses cartes d'avant (si elle en avait), et jamais celles de la casquette.
+  const personOffline = await cardIds(page);
+  if (personOnline.length > 0) expect(personOffline).toEqual(personOnline);
+  expect(personOffline.filter((id) => offline.includes(id))).toEqual([]);
   await ctx.setOffline(false);
   await ctx.close();
 });
@@ -372,10 +383,15 @@ test("L'en-tête n'est posé que sur la liste blanche : la flamme et les cartes 
   const fireCall = page.waitForRequest((r) => /\/api\/feed-posts\/[^/]+\/reaction$/.test(new URL(r.url()).pathname), {
     timeout: 30_000,
   });
+  const fireDone = page.waitForResponse((r) => /\/api\/feed-posts\/[^/]+\/reaction$/.test(new URL(r.url()).pathname));
   await page.getByTestId("feed-post-fire").first().click();
   const fire = await fireCall;
   expect((await fire.allHeaders())["x-orasso-actor"]).toBeUndefined();
+  await fireDone;
+  // Le second appui (retire la flamme) attend la réponse du premier : la base de recette reste propre.
+  const unfireDone = page.waitForResponse((r) => /\/api\/feed-posts\/[^/]+\/reaction$/.test(new URL(r.url()).pathname));
   await page.getByTestId("feed-post-fire").first().click();
+  await unfireDone;
   await page.waitForTimeout(1_000);
   const allowed = [
     /^GET \/api\/fil$/,
@@ -405,8 +421,7 @@ test("L'en-tête n'est posé que sur la liste blanche : la flamme et les cartes 
 test("Story depuis « Publier » : casquette A active, auteur B choisi → la story est au nom de B (tour 1, point 1)", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
-  const rows = (await sql("select id from structures where name = 'MéditeSportCar' limit 1")) as { id: string }[];
+  const rows = await sql<{ id: string }>("select id from structures where name = 'MéditeSportCar' limit 1");
   const other = rows[0]?.id;
   expect(other).toBeTruthy();
   const { ctx, page } = await open(browser, "sarah@orasso.local", "beton", 390, 1);
@@ -425,5 +440,35 @@ test("Story depuis « Publier » : casquette A active, auteur B choisi → la st
   await page.getByTestId("story-publish-kind").getByText("Publication").click();
   await page.waitForURL(/\/fil\/publier\?auteur=s/, { timeout: 30_000 });
   await expect(page.getByText("en tant que MéditeSportCar").first()).toBeVisible();
+  // Et la story est vraiment publiée au nom de B (casquette A active) : l'auteur se lit en base.
+  await page.getByTestId("fil-publish-kind").getByText("Story").click();
+  await page.waitForURL(/\/story\/publier\?auteur=s/, { timeout: 30_000 });
+  await expect(page.getByTestId("story-pick")).toBeVisible({ timeout: 30_000 });
+  const before = await sql<{ n: number }>("select count(*)::int as n from stories");
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("story-pick-gallery").click();
+  await (await chooser).setFiles(landscape());
+  await expect(page.getByTestId("story-fit")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("story-fit-continue").click();
+  await expect(page.getByTestId("story-plate")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("story-plate-none").click();
+  await page.getByTestId("story-plate-none-yes").click();
+  await page.getByTestId("story-plate-validate").click();
+  await expect(page.getByTestId("story-details")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("story-to-preview").click();
+  await expect(page.getByTestId("story-preview-canvas")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 90_000 });
+  const made = await sql<{ id: string; structure_id: string | null }>(
+    "select id, structure_id from stories order by created_at desc limit 1",
+  );
+  try {
+    expect(made[0]?.structure_id, "la story est au nom de MéditeSportCar, pas de la casquette active").toBe(other);
+    const after = await sql<{ n: number }>("select count(*)::int as n from stories");
+    expect(after[0]?.n).toBe((before[0]?.n ?? 0) + 1);
+  } finally {
+    // La base de recette reste propre.
+    if (made[0]) await sql("delete from stories where id = $1", [made[0].id]);
+  }
   await ctx.close();
 });

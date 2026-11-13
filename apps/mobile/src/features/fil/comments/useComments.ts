@@ -41,6 +41,7 @@ import { cacheScope } from "@/lib/kv";
 import { useActor } from "@/lib/useActor";
 import { postLive } from "./live";
 import { replyParentOf } from "./replyParent";
+import { forgetSender, rememberSender, senderOf } from "./sendActors";
 
 const statusOf = (e: unknown) => (e instanceof ApiRequestError ? e.status : -1);
 
@@ -66,9 +67,6 @@ export type CommentsController = {
   fire: (comment: FeedCommentView) => void;
   setOff: (off: boolean) => Promise<void>;
 };
-
-/** L'acteur de chaque envoi, pris au moment du geste et gardé pour tous ses essais (jamais celui d'au moment de « Réessayer »). */
-const sendActors = new Map<string, string | null>();
 
 export function useComments(
   post: FeedPostView,
@@ -199,9 +197,9 @@ export function useComments(
         const created = await api.createFeedComment(
           id,
           { text: p.text.trim(), parentId: p.parentId, clientId },
-          sendActors.has(clientId) ? (sendActors.get(clientId) ?? null) : actorRef.current,
+          senderOf(clientId, actorRef.current),
         );
-        sendActors.delete(clientId);
+        forgetSender(clientId);
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
@@ -237,7 +235,7 @@ export function useComments(
   const send = useCallback(
     (text: string, parentId: string | null) => {
       const clientId = randomUUID();
-      sendActors.set(clientId, actorRef.current);
+      rememberSender(clientId, actorRef.current);
       update(
         (s) =>
           pendingStart(parentId ? sheetToggleReplies(s, parentId, true) : s, { clientId, text: text.trim(), parentId }),
@@ -258,7 +256,7 @@ export function useComments(
 
   const discard = useCallback(
     (clientId: string) => {
-      sendActors.delete(clientId);
+      forgetSender(clientId);
       update((s) => pendingDrop(s, clientId), postLive.ticket(id));
     },
     [update, id],
