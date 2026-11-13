@@ -62,6 +62,8 @@ const WRITES_WHILE_SUSPENDED: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/me\/devices\/unregister$/],
   ["DELETE", /^\/api\/me\/devices\/[^/]+$/],
   ["DELETE", /^\/api\/me\/sessions\/[^/]+$/],
+  // Lot R9f : retirer son identification sur une photo d'album, à tout moment (« Ce n'est pas ma voiture »), même suspendu.
+  ["DELETE", /^\/api\/me\/album-tags\/[^/]+$/],
   // Relecture : se désister d'un événement (sinon malus d'absence à J+2 à cause de la suspension).
   ["POST", /^\/api\/applications\/[^/]+\/withdraw$/],
 ];

@@ -5,6 +5,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { eventAlbumPhotos, eventAlbums } from "../../db/schema";
 import type { Tx } from "../../lib/tx";
+import { dropStoriesOfAlbumPhotos } from "../stories/share";
 
 export async function anonymizeAlbumsForDeletedAccount(tx: Tx, mediaProfileIds: string[], at: Date): Promise<string[]> {
   if (!mediaProfileIds.length) return [];
@@ -19,8 +20,13 @@ export async function anonymizeAlbumsForDeletedAccount(tx: Tx, mediaProfileIds: 
       .update(eventAlbumPhotos)
       .set({ deletedAt: at })
       .where(and(inArray(eventAlbumPhotos.albumId, ids), isNull(eventAlbumPhotos.deletedAt)))
-      .returning({ key: eventAlbumPhotos.storageKey });
+      .returning({ id: eventAlbumPhotos.id, key: eventAlbumPhotos.storageKey });
     keys.push(...photos.map((p) => p.key));
+    // Lot R9f : les stories reprises de ces photos (« En story ») tombent ; leurs fichiers partent au balayage de `stories.expire`.
+    await dropStoriesOfAlbumPhotos(
+      tx,
+      photos.map((p) => p.id),
+    );
     await tx
       .update(eventAlbums)
       .set({ deletedAt: at, officialAt: null, photosCount: 0, title: null })

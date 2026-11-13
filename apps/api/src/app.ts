@@ -35,6 +35,7 @@ import { adminPublicRoutes, adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
 import { albumsPublicRoutes, albumsRoutes } from "./modules/albums/routes";
+import { albumTagsRoutes } from "./modules/albums/tags-routes";
 import { isLegacyGalleryKey, legacyFileState } from "./modules/albums/view";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
@@ -278,6 +279,8 @@ app.route("/", structuresRoutes);
 app.route("/", providersRoutes);
 // Vague R9 (lot R9e) : albums des médias ; avant `mediaRoutes` (il décore `GET /media/:id` de ses compteurs).
 app.route("/", albumsRoutes);
+// Lot R9f : identifications sur les photos d'album, « Tes photos », « En story » et « Enregistrer » (session exigée).
+app.route("/", albumTagsRoutes);
 app.route("/", mediaRoutes);
 app.route("/", eventsRoutes);
 // Lot R6c : « Qui y va », invitations entre passionnés, invitations coupées.

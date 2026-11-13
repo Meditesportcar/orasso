@@ -13,6 +13,7 @@ import {
 import { type Grade, gradeSchema } from "../grades";
 import type { ArrivalSlot } from "../rules/arrival";
 import type { StructureNoteView } from "./afterEvent";
+import type { AlbumMention } from "./albumTags";
 import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
 import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
 import type { LineupPreview } from "./lineup";
@@ -147,6 +148,11 @@ export type MyApplication = {
    * plateau à montrer (pas retenue, événement privé ou annulé, aucune présente) ; absente d'une copie plus ancienne.
    */
   lineupPreview?: LineupPreview | null;
+  /**
+   * Lot R9f (T42) : sortie passée, « Photos de ma voiture · N · <média> » : mes photos d'albums de médias à cet événement (voiture ou
+   * pseudo identifiés), les miennes seules, par album. **Absent** sans identification (et d'une sortie à venir) ; jamais des publications.
+   */
+  albumPhotos?: AlbumMention[];
 };
 
 /** Jour d'une candidature (lot 26) : identifiant, date locale `AAAA-MM-JJ`, horaires. */

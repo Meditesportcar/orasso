@@ -1,5 +1,6 @@
 // Lecture des candidatures : cartes « Accès » du passionné, fiches et liste du tri de l'organisateur.
 import {
+  type AlbumMention,
   type ApplicationAlert,
   type ApplicationForTriage,
   type ApplicationKind,
@@ -42,6 +43,7 @@ import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { contactViews } from "../after-event/contact-views";
 import { notesService } from "../after-event/notes";
+import { myMentionsByEvent } from "../albums/my-photos";
 import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
 import { arrivalsOf } from "../events/arrivals";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
@@ -381,9 +383,18 @@ export const applicationsQueries = {
       mine.filter((a) => a.status === "accepted").map((a) => a.event.id),
       v.user.id,
     );
+    // Lot R9f (T42) : sortie passée, mes photos d'albums de médias (voiture ou pseudo), les miennes seules ; rien sans identification.
+    const albumPhotos =
+      scope === "past"
+        ? await myMentionsByEvent(
+            v.user.id,
+            mine.map((a) => a.event.id),
+          )
+        : new Map<string, AlbumMention[]>();
     return mine.map((a) => ({
       ...a,
       lineupPreview: a.status === "accepted" ? (previews.get(a.event.id) ?? null) : null,
+      ...(albumPhotos.get(a.event.id)?.length ? { albumPhotos: albumPhotos.get(a.event.id) } : {}),
     }));
   },
 
