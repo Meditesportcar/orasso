@@ -594,7 +594,14 @@ function PublishForm({ start }: { start?: PublishStart }) {
       setDone(true);
     } catch (e) {
       if (!guard.current()) return;
-      if (e instanceof ApiRequestError && e.status === 404) {
+      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4) ; retrouvée, sans contenu.
+      if (e instanceof ApiRequestError && e.status === 409 && e.code === "post_unavailable") {
+        uncertainOutcome.current = "found";
+        if (mounted.current) discardTempPhotos();
+        setUncertain(null);
+        setFound(true);
+        setDone(true);
+      } else if (e instanceof ApiRequestError && e.status === 404) {
         uncertainOutcome.current = "freed";
         setUncertain(null);
         setClientId(randomUUID());

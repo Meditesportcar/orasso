@@ -127,6 +127,7 @@ export const publicationErrors = {
   event_not_attachable: "Tu ne peux pas rattacher ta publication à cet événement.",
   important_requires_event: "Une info importante se publie en tant qu'organisateur, pour un événement de ta structure.",
   account_changed: "Ta session a changé : recharge la page avant de publier.",
+  post_unavailable: "Ta publication existe, mais elle n'est pas visible pour le moment.",
   important_quota: "Tu as atteint la limite d'infos importantes pour cet événement (une par jour, trois par semaine).",
   photo_required:
     "Ajoute une photo. Seule une publication rattachée à un événement qui a une affiche peut s'en passer.",

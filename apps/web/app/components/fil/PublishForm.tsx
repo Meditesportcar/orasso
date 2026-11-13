@@ -513,6 +513,14 @@ export function PublishForm({
         setFound(true);
         return setDone(true);
       }
+      // La publication existe mais n'est pas visible (page suspendue) : ce n'est pas une absence (R9h, tour 4). On la tient pour retrouvée,
+      // sans la mémoriser (aucun contenu rendu) : l'envoi n'est jamais renouvelé, donc jamais de doublon.
+      if (res.status === 409 && res.error.code === "post_unavailable") {
+        uncertainOutcome.current = "found";
+        setUncertain(null);
+        setFound(true);
+        return setDone(true);
+      }
       if (res.status === 404) {
         uncertainOutcome.current = "freed";
         setUncertain(null);

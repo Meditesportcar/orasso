@@ -91,7 +91,7 @@ test("Publier : panne réseau puis perte de la page, rien n'est arrivé : « Pub
   });
 });
 
-test("Publier : la publication était partie : « Publier en mon nom » la retrouve (confirmation) et ne change rien", async ({
+test("Publier : la publication était partie et la structure reste suspendue : « Publier en mon nom » la tient pour retrouvée (409 post_unavailable), ne change rien", async ({
   page,
 }) => {
   test.setTimeout(240_000);
@@ -102,11 +102,11 @@ test("Publier : la publication était partie : « Publier en mon nom » la retro
     await revalidate(page);
     const lost = page.getByTestId("fil-publish-author-lost-me");
     await expect(lost).toBeVisible({ timeout: 30_000 });
-    // La page redevient lisible avant la vérification (la publication d'une page suspendue ne se relit pas) : elle est retrouvée.
-    await sql(
-      "update structures set verification = 'verified', suspended_reason = null where slug = 'roues-libres-66'",
-    );
+    // La structure reste suspendue : la publication existe mais ne se relit pas (409 `post_unavailable`, pas un 404) : elle est tenue pour
+    // retrouvée, jamais pour absente (R9h, tour 4) : l'envoi n'est pas renouvelé, rien n'est republié sous « Moi ».
+    const check = page.waitForResponse((r) => r.url().includes("/api/me/feed-posts/by-client/"));
     await lost.click();
+    expect((await check).status()).toBe(409);
     await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 30_000 });
     const rows = (await sql("select persona from feed_posts order by created_at desc limit 1")) as {
       persona: string;
@@ -135,7 +135,12 @@ test("Publier : vérification impossible (réseau) : le verrou est maintenu, auc
     const lost = page.getByTestId("fil-publish-author-lost-me");
     await expect(lost).toBeVisible({ timeout: 30_000 });
     await page.route("**/api/me/feed-posts/by-client/**", (route) => route.abort("failed"));
+    // On attend la tentative interceptée, puis la fin de la vérification (message d'incertitude, bouton réactivé), avant de contrôler.
+    const attempt = page.waitForEvent("requestfailed", (r) => r.url().includes("/api/me/feed-posts/by-client/"));
     await lost.click();
+    await attempt;
+    await expect(page.getByText("Impossible de vérifier l'envoi pour l'instant")).toBeVisible();
+    await expect(page.getByTestId("fil-publish-author-lost-me")).toBeEnabled();
     await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
     await expect(page.getByTestId("fil-publish-author-lost-me")).toBeVisible();
     await expect(page.locator('[data-testid^="fil-publish-as-"][aria-pressed="true"]')).toHaveCount(0);
