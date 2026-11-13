@@ -145,16 +145,31 @@ for (const [theme, width, scale] of [
         expect(box, `onglet ${label}`).not.toBeNull();
         // Le libellé tient sur une seule ligne (rectangles de largeur non nulle, comme appli-lotr6police) et aucun mot n'est coupé.
         const fit = await tab(page, label).evaluate((el) => {
+          const host = el.getBoundingClientRect();
           const tops = new Set<number>();
+          let left = Number.POSITIVE_INFINITY;
+          let right = Number.NEGATIVE_INFINITY;
           const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
           for (let n = walker.nextNode(); n; n = walker.nextNode()) {
             if (!(n.textContent ?? "").trim()) continue;
             const r = document.createRange();
             r.selectNodeContents(n);
-            for (const q of r.getClientRects()) if (q.width > 0) tops.add(Math.round(q.top));
+            for (const q of r.getClientRects()) {
+              if (q.width <= 0) continue;
+              tops.add(Math.round(q.top));
+              left = Math.min(left, q.left);
+              right = Math.max(right, q.right);
+            }
           }
-          return { lines: tops.size };
+          // Contrôle « rogné » : la largeur du texte ne dépasse pas la boîte de son onglet (1 px de tolérance d'arrondi).
+          return {
+            lines: tops.size,
+            inside: left >= host.left - 1 && right <= host.right + 1,
+            text: Math.round(right - left),
+            box: Math.round(host.width),
+          };
         });
+        expect(fit.inside, `libellé ${label} rogné : texte ${fit.text}px dans un onglet de ${fit.box}px`).toBe(true);
         expect(fit.lines, `libellé ${label} sur plusieurs lignes`).toBe(1);
       }
       await shot(page, `n-barre-${kind}-${theme}-${width}-x${scale}`);

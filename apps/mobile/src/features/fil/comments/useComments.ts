@@ -115,6 +115,7 @@ export function useComments(
         change,
         (next) => onPostRef.current(next),
         () => mounted.current,
+        (postId) => api.feedPost(postId),
       );
     },
     [],

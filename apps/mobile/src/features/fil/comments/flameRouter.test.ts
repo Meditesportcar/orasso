@@ -82,12 +82,13 @@ describe("flameRouter : une file par connexion, compte et commentaire", () => {
     const seen: FlameState[] = [];
     // L'utilisateur retire (il voit la flamme allumée) : une nouvelle file, qui envoie sa propre requête.
     const second = router.fire(key, on, { send: fresh.send, apply: (s) => seen.push(s), alive: () => true });
+    // La nouvelle file attend la fin de l'ancienne (jamais deux envois à la fois) : on libère d'abord l'ancienne.
+    await old.releaseAll();
+    await first;
     await fresh.releaseAll();
     await second;
     expect(fresh.sent).toEqual([false]);
     expect(seen[seen.length - 1]).toEqual({ reactionsCount: 4, reactedByMe: false });
-    await old.releaseAll();
-    await first;
   });
 
   it("file morte (alive du premier toucher faux) : un nouvel appui ouvre une nouvelle file", async () => {
@@ -101,12 +102,12 @@ describe("flameRouter : une file par connexion, compte et commentaire", () => {
     const fresh = slowServer();
     const seen: FlameState[] = [];
     const second = router.fire(key, off, { send: fresh.send, apply: (s) => seen.push(s), alive: () => true });
+    await dead.releaseAll();
+    await first;
     await fresh.releaseAll();
     await second;
     expect(fresh.sent).toEqual([true]);
     expect(seen[seen.length - 1]).toEqual({ reactionsCount: 9, reactedByMe: true });
-    await dead.releaseAll();
-    await first;
   });
 
   it("deux commentaires ou deux comptes : des files séparées", async () => {
@@ -125,5 +126,53 @@ describe("flameRouter : une file par connexion, compte et commentaire", () => {
       router.fire(flameKey("u2|x", "p", "c1"), off, io("u2c1")),
     ]);
     expect(calls.sort()).toEqual(["c1", "c2", "u2c1"]);
+  });
+
+  it("file remplacée : la nouvelle attend la fin de l'ancienne, jamais deux envois simultanés pour un commentaire", async () => {
+    const router = createFlameRouter();
+    const key = flameKey("u1|s:a", "p", "c");
+    const old = slowServer();
+    let simultaneous = 0;
+    let worst = 0;
+    const tracked = (server: ReturnType<typeof slowServer>) => (want: boolean) => {
+      simultaneous += 1;
+      worst = Math.max(worst, simultaneous);
+      return server.send(want).finally(() => {
+        simultaneous -= 1;
+      });
+    };
+    const first = router.fire(key, off, { send: tracked(old), apply: () => undefined, alive: () => true });
+    await tick();
+    router.reset(); // déconnexion puis reconnexion : l'ancienne série tourne encore
+    const fresh = slowServer();
+    const second = router.fire(key, on, { send: tracked(fresh), apply: () => undefined, alive: () => true });
+    await tick();
+    // La nouvelle série n'a rien envoyé tant que l'ancienne n'est pas finie.
+    expect(fresh.sent).toEqual([]);
+    await old.releaseAll();
+    await first;
+    await fresh.releaseAll();
+    await second;
+    expect(fresh.sent).toEqual([false]);
+    expect(worst).toBe(1);
+  });
+
+  it("le premier magasin meurt, un autre a rejoint : l'intention de B part et B reçoit l'état (A, morte, ne reçoit rien)", async () => {
+    const router = createFlameRouter();
+    const key = flameKey("u1|s:a", "p", "c");
+    const server = slowServer();
+    const a: FlameState[] = [];
+    const b: FlameState[] = [];
+    const aliveA = { v: true };
+    const run = router.fire(key, off, { send: server.send, apply: (s) => a.push(s), alive: () => aliveA.v });
+    await tick();
+    void router.fire(key, off, { send: server.send, apply: (s) => b.push(s), alive: () => true });
+    aliveA.v = false;
+    await server.releaseAll();
+    await run;
+    expect(server.sent[server.sent.length - 1]).toBe(true);
+    expect(b[b.length - 1]).toEqual({ reactionsCount: 9, reactedByMe: true });
+    // A (morte) n'a reçu que son geste local, pas le résultat du serveur.
+    expect(a).toHaveLength(1);
   });
 });

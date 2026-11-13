@@ -18,10 +18,23 @@ export function emitPost(
   change: (post: FeedPostView, ctx: { stale: boolean }) => FeedPostView,
   onCurrent: (next: FeedPostView) => void,
   mounted: () => boolean = () => true,
+  refetch?: (postId: string) => Promise<FeedPostView | null>,
 ): void {
   if (!live.alive(ticket)) return;
+  // La carte a été relue pendant la mutation : on ne devine pas (un compteur différent ne prouve pas que la relecture contient notre
+  // mutation), on **relit la publication** après la confirmation (une requête) et elle devient la base de la carte (tour 7, point 1).
+  const moved = live.cardMoved(post.id, ticket);
   const next = live.changePost(post.id, ticket, change);
   if (live.isCurrent(ticket) && mounted()) onCurrent(next ?? change(post, { stale: false }));
+  if (moved && refetch) {
+    void refetch(post.id)
+      .then((fresh) => {
+        if (!fresh || !live.alive(ticket)) return;
+        live.refreshPost(post.id, ticket, fresh);
+        if (live.isCurrent(ticket) && mounted()) onCurrent(fresh);
+      })
+      .catch(() => undefined);
+  }
 }
 
 /** Retire un commentaire du fil du ticket (R2 : l'état est lu dans le rappel) et met à jour la carte (`emit`). */

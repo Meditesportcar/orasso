@@ -223,4 +223,89 @@ describe("lateResponse : la réponse reçue APRÈS le passage de A à B", () => 
     dropRemoved(set, "p", "k1", tA as never, (change) => emitPost(set, tA as never, server, change, () => undefined));
     expect(count(set, server)).toBe(1);
   });
+
+  it("point 1 (tour 7) : carte relue AVANT l'enregistrement de notre ajout : on relit la publication, attendu 4 et notre commentaire dans l'aperçu", async () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const base = { ...server, commentsCount: 3 } as FeedPostView;
+    set.apply(base);
+    const tA = set.ticket("p");
+    // La carte est relue pendant l'envoi : le serveur rend 4 sans notre commentaire encore enregistré chez lui... puis l'enregistre.
+    const refreshed = { ...base, commentsCount: 4 } as FeedPostView;
+    set.apply(refreshed);
+    const mine = { id: "mine", text: "salut" };
+    const fresh = { ...base, commentsCount: 4, lastComments: [mine] } as unknown as FeedPostView;
+    const shown: FeedPostView[] = [];
+    let reads = 0;
+    emitPost(
+      set,
+      tA as never,
+      refreshed,
+      (post, ctx) => (ctx.stale ? post : postWithCommentAdded(post, created, null, 1)),
+      (n) => shown.push(n),
+      () => true,
+      async () => {
+        reads += 1;
+        return fresh;
+      },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reads).toBe(1);
+    expect((set.apply(fresh) as { commentsCount: number }).commentsCount).toBe(4);
+    expect((set.apply(fresh) as unknown as { lastComments: unknown[] }).lastComments).toEqual([mine]);
+    expect(shown[shown.length - 1]).toBe(fresh);
+  });
+
+  it("point 1 (tour 7) : suppression, carte relue avant l'enregistrement : on relit la publication (une requête)", async () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    const base = { ...server, commentsCount: 3 } as FeedPostView;
+    set.apply(base);
+    const tA = set.ticket("p");
+    set.updateSheet("p", (s) => ({ ...s, items: [item("k1")] }), tA as never);
+    const refreshed = { ...base, commentsCount: 4 } as FeedPostView; // un autre commentaire est arrivé entre-temps
+    set.apply(refreshed);
+    const fresh = { ...base, commentsCount: 3 } as FeedPostView; // 4 − notre suppression
+    let reads = 0;
+    dropRemoved(set, "p", "k1", tA as never, (change) =>
+      emitPost(
+        set,
+        tA as never,
+        refreshed,
+        change,
+        () => undefined,
+        () => true,
+        async () => {
+          reads += 1;
+          return fresh;
+        },
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reads).toBe(1);
+    expect((set.apply(fresh) as { commentsCount: number }).commentsCount).toBe(3);
+  });
+
+  it("point 1 : carte inchangée → aucune relecture, ±1 comme avant", async () => {
+    const set = createPostLiveSet();
+    set.setAccount(A, true);
+    set.apply(server);
+    const tA = set.ticket("p");
+    let reads = 0;
+    emitPost(
+      set,
+      tA as never,
+      server,
+      (post, ctx) => (ctx.stale ? post : postWithCommentAdded(post, created, null, 1)),
+      () => undefined,
+      () => true,
+      async () => {
+        reads += 1;
+        return null;
+      },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reads).toBe(0);
+    expect((set.apply(server) as { commentsCount: number }).commentsCount).toBe(3);
+  });
 });

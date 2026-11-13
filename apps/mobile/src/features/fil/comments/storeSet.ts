@@ -187,6 +187,24 @@ export function createPostLiveSet() {
       store.set(server, next, t);
       return next;
     },
+    /** La carte du ticket a-t-elle été relue depuis le geste (le compteur du serveur n'est plus celui du geste) ? */
+    cardMoved(postId: string, t: ScopedTicket): boolean {
+      const server = t.s ? servers.get(t.s)?.get(postId) : undefined;
+      return Boolean(t.b) && Boolean(server) && t.b !== server && t.b?.commentsCount !== server?.commentsCount;
+    },
+    /** La publication relue (tour 7, point 1) devient la base de la carte du ticket : elle contient notre mutation, rien n'est deviné. */
+    refreshPost(postId: string, t: ScopedTicket, fresh: FeedPostView): FeedPostView | null {
+      const store = storeOf(t);
+      if (!store || !t.s) return null;
+      let map = servers.get(t.s);
+      if (!map) {
+        map = new Map();
+        servers.set(t.s, map);
+      }
+      map.set(postId, fresh);
+      store.set(fresh, fresh, t);
+      return fresh;
+    },
     dropReads(postId: string, channel: string, t: ScopedTicket) {
       storeOf(t)?.beginRead(postId, channel);
     },
@@ -207,6 +225,8 @@ export function createPostLiveSet() {
     sheetOf: typeof facade.sheetOf;
     dropReads: typeof facade.dropReads;
     changePost: typeof facade.changePost;
+    cardMoved: typeof facade.cardMoved;
+    refreshPost: typeof facade.refreshPost;
     apply: typeof facade.apply;
   };
 }
