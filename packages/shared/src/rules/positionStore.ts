@@ -15,6 +15,16 @@ export const POSITION_INFLIGHT_STALE_MS = 30_000;
 /** Une demande de météo qui ne répond pas en 15 s est abandonnée : échec, `inflight` libéré, une nouvelle tentative peut partir. */
 export const POSITION_REQUEST_TIMEOUT_MS = 15_000;
 
+/** La demande a dépassé `POSITION_REQUEST_TIMEOUT_MS` (panne transitoire, jamais un refus ni une erreur inconnue). */
+export class PositionTimeoutError extends Error {
+  constructor() {
+    super("délai dépassé");
+  }
+}
+
+/** Ce qu'une relecture a donné à chaque appelant : sa réponse, son échec (avec la cause), ou rien (aucune relecture n'était à faire). */
+export type PositionRefreshResult = { status: "ok" } | { status: "failed"; error: unknown } | { status: "skipped" };
+
 export type PositionState<T = WeatherAt> = {
   owner: string | null;
   coarse: LatLng | null;
@@ -45,7 +55,15 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   // La dernière demande partie, tant qu'elle n'a pas répondu : une relecture ne part pas pendant qu'une demande est en vol (sauf si elle
   // est suspendue depuis plus de `POSITION_INFLIGHT_STALE_MS`, et seulement si c'est elle-même une relecture : une relecture ne part jamais
   // pendant un geste, quel que soit son âge). Effacée à l'oubli et à l'invalidation (changement de compte).
-  let inflight: { seq: number; at: number; kind: "give" | "refresh" } | null = null;
+  let inflight: { seq: number; at: number; kind: "give" | "refresh"; record?: RefreshRecord } | null = null;
+  // Les appels à `refresh` qui rejoignent la relecture en cours : chacun reçoit le résultat de la relecture qui se termine.
+  // Chaque attente est rattachée à SA requête : une requête invalidée (autre compte, oubli) termine ses attentes en `skipped`, une
+  // requête d'un autre compte ne résout jamais celles-ci.
+  type RefreshRecord = { waiters: Array<(result: PositionRefreshResult) => void> };
+  const refreshes = new Set<RefreshRecord>();
+  const dropWaiters = () => {
+    for (const record of refreshes) for (const resolve of record.waiters.splice(0)) resolve({ status: "skipped" });
+  };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -55,7 +73,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   /** La demande de météo, bornée dans le temps : l'abandon est un échec (rejet), la réponse tardive ne fait rien. */
   const request = (coarse: LatLng): Promise<T> =>
     new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("délai dépassé")), deps.timeoutMs ?? POSITION_REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(() => reject(new PositionTimeoutError()), deps.timeoutMs ?? POSITION_REQUEST_TIMEOUT_MS);
       deps.weatherAt(coarse).then(
         (value) => {
           clearTimeout(timer);
@@ -70,6 +88,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
 
   const forget = () => {
     generation += 1;
+    dropWaiters();
     inflight = null;
     set({ owner: null, coarse: null, at: null, fetchedAt: 0 });
   };
@@ -105,6 +124,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
     /** Invalide les demandes en cours (tickets) sans toucher à la position gardée : une transition de session a eu lieu. */
     invalidate() {
       generation += 1;
+      dropWaiters();
       inflight = null;
     },
     /** Capture la session et la génération DÈS LE GESTE ; `null` sans session. */
@@ -132,18 +152,28 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       }
     },
     /** Relit la météo de la position gardée : au plus toutes les `POSITION_REFRESH_MS`, sauf `force` (geste manuel). */
-    async refresh(force = false): Promise<void> {
+    async refresh(force = false): Promise<PositionRefreshResult> {
       purgeForeign();
       const { coarse, owner, fetchedAt } = state;
-      if (!coarse || owner === null || owner !== deps.scope()) return;
-      if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return;
+      if (!coarse || owner === null || owner !== deps.scope()) return { status: "skipped" };
+      if (!force && deps.now() - fetchedAt < POSITION_REFRESH_MS) return { status: "skipped" };
       // Une demande est en vol : sa réponse donnera la position la plus récente (deux relectures ne se chevauchent jamais). Une relecture
-      // sautée n'est pas rejouée : le prochain minuteur ou retour au premier plan s'en charge.
-      if (inflight !== null && (inflight.kind === "give" || deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS))
-        return;
+      // en vol est rejointe : l'appelant reçoit son résultat ; pendant un geste, rien ne part (`skipped`).
+      if (inflight !== null && (inflight.kind === "give" || deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS)) {
+        if (inflight.kind === "give") return { status: "skipped" };
+        const record = inflight.record;
+        if (!record) return { status: "skipped" };
+        return new Promise<PositionRefreshResult>((resolve) => {
+          record.waiters.push(resolve);
+        });
+      }
       const gen = generation;
       const seq = ++requestSeq;
-      inflight = { seq, at: deps.now(), kind: "refresh" };
+      // Une relecture suspendue reprise en main : ses attentes passent à la nouvelle (elles reçoivent son résultat, pas celui de l'ancienne).
+      const record: RefreshRecord = { waiters: inflight?.record ? inflight.record.waiters.splice(0) : [] };
+      refreshes.add(record);
+      inflight = { seq, at: deps.now(), kind: "refresh", record };
+      let result: PositionRefreshResult = { status: "skipped" };
       try {
         const at = await request(coarse);
         if (
@@ -153,13 +183,19 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
           seq !== requestSeq ||
           state.coarse !== coarse
         )
-          return;
+          return result;
         set({ at, fetchedAt: deps.now() });
-      } catch {
-        // Hors ligne ou limite atteinte : la dernière météo connue reste affichée.
+        result = { status: "ok" };
+      } catch (error) {
+        // Hors ligne ou limite atteinte : la dernière météo connue reste affichée ; la cause est rendue à l'appelant.
+        // Une relecture d'un autre compte ou d'une position oubliée n'a plus de cause à rendre.
+        result = gen !== generation || deps.scope() !== owner ? { status: "skipped" } : { status: "failed", error };
       } finally {
         if (inflight?.seq === seq) inflight = null;
+        refreshes.delete(record);
+        for (const resolve of record.waiters.splice(0)) resolve(result);
       }
+      return result;
     },
   };
 }

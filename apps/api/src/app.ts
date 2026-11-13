@@ -19,6 +19,7 @@ import { user } from "./db/schema";
 import { env } from "./env";
 import { hasSecondFactor } from "./lib/access";
 import { cacheGuard } from "./lib/cache-guard";
+import { now } from "./lib/deps";
 import { clockOffsetHeader } from "./lib/dev-clock";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
@@ -33,6 +34,8 @@ import { activityRoutes } from "./modules/activity/routes";
 import { adminPublicRoutes, adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
+import { albumsPublicRoutes, albumsRoutes } from "./modules/albums/routes";
+import { isLegacyGalleryKey, legacyFileState } from "./modules/albums/view";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
 import { audiencePrizeService } from "./modules/audience-prize/service";
@@ -53,6 +56,7 @@ import { feedRoutes } from "./modules/feed/routes";
 import { coauthorRoutes } from "./modules/feed/routes-coauthors";
 import { feedFilRoutes } from "./modules/feed/routes-fil";
 import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
+import { albumCardsMiddleware } from "./modules/feed/sources/albums";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -205,10 +209,23 @@ const PUBLIC_FILE = /^[A-Za-z0-9-]+(\/[A-Za-z0-9-]+)*\.(webp|png|jpg)$/;
 const FILE_TYPES: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 app.get("/files/*", async (c) => {
   const key = c.req.path.startsWith("/api/files/") ? c.req.path.slice("/api/files/".length) : "";
-  const data = PUBLIC_FILE.test(key) && !/^(private|feed)\//i.test(key) ? await storage.get(key) : null;
+  const allowed = PUBLIC_FILE.test(key) && !/^(private|feed)\//i.test(key);
+  // Lot R9e (Codex 1) : les clés des anciennes galeries suivent la visibilité de leur album (404 s'il n'est plus visible) et se
+  // revalident (`no-cache` + ETag), au lieu d'un cache d'un an : un média dont l'accréditation tombe ne reste pas en ligne.
+  const legacy = allowed && isLegacyGalleryKey(key);
+  if (legacy && (await legacyFileState(key.toLowerCase(), now())) === "hidden") throw notFound("Fichier introuvable");
+  const data = allowed ? await storage.get(key) : null;
   if (!data) throw notFound("Fichier introuvable");
+  const type = FILE_TYPES[key.slice(key.lastIndexOf(".") + 1)] ?? "application/octet-stream";
+  if (legacy) {
+    const etag = `"${key.slice(key.lastIndexOf("/") + 1).replace(/\.[a-z]+$/, "")}"`;
+    const sent = (c.req.header("if-none-match") ?? "").split(",").map((t) => t.trim().replace(/^W\//, ""));
+    const headers = { "cache-control": "public, no-cache", etag };
+    if (sent.includes(etag)) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(data), 200, { ...headers, "content-type": type });
+  }
   return c.body(new Uint8Array(data), 200, {
-    "content-type": FILE_TYPES[key.slice(key.lastIndexOf(".") + 1)] ?? "application/octet-stream",
+    "content-type": type,
     "cache-control": "public, max-age=31536000, immutable",
   });
 });
@@ -240,6 +257,10 @@ app.use("*", (c, next) =>
 );
 // Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, avant la session (aucun cookie dans une réponse en cache public).
 app.route("/", feedPublicPhotoRoutes);
+// Vague R9 (lot R9e) : photos publiques d'un album publié visible de tous (T34), avant la session (aucun cookie dans une réponse en cache public).
+app.route("/", albumsPublicRoutes);
+// Vague R9 (lot R9e) : `?cards=album` (le client sait dessiner la carte « album » du Fil) lu sur `/fil` et `/fil/*`.
+app.use("/fil/*", albumCardsMiddleware);
 // Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
 // Une route qui lit la session (`loadSession`) peut renouveler le cookie (`Set-Cookie`) : elle ne prend jamais un cache public.
 app.route("/", accessPublicRoutes);
@@ -255,6 +276,8 @@ app.route("/", vehiclesRoutes);
 app.route("/", garageRoutes);
 app.route("/", structuresRoutes);
 app.route("/", providersRoutes);
+// Vague R9 (lot R9e) : albums des médias ; avant `mediaRoutes` (il décore `GET /media/:id` de ses compteurs).
+app.route("/", albumsRoutes);
 app.route("/", mediaRoutes);
 app.route("/", eventsRoutes);
 // Lot R6c : « Qui y va », invitations entre passionnés, invitations coupées.

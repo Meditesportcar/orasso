@@ -18,7 +18,9 @@ export const uploadsRoutes = new Hono<AppEnv>()
     // demande (rectangles JSON posés à la main, outils du lot 51) ; facultatif, irréversible.
     let plateRects: PlateRect[] | undefined;
     if (typeof form.plateRects === "string" && form.plateRects.trim()) {
-      if (purpose !== "media_content") throw validation("Floutage de plaque : photos de contenu média seulement");
+      if (purpose !== "media_content" && purpose !== "album_photo") {
+        throw validation("Floutage de plaque : photos de contenu média et d'album seulement");
+      }
       let raw: unknown;
       try {
         raw = JSON.parse(form.plateRects);

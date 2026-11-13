@@ -1,5 +1,5 @@
 {
-  "id": "5bae3b37-b569-45ba-be1e-77c9654c1c81",
+  "id": "3110a61b-7247-4fdb-9c66-364c5118252d",
   "prevId": "304257da-c20a-456c-a8dd-06ea3a86af59",
   "version": "7",
   "dialect": "postgresql",
@@ -836,6 +836,517 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_album_photos": {
+      "name": "event_album_photos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "album_id": {
+          "name": "album_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plate_state": {
+          "name": "plate_state",
+          "type": "album_plate_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plate_rects": {
+          "name": "plate_rects",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legacy_source_key": {
+          "name": "legacy_source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_album_photos_position_key": {
+          "name": "event_album_photos_position_key",
+          "columns": [
+            {
+              "expression": "album_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_album_photos\".\"deleted_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_album_photos_client_key": {
+          "name": "event_album_photos_client_key",
+          "columns": [
+            {
+              "expression": "album_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_album_photos_album_idx": {
+          "name": "event_album_photos_album_idx",
+          "columns": [
+            {
+              "expression": "album_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_album_photos_album_id_event_albums_id_fk": {
+          "name": "event_album_photos_album_id_event_albums_id_fk",
+          "tableFrom": "event_album_photos",
+          "tableTo": "event_albums",
+          "columnsFrom": [
+            "album_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_album_photos_storage_key_key": {
+          "name": "event_album_photos_storage_key_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "storage_key"
+          ]
+        },
+        "event_album_photos_legacy_source_key_key": {
+          "name": "event_album_photos_legacy_source_key_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "legacy_source_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "event_album_photos_rects_check": {
+          "name": "event_album_photos_rects_check",
+          "value": "(\"event_album_photos\".\"plate_state\" in ('blurred', 'kept')) = (\"event_album_photos\".\"plate_rects\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.event_albums": {
+      "name": "event_albums",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_profile_id": {
+          "name": "media_profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "allow_save": {
+          "name": "allow_save",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "official_at": {
+          "name": "official_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photos_count": {
+          "name": "photos_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "views": {
+          "name": "views",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "album_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legacy_media_content_id": {
+          "name": "legacy_media_content_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_albums_official_key": {
+          "name": "event_albums_official_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_albums\".\"official_at\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_albums_legacy_key": {
+          "name": "event_albums_legacy_key",
+          "columns": [
+            {
+              "expression": "legacy_media_content_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_albums_client_key": {
+          "name": "event_albums_client_key",
+          "columns": [
+            {
+              "expression": "media_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_albums_event_idx": {
+          "name": "event_albums_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"event_albums\".\"status\" = 'published' and \"event_albums\".\"deleted_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_albums_media_idx": {
+          "name": "event_albums_media_idx",
+          "columns": [
+            {
+              "expression": "media_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_albums_draft_key": {
+          "name": "event_albums_draft_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "media_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_albums\".\"status\" = 'draft' and \"event_albums\".\"deleted_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_albums_event_id_events_id_fk": {
+          "name": "event_albums_event_id_events_id_fk",
+          "tableFrom": "event_albums",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_albums_media_profile_id_media_profiles_id_fk": {
+          "name": "event_albums_media_profile_id_media_profiles_id_fk",
+          "tableFrom": "event_albums",
+          "tableTo": "media_profiles",
+          "columnsFrom": [
+            "media_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_albums_author_id_user_id_fk": {
+          "name": "event_albums_author_id_user_id_fk",
+          "tableFrom": "event_albums",
+          "tableTo": "user",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_albums_legacy_media_content_id_media_contents_id_fk": {
+          "name": "event_albums_legacy_media_content_id_media_contents_id_fk",
+          "tableFrom": "event_albums",
+          "tableTo": "media_contents",
+          "columnsFrom": [
+            "legacy_media_content_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_albums_title_check": {
+          "name": "event_albums_title_check",
+          "value": "\"event_albums\".\"title\" is null or char_length(\"event_albums\".\"title\") <= 80"
+        },
+        "event_albums_published_check": {
+          "name": "event_albums_published_check",
+          "value": "\"event_albums\".\"status\" <> 'published' or \"event_albums\".\"published_at\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.legacy_file_blocks": {
+      "name": "legacy_file_blocks",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -11408,12 +11919,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "structure_id": {
-          "name": "structure_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11500,34 +12005,6 @@
           "method": "btree",
           "with": {}
         },
-        "notifications_user_structure_idx": {
-          "name": "notifications_user_structure_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "structure_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "delivered_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"notifications\".\"structure_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "notifications_actor_ids_idx": {
           "name": "notifications_actor_ids_idx",
           "columns": [
@@ -11608,19 +12085,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "notifications_structure_id_structures_id_fk": {
-          "name": "notifications_structure_id_structures_id_fk",
-          "tableFrom": "notifications",
-          "tableTo": "structures",
-          "columnsFrom": [
-            "structure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -18753,12 +19217,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "activity_seen_at": {
-          "name": "activity_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -22064,6 +22522,24 @@
         "sent"
       ]
     },
+    "public.album_plate_state": {
+      "name": "album_plate_state",
+      "schema": "public",
+      "values": [
+        "blurred",
+        "kept",
+        "none",
+        "unknown"
+      ]
+    },
+    "public.album_status": {
+      "name": "album_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "published"
+      ]
+    },
     "public.application_kind": {
       "name": "application_kind",
       "schema": "public",
@@ -22466,7 +22942,8 @@
         "feed_post",
         "story",
         "story_video",
-        "story_poster"
+        "story_poster",
+        "album_photo"
       ]
     },
     "public.contest_state": {
@@ -22531,7 +23008,8 @@
         "crew_comment",
         "feed_post",
         "story",
-        "feed_comment"
+        "feed_comment",
+        "album_photo"
       ]
     },
     "public.sanction_kind": {

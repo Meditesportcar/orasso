@@ -27,6 +27,7 @@ import {
   structures,
   uploads,
 } from "../../db/schema";
+import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
 import { resetMediaViews } from "./service";
@@ -486,6 +487,7 @@ describe("contenus", () => {
       photoKeys: ["media-contents/inconnue.webp"],
     });
     expect(bad.status).toBe(400);
+    await storage.put("media-contents/a.webp", Buffer.from("photo a"));
     await db.insert(uploads).values({
       key: "media-contents/a.webp",
       userId: leo.id,
@@ -517,6 +519,7 @@ describe("contenus", () => {
   it("tour 2 : deux publications simultanées de la même galerie rendent le même contenu, sans 400 ni doublon", async () => {
     await accredited();
     const keys = ["media-contents/s1.webp", "media-contents/s2.webp", "media-contents/s3.webp"];
+    for (const key of keys) await storage.put(key, Buffer.from(`photo ${key}`));
     await db.insert(uploads).values(
       keys.map((key) => ({
         key,
@@ -539,6 +542,7 @@ describe("contenus", () => {
 
   it("tour 2 : la reprise d'une galerie publiée passe avant la limite du jour (pas de 429)", async () => {
     await accredited();
+    await storage.put("media-contents/r.webp", Buffer.from("photo r"));
     await db.insert(uploads).values({
       key: "media-contents/r.webp",
       userId: leo.id,

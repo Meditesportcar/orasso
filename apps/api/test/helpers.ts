@@ -43,6 +43,8 @@ const TABLES = [
   "seasons",
   // Lot R9a : `page_follows` n'a aucune clé étrangère, la cascade des comptes ne la vide pas.
   "page_follows",
+  // Lot R9e : `legacy_file_blocks` n'a aucune clé étrangère (voulu : rien ne la supprime en cascade) ; les tests la vident.
+  "legacy_file_blocks",
 ];
 
 const QUIET_HOURS_AT_START = env.NOTIFY_QUIET_HOURS;

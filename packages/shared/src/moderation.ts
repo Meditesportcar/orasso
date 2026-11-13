@@ -23,6 +23,8 @@ export const reportTargets = [
   "story",
   // Lot R8k1 : commentaire d'une publication du Fil (publique parmi les membres).
   "feed_comment",
+  // Lot R9e : une photo d'un album de média (signalable par qui peut voir l'album).
+  "album_photo",
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
 
@@ -97,6 +99,7 @@ export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]
   story: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
   // Lot R8k1 : les motifs d'un commentaire de crew.
   feed_comment: ["insult", "harassment", "spam", "other"],
+  album_photo: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
 };
 
 /** Le motif est-il proposé pour ce type ? (contrôle de l'API, `reportCreateSchema`). */

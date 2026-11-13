@@ -9,10 +9,14 @@
 import {
   coarsePosition,
   createFollowTracker,
+  createPositionCalendar,
   createPositionStore,
   type LatLng,
+  type PositionOutcome,
+  PositionTimeoutError,
   type PracticalAt,
   type PracticalData,
+  practicalFailureOutcome,
   weatherFollowKey,
 } from "@orasso/shared";
 import { useEffect, useSyncExternalStore } from "react";
@@ -20,6 +24,16 @@ import { useEffect, useSyncExternalStore } from "react";
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
 import { beginMyPosition, giveMyPositionCell, useWeatherPosition } from "../weather/position";
+
+/** Un refus ou une panne de la demande de position : le statut HTTP (0 : le réseau n'a pas répondu) décide de la suite du calendrier. */
+class PositionRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
 let pendingExact: LatLng | null = null;
@@ -36,10 +50,37 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
       // Abandon au bout de 15 s : échec, le magasin libère la demande en vol (tour 9).
       timeoutMs: 15_000,
     });
-    if (!res.ok) throw new Error(res.error.message);
+    if (!res.ok) throw new PositionRequestError(res.status, res.error.message);
     return { exact, data: res.data };
   },
 });
+
+/**
+ * Le calendrier unique des relectures de lieux partiels (3, 6, 12, 24 s), partagé par tous les écrans montés : il lit le résultat de
+ * chaque relecture (réponse, panne, refus, erreur inconnue) ; un refus (4xx) l'arrête et retient son heure, relu au retour sur
+ * l'onglet après 60 s ; suspendu onglet masqué.
+ */
+const calendar = createPositionCalendar({
+  visible: () => typeof document === "undefined" || document.visibilityState === "visible",
+  refresh: async (): Promise<PositionOutcome> => {
+    const result = await store.refresh(true);
+    if (result.status !== "failed") return "ok";
+    if (result.error instanceof PositionRequestError) return practicalFailureOutcome(result.error.status);
+    return result.error instanceof PositionTimeoutError ? "transient" : "unknown";
+  },
+});
+
+/** Un écran de « Pratique » est monté : le calendrier travaille tant qu'il l'est. */
+export const retainPracticalCalendar = () => calendar.retain();
+
+/** Le calendrier est arrêté (refus, erreur inconnue) : « Réessayer » est proposé. */
+export const usePracticalCalendarFailed = () => useSyncExternalStore(calendar.subscribe, calendar.failed, () => false);
+
+/** Une lecture de la position est en vol : « Réessayer » est désactivé pendant ce temps. */
+export const usePracticalCalendarBusy = () => useSyncExternalStore(calendar.subscribe, calendar.busy, () => false);
+
+/** « Réessayer » : tout repart à 0 et les lieux de la position sont relus tout de suite. */
+export const retryPracticalCalendar = () => calendar.retry();
 
 // Suivi de la météo : une tentative par lieu pour la séance, remise à zéro à chaque changement de compte.
 const follow = createFollowTracker();
@@ -47,6 +88,11 @@ const follow = createFollowTracker();
 if (typeof window !== "undefined") {
   // Comme « Ma météo » (R8m) : toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface
   // la position, invalide les demandes en cours (modèle de demande en vol conservé) et remet le suivi de la météo à zéro.
+  // La clé du calendrier est la position gardée (`coarse` change à chaque position donnée) : une nouvelle position, un nouveau calendrier.
+  store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true, store.view().coarse));
+  // Retour sur l'onglet ou retour en ligne : la relecture due part (jamais depuis un onglet masqué), un refus est relu après 60 s.
+  document.addEventListener("visibilitychange", () => calendar.resume());
+  window.addEventListener("online", () => calendar.resume());
   let seen: string | null = currentSession();
   listenSession((userId) => {
     if (userId !== seen) {

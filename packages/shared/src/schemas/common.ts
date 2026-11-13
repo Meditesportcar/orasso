@@ -152,6 +152,10 @@ export const errorCodes = [
   // Lot R8p (tours 8) : un envoi sous un autre compte que celui du formulaire ; l'e-mail d'une invitation est encore en route.
   "account_changed",
   "mail_pending",
+  // Lot R9e : albums des médias (plafond de 200 photos, publication sans photo, média non accrédité à l'événement).
+  "album_full",
+  "album_empty",
+  "not_accredited",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

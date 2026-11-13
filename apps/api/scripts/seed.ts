@@ -17,6 +17,7 @@ import { syncVehicleReference } from "../src/modules/vehicles/reference-sync";
 import { seedActivity } from "./seed/activity";
 import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
+import { seedAlbums } from "./seed/albums";
 import { seedBase, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedAnnouncementsReprise, seedCommunication } from "./seed/communication";
@@ -210,6 +211,8 @@ async function main() {
   await seedPageFollows();
   // Lot R9d : l'Activité de la structure (la cloche de l'organisateur), une ligne par responsable.
   await seedStructureActivity();
+  // Lot R9e : les galeries d'avant reprises en albums, un album publié (Sud Cars, 12 photos) et un brouillon de 3 photos.
+  await seedAlbums();
 }
 
 try {

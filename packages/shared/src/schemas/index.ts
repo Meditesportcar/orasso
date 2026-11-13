@@ -3,6 +3,7 @@ export * from "./account";
 export * from "./activity";
 export * from "./admin";
 export * from "./afterEvent";
+export * from "./albums";
 export * from "./application";
 export * from "./auth";
 export * from "./common";
