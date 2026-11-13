@@ -14,15 +14,24 @@ import {
   type LatLng,
   PRACTICAL_PARTIAL_RETRY_MS,
   type PracticalAt,
+  type PracticalData,
   weatherFollowKey,
 } from "@orasso/shared";
 import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
 import { beginMyPosition, giveMyPositionCell, useWeatherPosition } from "@/features/weather/position";
 import { api } from "@/lib/api";
+import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
+/** Le statut de l'échec de la dernière demande de position (`null` : elle a répondu) : le calendrier des relectures s'y arrête sur un refus. */
+let lastReadStatus: number | null = null;
+export const resetPositionReadStatus = () => {
+  lastReadStatus = null;
+};
+export const positionReadStatus = () => lastReadStatus;
+
 let pendingExact: LatLng | null = null;
 
 const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositionStore<PracticalAt>({
@@ -31,7 +40,14 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
   weatherAt: async (coarse): Promise<PracticalAt> => {
     // L'exacte est prise AU DÉPART de cette demande (avant toute attente) : une réponse ne reprend jamais l'exacte d'un autre geste.
     const exact = pendingExact ?? store.getState().at?.exact ?? coarse;
-    const data = await api.practical({ near: "position", lat: coarse.lat, lng: coarse.lng });
+    let data: PracticalData;
+    try {
+      data = await api.practical({ near: "position", lat: coarse.lat, lng: coarse.lng });
+      lastReadStatus = null;
+    } catch (error) {
+      lastReadStatus = error instanceof ApiRequestError ? error.status : 0;
+      throw error;
+    }
     return { exact, data };
   },
 });

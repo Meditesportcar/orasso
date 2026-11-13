@@ -11,6 +11,7 @@ import {
   type PracticalData,
   type PracticalFilter,
   type PracticalReadOutcome,
+  positionCalendarContinues,
   practicalFailureOutcome,
   practicalPendingDelay,
   practicalRefusedReadAllowed,
@@ -19,7 +20,13 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
-import { refreshPracticalPosition, useFollowWeatherPosition, usePracticalPosition } from "./position";
+import {
+  positionReadStatus,
+  refreshPracticalPosition,
+  resetPositionReadStatus,
+  useFollowWeatherPosition,
+  usePracticalPosition,
+} from "./position";
 
 /** Les derniers choix de la séance (page chargée) : « Près de moi | Près de ma sortie », les puces, « Liste | Carte ». */
 export const practicalSession: { choice: PracticalChoice; filter: PracticalFilter; view: "list" | "map" } = {
@@ -208,19 +215,36 @@ export function usePracticalSources(): PracticalSources {
     }
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Suspendu tant que l'onglet est masqué : la relecture due reprend au retour (jamais perdue, jamais en arrière-plan).
+    let suspended = false;
+    const visible = () => typeof document === "undefined" || document.visibilityState === "visible";
+    const fire = () => {
+      if (!active) return;
+      if (!visible()) {
+        suspended = true;
+        return;
+      }
+      suspended = false;
+      resetPositionReadStatus();
+      void refreshPracticalPosition(true).then(() => {
+        // Un refus (4xx) arrête tout le calendrier ; une panne transitoire le poursuit.
+        if (active && positionCalendarContinues(positionReadStatus())) next();
+      });
+    };
     const next = () => {
       const delay = practicalPendingDelay(partialAttempts.current);
       if (delay === null || !active) return;
       partialAttempts.current += 1;
-      timer = setTimeout(() => {
-        void refreshPracticalPosition(true).finally(() => {
-          if (active) next();
-        });
-      }, delay);
+      timer = setTimeout(fire, delay);
     };
+    const onVisible = () => {
+      if (suspended && visible()) fire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     next();
     return () => {
       active = false;
+      document.removeEventListener("visibilitychange", onVisible);
       if (timer) clearTimeout(timer);
     };
   }, [partial]);

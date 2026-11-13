@@ -21,6 +21,13 @@ import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
 import { beginMyPosition, giveMyPositionCell, useWeatherPosition } from "../weather/position";
 
+/** Le statut de l'échec de la dernière demande de position (`null` : elle a répondu) : le calendrier des relectures s'y arrête sur un refus. */
+let lastReadStatus: number | null = null;
+export const resetPositionReadStatus = () => {
+  lastReadStatus = null;
+};
+export const positionReadStatus = () => lastReadStatus;
+
 /** L'exacte du geste en cours : lue par la requête de la case, puis gardée avec la réponse (une relecture la reprend de là). */
 let pendingExact: LatLng | null = null;
 
@@ -36,6 +43,7 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
       // Abandon au bout de 15 s : échec, le magasin libère la demande en vol (tour 9).
       timeoutMs: 15_000,
     });
+    lastReadStatus = res.ok ? null : res.status;
     if (!res.ok) throw new Error(res.error.message);
     return { exact, data: res.data };
   },

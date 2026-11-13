@@ -13,10 +13,12 @@ import {
   type PracticalData,
   type PracticalFilter,
   type PracticalReadOutcome,
+  positionCalendarContinues,
   practicalFailureOutcome,
   practicalPendingDelay,
   practicalReadAllowed,
   practicalRefusedReadAllowed,
+  practicalResumeDelay,
   shouldRetryPractical,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
@@ -28,7 +30,9 @@ import { ApiRequestError } from "@/lib/http";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
+  positionReadStatus,
   refreshPracticalPosition,
+  resetPositionReadStatus,
   useFollowWeatherPosition,
   usePracticalPosition,
 } from "./position";
@@ -196,7 +200,26 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     // Une relance tombée hors focus est reprise au retour, même si la dernière lecture date de moins de 15 s (une seule, sans boucle).
     if (resumePending.current) {
       resumePending.current = false;
-      void load();
+      const wait = practicalResumeDelay(lastStart.current, Date.now());
+      if (wait <= 0) {
+        void load();
+        return;
+      }
+      // Retour avant les 15 s minimales : la reprise n'est pas perdue, elle part au délai restant (une seule, sans boucle).
+      retryTimer.schedule(() => {
+        if (!alive.current) return;
+        if (
+          !shouldRetryPractical({
+            network: true,
+            focused: focused.current,
+            foreground: AppState.currentState === "active",
+          })
+        ) {
+          resumePending.current = true;
+          return;
+        }
+        void latest.current();
+      }, wait);
       return;
     }
     // Un refus (4xx) : relu seulement après `STALE_MS` (et jamais deux lectures à moins de 15 s).
@@ -207,7 +230,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran).
     if (!practicalReadAllowed(lastStart.current, Date.now())) return;
     if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
-  }, [enabled, load]);
+  }, [enabled, load, retryTimer]);
   useFocusEffect(
     useCallback(() => {
       focused.current = true;
@@ -251,19 +274,36 @@ export function usePracticalSources(eventId?: string): PracticalSources {
     }
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Suspendu tant que l'appli est en arrière-plan : la relecture due reprend au retour (jamais perdue, jamais en arrière-plan).
+    let suspended = false;
+    const visible = () => AppState.currentState === "active";
+    const fire = () => {
+      if (!active) return;
+      if (!visible()) {
+        suspended = true;
+        return;
+      }
+      suspended = false;
+      resetPositionReadStatus();
+      void refreshPracticalPosition(true).then(() => {
+        // Un refus (4xx) arrête tout le calendrier ; une panne transitoire le poursuit.
+        if (active && positionCalendarContinues(positionReadStatus())) next();
+      });
+    };
     const next = () => {
       const delay = practicalPendingDelay(partialAttempts.current);
       if (delay === null || !active) return;
       partialAttempts.current += 1;
-      timer = setTimeout(() => {
-        void refreshPracticalPosition(true).finally(() => {
-          if (active) next();
-        });
-      }, delay);
+      timer = setTimeout(fire, delay);
     };
+    const onVisible = () => {
+      if (suspended && visible()) fire();
+    };
+    const sub = AppState.addEventListener("change", onVisible);
     next();
     return () => {
       active = false;
+      sub.remove();
       if (timer) clearTimeout(timer);
     };
   }, [partial]);

@@ -7,10 +7,12 @@ import {
   nextPracticalRead,
   PRACTICAL_MIN_GAP_MS,
   PRACTICAL_STALE_MS,
+  positionCalendarContinues,
   practicalFailureOutcome,
   practicalPendingDelay,
   practicalReadAllowed,
   practicalRefusedReadAllowed,
+  practicalResumeDelay,
   practicalRetryDelay,
   shouldRetryPractical,
   weatherFollowKey,
@@ -170,5 +172,22 @@ describe("refus, transitoire, complète : une règle unique (suite R8q, tour 5)"
     expect(practicalRefusedReadAllowed(0, 0, 9_999_999)).toBe(false);
     // `practicalReadAllowed` garde la main : une lecture partie il y a moins de 15 s l'empêche.
     expect(practicalRefusedReadAllowed(refusedAt, refusedAt + 61_000 - 5_000, refusedAt + 61_000)).toBe(false);
+  });
+});
+
+describe("reprise hors focus et calendrier de position (suite R8q, tour 5, relecture Codex)", () => {
+  it("perte de focus à 3 s, retour à 5 s : la lecture partie à 0 reprend à 15 s (10 s restantes)", () => {
+    expect(practicalResumeDelay(0, 5_000)).toBe(0); // aucune lecture connue : tout de suite
+    expect(practicalResumeDelay(1_000, 6_000)).toBe(10_000);
+    expect(practicalResumeDelay(1_000, 16_000)).toBe(0);
+    expect(practicalResumeDelay(1_000, 60_000)).toBe(0);
+  });
+
+  it("partielle puis 403 ou 429 : le calendrier de position s'arrête ; réseau, 5xx ou réponse : il continue", () => {
+    expect(positionCalendarContinues(403)).toBe(false);
+    expect(positionCalendarContinues(429)).toBe(false);
+    expect(positionCalendarContinues(0)).toBe(true);
+    expect(positionCalendarContinues(502)).toBe(true);
+    expect(positionCalendarContinues(null)).toBe(true);
   });
 });
