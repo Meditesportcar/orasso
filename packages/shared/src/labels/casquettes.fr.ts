@@ -39,9 +39,19 @@ export const casquettesLabels = {
   /** L'auteur d'une story perd ses droits pendant la rédaction : l'envoi est bloqué, on choisit (jamais de bascule silencieuse). */
   authorLost: (name: string) => `Tu n'as plus accès à ${name} : la story ne peut pas partir en son nom.`,
   authorLostChoice: "Publier en mon nom",
+  /** « Publier » : la casquette choisie n'est plus disponible pendant la rédaction (R9h, tour 2) ; jamais de repli silencieux sur « Moi ». */
+  postAuthorLost: (name: string) => `Tu n'as plus accès à ${name} : la publication ne peut pas partir en son nom.`,
+  authorLostUnknown: "cette page",
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",
+  /** Le site (lot R9h) : la pastille de la barre du haut d'un espace, la rangée de navigation de la casquette, le Fil d'une page indisponible. */
+  siteChipOpen: (name: string) => `Page de ${name}`,
+  siteNav: (name: string) => `Navigation de ${name}`,
+  filUnavailable: "Le Fil de cette page n'est pas disponible.",
+  filUnavailableText:
+    "Une page suspendue, ou survolée en assistance, ne lit ni n'agit en son nom. Reviens à l'espace de la page.",
+  filUnavailableBack: "Retour à l'espace",
 } as const;
 
 /** « Abonnements » vu par une casquette (maquette `filR9`, choix 12) : ce que la casquette suit, pas ce que la personne suit. */

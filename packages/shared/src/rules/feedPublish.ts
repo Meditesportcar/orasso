@@ -3,6 +3,7 @@
 // restent les seules à faire foi (droits, rôle déduit, plafond) ; l'écran les annonce sans les décider. Les anciennes règles
 // (`publishIssue`, `feedPostBody`, `eventsWithPlace`, dans `feedList.ts`) restent pour l'APK en ligne.
 import { BUSINESS_TIMEZONE } from "../enums";
+import { casquettesLabels } from "../labels/casquettes.fr";
 import { publicationErrors } from "../labels/feed.fr";
 import {
   attachPhraseOf,
@@ -67,7 +68,7 @@ const DESTINATION_OF: Record<string, PublishDestination> = {
  * pages. L'API vérifie les droits : cette liste ne fait que proposer.
  */
 export function publishAuthors(
-  personas: readonly Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl">[],
+  personas: readonly (Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl"> & { suspended?: boolean })[],
   pseudo: string,
   avatarUrl: string | null = null,
 ): PublishAuthor[] {
@@ -82,7 +83,8 @@ export function publishAuthors(
     logoUrl: avatarUrl,
   };
   const pages = personas
-    .filter((p) => p.kind in DESTINATION_OF)
+    // Une page suspendue ne se propose pas (R9h, tour 1) : l'API refuserait l'envoi, la personne n'a pas à le découvrir à l'envoi.
+    .filter((p) => p.kind in DESTINATION_OF && !p.suspended)
     .map((p, index) => ({ p, index }))
     .sort((a, b) => (RANK[a.p.kind] ?? 9) - (RANK[b.p.kind] ?? 9) || a.index - b.index)
     .map(({ p }): PublishAuthor => {
@@ -215,7 +217,42 @@ export type PublishDraft = {
   forbidden?: EventsForbidden | null;
   /** Étiquette « Offre » (R9c) : comptée seulement pour la casquette pro. */
   offer?: OfferForm | null;
+  /**
+   * Le nom de l'auteur choisi quand il n'est plus disponible (casquette suspendue ou perdue pendant la rédaction) : l'envoi est bloqué
+   * avec un message, jamais de repli silencieux sur « Moi » (R9h, tour 2).
+   */
+  authorLost?: string | null;
 };
+
+/**
+ * Le résultat de « Modifier ma publication » / « Publier en mon nom » après un envoi incertain, d'après la réponse de
+ * `GET /me/feed-posts/by-client/:id` (R9h, tours 4 et 5) : `found` (200 : publication retrouvée, visible), `hidden` (409
+ * `post_unavailable` : elle existe mais reste masquée, page suspendue : un état distinct, jamais « Publié dans le Fil »), `freed`
+ * (404 : absence confirmée, nouvel identifiant), `kept` (tout le reste : vérification impossible, le verrou est maintenu). Dans les trois
+ * premiers cas hors `freed`, l'envoi n'est jamais renouvelé.
+ */
+export function uncertainCheckOutcome(
+  res: { ok: true } | { ok: false; status: number; code?: string },
+): "found" | "hidden" | "freed" | "kept" {
+  if (res.ok) return "found";
+  if (res.status === 409 && res.code === "post_unavailable") return "hidden";
+  return res.status === 404 ? "freed" : "kept";
+}
+
+/**
+ * L'auteur du brouillon : celui de la clé choisie, ou — s'il n'est plus proposé (suspension, perte de droits) — `lost` avec son nom (lu
+ * dans `names`, les noms vus à l'affichage précédent) et `author` = « Moi » **pour l'affichage seulement** : l'envoi reste bloqué
+ * jusqu'à un choix explicite (R9h, tour 2).
+ */
+export function resolvePublishAuthor<A extends { key: string }>(
+  authors: readonly A[],
+  authorKey: string,
+  names: ReadonlyMap<string, string> = new Map(),
+): { author: A; lost: string | null } {
+  const found = authors.find((a) => a.key === authorKey);
+  if (found) return { author: found, lost: null };
+  return { author: authors[0] as A, lost: names.get(authorKey) ?? casquettesLabels.authorLostUnknown };
+}
 
 /**
  * La ligne « ce qui manque » (jamais un bouton principal grisé sans elle), ou `null`. Dans cet ordre : préparation en cours ;
@@ -223,6 +260,7 @@ export type PublishDraft = {
  * décision de plaque de chaque photo ; légende trop longue ; offre (R9c : titre, dates) ; « Info importante » sans motif.
  */
 export function publishIssueR8(draft: PublishDraft, now: Date = displayNow()): string | null {
+  if (draft.authorLost) return casquettesLabels.postAuthorLost(draft.authorLost);
   if (draft.preparing) return L.preparing;
   if (draft.forbidden)
     return draft.forbidden === "persona_forbidden" ? publicationErrors.persona_forbidden : T.forbiddenMore;
@@ -547,18 +585,25 @@ export function draftFromBody(
   offer: OfferForm;
 } {
   const persona = typeof body.persona === "string" ? body.persona : "fan";
-  const author =
-    authors.find(
-      (a) =>
-        a.persona === persona &&
-        (persona !== "organizer" || a.structureId === body.structureId) &&
-        (persona !== "pro" || a.proId === body.proId),
-    ) ?? authors[0];
+  const author = authors.find(
+    (a) =>
+      a.persona === persona &&
+      (persona !== "organizer" || a.structureId === body.structureId) &&
+      (persona !== "pro" || a.proId === body.proId),
+  );
+  // Jamais « Moi » pour une page devenue indisponible (R9h, tour 3) : le corps figé porte la page, c'est elle qui est affichée (par sa
+  // clé, absente des auteurs proposés : `resolvePublishAuthor` la signale « perdue »), pas un repli silencieux sur la personne.
+  const lostId = persona === "organizer" ? body.structureId : persona === "pro" ? body.proId : null;
+  const authorKey =
+    author?.key ??
+    (persona === "fan"
+      ? "me"
+      : `${DESTINATION_OF[persona] ?? persona}:${typeof lostId === "string" && lostId ? lostId : "perdue"}`);
   const important = body.important as { reason?: ImportantReason } | undefined;
   const aspects: readonly string[] = ["portrait_4_5", "square", "landscape"];
   return {
     choice: {
-      authorKey: author?.key ?? "me",
+      authorKey,
       eventId: typeof body.eventId === "string" ? body.eventId : null,
       vehicleId: typeof body.vehicleId === "string" ? body.vehicleId : null,
       placeLabel: typeof body.placeLabel === "string" ? body.placeLabel : "",

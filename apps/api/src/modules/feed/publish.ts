@@ -532,7 +532,17 @@ export const feedPostsService = {
     rateLimit("feedRead", v.user.id);
     const id = await findReplay(db, v.user.id, clientId);
     if (!id) throw notFound("Publication introuvable");
-    return ownView(v, id);
+    // Lot R9h (tour 4) : l'identifiant existe mais la publication n'est pas lisible (la structure est suspendue) : ce n'est pas une
+    // absence. 409 `post_unavailable`, réponse minimale (aucun contenu), pour le seul compte émetteur (`findReplay` ne rend que le sien) ;
+    // un client ne libère jamais l'envoi incertain là-dessus.
+    try {
+      return await ownView(v, id);
+    } catch (error) {
+      if (error instanceof AppError && error.status === 404) {
+        throw new AppError(409, "post_unavailable", publicationErrors.post_unavailable);
+      }
+      throw error;
+    }
   },
 
   /** `GET /me/feed-posts?cursor=` : mes publications, les plus récentes d'abord. */

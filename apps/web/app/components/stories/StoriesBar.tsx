@@ -9,14 +9,18 @@ import { barDisplay, storyViewerLabels as L, mineRingState, type StoryBar } from
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/stories.css";
+import { useCasquette } from "../../lib/actor";
 import { apiFetch } from "../../lib/api.client";
 import { useChannel } from "../../lib/useChannel";
 
-/** La route « Publier une story » est créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours. */
+/** « Publier une story » : le « + » y mène ; en casquette, au nom de la page (`?auteur=<clé>`, lot R9h). */
 const PUBLISH_HREF = "/app/story/publier";
+const publishHref = (actor: string | null) =>
+  actor ? `${PUBLISH_HREF}?auteur=${encodeURIComponent(actor)}` : PUBLISH_HREF;
 
 /** Depuis la barre du Fil (lot R8s) : `?suite=barre`, la lecture enchaîne les auteurs suivants de la barre. */
-export const storyHref = (key: string) => `/app/story/${encodeURIComponent(key)}?suite=barre`;
+export const storyHref = (key: string, barre?: string | null) =>
+  `/app/story/${encodeURIComponent(key)}?suite=barre${barre ? `&barre=${encodeURIComponent(barre)}` : ""}`;
 
 export function StoriesBar({
   userId,
@@ -27,13 +31,21 @@ export function StoriesBar({
   pseudo: string;
   avatarUrl: string | null;
 }) {
+  // Lot R9h (T51) : en casquette, `GET /stories/bar` avec l'acteur rend `mine` = les stories de la page, et le premier rond porte son
+  // logo ; hors espace de casquette, `null` et rien ne change.
+  const casquette = useCasquette();
+  const actor = casquette?.key ?? null;
+  const ownKey = actor ?? `u:${userId}`;
+  const ownName = casquette?.name ?? pseudo;
+  const ownAvatar = casquette ? casquette.logoUrl : avatarUrl;
+  const addHref = publishHref(actor);
   const [bar, setBar] = useState<StoryBar | null>(null);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
 
   const load = useCallback(async () => {
     const mine = ++seq.current;
-    const res = await apiFetch<StoryBar>("/stories/bar");
+    const res = await apiFetch<StoryBar>("/stories/bar", { actor });
     if (mine !== seq.current) return;
     if (!res.ok) {
       setError(res.status === 429 ? L.tooMany : L.loadError);
@@ -41,7 +53,7 @@ export function StoriesBar({
     }
     setBar(res.data);
     setError(null);
-  }, []);
+  }, [actor]);
 
   useEffect(() => {
     void load();
@@ -66,27 +78,22 @@ export function StoriesBar({
     <nav className="stories-bar" aria-label={L.barTitle} data-testid="stories-bar">
       <ul className="stories-bar__row">
         <li className="stories-bar__item" data-testid="stories-mine">
-          {mineState ? (
+          {mineState || casquette ? (
             <>
               <a
-                href={storyHref(`u:${userId}`)}
+                href={mineState ? storyHref(ownKey, actor) : addHref}
                 className="stories-bar__link"
-                aria-label={L.openMine}
+                aria-label={mineState ? L.openMine : L.addStoryHint}
                 data-testid="stories-mine-ring"
               >
-                <AvatarRing ring={mineState} size="lg" src={avatarUrl} name={pseudo} />
+                <AvatarRing ring={mineState} size="lg" src={ownAvatar} name={ownName} />
               </a>
-              <a
-                href={PUBLISH_HREF}
-                className="stories-bar__plus"
-                aria-label={L.addStoryHint}
-                data-testid="stories-add"
-              >
+              <a href={addHref} className="stories-bar__plus" aria-label={L.addStoryHint} data-testid="stories-add">
                 <Icon name="add" size={12} />
               </a>
             </>
           ) : (
-            <a href={PUBLISH_HREF} className="stories-bar__add" aria-label={L.addStoryHint} data-testid="stories-add">
+            <a href={addHref} className="stories-bar__add" aria-label={L.addStoryHint} data-testid="stories-add">
               <Icon name="add" size={24} />
             </a>
           )}
@@ -98,7 +105,7 @@ export function StoriesBar({
           return (
             <li key={a.key} className="stories-bar__item" data-testid={`stories-author-${a.key}`}>
               <a
-                href={storyHref(a.key)}
+                href={storyHref(a.key, actor)}
                 className="stories-bar__link"
                 aria-label={`${L.openStories(a.pseudoOrName)}${a.crewName ? `, ${a.crewName}` : ""}`}
               >

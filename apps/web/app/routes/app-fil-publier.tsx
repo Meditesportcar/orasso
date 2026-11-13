@@ -3,6 +3,7 @@ import { feedScreenLabels as L } from "@orasso/shared";
 import { ficheHandle } from "../components/FicheBar";
 import { PublishForm } from "../components/fil/PublishForm";
 import { api, requireMe } from "../lib/api.server";
+import { filHrefOfAuthor } from "../lib/casquetteFil";
 import type { Route } from "./+types/app-fil-publier";
 
 // « Publier au Fil » (lot R7e2, D38, maquette R7.24 ; lot R8p, maquette R8.4) : photos (fichiers), recadrage 4:5 par défaut
@@ -22,11 +23,17 @@ export async function loader({ request }: Route.LoaderArgs) {
       // Lot R9c : « Publier une offre » pose la fiche pro et l'étiquette « Offre ».
       fiche: url.searchParams.get("fiche"),
       etiquette: url.searchParams.get("etiquette"),
+      // Lot R9h (T18, T51) : « Publier » depuis le Fil d'une casquette : `?auteur=<clé d'auteur>` (comme l'appli).
+      auteur: url.searchParams.get("auteur"),
     },
+    back: filHrefOfAuthor(url.searchParams.get("auteur"), me),
     userId: me.user.id,
     pseudo: me.profile.pseudo,
     avatarUrl: me.profile.avatarUrl,
-    personas: (me.personas ?? []).map((p) => ({ kind: p.kind, id: p.id, label: p.label, logoUrl: p.logoUrl })),
+    // Une casquette suspendue ne se choisit pas (R9h, tour 1) : l'API refuserait l'envoi.
+    personas: (me.personas ?? [])
+      .filter((p) => !p.suspended)
+      .map((p) => ({ kind: p.kind, id: p.id, label: p.label, logoUrl: p.logoUrl })),
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
       : [],
@@ -49,6 +56,7 @@ export default function AppFilPublier({ loaderData }: Route.ComponentProps) {
       vehicles={loaderData.vehicles}
       optionsFailed={loaderData.optionsFailed}
       start={loaderData.start}
+      back={loaderData.back}
     />
   );
 }

@@ -54,8 +54,17 @@ export default [
     route("app/recap/:eventId", "routes/recap.tsx"),
     // Lot R7j : la page d'un souvenir (« il y a un an… »), cible de la notification `memory`.
     route("app/souvenir/:eventId", "routes/app-souvenir.tsx"),
-    route("app/media", "routes/media.tsx"),
-    route("app/media/nouveau", "routes/media-nouveau.tsx"),
+    // Lot R9h (T52) : le Média et le Prestataire reçoivent une sous-navigation de casquette (`layouts/casquette.tsx`), le Fil de la
+    // casquette et sa Page (la partie 2 refait la Page du propriétaire).
+    layout("layouts/casquette.tsx", [
+      route("app/media", "routes/media.tsx"),
+      route("app/media/nouveau", "routes/media-nouveau.tsx"),
+      route("app/media/fil", "routes/casquette-fil.tsx", { id: "media-fil" }),
+      route("app/media/page", "routes/casquette-page.tsx", { id: "media-page" }),
+      route("app/prestataire", "routes/prestataire.tsx"),
+      route("app/prestataire/fil", "routes/casquette-fil.tsx", { id: "prestataire-fil" }),
+      route("app/prestataire/page", "routes/casquette-page.tsx", { id: "prestataire-page" }),
+    ]),
     route("m/:id", "routes/m.tsx"),
     route("providers/:id", "routes/prestataires.tsx"),
     route("app/garage", "routes/garage.tsx"),
@@ -72,7 +81,6 @@ export default [
     route("app/mes-donnees", "routes/mes-donnees.ts"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),
     route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
-    route("app/prestataire", "routes/prestataire.tsx"),
     route("app/billets", "routes/billets.tsx"),
     // Social (lot 17) : Journal, profils et véhicules des autres (connectés seulement). Lot R6b : « Mes amis » redirige
     // vers « Ton réseau » (plus d'amitié).

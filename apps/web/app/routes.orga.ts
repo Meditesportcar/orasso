@@ -27,6 +27,9 @@ export default [
     route("communication", "routes/orga-communication.tsx"),
     // Lot R9d : l'Activité de la structure (la cloche de l'organisateur).
     route("activite", "routes/orga-activite.tsx"),
+    // Lot R9h (T51, T50) : le Fil de la structure et sa Page (la partie 2 refait la Page du propriétaire).
+    route("fil", "routes/casquette-fil.tsx", { id: "orga-fil" }),
+    route("page", "routes/casquette-page.tsx", { id: "orga-page" }),
     route("communication/conversation/:id", "routes/orga-conversation.tsx"),
   ]),
 ] satisfies RouteConfig;
