@@ -228,17 +228,17 @@ describe("lot R9b : les onglets du prestataire et du média", () => {
     expect(items.map((t) => t.label)).toEqual(["Publications", "Prestations", "Mentions"]);
     expect(items[2]?.count).toBe(3);
   });
-  it("média : Publications, Contenus, Mentions · N", () => {
-    expect(ids("media", true, 0)).toEqual(["publications", "contents", "mentions"]);
+  it("média : Publications, Albums, Mentions · N", () => {
+    expect(ids("media", true, 0)).toEqual(["publications", "albums", "mentions"]);
     expect(pageTabs("media", { session: true, mentionsCount: 0 }).map((t) => t.label)).toEqual([
       "Publications",
-      "Contenus",
+      "Albums",
       "Mentions",
     ]);
   });
   it("sans session (T4) : « Prestations » seule, « Contenus » seul ; la structure garde Événements et Publications", () => {
     expect(ids("provider", false)).toEqual(["services"]);
-    expect(ids("media", false)).toEqual(["contents"]);
+    expect(ids("media", false)).toEqual(["albums"]);
     expect(ids("structure", false)).toEqual(["events", "publications"]);
     expect(ids("pro", false)).toEqual(["presentation"]);
   });
@@ -246,27 +246,27 @@ describe("lot R9b : les onglets du prestataire et du média", () => {
     expect(ids("pro", true, 1, true)).toEqual(["publications", "offers", "mentions"]);
     expect(ids("structure", true, 1, true)).toEqual(["events", "publications", "mentions"]);
     expect(ids("provider", true, 1, true)).toEqual(["publications", "services", "mentions"]);
-    expect(ids("media", true, 1, true)).toEqual(["publications", "contents", "mentions"]);
+    expect(ids("media", true, 1, true)).toEqual(["publications", "albums", "mentions"]);
   });
   it("ouverture : Publications si elle en a, sinon Prestations, Contenus (Offres pour le propriétaire d'un pro)", () => {
     expect(pageOpenTab("provider", { publications: 4 }, true)).toBe("publications");
     expect(pageOpenTab("provider", { publications: 0 }, true)).toBe("services");
-    expect(pageOpenTab("media", { publications: 0 }, true)).toBe("contents");
-    expect(pageOpenTab("media", {}, true)).toBe("contents");
+    expect(pageOpenTab("media", { publications: 0 }, true)).toBe("albums");
+    expect(pageOpenTab("media", {}, true)).toBe("albums");
     expect(pageOpenTab("provider", { publications: 9 }, false)).toBe("services");
-    expect(pageOpenTab("media", { publications: 9 }, false)).toBe("contents");
+    expect(pageOpenTab("media", { publications: 9 }, false)).toBe("albums");
     expect(pageOpenTab("pro", { publications: 0 }, true, true)).toBe("offers");
     expect(pageOpenTab("pro", { publications: 0 }, true)).toBe("presentation");
     expect(pageOpenTab("pro", { publications: 2 }, true, true)).toBe("publications");
   });
-  it("l'adresse : ?onglet=prestations (prestataire), ?onglet=contenus (média), ignoré pour un autre genre ou sans session", () => {
+  it("l'adresse : ?onglet=prestations (prestataire), ?onglet=albums (média), ignoré pour un autre genre ou sans session", () => {
     expect(explicitPageTab("provider", "prestations", true)).toBe("services");
-    expect(explicitPageTab("media", "contenus", true)).toBe("contents");
+    expect(explicitPageTab("media", "albums", true)).toBe("albums");
     expect(explicitPageTab("structure", "prestations", true)).toBeNull();
     expect(explicitPageTab("provider", "mentions", false)).toBeNull();
     expect(explicitPageTab("pro", "presentation", true, true)).toBeNull();
     expect(pageShownTab("media", { raw: "mentions", counts: { publications: 0 }, session: true })).toBe("mentions");
-    expect(pageShownTab("media", { raw: "x", counts: { publications: 0 }, session: true })).toBe("contents");
+    expect(pageShownTab("media", { raw: "x", counts: { publications: 0 }, session: true })).toBe("albums");
   });
 });
 
@@ -293,12 +293,17 @@ describe("lot R9b : les compteurs du prestataire et du média", () => {
       [0, "organisateur"],
     ]);
   });
-  it("média (T22) : abonnés, accréditations, publications", () => {
-    const cells = pageCounters("media", { followers: 524, accreditations: 3, publications: 12 });
+  it("média (T22 remplacé par R9e) : abonnés, albums, photos", () => {
+    const cells = pageCounters("media", { followers: 524, albums: 3, photos: 12 });
     expect(cells.map((c) => [c.key, c.value, c.label])).toEqual([
       ["followers", 524, "abonnés"],
-      ["accreditations", 3, "accréditations"],
-      ["publications", 12, "publications"],
+      ["albums", 3, "albums"],
+      ["photos", 12, "photos"],
+    ]);
+    expect(pageCounters("media", { followers: 1, albums: 1, photos: 1 }).map((c) => c.label)).toEqual([
+      "abonné",
+      "album",
+      "photo",
     ]);
     expect(pageCounters("media", { followers: 2 }).map((c) => c.value)).toEqual([2, null, null]);
   });

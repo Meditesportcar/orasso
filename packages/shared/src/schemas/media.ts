@@ -164,6 +164,9 @@ export type MediaPage = MediaPublic &
     stories?: StoriesSummary;
     /** Lot R9b (T22) : ses accréditations acceptées sur des événements publiés. */
     accreditationsCount?: number;
+    /** Lot R9e : ses albums publiés visibles et leurs photos (l'onglet « Albums », compteurs « abonnés · albums · photos »). */
+    albumsCount?: number;
+    photosCount?: number;
   };
 
 export type MediaEventBrief = {

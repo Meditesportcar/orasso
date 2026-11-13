@@ -82,9 +82,8 @@ describe("genres de carte", () => {
     for (const kind of feedCardKinds) {
       expect(FEED_KINDS_DRAWN.includes(kind) || isFeedKindReserved(kind)).toBe(true);
     }
-    // Registre des genres réservés : « album » (R9e partie 1, API) est servi seulement avec `?cards=album` et dessiné par
-    // R9e partie 2 (`AlbumCard`) ; R9e-2 l'ajoute à `FEED_KINDS_DRAWN` et remet ce registre à vide.
-    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual(["album"]);
+    // Registre des genres réservés : plus aucun (R9e-2 dessine « album », servi seulement avec `?cards=album`).
+    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual([]);
   });
 });
 
