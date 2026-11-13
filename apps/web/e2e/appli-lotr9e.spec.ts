@@ -524,45 +524,6 @@ test("retirer AVANT la validation tardive de l'ajout : l'annulation par clientId
   }
 });
 
-test("réponse de suppression perdue APRÈS la suppression effective : la tuile part, le compteur suit, l'annulation est rejouée avant l'envoi suivant", async ({
-  browser,
-}) => {
-  test.setTimeout(240_000);
-  const leo = await openBeziersStep2(browser);
-  const page = leo.page;
-  try {
-    await pickPhotos(page, ["car-golf-gti.jpg"]);
-    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
-    await page.getByTestId("album-step2-continue").click();
-    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
-    await page.getByTestId("album-line-photos").click();
-    await expect(page.getByTestId("album-count")).toContainText("1");
-    let lost = 0;
-    await page.route("**/api/me/albums/*/photos/by-client/*", async (route) => {
-      // Les deux premières réponses se perdent (la suppression est faite côté serveur) : le nouvel essai immédiat se perd aussi.
-      if (route.request().method() === "DELETE" && lost++ < 2) {
-        await route.fetch();
-        await route.abort();
-      } else await route.continue();
-    });
-    await page.getByTestId("album-tile").first().click();
-    await page.getByTestId("album-photo-remove").click();
-    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByTestId("album-count")).toContainText("0");
-    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
-    // Le prochain envoi rejoue d'abord l'annulation (204), puis part : l'album a la nouvelle photo, rien d'autre.
-    await pickPhotos(page, ["car-mx5.jpg"]);
-    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
-    await page.getByTestId("album-step2-continue").click();
-    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
-    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
-    expect(lost).toBeGreaterThanOrEqual(3);
-  } finally {
-    await leo.ctx.close();
-    await sql(DROP_BEZIERS_DRAFTS);
-  }
-});
-
 test("deux signalements successifs : le second formulaire est neuf (pas de « Signalement envoyé » hérité) et vise l'autre photo", async ({
   browser,
 }) => {
@@ -600,16 +561,10 @@ test("deux signalements successifs : le second formulaire est neuf (pas de « Si
   await damien.ctx.close();
 });
 
-// --- Tour 3 (la file d'abord ; réseau natif ; refus définitifs visibles ; double appui) ---------------------------------------------
+// --- Tour 4 (simplification : un retrait est une opération serveur synchrone, qui demande du réseau) -----------------------------------
 
 const CANCEL_ROUTE = "**/api/me/albums/*/photos/by-client/*";
-/** Les valeurs du stockage de l'appli (navigateur) qui parlent d'une annulation en file. */
-const queuedCancels = (page: Page) =>
-  page.evaluate(() =>
-    Object.keys(localStorage)
-      .map((k) => localStorage.getItem(k) ?? "")
-      .filter((v) => v.includes("cancel:")),
-  );
+const DELETE_ROUTE = "**/api/me/albums/*/photos/*";
 
 async function oneAddedPhoto(page: Page, name = "car-golf-gti.jpg") {
   await pickPhotos(page, [name]);
@@ -619,12 +574,9 @@ async function oneAddedPhoto(page: Page, name = "car-golf-gti.jpg") {
   await page.getByTestId("album-line-photos").click();
   await expect(page.getByTestId("album-count")).toContainText("1");
 }
-const removeFirstTile = async (page: Page, id = "album-tile") => {
-  await page.getByTestId(id).first().click();
-  await page.getByTestId("album-photo-remove").click();
-};
+const openFirstTile = (page: Page, id = "album-tile") => page.getByTestId(id).first().click();
 
-test("retrait hors ligne : l'annulation reste en file (persistée), la tuile part ; le RETOUR DU RÉSEAU (connectivité native) la rejoue sans autre action", async ({
+test("retrait en ligne : « Retrait… » pendant l'appel (DELETE retardé), la tuile reste, rien d'autre ne part, elle ne disparaît qu'au 204", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -632,40 +584,21 @@ test("retrait hors ligne : l'annulation reste en file (persistée), la tuile par
   const page = leo.page;
   try {
     await oneAddedPhoto(page);
-    await leo.ctx.setOffline(true);
-    await removeFirstTile(page);
-    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    expect((await queuedCancels(page)).length).toBeGreaterThan(0);
-    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
-    // Le réseau revient pendant que l'écran reste affiché, sans passage en arrière-plan ni autre action.
-    await leo.ctx.setOffline(false);
-    await expect.poll(async () => (await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n, { timeout: 60_000 }).toBe(0);
-    await expect.poll(async () => (await queuedCancels(page)).length, { timeout: 30_000 }).toBe(0);
-  } finally {
-    await leo.ctx.close();
-    await sql(DROP_BEZIERS_DRAFTS);
-  }
-});
-
-test("la file d'abord : l'annulation est persistée AVANT son premier appel réseau (DELETE retardé) ; l'écran attend l'issue", async ({
-  browser,
-}) => {
-  test.setTimeout(240_000);
-  const leo = await openBeziersStep2(browser);
-  const page = leo.page;
-  try {
-    await oneAddedPhoto(page);
-    let persisted: number | null = null;
     await page.route(CANCEL_ROUTE, async (route) => {
-      persisted ??= (await queuedCancels(page)).length;
       await new Promise((resolve) => setTimeout(resolve, 2500));
       await route.continue();
     });
-    await removeFirstTile(page);
-    await expect.poll(() => persisted !== null).toBe(true);
-    expect(persisted as unknown as number).toBeGreaterThan(0);
+    const done = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await openFirstTile(page);
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-photo-remove")).toHaveText("Retrait…");
+    await expect(page.getByTestId("album-photo-remove")).toBeDisabled();
+    await expect(page.getByTestId("album-tile")).toHaveCount(1);
+    expect((await done).status()).toBe(204);
     await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    expect((await queuedCancels(page)).length).toBe(0);
+    await expect(page.getByTestId("album-count")).toContainText("0");
     expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
   } finally {
     await leo.ctx.close();
@@ -673,7 +606,7 @@ test("la file d'abord : l'annulation est persistée AVANT son premier appel rés
   }
 });
 
-test("401 : l'annulation RESTE en file (ni abandon ni réapparition), rejouée à la reconnexion ; 409 : refus définitif, la photo RÉAPPARAÎT avec un état d'échec", async ({
+test("retrait en échec (réseau, 409, 403, réponse perdue) : la tuile reste visible, le message s'affiche, « Réessayer » aboutit une fois l'obstacle levé", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -681,81 +614,133 @@ test("401 : l'annulation RESTE en file (ni abandon ni réapparition), rejouée �
   const page = leo.page;
   try {
     await oneAddedPhoto(page);
-    let mode: "hors-ligne" | "401" | "409" | "ok" = "hors-ligne";
-    await page.route(CANCEL_ROUTE, async (route) => {
-      if (mode === "hors-ligne") await route.abort();
-      else if (mode === "ok") await route.continue();
-      else
-        await route.fulfill({
-          status: mode === "401" ? 401 : 409,
-          contentType: "application/json",
-          body: JSON.stringify({
-            error: { code: "x", message: mode === "401" ? "Session expirée" : "Retrait refusé" },
-          }),
-        });
-    });
-    await removeFirstTile(page);
+    const refuse = (status: number) => async (route: import("@playwright/test").Route) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "refused", message: `Retrait refusé (${status})` } }),
+      });
+    const cases: Array<[string, (route: import("@playwright/test").Route) => Promise<void>]> = [
+      ["réseau", async (route) => route.abort()],
+      ["409", refuse(409)],
+      ["403", refuse(403)],
+      [
+        "perdue",
+        async (route) => {
+          await route.fetch();
+          await route.abort();
+        },
+      ],
+    ];
+    await openFirstTile(page);
+    for (const [name, handler] of cases) {
+      await page.unroute(CANCEL_ROUTE);
+      await page.route(CANCEL_ROUTE, handler);
+      await page.getByTestId("album-photo-remove").click();
+      await expect(page.getByTestId("album-remove-error"), name).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("album-photo-remove"), name).toHaveText("Réessayer");
+      await expect(page.getByTestId("album-tile"), name).toHaveCount(1);
+    }
+    // La suppression a bien eu lieu côté serveur (réponse perdue) ; « Réessayer » rejoue : 204 (idempotent), la tuile part.
+    await page.unroute(CANCEL_ROUTE);
+    await page.getByTestId("album-photo-remove").click();
     await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    // 401 au rejeu : elle reste.
-    mode = "401";
-    await leo.ctx.setOffline(true);
-    await leo.ctx.setOffline(false);
-    await page.waitForTimeout(2500);
-    expect((await queuedCancels(page)).length).toBeGreaterThan(0);
-    await expect(page.getByTestId("album-tile-base")).toHaveCount(0);
-    // Reconnexion du même compte : rejouée, la photo est retirée.
-    mode = "ok";
-    await leo.ctx.setOffline(true);
-    await leo.ctx.setOffline(false);
-    await expect.poll(async () => (await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n, { timeout: 60_000 }).toBe(0);
-    // Second cas : une photo de plus, retrait hors ligne puis refus définitif (409) au rejeu : elle réapparaît dans la grille.
-    await pickPhotos(page, ["car-mx5.jpg"]);
-    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
-    await page.getByTestId("album-step2-continue").click();
-    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
-    await page.getByTestId("album-line-photos").click();
-    mode = "hors-ligne";
-    await removeFirstTile(page);
-    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    mode = "409";
-    await leo.ctx.setOffline(true);
-    await leo.ctx.setOffline(false);
-    await expect(page.getByTestId("album-tile-base")).toHaveCount(1, { timeout: 60_000 });
-    await expect(page.getByText("Un retrait a été refusé", { exact: false })).toBeVisible();
-    expect((await queuedCancels(page)).length).toBe(0);
+    await expect(page.getByTestId("album-count")).toContainText("0");
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
   } finally {
     await leo.ctx.close();
     await sql(DROP_BEZIERS_DRAFTS);
   }
 });
 
-test("double appui sur « Continuer » pendant que la file se rejoue : un seul envoi par photo", async ({ browser }) => {
+test("hors ligne : « Retirer » est désactivé avec « Il faut du réseau pour retirer une photo. », aucune requête ne part ; le réseau revient, le retrait passe", async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
   const leo = await openBeziersStep2(browser);
   const page = leo.page;
   try {
     await oneAddedPhoto(page);
-    let calls = 0;
-    await page.route(CANCEL_ROUTE, async (route) => {
-      calls++;
-      if (calls <= 2) await route.abort();
-      else {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        await route.continue();
-      }
-    });
-    await removeFirstTile(page);
-    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
-    const uploads: string[] = [];
+    const deletes: string[] = [];
     page.on("request", (r) => {
-      if (r.method() === "POST" && r.url().endsWith("/api/me/uploads")) uploads.push(r.url());
+      if (r.method() === "DELETE") deletes.push(r.url());
     });
-    await pickPhotos(page, ["car-mx5.jpg"]);
-    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
-    await page.getByTestId("album-step2-continue").dblclick();
-    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
-    expect(uploads).toHaveLength(1);
-    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+    await openFirstTile(page);
+    await leo.ctx.setOffline(true);
+    await expect(page.getByTestId("album-photo-remove")).toBeDisabled({ timeout: 30_000 });
+    await expect(page.getByTestId("album-remove-offline")).toContainText("Il faut du réseau pour retirer une photo.");
+    await page.getByTestId("album-photo-remove").click({ force: true });
+    await page.waitForTimeout(600);
+    expect(deletes).toEqual([]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1);
+    await leo.ctx.setOffline(false);
+    await expect(page.getByTestId("album-photo-remove")).toBeEnabled({ timeout: 30_000 });
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await leo.ctx.setOffline(false).catch(() => undefined);
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("double appui sur « Retirer la photo » : une seule requête de suppression", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await oneAddedPhoto(page);
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(r.url());
+    });
+    await page.route(CANCEL_ROUTE, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await route.continue();
+    });
+    await openFirstTile(page);
+    await page.getByTestId("album-photo-remove").dblclick();
+    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
+    expect(deletes).toHaveLength(1);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("brouillon repris : la photo du brouillon se retire par le même chemin (échec : elle reste ; « Retrait… » puis disparue au 204)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await oneAddedPhoto(page);
+    await go(page, "/album/nouveau");
+    await page.getByTestId("album-event").filter({ hasText: "Béziers Night" }).click();
+    await expect(page.getByTestId("album-step1-continue")).toContainText("Reprendre l'album");
+    await page.getByTestId("album-step1-continue").click();
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(1, { timeout: 30_000 });
+    await page.route(DELETE_ROUTE, async (route) =>
+      route.request().method() === "DELETE" ? route.abort() : route.continue(),
+    );
+    await openFirstTile(page, "album-tile-base");
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-remove-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(1);
+    await page.unroute(DELETE_ROUTE);
+    await page.route(DELETE_ROUTE, async (route) => {
+      if (route.request().method() !== "DELETE") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return route.continue();
+    });
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-photo-remove")).toHaveText("Retrait…");
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(1);
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("album-count")).toContainText("0");
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
   } finally {
     await leo.ctx.close();
     await sql(DROP_BEZIERS_DRAFTS);

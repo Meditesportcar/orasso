@@ -6499,7 +6499,7 @@ Source : `corrections-r9e2-t2.md` (Codex `codex-relecture-r9e2-t1.md`, Opus `opu
 - **Plafond** : `pickNotice` (partagé) : « Seules les N premières photos ont été gardées sur M » avec le bon nombre, et quand l'album est plein « L'album compte déjà 200 photos : aucune photo n'a été ajoutée » (jamais « 0 premières »).
 - **Recettes** : `feed_seen` et `feed_seen_floor` ne sont vidés que pour Damien.
 
-**Table des opérations** (ligne = opération, colonne = ce que voit le client ; **un test par ligne qui compte**) :
+**Table des opérations** (**remplacée au tour 4** : la file persistante a été retirée, voir la table du tour 4 plus bas) :
 
 | Opération | Réponse reçue | Réponse perdue avant validation | Réponse perdue après validation | Hors ligne |
 |---|---|---|---|---|
@@ -6522,7 +6522,7 @@ Source : `corrections-r9e2-t3.md` (Codex `codex-relecture-r9e2-t2.md`, Opus `opu
 - **5.** La visionneuse du site navigue depuis l'index **affiché** et ramène aussi l'index d'état dans la plage quand la suite raccourcit. **D7 (appli)** : `afterClose` est vidé à chaque ouverture de la visionneuse ; une seule voie de déclenchement (iOS : `onDismiss` ; ailleurs : le rendu fermé puis `runAfterInteractions`). **D8 (site)** : l'erreur de retrait ne s'affiche que pour la photo concernée (`intent`, `photoId`). **Partie C de `vague-r8` (`SheetBoundary`)** : le `Modal` de `AlbumPhotoViewer` contient une `<SheetBoundary>`.
 - **D5/D6 (tests).** API : « un autre média accrédité (Marc) » (404, la photo de Léo reste, 404 et non 204 pour une photo déjà retirée), pierre tombale puis ajout avec un autre `clientId` (201), `clientId` annulé sur l'album A sans effet sur B. Le test partagé « retrait avant la validation tardive », tautologique (un `Set` local jouait l'API), est retiré : **la preuve est côté API** (« avant l'ajout », « simultanés ») **et dans les recettes** (POST retenu, rejoué à la main : 409). **Instabilité vue par Opus** (`events_slug_key` sous charge) : le slug de `organizerEvent` est maintenant unique à chaque appel (sans rien assouplir ; je n'ai pas reproduit le défaut, la cause exacte reste une remise à zéro sous charge).
 
-**Table des opérations complétée** (opération × ce que voit le client ; colonnes ajoutées « session changée » et « refus définitif » ; **un test par ligne qui compte**) :
+**Table des opérations complétée** (**remplacée au tour 4** : la file persistante, ses refus définitifs et sa reprise n'existent plus ; voir la table du tour 4 plus bas) :
 
 | Opération | Réponse reçue | Perdue avant validation | Perdue après validation | Hors ligne | Session changée / expirée | Refus définitif (400, 404, 409, 422) |
 |---|---|---|---|---|---|---|
@@ -6531,6 +6531,31 @@ Source : `corrections-r9e2-t3.md` (Codex `codex-relecture-r9e2-t2.md`, Opus `opu
 | **Annulation avant l'ajout tardif** | 204, pierre tombale ; l'ajout qui arrive : 409, envoi non consommé (tests API, recettes « retirer AVANT ») | — | — | idem ligne précédente | idem | idem |
 | **Remplacement** (envoi retiré, nouvelle photo) | l'envoi retiré est supprimé **avant** le nouvel envoi, quota plein (`albumUploads` « retrait lent → remplacement ») | l'envoi retiré reste en file, rejoué avant tout envoi | 404 sur un **envoi** = supprimé (ce n'est pas une photo) ; l'annulation, elle, passe avant et se prouve par 204 (`removalQueue` « annulations avant envois ») | file persistante | idem | un refus sur un envoi sort de la file avec une trace (`removalQueue` « refus définitif ») |
 | **Reprise** (ouverture, réseau, début d'un envoi, brouillon repris) | rejoue la file puis envoie ; un brouillon repris est relu après le rejeu (recette site « brouillon repris ») | idem | idem | idem | file invalidée : rien ne joue | refus : les photos réapparaissent |
+
+### Lot R9e, partie 2, tour 4 (13/11/2026) : simplification, un retrait est une opération serveur synchrone
+
+Source : `corrections-r9e2-t4.md` (relecture Codex `codex-relecture-r9e2-t3.md`). **Décision du coordinateur, pas un assouplissement** : la file persistante des retraits côté client ne convergeait pas après trois tours de relecture (refus oublié, session, deux onglets, persistance contournée, chemins qui l'évitaient). Elle est **retirée**, avec ses tests : `rules/removalQueue.ts` et `removalQueue.test.ts` (supprimés), `removeAlbumItem`, `reappearedPhotos`, `reconcile` n'est plus appelée (la règle reste testée), le stockage `orasso.album-removals.*` du site, le rejeu à l'ouverture et au retour du réseau, `hasPending`, `takeDropped`, `reappear`, `useNetworkState` pour la file, les libellés `pendingRemovals` et `removalRefused`. Les routes de l'API (`cancelPhoto` par `clientId`, pierre tombale, idempotence) **restent** : c'est elles qui rendent le retrait juste.
+
+**La règle.** Retirer une photo ajoutée (envoyée, ajout en vol, brouillon repris) est **une opération serveur synchrone qui demande du réseau**, par **un seul chemin** (`removeAlbumPhoto` dans `rules/albumUploads.ts`, appelée par le site et par l'appli) : hors ligne, « Retirer » est désactivé et dit « Il faut du réseau pour retirer une photo. » ; en ligne, la tuile passe à « Retrait… » et **ne quitte l'écran qu'au 204** (au 204 de l'annulation par `clientId` si l'ajout est encore en vol) ; en cas d'échec (réseau, 4xx, 5xx, réponse perdue), la photo reste visible avec le message et « Réessayer » (le rejeu est sûr : 204 idempotent). Une photo pas encore ajoutée (rien côté serveur) part de l'écran tout de suite.
+
+- **Transitions bloquées pendant toute opération.** Un compteur d'opération en mémoire (`takeTurn`/`endTurn`) tient « Continuer », « Publier », « Ajouter », « Retirer » désactivés tant qu'un envoi, un retrait, une création de brouillon ou une transition est en vol ; un second appui (double clic) ne lance rien.
+- **Session : formulaire mort.** Au changement de compte (site : `listenSession` ; appli : `accountGuard()`), le formulaire ne fait plus rien : actions désactivées, **aucune requête**, **aucune réponse en vol appliquée** (y compris la création du brouillon, un ajout, une suppression), message « Tu as changé de compte : recharge la page. ».
+- **Envois non utilisés** (photo retirée avant l'ajout, cadres changés) : suppression « au mieux », **un essai**, sans persistance (`retire` / `release`) ; le serveur purge les envois non consommés à 24 h (`uploads.purge`). Le quota d'envois en attente (40) reste respecté : le nettoyage est attendu avant chaque envoi.
+- **Brouillon repris** : l'écran montre l'état du serveur à l'ouverture, rien d'autre (plus de rejeu avant lecture).
+
+**Ce qu'on perd** : retirer une photo **hors ligne** n'est plus possible (elle partait de l'écran et se supprimait au retour du réseau) ; on le refait en ligne. C'est voulu : un retrait que l'écran affiche comme fait mais que le serveur n'a pas confirmé était la source de tous les défauts relevés.
+
+**Table des opérations** (opération × issue ; un test par ligne) :
+
+| Opération | 204 / réponse reçue | Échec (réseau, 4xx, 5xx) ou réponse perdue | Hors ligne | Session changée |
+|---|---|---|---|---|
+| **Ajout** (`POST /photos`, `clientId`) | la photo est dans l'album, décision figée (`albumUploads` « envoie puis ajoute… ») | rien ou tout dans l'album ; « Reprendre l'envoi » rejoue le même `clientId`, même décision (`albumUploads` « reprise après coupure », recettes « réponse perdue après telle quelle ») | l'envoi échoue, reprise ensuite | aucune requête, aucune réponse appliquée (recette site « changement de compte ») |
+| **Retrait d'une photo ajoutée** (séance, en vol, brouillon repris : même chemin) | « Retrait… » puis tuile partie au 204 (`removeAlbumPhoto` « elle ne rend qu'au 204 », recettes site et appli « retrait en ligne ») | la tuile reste, message, « Réessayer » (recettes « retrait en échec » : réseau, 409, 403, réponse perdue puis 204) | « Retirer » désactivé, message, aucune requête (recettes « hors ligne ») | formulaire mort, la tuile reste (recette site « changement de compte ») |
+| **Retrait avant l'ajout tardif** | annulation 204, pierre tombale, l'ajout qui arrive ensuite : 409 (tests API « avant l'ajout » et « simultanés », recettes « retirer AVANT ») | idem ligne précédente | idem | idem |
+| **Double appui** | une seule requête (recettes « double appui sur Retirer ») | — | — | — |
+| **Envoi non utilisé** (remplacement, cadres changés) | supprimé **avant** le nouvel envoi, quota plein (`albumUploads` « un nettoyage lent », « attendu avant chaque envoi ») | un essai, pas de reprise ; purge serveur à 24 h | idem | idem |
+
+**À dire au coordinateur.** (1) Appli : le changement de compte n'a pas de recette navigateur (le jeton de l'appli vit dans l'instance, un autre onglet ne peut pas le remplacer) ; la garde est `accountGuard()` (testée par `cacheScope.test.ts` et `galleryUploads.test.ts`), appelée avant chaque requête et chaque application de réponse dans `useAlbumUploads`. (2) Le site a les deux recettes de changement de compte (étape 1 et suppression retardée).
 
 ## Lot R9f, partie 1 (13/11/2026) : identification sur une photo d'album et « Tes photos », API (migration `album-tags`)
 

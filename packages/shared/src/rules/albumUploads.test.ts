@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { AlbumPhotoView } from "../schemas/albums";
 import {
   type AlbumItem,
   AlbumSendStopped,
@@ -14,16 +13,15 @@ import {
   pickLimit,
   pickNotice,
   platedCount,
-  reappearedPhotos,
+  type RemovalDeps,
   reconcile,
   remaining,
-  removeAlbumItem,
+  removeAlbumPhoto,
   reopenDecisions,
   type SendDeps,
   sendAlbumPhotos,
   signatureOf,
 } from "./albumUploads";
-import { createRemovalQueue, isDefinitiveStatus, type QueuedOp } from "./removalQueue";
 
 const RECT = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
 const item = (n: number, rects = [] as (typeof RECT)[], over: Partial<AlbumItem> = {}): AlbumItem => ({
@@ -295,27 +293,15 @@ describe("le plafond coupe la sélection", () => {
   });
 });
 
-describe("tout nouvel envoi attend derrière le nettoyage requis (retrait lent → remplacement, quota plein)", () => {
-  it("un retrait lent : l'envoi de la remplaçante ne part qu'après la suppression ; quota plein, il n'est jamais refusé", async () => {
+describe("un nouvel envoi attend la libération des envois retirés (au mieux, sans persistance)", () => {
+  it("un nettoyage lent : l'envoi de la remplaçante ne part qu'après la suppression ; quota plein, il n'est jamais refusé", async () => {
     const order: string[] = [];
     let quota = 40; // envois en attente : plein
     let finishRemoval!: () => void;
     const slow = new Promise<void>((r) => {
       finishRemoval = r;
     });
-    const queue = createRemovalQueue({
-      remove: async (u) => {
-        order.push(`suppression ${u.id} commence`);
-        await slow;
-        quota -= 1;
-        order.push(`suppression ${u.id} finie`);
-      },
-      store: { read: async () => [], write: async () => undefined },
-    });
-    // « Retirer » : l'envoi retiré part en file, sans attendre (l'écran reste réactif).
-    queue.retire({ id: "u1", key: "k1" });
-    const first = queue.release();
-    // La remplaçante est envoyée tout de suite : son envoi attend la fin du nettoyage.
+    const pending: Promise<void>[] = [];
     const items = [item(1)];
     const deps: SendDeps = {
       upload: async () => {
@@ -324,16 +310,33 @@ describe("tout nouvel envoi attend derrière le nettoyage requis (retrait lent �
         return { id: "u2", key: "private/album-uploads/u2.webp" };
       },
       add: async (it) => ({ id: `p-${it.clientId}` }),
-      retire: () => undefined,
-      release: () => queue.release(),
+      // Un essai, puis rien : la suppression part, sans file ni stockage.
+      retire: (u) => {
+        order.push(`suppression ${u.id} commence`);
+        pending.push(
+          slow.then(() => {
+            quota -= 1;
+            order.push(`suppression ${u.id} finie`);
+          }),
+        );
+      },
+      release: async () => {
+        await Promise.all(pending.splice(0));
+      },
       onItem: () => undefined,
     };
-    const sending = sendAlbumPhotos(items, deps);
+    // Une photo déjà envoyée dont les cadres ont changé : son envoi est retiré, puis la remplaçante part.
+    const moved = item(1, [RECT], {
+      decision: "blurred",
+      upload: { id: "u1", key: "k1", signature: "autre signature" },
+    });
+    const sending = sendAlbumPhotos([moved], deps);
     await new Promise((r) => setTimeout(r, 0));
     expect(order).toEqual(["suppression u1 commence"]);
     finishRemoval();
-    await Promise.all([first, sending]);
+    await sending;
     expect(order).toEqual(["suppression u1 commence", "suppression u1 finie", "envoi remplaçante"]);
+    expect(items).toHaveLength(1);
   });
 
   it("le nettoyage est attendu avant chaque envoi, pas seulement avant un remplacement", async () => {
@@ -344,176 +347,55 @@ describe("tout nouvel envoi attend derrière le nettoyage requis (retrait lent �
   });
 });
 
-describe("retirer une photo : l'opération entre dans la file AVANT son premier appel réseau, et n'en sort que sur une réponse qui prouve son issue", () => {
-  const net = new TypeError("réseau coupé");
-  const status = (code: number) => Object.assign(new Error(`HTTP ${code}`), { status: code });
-  const stopsOn = (e: unknown) => e === net || [401, 403].includes((e as { status?: number }).status ?? 0);
-  const finalOn = (e: unknown) => isDefinitiveStatus((e as { status?: number }).status ?? 0);
-  /** Une file dont le stockage est en mémoire (journal des écritures et des appels, dans l'ordre) et dont `current` peut changer. */
-  function harness(remove: (op: QueuedOp) => Promise<unknown>) {
-    const journal: string[] = [];
-    let stored: QueuedOp[] = [];
-    let session = "A";
-    const queue = createRemovalQueue({
-      remove: async (op) => {
-        journal.push(`appel ${op.id}`);
-        return remove(op);
-      },
-      store: {
-        current: () => session === "A",
-        read: async () => [...stored],
-        write: async (l) => {
-          stored = [...l];
-          journal.push(`écrit [${l.map((o) => o.id).join(",")}]`);
-        },
-      },
-      stops: stopsOn,
-      final: finalOn,
-    });
-    return { queue, journal, stored: () => stored.map((o) => o.id), changeSession: () => (session = "B") };
-  }
-  const added = (n: number, over: Partial<AlbumItem> = {}) => item(n, [], { attempted: true, ...over });
+describe("retirer une photo ajoutée : un seul chemin, une opération serveur synchrone, rien ne part de l'écran avant la confirmation", () => {
+  const calls: string[] = [];
+  const deps = (over: Partial<RemovalDeps> = {}): RemovalDeps => ({
+    cancelByClient: async (id) => {
+      calls.push(`par tentative ${id}`);
+    },
+    deleteByPhoto: async (id) => {
+      calls.push(`par identifiant ${id}`);
+    },
+    ...over,
+  });
 
-  it("l'annulation est en mémoire ET persistée avant son premier appel ; pendant l'attente, `hasPending()` est vrai et la publication est bloquée jusqu'à l'issue (DELETE retardé)", async () => {
-    let release!: () => void;
+  it("une photo de la séance (même dont l'ajout est encore en vol) : annulation par tentative ; une photo reprise ou réapparue : même fonction, par tentative si connue, sinon par identifiant", async () => {
+    calls.length = 0;
+    await removeAlbumPhoto({ clientId: "c1", photoId: "p1" }, deps());
+    await removeAlbumPhoto({ clientId: "c2" }, deps());
+    await removeAlbumPhoto({ clientId: undefined, photoId: "p3" }, deps());
+    await removeAlbumPhoto({ clientId: null, photoId: "p4" }, deps());
+    expect(calls).toEqual(["par tentative c1", "par tentative c2", "par identifiant p3", "par identifiant p4"]);
+  });
+
+  it("elle ne rend qu'au 204 : un DELETE retardé garde l'appelant en attente, un échec (réseau, 409, 403) jette (la photo reste visible, « Réessayer »)", async () => {
+    let finish!: () => void;
     const slow = new Promise<void>((r) => {
-      release = r;
+      finish = r;
     });
-    const h = harness(async () => slow);
-    const photo = added(1, { photoId: "p1" });
-    const done = removeAlbumItem(photo, { albumId: "A", queue: h.queue });
-    // Avant même que l'appel ne parte : en mémoire (synchrone), puis persistée, puis l'appel.
-    expect(h.queue.hasPending()).toBe(true);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.journal).toEqual([`écrit [cancel:A:${photo.clientId}]`, `appel cancel:A:${photo.clientId}`]);
-    // La transition « Publier » attend la file : elle ne passe pas devant la suppression en route.
-    const canPublish = async () => {
-      await h.queue.release();
-      return !h.queue.hasPending();
-    };
-    let published: boolean | null = null;
-    const attempt = canPublish().then((ok) => {
-      published = ok;
+    let settled = false;
+    const pending = removeAlbumPhoto({ clientId: "c1" }, deps({ cancelByClient: () => slow })).then(() => {
+      settled = true;
     });
     await new Promise((r) => setTimeout(r, 0));
-    expect(published).toBeNull();
-    release();
-    expect(await done).toEqual({ status: "removed" });
-    await attempt;
-    expect(published).toBe(true);
-    expect(h.stored()).toEqual([]);
+    expect(settled).toBe(false);
+    finish();
+    await pending;
+    expect(settled).toBe(true);
+    for (const failure of [
+      new TypeError("réseau coupé"),
+      Object.assign(new Error("409"), { status: 409 }),
+      Object.assign(new Error("403"), { status: 403 }),
+    ]) {
+      await expect(
+        removeAlbumPhoto({ clientId: "c1" }, deps({ cancelByClient: async () => Promise.reject(failure) })),
+      ).rejects.toBe(failure);
+    }
   });
 
-  it("ajout parti (réponse perdue après validation) : l'annulation est confirmée par l'API (204), la tuile part, l'envoi est supprimé après", async () => {
-    const h = harness(async () => undefined);
-    const lost = added(1, { upload: { id: "u1", key: "k1", signature: "s" } });
-    const result = await removeAlbumItem(lost, { albumId: "A", queue: h.queue });
-    expect(result).toEqual({ status: "removed" });
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.journal.filter((j) => j.startsWith("appel"))).toEqual([`appel cancel:A:${lost.clientId}`, "appel u1"]);
-  });
-
-  it("hors ligne : l'annulation reste en file (mémoire + persistance), la tuile part ; rejouée au retour du réseau, confirmée, jamais perdue", async () => {
-    let online = false;
-    const h = harness(async () => {
-      if (!online) throw net;
-    });
-    const it1 = added(1, { photoId: "p1" });
-    expect(await removeAlbumItem(it1, { albumId: "A", queue: h.queue })).toEqual({ status: "queued" });
-    expect(h.queue.hasPending()).toBe(true);
-    expect(h.stored()).toEqual([`cancel:A:${it1.clientId}`]);
-    online = true;
-    await h.queue.replay();
-    expect(h.queue.hasPending()).toBe(false);
-    expect(h.stored()).toEqual([]);
-  });
-
-  it("session expirée (401) pendant une annulation hors ligne : elle RESTE en file ; reconnexion du même compte : rejouée, photo retirée", async () => {
-    let step: "expiree" | "reconnecte" = "expiree";
-    const h = harness(async () => {
-      if (step === "expiree") throw status(401);
-    });
-    const it1 = added(1, { photoId: "p1" });
-    expect(await removeAlbumItem(it1, { albumId: "A", queue: h.queue })).toEqual({ status: "queued" });
-    expect(h.queue.takeDropped()).toEqual([]);
-    expect(h.queue.hasPending()).toBe(true);
-    expect(h.stored()).toEqual([`cancel:A:${it1.clientId}`]);
-    // 403 (droits en cours de rétablissement) : même chose.
-    step = "expiree";
-    await h.queue.replay();
-    expect(h.queue.hasPending()).toBe(true);
-    step = "reconnecte";
-    await h.queue.replay();
-    expect(h.queue.hasPending()).toBe(false);
-    expect(h.stored()).toEqual([]);
-  });
-
-  it("refus définitif au rejeu (retrait hors ligne → 409) : arrêt des rejeux, état d'échec visible, l'album relu : la photo réapparaît ; droits rétablis : elle se retire de nouveau", async () => {
-    let mode: "hors-ligne" | "refus" | "ok" = "hors-ligne";
-    const h = harness(async () => {
-      if (mode === "hors-ligne") throw net;
-      if (mode === "refus") throw status(409);
-    });
-    const gone = added(1, { photoId: "p1" });
-    expect(await removeAlbumItem(gone, { albumId: "A", queue: h.queue })).toEqual({ status: "queued" });
-    mode = "refus";
-    await h.queue.replay();
-    // Plus rejoué, mais pas oublié : l'échec est visible (`takeDropped`), la file est vide.
-    expect(h.queue.hasPending()).toBe(false);
-    const failures = h.queue.takeDropped();
-    expect(failures.map((f) => f.op.id)).toEqual([`cancel:A:${gone.clientId}`]);
-    // L'album relu rend la photo : elle réapparaît dans la grille (version du serveur) avant toute publication.
-    const albumPhotos = [{ id: "p1", url: "/api/albums/A/photos/p1.webp", clientId: gone.clientId } as AlbumPhotoView];
-    expect(reappearedPhotos(albumPhotos, { photoIds: [], clientIds: [] }).map((p) => p.id)).toEqual(["p1"]);
-    // Droits rétablis : « Retirer » repart (nouvelle opération), confirmée.
-    mode = "ok";
-    expect(await removeAlbumItem(gone, { albumId: "A", queue: h.queue })).toEqual({ status: "removed" });
-  });
-
-  it("refus définitif d'un retrait demandé à l'instant (409 : dernière photo d'un album publié) : la photo reste, l'erreur remonte, rien ne reste en file", async () => {
-    const refused = status(409);
-    const h = harness(async () => {
-      throw refused;
-    });
-    const result = await removeAlbumItem(added(1, { photoId: "p1" }), { albumId: "A", queue: h.queue });
-    expect(result).toEqual({ status: "refused", error: refused });
-    expect(h.queue.hasPending()).toBe(false);
-    expect(h.queue.takeDropped()).toEqual([]);
-    expect(h.stored()).toEqual([]);
-  });
-
-  it("session changée (autre compte, autre onglet) : la file ne joue plus, n'écrit plus, n'efface rien du stockage du compte quitté", async () => {
-    const h = harness(async () => {
-      throw net;
-    });
-    const gone = added(1, { photoId: "p1" });
-    expect(await removeAlbumItem(gone, { albumId: "A", queue: h.queue })).toEqual({ status: "queued" });
-    const before = h.stored();
-    const calls = h.journal.length;
-    h.changeSession();
-    await h.queue.replay();
-    expect(await h.queue.enqueue({ id: "x", albumId: "A", clientId: "y" })).toBe("pending");
-    expect(h.journal.length).toBe(calls);
-    expect(h.stored()).toEqual(before);
-  });
-
-  it("photo dont l'ajout n'est pas parti : aucune annulation côté serveur, seulement son envoi retiré", async () => {
-    const h = harness(async () => undefined);
-    const result = await removeAlbumItem(item(1, [], { upload: { id: "u9", key: "k9", signature: "s" } }), {
-      albumId: "A",
-      queue: h.queue,
-    });
-    expect(result).toEqual({ status: "removed" });
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.journal.filter((j) => j.startsWith("appel"))).toEqual(["appel u9"]);
-  });
-
-  it("les photos réapparues ne doublent pas celles déjà montrées ni celles dont le retrait attend encore", () => {
-    const photos = [
-      { id: "a", url: "u", clientId: "ca" },
-      { id: "b", url: "u", clientId: "cb" },
-      { id: "c", url: "u", clientId: "cc" },
-    ] as AlbumPhotoView[];
-    expect(reappearedPhotos(photos, { photoIds: ["a"], clientIds: ["cb"] }).map((p) => p.id)).toEqual(["c"]);
+  it("sans identifiant : jette, rien ne part", async () => {
+    calls.length = 0;
+    await expect(removeAlbumPhoto({}, deps())).rejects.toThrow("Photo à retirer inconnue");
+    expect(calls).toEqual([]);
   });
 });

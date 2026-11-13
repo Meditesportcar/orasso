@@ -2,9 +2,9 @@
 // photos (plaques : une décision pour le lot ; envoi une photo à la fois), 3. les détails et « Publier l'album ». Quitter en cours : le
 // brouillon reste (« Reprendre l'album » à la prochaine ouverture pour le même événement). Un refus de l'API s'affiche, le flux reste.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L, reappearedPhotos } from "@orasso/shared";
+import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -76,12 +76,12 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   useEffect(() => {
     if (!resumeId) return;
     let live = true;
-    // Le rejeu de la file (retraits non confirmés d'une séance précédente) passe d'abord : le brouillon affiché est celui d'après.
-    uploads
-      .ready()
-      .then(() => api.album(resumeId))
+    // Le brouillon repris : l'écran affiche l'état du serveur (les photos de l'album), rien d'autre.
+    api
+      .album(resumeId)
       .then((a) => {
-        if (!live) return;
+        // Une réponse qui arrive après un changement de compte n'est pas appliquée.
+        if (!live || !uploads.alive()) return;
         if (a.status !== "draft" || !a.mine) {
           router.replace(`/album/${a.id}` as never);
           return;
@@ -94,67 +94,37 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     return () => {
       live = false;
     };
-  }, [resumeId, router, arrive, uploads.ready]);
+  }, [resumeId, router, arrive, uploads.alive]);
 
   async function createDraft() {
-    if (!eventId) return;
+    // Une seule opération à la fois ; formulaire mort (autre compte) : aucune requête ne part.
+    if (!eventId || !uploads.takeTurn()) return;
     setBusy(true);
     setError(null);
     try {
-      // Le rejeu de la file passe d'abord : les photos d'un brouillon déjà retirées côté serveur ne s'affichent pas.
-      await uploads.ready();
       const a = await api.createAlbum({ eventId, title: null });
+      if (!uploads.alive()) return;
       arrive(a);
       setStep(2);
     } catch (e) {
-      setError(errorMessage(e));
+      if (uploads.alive()) setError(errorMessage(e));
     } finally {
       setBusy(false);
+      uploads.endTurn();
     }
   }
 
-  /** Les retraits refusés pour de bon (au rejeu) : l'album est relu, les photos concernées réapparaissent dans la grille avant toute publication. */
-  const reappear = useCallback(async () => {
-    if (!album) return;
-    try {
-      const fresh = await api.album(album.id);
-      const extra = reappearedPhotos(fresh.photos, {
-        photoIds: [...basePhotos.map((p) => p.id), ...uploads.items.flatMap((i) => (i.photoId ? [i.photoId] : []))],
-        clientIds: [...uploads.items.map((i) => i.clientId), ...uploads.pendingClientIds()],
-      });
-      if (extra.length > 0) setBasePhotos((list) => [...list, ...extra]);
-      refresh(fresh);
-    } catch (e) {
-      setError(errorMessage(e));
-      return;
-    }
-    setError(L.removalRefused);
-  }, [album, basePhotos, uploads.items, uploads.pendingClientIds, refresh]);
-  const seenRefusals = useRef(0);
-  useEffect(() => {
-    if (uploads.refusals > seenRefusals.current) {
-      seenRefusals.current = uploads.refusals;
-      void reappear();
-    }
-  }, [uploads.refusals, reappear]);
-
   async function toDetails() {
-    if (!album) return;
-    // Une seule opération à la fois : un second appui pendant le rejeu de la file ou l'envoi ne lance rien (pas d'envois orphelins).
-    if (!uploads.takeTurn()) return;
+    if (!album || !uploads.takeTurn()) return;
     try {
       setError(null);
-      // Toute transition attend la file : une photo retirée ne doit pas finir dans l'album publié.
-      const settled = await uploads.flush();
-      if (settled !== "ok") {
-        if (settled === "pending") setError(L.pendingRemovals);
-        return;
-      }
       if (uploads.pending > 0 && !(await uploads.send(true))) return;
-      refresh(await api.album(album.id));
+      const fresh = await api.album(album.id);
+      if (!uploads.alive()) return;
+      refresh(fresh);
       setStep(3);
     } catch (e) {
-      setError(errorMessage(e));
+      if (uploads.alive()) setError(errorMessage(e));
     } finally {
       uploads.endTurn();
     }
@@ -165,17 +135,14 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     setBusy(true);
     setError(null);
     try {
-      const settled = await uploads.flush();
-      if (settled !== "ok") {
-        if (settled === "pending") setError(L.pendingRemovals);
-        return;
-      }
       await api.patchAlbum(album.id, { title: title.trim(), allowSave });
+      if (!uploads.alive()) return;
       const done = await api.publishAlbum(album.id);
+      if (!uploads.alive()) return;
       void drafts.reload();
       router.replace(`/album/${done.id}` as never);
     } catch (e) {
-      setError(errorMessage(e));
+      if (uploads.alive()) setError(errorMessage(e));
     } finally {
       setBusy(false);
       uploads.endTurn();
@@ -195,18 +162,14 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     const photo = basePhotos.find((p) => p.id === editing.id);
     return photo ? { kind: "base", photo } : null;
   })();
+  /** Le seul chemin de retrait (`removeAlbumPhoto`) : photo de la séance, photo en vol, photo d'un brouillon repris. Elle ne part de l'écran qu'au 204. */
   async function removeTarget(): Promise<boolean> {
     if (!editing || !album) return false;
     if (editing.kind === "item") return uploads.remove(editing.id);
-    try {
-      await api.deleteAlbumPhoto(album.id, editing.id);
-      setBasePhotos((list) => list.filter((p) => p.id !== editing.id));
-      refresh(await api.album(album.id));
-      return true;
-    } catch (e) {
-      setError(errorMessage(e));
-      return false;
-    }
+    const photo = basePhotos.find((p) => p.id === editing.id);
+    if (!photo || !(await uploads.removeServer({ clientId: photo.clientId, photoId: photo.id }))) return false;
+    setBasePhotos((list) => list.filter((p) => p.id !== editing.id));
+    return true;
   }
 
   return (
@@ -221,52 +184,63 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
           onChange={uploads.setRects}
           onRemove={removeTarget}
           onClose={() => setEditing(null)}
+          removing={uploads.removing}
+          removeError={uploads.removeError}
+          online={uploads.online}
+          busy={uploads.busy}
           error={uploads.error ?? error}
         />
       }
     >
-      {(accreditations.error && !accreditations.data) || (profile.error && !profile.data) ? (
-        <Notice tone="error">{(accreditations.error ?? profile.error)?.message}</Notice>
+      {uploads.dead ? (
+        <Notice tone="error" testID="album-session-stale">
+          {L.sessionChanged}
+        </Notice>
       ) : null}
-      {accreditations.loading && !accreditations.data && step === 1 ? <Text variant="body">Chargement…</Text> : null}
-      {step === 1 && (accreditations.data || !accreditations.loading) ? (
-        <AlbumStep1Event
-          choices={choices}
-          chosen={eventId}
-          onChoose={setChosen}
-          drafts={draftEvents}
-          busy={busy}
-          error={error}
-          onContinue={() => void createDraft()}
-        />
-      ) : null}
-      {step === 2 && album ? (
-        <>
-          <AlbumStep2Photos
-            uploads={uploads}
-            basePhotos={basePhotos}
-            onOpenItem={(id) => setEditing({ kind: "item", id })}
-            onOpenBase={(id) => setEditing({ kind: "base", id })}
-            onContinue={() => void toDetails()}
+      <View pointerEvents={uploads.dead ? "none" : "auto"} style={uploads.dead ? styles.dead : undefined}>
+        {(accreditations.error && !accreditations.data) || (profile.error && !profile.data) ? (
+          <Notice tone="error">{(accreditations.error ?? profile.error)?.message}</Notice>
+        ) : null}
+        {accreditations.loading && !accreditations.data && step === 1 ? <Text variant="body">Chargement…</Text> : null}
+        {step === 1 && (accreditations.data || !accreditations.loading) ? (
+          <AlbumStep1Event
+            choices={choices}
+            chosen={eventId}
+            onChoose={setChosen}
+            drafts={draftEvents}
+            busy={busy || uploads.busy}
+            error={error}
+            onContinue={() => void createDraft()}
           />
-          {error && !uploads.error ? <Notice tone="error">{error}</Notice> : null}
-        </>
-      ) : null}
-      {step === 3 && album ? (
-        <AlbumStep3Details
-          album={album}
-          mediaName={mediaName}
-          title={title}
-          onTitle={setTitle}
-          allowSave={allowSave}
-          onAllowSave={setAllowSave}
-          blurred={blurred}
-          busy={busy}
-          error={error}
-          onEditPhotos={() => setStep(2)}
-          onPublish={() => void publish()}
-        />
-      ) : null}
+        ) : null}
+        {step === 2 && album ? (
+          <>
+            <AlbumStep2Photos
+              uploads={uploads}
+              basePhotos={basePhotos}
+              onOpenItem={(id) => setEditing({ kind: "item", id })}
+              onOpenBase={(id) => setEditing({ kind: "base", id })}
+              onContinue={() => void toDetails()}
+            />
+            {error && !uploads.error ? <Notice tone="error">{error}</Notice> : null}
+          </>
+        ) : null}
+        {step === 3 && album ? (
+          <AlbumStep3Details
+            album={album}
+            mediaName={mediaName}
+            title={title}
+            onTitle={setTitle}
+            allowSave={allowSave}
+            onAllowSave={setAllowSave}
+            blurred={blurred}
+            busy={busy || uploads.busy}
+            error={error}
+            onEditPhotos={() => setStep(2)}
+            onPublish={() => void publish()}
+          />
+        ) : null}
+      </View>
     </FlowScreen>
   );
 }
@@ -275,4 +249,5 @@ const styles = StyleSheet.create({
   steps: { gap: space1, paddingHorizontal: space3, paddingVertical: space2 },
   bar: { flexDirection: "row", gap: space1 },
   seg: { flex: 1, height: 4, borderRadius: 2 },
+  dead: { opacity: 0.4 },
 });

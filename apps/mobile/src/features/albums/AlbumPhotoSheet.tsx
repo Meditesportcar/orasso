@@ -35,6 +35,10 @@ export function AlbumPhotoSheet({
   onChange,
   onRemove,
   onClose,
+  removing,
+  removeError,
+  online,
+  busy,
   error,
 }: {
   target: PhotoTarget;
@@ -42,12 +46,26 @@ export function AlbumPhotoSheet({
   /** Retire la photo (rend vrai si elle est retirée : la feuille se ferme). */
   onRemove: () => Promise<boolean>;
   onClose: () => void;
+  /** La clé de la photo dont le retrait est en cours (« Retrait… »), et le dernier échec de retrait (la photo reste visible, « Réessayer »). */
+  removing: string | null;
+  removeError: { key: string; message: string } | null;
+  /** Retirer demande du réseau : hors ligne, le bouton est désactivé avec son message. */
+  online: boolean;
+  /** Une opération est en cours (envoi, retrait) : rien d'autre ne part. */
+  busy: boolean;
   error?: string | null;
 }) {
   const { t } = useTheme();
   const item = target?.kind === "item" ? target.item : null;
   const locked = item ? isPhotoLocked(item) : false;
   const editable = item !== null && !locked;
+  const key = target
+    ? target.kind === "item"
+      ? target.item.clientId
+      : (target.photo.clientId ?? target.photo.id)
+    : "";
+  const failed = removeError?.key === key ? removeError : null;
+  const isRemoving = removing === key;
   return (
     <AppSheet visible={target !== null} onClose={onClose} accessibilityLabel={L.plateSheetTitle} maxHeight={0.92}>
       {target ? (
@@ -92,8 +110,14 @@ export function AlbumPhotoSheet({
               {item ? <Notice testID="album-decision-frozen">{L.decisionFrozen}</Notice> : null}
             </>
           )}
-          {error ? (
+          {failed ? (
             <Notice tone="error" testID="album-remove-error">
+              {`${L.removeFailed} ${failed.message}`}
+            </Notice>
+          ) : null}
+          {!online ? <Notice testID="album-remove-offline">{L.needNetwork}</Notice> : null}
+          {error ? (
+            <Notice tone="error" testID="album-sheet-error">
               {error}
             </Notice>
           ) : null}
@@ -101,10 +125,11 @@ export function AlbumPhotoSheet({
             variant="plate"
             icon="trash"
             fullWidth
+            disabled={!online || busy}
             onPress={() => void onRemove().then((done) => done && onClose())}
             testID="album-photo-remove"
           >
-            {L.photoRemove}
+            {isRemoving ? L.removing : failed ? L.retry : L.photoRemove}
           </Button>
         </View>
       ) : null}

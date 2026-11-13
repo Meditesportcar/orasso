@@ -15,7 +15,6 @@ import { albumLabels } from "../labels/albums.fr";
 import type { AlbumPhotoView, AlbumPlateDecision } from "../schemas/albums";
 import { ALBUM_MAX_PHOTOS } from "../schemas/media";
 import type { PlateRect } from "../schemas/vehicle";
-import { cancelOp, type RemovalQueue } from "./removalQueue";
 
 /** Photos au plus par ouverture du sélecteur du système (limite du système, fiche R9e). */
 export const PICK_PER_OPEN = 30;
@@ -208,49 +207,31 @@ export async function sendAlbumPhotos(items: readonly AlbumItem[], deps: SendDep
   return done;
 }
 
-export type RemoveItemDeps = {
-  albumId: string;
-  /** La file : l'annulation y entre **avant** son premier appel réseau (mémoire et stockage) et n'en sort que sur la réponse de l'API. */
-  queue: Pick<RemovalQueue, "retire" | "release" | "enqueue" | "takeDropped">;
+/** Ce qui identifie une photo à retirer : sa tentative d'ajout (`clientId`, toujours connue d'une photo de la séance) ou son identifiant. */
+export type RemovalTarget = { clientId?: string | null; photoId?: string | null };
+
+export type RemovalDeps = {
+  /** `DELETE /me/albums/:id/photos/by-client/:clientId` : atomique côté API, 204 = la photo n'est pas dans l'album et n'y entrera pas. */
+  cancelByClient: (clientId: string) => Promise<unknown>;
+  /** `DELETE /me/albums/:id/photos/:photoId` : idempotent côté API (204). */
+  deleteByPhoto: (photoId: string) => Promise<unknown>;
 };
 
-export type RemoveItemResult =
-  /** Confirmée par l'API (204) : la photo n'est pas dans l'album et n'y entrera pas. */
-  | { status: "removed" }
-  /** Pas encore confirmée (hors ligne, session expirée, 5xx…) : l'annulation reste en file, la photo part de l'écran, la publication attend. */
-  | { status: "queued" }
-  /** Refus définitif (400, 404, 409, 422) : la photo **reste** (jamais retirée à l'écran), avec l'erreur de l'API. */
-  | { status: "refused"; error: unknown };
-
 /**
- * Retire une photo de la séance. Une photo dont l'ajout est parti (même sans réponse) est **annulée par son `clientId`**, côté API et
- * sous le verrou de l'ajout : un ajout encore en route finira refusé, un ajout fini sera retiré. L'annulation **entre dans la file avant
- * son premier appel réseau** : pendant l'attente, `hasPending()` est vrai et la publication ne peut pas passer devant elle. La réussite
- * n'est déclarée que sur la réponse de l'API, jamais sur un 404 seul. L'envoi de la photo, s'il en reste un, est supprimé après (la file
- * passe les annulations avant les envois).
+ * **Le seul chemin de retrait d'une photo déjà ajoutée** (tour 4), pour le site et l'appli, pour une photo envoyée, une photo dont l'ajout est
+ * encore en vol, une photo d'un brouillon repris : une opération **serveur synchrone**, qui demande du réseau. Elle ne rend que sur le 204 ;
+ * toute autre issue (réseau, 4xx, 5xx) **jette** et l'écran garde la photo visible, avec le message et « Réessayer ». Rien n'est jamais retiré
+ * de l'écran avant cette confirmation. Par `clientId` quand on le connaît (un ajout encore en route sera refusé, un ajout fini sera retiré),
+ * sinon par identifiant (photo reprise d'une ancienne galerie, sans `clientId`).
  */
-export async function removeAlbumItem(item: AlbumItem, deps: RemoveItemDeps): Promise<RemoveItemResult> {
-  let result: RemoveItemResult = { status: "removed" };
-  if (item.attempted || item.photoId) {
-    const op = cancelOp(deps.albumId, item.clientId);
-    const outcome = await deps.queue.enqueue(op);
-    if (outcome === "refused") return { status: "refused", error: deps.queue.takeDropped(op.id)[0]?.error };
-    if (outcome === "pending") result = { status: "queued" };
+export async function removeAlbumPhoto(target: RemovalTarget, deps: RemovalDeps): Promise<void> {
+  if (target.clientId) {
+    await deps.cancelByClient(target.clientId);
+    return;
   }
-  if (item.upload) deps.queue.retire({ id: item.upload.id, key: item.upload.key });
-  void deps.queue.release();
-  return result;
-}
-
-/**
- * Photos de l'album que l'écran ne montre plus : un retrait refusé pour de bon (après coup, au rejeu) les a laissées côté serveur. Elles
- * **réapparaissent** dans la grille (version du serveur) avant toute publication ; les photos déjà montrées ne sont pas doublées.
- */
-export function reappearedPhotos(
-  albumPhotos: readonly AlbumPhotoView[],
-  shown: { photoIds: readonly string[]; clientIds: readonly string[] },
-): AlbumPhotoView[] {
-  const ids = new Set(shown.photoIds);
-  const clients = new Set(shown.clientIds);
-  return albumPhotos.filter((p) => !ids.has(p.id) && !(p.clientId && clients.has(p.clientId)));
+  if (target.photoId) {
+    await deps.deleteByPhoto(target.photoId);
+    return;
+  }
+  throw new Error("Photo à retirer inconnue.");
 }

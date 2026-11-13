@@ -84,11 +84,9 @@ export const albumLabels = {
   pickCut: (kept: number, asked: number) =>
     `Seules ${kept === 1 ? "la première photo a été gardée" : `les ${kept} premières photos ont été gardées`} sur ${asked} (30 par ouverture, 200 par album).`,
   pickFull: (max: number) => `L'album compte déjà ${max} photos : aucune photo n'a été ajoutée.`,
-  removalRefused:
-    "Un retrait a été refusé par le serveur : la photo est revenue dans la liste. Vérifie ton album avant de continuer.",
-  sessionChanged:
-    "Ta session a changé dans un autre onglet. Recharge la page pour reprendre ton album : tes retraits en attente sont gardés.",
-  pendingRemovals: "Des retraits attendent le retour du réseau. Réessaie dans un instant.",
+  sessionChanged: "Tu as changé de compte : recharge la page.",
+  needNetwork: "Il faut du réseau pour retirer une photo.",
+  removing: "Retrait…",
   frameSet: "Cadre posé",
   framePlace: "Poser un cadre de plaque",
   frameRemove: "Retirer le cadre",
@@ -97,7 +95,7 @@ export const albumLabels = {
   keptBadge: "Envoyée telle quelle",
   decisionFrozen: "Cette photo est déjà partie : sa décision de plaque ne change plus. Tu peux la retirer.",
   addedPhoto: "Photo ajoutée à l’album",
-  removeFailed: "La photo n’a pas pu être retirée. Réessaie.",
+  removeFailed: "La photo n’a pas pu être retirée : elle reste dans l’album.",
   coverAlt: (title: string) => `Mosaïque de l'album ${title}`,
   openPhoto: (n: number, total: number) => `Ouvrir la photo ${n} sur ${total}`,
   closeViewer: "Fermer",

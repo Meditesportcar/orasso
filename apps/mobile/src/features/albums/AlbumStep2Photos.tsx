@@ -33,11 +33,12 @@ export function AlbumStep2Photos({
   onContinue: () => void;
 }) {
   const { t } = useTheme();
-  const { items, plated, counts, canChange, detecting, pending, sending, progress, error } = uploads;
+  const { items, plated, counts, canChange, detecting, pending, sending, progress, error, removing } = uploads;
+  // Une seule opération à la fois : tant qu'un envoi ou un retrait est en cours, rien d'autre ne part (« Continuer », « Ajouter », tuiles).
+  const opBusy = uploads.busy;
   const ready = basePhotos.length + items.length;
   const needsDecision = plated > 0;
-  const canContinue =
-    (ready > 0 && !needsDecision && !detecting && !sending) || (pending === 0 && ready > 0 && !sending);
+  const canContinue = (ready > 0 && !needsDecision && !detecting && !opBusy) || (pending === 0 && ready > 0 && !opBusy);
   const decided = counts.blurred + counts.kept;
   const summary = [
     counts.blurred > 0 ? L.blurredTitle(counts.blurred) : null,
@@ -61,7 +62,7 @@ export function AlbumStep2Photos({
         <Button
           variant="secondary"
           icon="add"
-          disabled={sending}
+          disabled={opBusy}
           onPress={() => void uploads.pick(basePhotos.length)}
           testID="album-pick"
         >
@@ -100,7 +101,7 @@ export function AlbumStep2Photos({
             ) : null}
             {decided > 0 && plated > 0 && summary ? <Muted variant="caption">{summary}</Muted> : null}
             {canChange ? (
-              <Button variant="secondary" icon="undo" disabled={sending} onPress={uploads.reopen} testID="album-change">
+              <Button variant="secondary" icon="undo" disabled={opBusy} onPress={uploads.reopen} testID="album-change">
                 {L.change}
               </Button>
             ) : null}
@@ -114,7 +115,7 @@ export function AlbumStep2Photos({
             key={p.id}
             accessibilityRole="button"
             accessibilityLabel={L.photoRemove}
-            disabled={sending}
+            disabled={opBusy}
             onPress={() => onOpenBase(p.id)}
             style={[styles.tile, { backgroundColor: t.color.surface }]}
             testID="album-tile-base"
@@ -123,6 +124,7 @@ export function AlbumStep2Photos({
             <View style={[styles.check, { backgroundColor: t.color.accent }]}>
               <Icon name="check" size={12} color={t.color.nightInk} />
             </View>
+            {removing === (p.clientId ?? p.id) ? <RemovingBadge /> : null}
           </Pressable>
         ))}
         {items.map((i) => (
@@ -131,7 +133,7 @@ export function AlbumStep2Photos({
             accessibilityRole="button"
             accessibilityLabel={i.photoId ? L.photoRemove : L.plateSheetTitle}
             // Un cadre posé à la main n'est jamais écrasé : la tuile s'ouvre quand la détection de cette photo est finie.
-            disabled={sending || (!i.detected && !i.photoId)}
+            disabled={opBusy || (!i.detected && !i.photoId)}
             onPress={() => onOpenItem(i.clientId)}
             style={[styles.tile, { backgroundColor: t.color.surface }]}
             testID="album-tile"
@@ -145,6 +147,7 @@ export function AlbumStep2Photos({
             <View style={[styles.check, { backgroundColor: i.photoId ? t.color.accent : t.color.night }]}>
               <Icon name="check" size={12} color={t.color.nightInk} />
             </View>
+            {removing === i.clientId ? <RemovingBadge /> : null}
           </Pressable>
         ))}
       </View>
@@ -176,7 +179,28 @@ export function AlbumStep2Photos({
   );
 }
 
+/** « Retrait… » sur la tuile dont le retrait est en cours : elle reste visible jusqu'au 204 de l'API. */
+function RemovingBadge() {
+  const { t } = useTheme();
+  return (
+    <View style={[styles.removing, { backgroundColor: t.color.night }]} testID="album-tile-removing">
+      <Text variant="caption" color={t.color.nightInk}>
+        {L.removing}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  removing: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    paddingVertical: 4,
+    opacity: 0.85,
+  },
   block: { gap: space3 },
   count: { flexDirection: "row", alignItems: "center", gap: space3 },
   countText: { flex: 1, gap: space1 },
