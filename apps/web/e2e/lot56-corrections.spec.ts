@@ -426,6 +426,73 @@ test("fiche événement : une galerie sans adresse est un album de la section «
   }
 });
 
+test("fiche événement : la vue de l'album est comptée à l'ouverture depuis la fiche, et réessayée après un échec", async ({
+  page,
+}) => {
+  const events = await apiCall<{ items: { posterUrl: string | null }[] }>(null, "GET", "/events?limit=5");
+  const slug = "nocturne-de-canet-2026";
+  const keys = twoKeys(events.data.items);
+  const ev = await apiCall<{ id: string }>(null, "GET", `/events/by-slug/${slug}`);
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  let contentId = "";
+  let accreditationId = "";
+  try {
+    const media = await client.query<{ id: string; user_id: string }>(
+      "select id, user_id from media_profiles where deleted_at is null limit 1",
+    );
+    const mediaId = media.rows[0]?.id;
+    if (!mediaId) throw new Error("Aucun profil média dans le seed");
+    const accreditation = await client.query<{ id: string }>(
+      `insert into applications (event_id, user_id, kind, media_profile_id, media_formats, status, rules_accepted_at, follow_structure)
+       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) returning id`,
+      [ev.data.id, media.rows[0]?.user_id, mediaId],
+    );
+    accreditationId = accreditation.rows[0]?.id ?? "";
+    const inserted = await client.query<{ id: string }>(
+      `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
+       values ($1, $2, 'gallery', 'Galerie retentée E2E', null, 'other', $3) returning id`,
+      [mediaId, ev.data.id, keys],
+    );
+    contentId = inserted.rows[0]?.id ?? "";
+    await adoptGallery(client);
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    const calls: number[] = [];
+    await page.route(/\/api\/media-contents\/[^/]+\/view$/, async (route) => {
+      calls.push(Date.now());
+      if (calls.length === 1) await route.fulfill({ status: 503, body: "" });
+      else await route.continue();
+    });
+    await loginInBrowser(page, "damien@orasso.local", undefined, `/e/${slug}`);
+    await page.waitForLoadState("networkidle");
+    // Aucune vue au chargement de la fiche.
+    expect(calls).toHaveLength(0);
+    const open = () =>
+      page
+        .getByTestId("event-photos-album")
+        .filter({ hasText: "Galerie retentée E2E" })
+        .getByTestId("event-photos-open");
+    // Une vue à l'ouverture ; le premier appel échoue (503), l'album s'ouvre quand même.
+    await open().click();
+    await page.waitForURL(new RegExp(`/albums/${contentId}`));
+    await expect.poll(() => calls.length).toBe(1);
+    // Nouvelle ouverture depuis la fiche : l'appel est retenté, et réussit.
+    await page.goto(`/e/${slug}`);
+    await page.waitForLoadState("networkidle");
+    expect(calls).toHaveLength(1);
+    await open().click();
+    await page.waitForURL(new RegExp(`/albums/${contentId}`));
+    await expect.poll(() => calls.length).toBe(2);
+    const counted = await client.query<{ views: number }>("select views from event_albums where id = $1", [contentId]);
+    expect(counted.rows[0]?.views).toBe(1);
+  } finally {
+    if (contentId) await dropGallery(client, contentId);
+    if (accreditationId) await client.query("delete from applications where id = $1", [accreditationId]);
+    await client.end();
+  }
+});
+
 test("bandeau des dates : pause au survol et au focus", async ({ page }) => {
   await setTheme(page, "beton");
   await page.setViewportSize(DESKTOP);

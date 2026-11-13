@@ -89,7 +89,15 @@ test("Damien reprend une photo dans le journal : crédit conservé, une seule fo
     expect(reposted?.photos[0]?.credit?.mediaName).toBe("Sud Cars");
     postId = reposted?.id ?? null;
     await page.goto(`/e/${SLUG}`);
-    // Le crédit se lit sur la carte (vue « Une par une » du journal) ; la grille de deux n'est que des vignettes.
+    // Grille de deux (vue par défaut) : le crédit est dans la méta texte sous la vignette (jamais une pastille sur la photo).
+    await expect(page.getByTestId("publication-tile-credit").first()).toHaveText("Photo : Sud Cars");
+    // Sans session : le journal public porte aussi le crédit.
+    const visitor = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const visitorPage = await visitor.newPage();
+    await visitorPage.goto(`/e/${SLUG}`);
+    await expect(visitorPage.getByTestId("journal-public-credit").first()).toHaveText("Photo : Sud Cars");
+    await visitor.close();
+    // Vue « Une par une » : la photo porte « Photo : <média> » et le pied « repartagée, crédit non retirable ».
     await page.getByRole("button", { name: "Une par une" }).click();
     await expect(page.getByTestId("credit-foot").first()).toContainText("repartagée, crédit non retirable");
     await expect(page.getByTestId("credit-overlay").first()).toHaveText("Photo : Sud Cars");
