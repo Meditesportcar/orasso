@@ -228,3 +228,77 @@ test.describe("tour 1", () => {
     await shot(page, "multi-selecteur-390");
   });
 });
+
+// Petit lot de fin, partie B1 : les retouches du site relevées par la relecture de la partie E.
+test.describe("partie B1", () => {
+  test.describe("grand écran (1 280 px)", () => {
+    test.use({ viewport: { width: 1280, height: 900 } });
+
+    test("?onglet=sorties : « Sorties » est masqué et « Fil » porte le soulignement", async ({ page }) => {
+      test.setTimeout(180_000);
+      const crew = await r5Crew(unique());
+      await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}&onglet=sorties`);
+      await expect(page.getByTestId("crew-tab-sorties")).toBeHidden();
+      const underline = (id: string) =>
+        page.getByTestId(id).evaluate((el) => {
+          const after = getComputedStyle(el, "::after");
+          return { content: after.content, height: after.height };
+        });
+      // Le soulignement moutarde de 3 px sous « Fil » (même rendu que l'onglet choisi), absent sous « Membres ».
+      expect(await underline("crew-tab-fil")).toEqual({ content: '""', height: "3px" });
+      expect((await underline("crew-tab-membres")).content).not.toBe('""');
+      await expect(page.getByTestId("crew-propose-outing")).toBeVisible();
+      await shot(page, "sorties-1280-onglet-fil-souligne");
+    });
+
+    test("un seul « Proposer une sortie » dans la page", async ({ page }) => {
+      test.setTimeout(180_000);
+      const crew = await r5Crew(unique());
+      await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`);
+      await expect(page.getByTestId("crew-propose-outing")).toHaveCount(1);
+      await expect(page.getByTestId("crew-propose-outing-wide")).toHaveCount(0);
+    });
+  });
+
+  test.describe("téléphone (390 px)", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test("un seul « Proposer une sortie », sur l'onglet Sorties, en secondaire", async ({ page }) => {
+      test.setTimeout(180_000);
+      const crew = await r5Crew(unique());
+      await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}&onglet=sorties`);
+      await expect(page.getByTestId("crew-propose-outing")).toHaveCount(1);
+      await expect(page.getByTestId("crew-propose-outing")).toBeVisible();
+    });
+
+    test("« Publier » depuis un autre onglet : retirer `publier` de l'adresse ne relance aucun chargeur", async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+      const crew = await r5Crew(unique());
+      await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}&onglet=membres`);
+      // Les lectures des chargeurs passent par `*.data` (une par route de la page) : on les compte à partir de l'arrivée.
+      const loads: string[] = [];
+      page.on("request", (r) => {
+        if (/\.data(\?|$)/.test(r.url())) loads.push(r.url());
+      });
+      await page.getByTestId("crew-feed-publish").click();
+      await expect(page.getByTestId("crew-publish")).toBeVisible({ timeout: 20_000 });
+      await expect.poll(() => new URL(page.url()).searchParams.has("publier")).toBe(false);
+      await page.waitForTimeout(1_500);
+      // Le chargeur de la page (mes crews, le crew, ses membres, ses demandes) ne se relit pas : aucune lecture ne le nomme (`_routes`
+      // absent = tous les chargeurs). Seuls les chargeurs parents (`root`, `layouts/app`) se relisent, c'est leur règle.
+      // (L'arrivée sur le Fil, `publier=1`, est une vraie navigation : le chargeur y relit. On ne compte que ce qui suit, sans `publier`.)
+      const crewReads = loads.filter((u) => {
+        const { searchParams } = new URL(u);
+        if (searchParams.has("publier")) return false;
+        const routes = searchParams.get("_routes");
+        return routes === null || routes.split(",").includes("routes/app-crew");
+      });
+      expect(
+        crewReads,
+        `lectures du chargeur de la page après le retrait de publier : ${crewReads.join(" | ")}`,
+      ).toEqual([]);
+    });
+  });
+});
