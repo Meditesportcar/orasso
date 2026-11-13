@@ -136,6 +136,8 @@ for (const theme of ["beton", "sable"] as const) {
 
       // La publication reprise dans le journal de la fiche.
       await go(page, `/e/${SLUG}`);
+      // Le crédit se lit sur la carte (vue « Une par une » du journal) ; la grille de deux n'est que des vignettes.
+      await page.getByRole("button", { name: "Une par une" }).click();
       await expect(page.getByTestId("credit-foot").first()).toContainText("repartagée, crédit non retirable", {
         timeout: 30_000,
       });

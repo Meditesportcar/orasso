@@ -89,6 +89,8 @@ test("Damien reprend une photo dans le journal : crédit conservé, une seule fo
     expect(reposted?.photos[0]?.credit?.mediaName).toBe("Sud Cars");
     postId = reposted?.id ?? null;
     await page.goto(`/e/${SLUG}`);
+    // Le crédit se lit sur la carte (vue « Une par une » du journal) ; la grille de deux n'est que des vignettes.
+    await page.getByRole("button", { name: "Une par une" }).click();
     await expect(page.getByTestId("credit-foot").first()).toContainText("repartagée, crédit non retirable");
     await expect(page.getByTestId("credit-overlay").first()).toHaveText("Photo : Sud Cars");
     await page.getByTestId("credit-album").first().click();

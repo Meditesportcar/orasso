@@ -214,13 +214,14 @@ test("sans session : la fiche de l'événement montre l'album, sans rien d'ident
   const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
   expect(rassemblement).toBeTruthy();
   await page.goto("/e/rassemblement-cote-vermeille-2025");
-  const section = page.getByTestId("media-contents");
+  // R9g : l'album est une carte de la section « Photos » (la mosaïque), plus une galerie dans « Médias présents ».
+  const section = page.getByTestId("event-photos");
   await expect(section).toBeVisible({ timeout: 30_000 });
   await expect(section).toContainText("Les photos du Rassemblement Côte Vermeille");
-  const photos = section.getByTestId("media-gallery-photo");
+  const photos = section.getByTestId("event-photos-cover");
   await expect(photos.first()).toBeVisible();
   // Les photos sont lisibles sans session (route publique), aucune identification de véhicule ni de pseudo.
-  const src = await photos.first().locator("img").getAttribute("src");
+  const src = await photos.first().locator("img").first().getAttribute("src");
   expect(src).toContain("/api/public/albums/");
   const res = await page.request.get(src ?? "");
   expect(res.status()).toBe(200);
