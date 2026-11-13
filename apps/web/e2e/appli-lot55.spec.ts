@@ -372,7 +372,8 @@ for (const theme of THEMES) {
 
     // Ajouter un lien sur la Nocturne (accréditée).
     await page.getByTestId("media-add").click();
-    await expect(page.getByText("Ce que tu ajoutes", { exact: true })).toBeVisible();
+    // Lot R9e : la feuille n'ajoute plus que des liens (les photos vont dans un album) ; une ligne le dit.
+    await expect(page.getByTestId("media-add-albums-note")).toBeVisible();
     const publish = page.getByTestId("media-publish");
     await expect(publish).toBeDisabled();
     // Le dernier événement commencé est choisi d'office (Béziers Night) ; la Nocturne se choisit d'une touche.

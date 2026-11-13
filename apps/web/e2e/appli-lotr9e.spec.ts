@@ -96,6 +96,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await pageTab(page).click();
     // « Albums » : « Nouvel album » (le seul bouton principal), les albums du seed (le brouillon porte « Brouillon »), « Liens ».
     await expect(page.getByTestId("page-tab-albums")).toContainText("Albums", { timeout: 30_000 });
+    await page.getByTestId("page-tab-albums").click();
     await expect(page.getByTestId("page-album-new")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("page-album").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("page-album").filter({ hasText: "Béziers Night en images" })).toBeVisible();
@@ -166,6 +167,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     // Sa Page : l'album est dans « Albums », les compteurs « albums · photos » comptent.
     await wearMedia(page);
     await pageTab(page).click();
+    await page.getByTestId("page-tab-albums").click();
     await expect(page.getByTestId("page-album").filter({ hasText: title })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("page-count-albums")).toBeVisible();
     await expect(page.getByTestId("page-count-photos")).toBeVisible();
@@ -192,6 +194,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     const sud = created?.media.key.slice(2);
     await go(d, `/m/${sud}`);
     await expect(d.getByTestId("page-name")).toContainText("Sud Cars", { timeout: 30_000 });
+    await d.getByTestId("page-tab-albums").click();
     await expect(d.getByTestId("page-album").filter({ hasText: title })).toBeVisible({ timeout: 30_000 });
     await expect(d.getByTestId("page-album-new")).toHaveCount(0);
     await damien.ctx.close();
