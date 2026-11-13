@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { departmentBounds } from "../departmentBounds";
 import { departmentCentroids } from "../geo";
 import { practicalInput } from "../schemas/practical";
 import {
+  departmentsAround,
   filterKind,
   formatKm,
   nearestDepartments,
   nearestOfEach,
+  PRACTICAL_DEPARTMENTS_MAX,
   PRACTICAL_MAX,
   PRACTICAL_RADIUS_KM,
   type PracticalPlace,
@@ -131,5 +134,133 @@ describe("règles de Pratique (R8q)", () => {
       expect(practicalInput.safeParse({ near: "outing", eventId: "x" }).success).toBe(false);
       expect(practicalInput.safeParse({ near: "elsewhere" }).success).toBe(false);
     });
+  });
+});
+
+describe("départements autour d'un point et tri exact (suite R8q)", () => {
+  it("Paris : la petite couronne est lue, pas seulement les deux départements aux centres les plus proches", () => {
+    const around = departmentsAround({ lat: 48.85, lng: 2.35 });
+    for (const code of ["75", "92", "93", "94"]) expect(around, code).toContain(code);
+    expect(around.length).toBeGreaterThan(nearestDepartments({ lat: 48.85, lng: 2.35 }).length);
+  });
+
+  it("près d'une limite des Pyrénées-Orientales : le département voisin est lu, en rase campagne le nombre reste petit", () => {
+    // Côté Aude de la limite avec le 66 (Salses, Leucate) : les deux départements sont dans la zone.
+    const border = departmentsAround({ lat: 42.85, lng: 2.85 });
+    expect(border).toContain("66");
+    expect(border).toContain("11");
+    // Au cœur du 66, loin des limites de la zone de 30 km : pas de département inutile des autres régions.
+    const inside = departmentsAround({ lat: 42.6, lng: 2.5 });
+    expect(inside).toContain("66");
+    expect(inside.length).toBeLessThanOrEqual(5);
+  });
+
+  it("le plancher des deux plus proches est conservé, sans doublon", () => {
+    const point = { lat: 46.6, lng: 2.4 };
+    const around = departmentsAround(point);
+    for (const code of nearestDepartments(point, 2)) expect(around).toContain(code);
+    expect(new Set(around).size).toBe(around.length);
+  });
+
+  it("trier sur la distance exacte : deux lieux dans le même dixième de kilomètre restent dans l'ordre exact", () => {
+    const from = { lat: 42.7, lng: 2.9 };
+    // 0,04 km d'écart (même dixième : 1,0 km), le plus proche est listé en second dans l'entrée.
+    const farther = place("fuel", 42.70898, 2.9, { id: "a" });
+    const nearer = place("fuel", 42.70862, 2.9, { id: "b" });
+    const sorted = withDistance([farther, nearer], from);
+    expect(sorted.map((p) => p.id)).toEqual(["b", "a"]);
+    expect(sorted[0]?.distanceKm).toBe(sorted[1]?.distanceKm);
+    expect(String(sorted[0]?.distanceKm).split(".")[1]?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("emprises des départements et plafond (suite R8q, tour 3)", () => {
+  it("les contre-exemples de Codex : près de (49,5 ; 5,5) et de (49,6 ; 5,5), le 54 est lu", () => {
+    for (const point of [
+      { lat: 49.5, lng: 5.5 },
+      { lat: 49.6, lng: 5.5 },
+    ]) {
+      const around = departmentsAround(point);
+      expect(around, JSON.stringify(point)).toContain("54");
+      for (const code of ["08", "55", "57"]) expect(around, code).toContain(code);
+    }
+  });
+
+  it("un département dont l'emprise est hors du carré de recherche n'est pas lu", () => {
+    const inside = departmentsAround({ lat: 42.6, lng: 2.5 });
+    expect(inside).toContain("66");
+    for (const code of ["29", "74", "67", "59"]) expect(inside, code).not.toContain(code);
+  });
+
+  it("Paris et la limite 66/11", () => {
+    const paris = departmentsAround({ lat: 48.85, lng: 2.35 });
+    for (const code of ["75", "92", "93", "94"]) expect(paris, code).toContain(code);
+    const border = departmentsAround({ lat: 42.85, lng: 2.85 });
+    expect(border).toContain("66");
+    expect(border).toContain("11");
+  });
+
+  it("plafond de 12 départements, le département du point toujours lu", () => {
+    for (const point of [
+      { lat: 48.85, lng: 2.35 },
+      { lat: 49.5, lng: 5.5 },
+      { lat: 47.2, lng: 2.4 },
+      { lat: 43.6, lng: 1.44 },
+      { lat: 45.76, lng: 4.84 },
+    ]) {
+      const around = departmentsAround(point);
+      expect(around.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+      expect(around).toContain(nearestDepartments(point, 1)[0]);
+    }
+    // Un très grand rayon dépasse le plafond : la liste reste bornée.
+    expect(departmentsAround({ lat: 48.85, lng: 2.35 }, 150).length).toBe(PRACTICAL_DEPARTMENTS_MAX);
+  });
+
+  it("les emprises couvrent les 101 départements, chaque centre y est contenu", () => {
+    for (const [code, centre] of Object.entries(departmentCentroids)) {
+      const box = departmentBounds[code];
+      expect(box, code).toBeTruthy();
+      const [south, west, north, east] = box as readonly [number, number, number, number];
+      // Les centres sont approchés (quelques km) : une marge de 0,1° suffit.
+      expect(centre.lat, code).toBeGreaterThanOrEqual(south - 0.1);
+      expect(centre.lat, code).toBeLessThanOrEqual(north + 0.1);
+      expect(centre.lng, code).toBeGreaterThanOrEqual(west - 0.1);
+      expect(centre.lng, code).toBeLessThanOrEqual(east + 0.1);
+    }
+  });
+});
+
+describe("le département qui contient le point n'est jamais écarté (suite R8q, tour 4)", () => {
+  it("un point dense, au plafond : 75 reste lu même avec un rayon qui dépasse 12 départements", () => {
+    const paris = { lat: 48.8566, lng: 2.3522 };
+    for (const radius of [30, 80, 150, 300]) {
+      const around = departmentsAround(paris, radius);
+      expect(around.length).toBeLessThanOrEqual(PRACTICAL_DEPARTMENTS_MAX);
+      expect(around, `rayon ${radius}`).toContain("75");
+    }
+  });
+
+  it("un point à l'intérieur de l'emprise d'un département le lit, même si le centre d'un voisin est plus proche", () => {
+    // Le 94 (Val-de-Marne) : un point à l'est de Vincennes, dans son emprise.
+    const point = { lat: 48.79, lng: 2.5 };
+    expect(departmentsAround(point, 5)).toContain("94");
+  });
+});
+
+describe("le département du point : par l'emprise, pas par le centre (suite R8q, tour 5)", () => {
+  it("à la limite du 66 et de l'Ariège, le centre le plus proche est celui de l'Ariège (09) mais le point est dans le 66 : l'Ariège n'est pas lue", () => {
+    const point = { lat: 42.4, lng: 1.75 };
+    expect(nearestDepartments(point, 1)[0]).toBe("09");
+    // Un rayon d'un kilomètre : seule l'emprise du 66 contient le point (celle du 09 en est loin au nord).
+    const around = departmentsAround(point, 1);
+    expect(around).toContain("66");
+    expect(around).not.toContain("09");
+  });
+
+  it("au plafond, quand beaucoup d'emprises coupent le carré, celle qui contient le point est lue", () => {
+    const point = { lat: 48.8566, lng: 2.3522 };
+    const around = departmentsAround(point, 300);
+    expect(around.length).toBe(PRACTICAL_DEPARTMENTS_MAX);
+    expect(around).toContain("75");
   });
 });

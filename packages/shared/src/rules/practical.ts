@@ -1,7 +1,8 @@
 // Lot R8q : règles pures de « Pratique » (maquette R8.12) : la station-service et le lavage les plus proches, de moi ou d'une
 // sortie. Aucune règle ici ne lit l'heure. La position d'une personne n'est jamais une donnée du serveur : l'API ne connaît
 // que la case de 0,1° (`weatherCell`), le téléphone calcule les distances avec sa position exacte, qui ne le quitte pas.
-import { departmentCentroids, distanceKm, type LatLng } from "../geo";
+import { BOUNDS_MARGIN_KM, departmentBounds } from "../departmentBounds";
+import { departmentCentroids, distanceKm, type LatLng, nearestDepartment } from "../geo";
 import { NBSP } from "../labels/units.fr";
 
 /** Les deux sortes de lieu : station-service (`fuel`) et lavage (`wash`). */
@@ -13,6 +14,9 @@ export const PRACTICAL_RADIUS_KM = 30;
 export const PRACTICAL_MAX = 200;
 /** Les départements dont on lit les lieux : les deux dont le centre est le plus proche de l'origine. */
 export const PRACTICAL_DEPARTMENTS = 2;
+
+/** Plafond du nombre de départements lus pour une demande. */
+export const PRACTICAL_DEPARTMENTS_MAX = 12;
 
 /** Un lieu servi par `POST /practical` : ni prix, ni heure de mise à jour, ni distance. */
 export type PracticalPlace = {
@@ -71,6 +75,52 @@ export function nearestDepartments(point: LatLng, count = PRACTICAL_DEPARTMENTS)
     .map((d) => d.code);
 }
 
+/**
+ * Les départements qui coupent la zone recherchée : un département est lu si son emprise (rectangle lat/lng, `departmentBounds`, plus
+ * `BOUNDS_MARGIN_KM`) coupe le carré qui enferme le cercle de `radiusKm` autour du point. Un rectangle contient tout le département :
+ * on peut en lire un de trop (une emprise déborde sur un voisin), jamais un de moins. Plafond de `PRACTICAL_DEPARTMENTS_MAX`, les plus
+ * proches du point d'abord (distance au rectangle, 0 s'il y est). Un département dont l'emprise contient le point n'est jamais écarté par le plafond.
+ */
+export function departmentsAround(point: LatLng, radiusKm = PRACTICAL_RADIUS_KM): string[] {
+  const kmPerDegLat = 111.2;
+  const margin = BOUNDS_MARGIN_KM;
+  const reach = radiusKm + margin;
+  // Les méridiens se resserrent vers le pôle : le carré est plus large du côté où le cosinus est le plus petit.
+  const worstLat = Math.min(89, Math.abs(point.lat) + reach / kmPerDegLat);
+  const kmPerDegLng = kmPerDegLat * Math.cos((worstLat * Math.PI) / 180);
+  const dLat = reach / kmPerDegLat;
+  const dLng = reach / kmPerDegLng;
+  const south = point.lat - dLat;
+  const north = point.lat + dLat;
+  const west = point.lng - dLng;
+  const east = point.lng + dLng;
+  const marginLat = margin / kmPerDegLat;
+  const found: { code: string; km: number }[] = [];
+  for (const code of Object.keys(departmentCentroids)) {
+    const box = departmentBounds[code];
+    if (!box) continue;
+    const [bs, bw, bn, be] = box;
+    const lngMargin = margin / (kmPerDegLat * Math.max(0.2, Math.cos((((bs + bn) / 2) * Math.PI) / 180)));
+    const intersects =
+      bs - marginLat <= north && bn + marginLat >= south && bw - lngMargin <= east && be + lngMargin >= west;
+    if (!intersects) continue;
+    // Distance du point au rectangle (0 s'il y est), pour classer.
+    const clampedLat = Math.min(Math.max(point.lat, bs), bn);
+    const clampedLng = Math.min(Math.max(point.lng, bw), be);
+    found.push({ code, km: distanceKm(point, { lat: clampedLat, lng: clampedLng }) });
+  }
+  // Aucune emprise ne contient le point (position en mer, imprécision) : le département dont le centre est le plus proche.
+  if (!found.some((f) => f.km === 0)) {
+    const own = nearestDepartment(point);
+    if (own && !found.some((f) => f.code === own)) found.push({ code: own, km: 0 });
+  }
+  return found
+    .sort((x, y) => x.km - y.km || x.code.localeCompare(y.code))
+    .slice(0, PRACTICAL_DEPARTMENTS_MAX)
+    .map((f) => f.code)
+    .sort();
+}
+
 /** Les lieux à `radiusKm` de l'origine au plus, les `max` plus proches (sans doublon d'identifiant). */
 export function placesAround<T extends { id: string; lat: number; lng: number }>(
   places: readonly T[],
@@ -95,11 +145,12 @@ export function placesAround<T extends { id: string; lat: number; lng: number }>
 
 const tenth = (n: number) => Math.round(n * 10) / 10;
 
-/** Les lieux avec leur distance à `from` (arrondie au dixième de km), du plus proche au plus éloigné. */
+/** Les lieux avec leur distance à `from`, du plus proche au plus éloigné : le tri se fait sur la distance exacte, l'arrondi (au dixième de km) n'est que pour l'affichage. */
 export function withDistance(places: readonly PracticalPlace[], from: LatLng): PracticalPlaceAt[] {
   return places
-    .map((p) => ({ ...p, distanceKm: tenth(distanceKm(from, p)) }))
-    .sort((a, b) => a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
+    .map((p) => ({ place: p, exact: distanceKm(from, p) }))
+    .sort((a, b) => a.exact - b.exact || a.place.id.localeCompare(b.place.id))
+    .map(({ place, exact }) => ({ ...place, distanceKm: tenth(exact) }));
 }
 
 /** La plus proche de chaque sorte (station-service d'abord, lavage ensuite), `null` quand il n'y en a pas. */

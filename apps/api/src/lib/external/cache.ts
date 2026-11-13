@@ -102,6 +102,14 @@ export async function cachedSource<T>(opts: CachedSourceOptions<T>): Promise<T |
   if (!flight) {
     flight = (async () => {
       try {
+        // Au début du vol : une autre demande a pu terminer son chargement (et retirer son vol) entre notre première lecture et ici ;
+        // la ligne du cache, relue, est alors fraîche et on la rend sans rappeler la source.
+        try {
+          const fresh = await db.query.externalCache.findFirst({ where: eq(externalCache.key, key) });
+          if (fresh && now().getTime() - fresh.fetchedAt.getTime() < ttlMs) return fresh.data as T;
+        } catch {
+          // Lecture impossible : on charge comme avant.
+        }
         const data = await load();
         if (data === null) throw new Error("réponse inutilisable");
         const values = { key, fetchedAt: now(), data: data as unknown };

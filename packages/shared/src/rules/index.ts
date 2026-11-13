@@ -75,6 +75,7 @@ export * from "./publicationsList";
 export * from "./publicPage";
 export * from "./pushRecipient";
 export * from "./quietHours";
+export * from "./readCycle";
 export * from "./recurrence";
 export * from "./registrationBlock";
 export * from "./registrationWindow";

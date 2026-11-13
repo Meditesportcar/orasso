@@ -77,3 +77,88 @@ export function createFollowTracker(now: () => number = Date.now, echoMs = 10_00
 export function weatherFollowKey(coarse: { lat: number; lng: number } | null): string | null {
   return coarse ? `${coarse.lat.toFixed(1)},${coarse.lng.toFixed(1)}` : null;
 }
+
+/** Relectures tant que la réponse annonce des chargements en cours : 3 s, 6 s, 12 s, 24 s, puis arrêt (`null`). */
+export const PRACTICAL_PENDING_DELAYS_MS = [3_000, 6_000, 12_000, 24_000] as const;
+export function practicalPendingDelay(attempt: number): number | null {
+  return PRACTICAL_PENDING_DELAYS_MS[Math.max(0, Math.floor(attempt))] ?? null;
+}
+
+/**
+ * Une lecture à la fois, sans en perdre : une demande qui arrive pendant une lecture en cours est mise en attente (une seule) ; à la
+ * fin de la lecture, `leave` dit s'il faut en relancer une (changement de compte pendant la requête : la lecture du nouveau compte
+ * part dès que la précédente est terminée).
+ */
+export function createReadGate() {
+  let busy = false;
+  let queued = false;
+  return {
+    /** `true` : la lecture peut partir. `false` : une lecture est en cours, celle-ci est mise en attente. */
+    enter(): boolean {
+      if (busy) {
+        queued = true;
+        return false;
+      }
+      busy = true;
+      return true;
+    },
+    /** La lecture est terminée : `true` si une demande attendait (il faut relire). */
+    leave(): boolean {
+      busy = false;
+      const rerun = queued;
+      queued = false;
+      return rerun;
+    },
+  };
+}
+
+/** Ce qu'une lecture a donné, pour décider de la suite. */
+export type PracticalReadOutcome = "complete" | "partial" | "transient" | "refused";
+
+/** Une réponse relue au plus toutes les 60 s au retour sur l'écran (et un refus, seulement après ce délai). */
+export const PRACTICAL_STALE_MS = 60_000;
+
+/** L'issue d'une lecture en échec : réseau (statut 0) ou 5xx (502 pendant un déploiement) = transitoire ; tout 4xx (403, 429…) = refus. */
+export function practicalFailureOutcome(status: number): "transient" | "refused" {
+  return status === 0 || status >= 500 ? "transient" : "refused";
+}
+
+/**
+ * Un refus (4xx) n'est relu qu'au retour sur l'écran (onglet visible, appli au premier plan, retour en ligne), seulement après
+ * `PRACTICAL_STALE_MS` et si `practicalReadAllowed` le permet ; jamais par une minuterie.
+ */
+export function practicalRefusedReadAllowed(refusedAt: number, lastStartedAt: number, now: number): boolean {
+  return refusedAt > 0 && now - refusedAt >= PRACTICAL_STALE_MS && practicalReadAllowed(lastStartedAt, now);
+}
+
+/**
+ * La suite d'une lecture de « Pratique », trois issues : **transitoire** (réseau ou 5xx) : relance espacée (15 s, 30 s, 60 s, 2 min) ou
+ * poursuite du calendrier s'il est commencé ; **refus** (4xx) : aucune minuterie (voir `practicalRefusedReadAllowed`) ; **complète** :
+ * calendrier (`calendarStep`, 3/6/12/24 s tant que des chargements sont en cours) et compteur de relances (`networkAttempt`) à 0. Une
+ * réponse partielle avance le calendrier. `delay: null` : rien à relancer.
+ */
+export function nextPracticalRead(
+  outcome: PracticalReadOutcome,
+  calendarStep: number,
+  networkAttempt: number,
+): { delay: number | null; calendarStep: number; networkAttempt: number } {
+  if (outcome === "complete") return { delay: null, calendarStep: 0, networkAttempt: 0 };
+  if (outcome === "refused") return { delay: null, calendarStep, networkAttempt };
+  const pending = outcome === "partial" || calendarStep > 0 ? practicalPendingDelay(calendarStep) : null;
+  if (pending !== null) {
+    return {
+      delay: pending,
+      calendarStep: calendarStep + 1,
+      networkAttempt: outcome === "partial" ? 0 : networkAttempt,
+    };
+  }
+  if (outcome === "transient" && calendarStep === 0) {
+    return { delay: practicalRetryDelay(networkAttempt), calendarStep, networkAttempt: networkAttempt + 1 };
+  }
+  return { delay: null, calendarStep, networkAttempt };
+}
+
+/** Délai restant avant qu'une reprise tombée hors focus puisse partir : jamais deux lectures à moins de 15 s (0 : tout de suite). */
+export function practicalResumeDelay(lastStartedAt: number, now: number): number {
+  return lastStartedAt === 0 ? 0 : Math.max(0, PRACTICAL_MIN_GAP_MS - (now - lastStartedAt));
+}

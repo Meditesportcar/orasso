@@ -474,3 +474,51 @@ describe("Overpass : la requête n'excède pas le délai du client", () => {
     expect(overpassQuery("66")).not.toContain("timeout:60");
   });
 });
+
+describe("POST /practical : tous les départements qui coupent la zone (suite R8q)", () => {
+  it("autour de Paris : les lieux du 93 et du 94 sont lus et servis, pas seulement ceux des deux départements aux centres les plus proches", async () => {
+    const stub = practicalSources({
+      wash: { "93": [{ name: "Lavage de Bobigny", lat: 48.87, lon: 2.45 }] },
+      fuel: { "94": [{ adresse: "Avenue de Paris", ville: "Créteil", cp: "94000", lat: 48.78, lon: 2.46 }] },
+    });
+    const res = await call(await fan("Fan_Paris"), "POST", "/practical", { near: "position", lat: 48.8, lng: 2.4 });
+    expect(res.status).toBe(200);
+    const queried = new Set(stub.calls.map((c) => c.department));
+    expect(queried.has("93")).toBe(true);
+    expect(queried.has("94")).toBe(true);
+    expect(res.json.places.map((p: { name: string }) => p.name).sort()).toEqual([
+      "Lavage de Bobigny",
+      "Station-service",
+    ]);
+    // Les sources n'ont reçu que des codes de département (jamais la position).
+    for (const c of stub.calls) expect(c.department).toMatch(/^[0-9][0-9AB]$/);
+  });
+});
+
+describe("POST /practical : beaucoup de départements et une source lente (suite R8q, tour 2)", () => {
+  it("la réponse annonce « en cours » tant que les chargements durent, puis devient complète", async () => {
+    const stub = practicalSources(
+      {
+        wash: { "75": [{ name: "Lavage de Paris", lat: 48.86, lon: 2.34 }] },
+        fuel: { "93": [{ adresse: "Avenue de la République", ville: "Bobigny", cp: "93000", lat: 48.9, lon: 2.44 }] },
+      },
+      { delayMs: 120 },
+    );
+    const u = await viewerOf(await fan("Fan_Huit"));
+    const target = { near: "position" as const, cell: { lat: 48.9, lng: 2.4, key: "48.9,2.4" } };
+    const first = await practicalService.get(u, target, 40);
+    // Au moins huit départements à lire, l'Overpass en série est lent : rien d'achevé dans le budget.
+    expect(first.partial).toBe(true);
+    // Les chargements continuent en arrière-plan ; une relecture plus tard ne dit « complet » qu'une fois tout chargé.
+    let last = first;
+    for (let i = 0; i < 20 && last.partial; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      last = await practicalService.get(u, target, 40);
+    }
+    expect(last.partial).toBe(false);
+    expect(new Set(stub.calls.filter((c) => c.source === "wash").map((c) => c.department)).size).toBeGreaterThanOrEqual(
+      8,
+    );
+    expect(last.places.length).toBeGreaterThan(0);
+  });
+});
