@@ -406,3 +406,40 @@ describe("suite R8q, tour 6 : chaque appel à refresh reçoit le résultat de la
     expect(await refresh).toEqual({ status: "ok" });
   });
 });
+
+describe("suite R8q, tour 7 : les attentes sont rattachées à leur requête", () => {
+  it("A en vol puis B : l'échec tardif de A ne résout pas les attentes de B, l'attente invalidée de A se termine en skipped", async () => {
+    const t = setup();
+    const a = t.store.give(here);
+    t.pending[0]?.resolve(at("A"));
+    await a;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const a1 = t.store.refresh(true);
+    const a2 = t.store.refresh(true);
+    // Changement de compte : le module de position oublie aussitôt la position.
+    t.setScope("B");
+    t.store.forget();
+    expect(await a2).toEqual({ status: "skipped" });
+    const b = t.store.give(here);
+    t.pending[2]?.resolve(at("B"));
+    await b;
+    t.advance(POSITION_REFRESH_MS + 1);
+    const b1 = t.store.refresh(true);
+    const b2 = t.store.refresh(true);
+    expect(t.calls()).toBe(4);
+    // Les réponses arrivent dans l'ordre inverse : l'échec de A d'abord.
+    t.pending[1]?.reject(new Error("A, tardif"));
+    expect(await a1).toEqual({ status: "skipped" });
+    let settled = false;
+    void b2.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    t.pending[3]?.resolve(at("B, relue"));
+    expect(await b1).toEqual({ status: "ok" });
+    expect(await b2).toEqual({ status: "ok" });
+    expect(t.store.view().at?.label).toBe("B, relue");
+  });
+});

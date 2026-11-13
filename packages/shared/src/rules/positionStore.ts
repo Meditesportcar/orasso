@@ -55,9 +55,15 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
   // La dernière demande partie, tant qu'elle n'a pas répondu : une relecture ne part pas pendant qu'une demande est en vol (sauf si elle
   // est suspendue depuis plus de `POSITION_INFLIGHT_STALE_MS`, et seulement si c'est elle-même une relecture : une relecture ne part jamais
   // pendant un geste, quel que soit son âge). Effacée à l'oubli et à l'invalidation (changement de compte).
-  let inflight: { seq: number; at: number; kind: "give" | "refresh" } | null = null;
+  let inflight: { seq: number; at: number; kind: "give" | "refresh"; record?: RefreshRecord } | null = null;
   // Les appels à `refresh` qui rejoignent la relecture en cours : chacun reçoit le résultat de la relecture qui se termine.
-  let waiters: Array<(result: PositionRefreshResult) => void> = [];
+  // Chaque attente est rattachée à SA requête : une requête invalidée (autre compte, oubli) termine ses attentes en `skipped`, une
+  // requête d'un autre compte ne résout jamais celles-ci.
+  type RefreshRecord = { waiters: Array<(result: PositionRefreshResult) => void> };
+  const refreshes = new Set<RefreshRecord>();
+  const dropWaiters = () => {
+    for (const record of refreshes) for (const resolve of record.waiters.splice(0)) resolve({ status: "skipped" });
+  };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
@@ -82,6 +88,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
 
   const forget = () => {
     generation += 1;
+    dropWaiters();
     inflight = null;
     set({ owner: null, coarse: null, at: null, fetchedAt: 0 });
   };
@@ -117,6 +124,7 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
     /** Invalide les demandes en cours (tickets) sans toucher à la position gardée : une transition de session a eu lieu. */
     invalidate() {
       generation += 1;
+      dropWaiters();
       inflight = null;
     },
     /** Capture la session et la génération DÈS LE GESTE ; `null` sans session. */
@@ -153,13 +161,18 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
       // en vol est rejointe : l'appelant reçoit son résultat ; pendant un geste, rien ne part (`skipped`).
       if (inflight !== null && (inflight.kind === "give" || deps.now() - inflight.at < POSITION_INFLIGHT_STALE_MS)) {
         if (inflight.kind === "give") return { status: "skipped" };
+        const record = inflight.record;
+        if (!record) return { status: "skipped" };
         return new Promise<PositionRefreshResult>((resolve) => {
-          waiters.push(resolve);
+          record.waiters.push(resolve);
         });
       }
       const gen = generation;
       const seq = ++requestSeq;
-      inflight = { seq, at: deps.now(), kind: "refresh" };
+      // Une relecture suspendue reprise en main : ses attentes passent à la nouvelle (elles reçoivent son résultat, pas celui de l'ancienne).
+      const record: RefreshRecord = { waiters: inflight?.record ? inflight.record.waiters.splice(0) : [] };
+      refreshes.add(record);
+      inflight = { seq, at: deps.now(), kind: "refresh", record };
       let result: PositionRefreshResult = { status: "skipped" };
       try {
         const at = await request(coarse);
@@ -175,12 +188,12 @@ export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
         result = { status: "ok" };
       } catch (error) {
         // Hors ligne ou limite atteinte : la dernière météo connue reste affichée ; la cause est rendue à l'appelant.
-        result = { status: "failed", error };
+        // Une relecture d'un autre compte ou d'une position oubliée n'a plus de cause à rendre.
+        result = gen !== generation || deps.scope() !== owner ? { status: "skipped" } : { status: "failed", error };
       } finally {
         if (inflight?.seq === seq) inflight = null;
-        const joined = waiters;
-        waiters = [];
-        for (const resolve of joined) resolve(result);
+        refreshes.delete(record);
+        for (const resolve of record.waiters.splice(0)) resolve(result);
       }
       return result;
     },

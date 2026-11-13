@@ -34,6 +34,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
   let halted = false;
   // Une lecture est due mais attend le retour sur l'écran (échéance tombée masquée, ou échec transitoire).
   let pending = false;
+  // Un numéro par reprise manuelle ou remise à zéro : l'issue d'une lecture partie avant est ignorée (pas de double lecture).
+  let epoch = 0;
 
   const fire = () => {
     if (!deps.visible()) {
@@ -45,6 +47,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
   };
 
   const manual = () => {
+    epoch += 1;
     timer.cancel();
     calendarStep = 0;
     networkAttempt = 0;
@@ -54,9 +57,14 @@ export function createReadCycle(deps: ReadCycleDeps) {
   };
 
   return {
-    /** Une lecture part : l'écart minimal de 15 s se compte depuis ici. */
-    begin() {
+    /** Une lecture part : l'écart minimal de 15 s se compte depuis ici. Rend le numéro de la lecture (voir `current`). */
+    begin(): number {
       lastStart = now();
+      return epoch;
+    },
+    /** Cette lecture est-elle toujours la dernière ? Faux après « Réessayer » ou une remise à zéro : son issue est ignorée. */
+    current(token: number): boolean {
+      return token === epoch;
     },
     /** L'issue de la lecture : elle remplace toute échéance en attente. */
     settled(outcome: ReadCycleOutcome) {
@@ -127,9 +135,11 @@ export function createReadCycle(deps: ReadCycleDeps) {
 export type PositionOutcome = "ok" | "transient" | "refused" | "unknown";
 
 /**
- * Le calendrier unique des relectures de position (3, 6, 12, 24 s tant que les lieux sont partiels), porté par le magasin et partagé par
- * tous les écrans montés (`retain`) : une seule chaîne, un seul résultat par relecture. Un refus retient son heure (relu au retour
- * après `PRACTICAL_STALE_MS`) ; une erreur inconnue l'arrête ; une réponse complète (`setPartial(false)`) annule tout.
+ * Le calendrier unique des relectures de position (3, 6, 12, 24 s tant que les lieux sont partiels), partagé par tous les écrans montés
+ * (`retain`) : une seule chaîne, un seul résultat par relecture. L'issue (refus et son heure, erreur inconnue, nombre de relances) est
+ * GARDÉE : démonter puis remonter un écran suspend les minuteries sans l'effacer. La remise à zéro n'a lieu qu'au changement de session
+ * (lieux plus partiels : `setPartial(false)`), de position (la clé change : un nouveau calendrier, les suites de l'ancienne sont jetées)
+ * ou sur `retry` (« Réessayer »). Un refus retient son heure (relu au retour après `PRACTICAL_STALE_MS`) ; une erreur inconnue l'arrête.
  */
 export function createPositionCalendar(deps: {
   refresh: () => Promise<PositionOutcome>;
@@ -138,41 +148,70 @@ export function createPositionCalendar(deps: {
 }) {
   let users = 0;
   let partial = false;
-  let started = false;
+  let key: unknown = null;
+  // Le calendrier est en cours : au moins un écran monté pour des lieux partiels.
+  let running = false;
   let generation = 0;
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   const active = () => users > 0 && partial;
   const cycle: ReturnType<typeof createReadCycle> = createReadCycle({
     visible: deps.visible,
     now: deps.now,
-    run: () => {
-      const gen = generation;
-      cycle.begin();
-      void deps.refresh().then((outcome) => {
-        // Complète, démontée ou autre compte entre-temps : cette réponse n'a plus de suite.
-        if (gen !== generation || !active()) return;
-        cycle.settled(outcome === "ok" ? "partial" : outcome);
-      });
-    },
+    run: () => start(),
   });
+  const start = () => {
+    const gen = generation;
+    cycle.begin();
+    void deps.refresh().then((outcome) => {
+      // Une autre position (ou une autre session, ou les lieux complets) entre-temps : cette réponse n'a plus de suite ni d'effet.
+      if (gen !== generation) return;
+      cycle.settled(outcome === "ok" ? "partial" : outcome);
+      // Plus aucun écran monté : l'issue est gardée, aucune minuterie ne reste.
+      if (!active()) cycle.dispose();
+      notify();
+    });
+  };
   const sync = () => {
-    if (active()) {
-      if (!started) {
-        started = true;
-        cycle.settled("partial");
-      }
-    } else if (started) {
-      started = false;
+    if (!partial) {
+      // Lieux complets ou autre session : tout repart à 0.
+      const changed = running || cycle.blocked();
       generation += 1;
       cycle.reset();
+      running = false;
+      key = null;
+      if (changed) notify();
+      return;
+    }
+    if (active()) {
+      if (!running) {
+        running = true;
+        // Remontage : une issue gardée (refus, erreur inconnue) n'est pas effacée ; un refus ancien est relu s'il a plus de 60 s.
+        if (cycle.blocked()) cycle.resume();
+        else cycle.settled("partial");
+      }
+    } else if (running) {
+      running = false;
+      cycle.dispose();
     }
   };
   return {
-    /** Les lieux de la position sont-ils partiels ? (à chaque changement du magasin) */
-    setPartial(next: boolean) {
+    /** Les lieux de la position sont-ils partiels ? `positionKey` change à chaque nouvelle position donnée (nouveau calendrier). */
+    setPartial(next: boolean, positionKey: unknown = null) {
+      if (next && positionKey !== key && key !== null) {
+        // Une nouvelle position : les suites de l'ancienne sont jetées, l'issue gardée ne la concerne pas.
+        generation += 1;
+        cycle.reset();
+        running = false;
+        notify();
+      }
       partial = next;
+      if (next) key = positionKey;
       sync();
     },
-    /** Un écran monté demande le calendrier ; la fonction rendue le libère. */
+    /** Un écran monté demande le calendrier ; la fonction rendue le libère (suspend sans effacer l'issue). */
     retain(): () => void {
       users += 1;
       sync();
@@ -187,6 +226,22 @@ export function createPositionCalendar(deps: {
     /** Retour sur l'écran : onglet visible, appli au premier plan. */
     resume() {
       if (active()) cycle.resume();
+    },
+    /** « Réessayer » : tout repart à 0 et une relecture part tout de suite. */
+    retry() {
+      if (!partial) return;
+      cycle.manual();
+      running = active();
+      notify();
+      start();
+    },
+    /** Le calendrier est arrêté par un refus ou une erreur inconnue : « Réessayer » est proposé. */
+    failed: () => partial && cycle.blocked(),
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     state: () => cycle.state(),
   };

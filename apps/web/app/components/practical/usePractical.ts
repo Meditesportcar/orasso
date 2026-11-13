@@ -16,7 +16,13 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { apiFetch } from "../../lib/api.client";
 import { currentSession, listenSession } from "../../lib/sessionChannel";
-import { retainPracticalCalendar, useFollowWeatherPosition, usePracticalPosition } from "./position";
+import {
+  retainPracticalCalendar,
+  retryPracticalCalendar,
+  useFollowWeatherPosition,
+  usePracticalCalendarFailed,
+  usePracticalPosition,
+} from "./position";
 
 /** Les derniers choix de la séance (page chargée) : « Près de moi | Près de ma sortie », les puces, « Liste | Carte ». */
 export const practicalSession: { choice: PracticalChoice; filter: PracticalFilter; view: "list" | "map" } = {
@@ -166,9 +172,18 @@ export function usePracticalSources(): PracticalSources {
   const outing = useRead("outing", true);
   // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
   useEffect(() => retainPracticalCalendar(), []);
+  const positionFailed = usePracticalCalendarFailed();
   return {
     me: at
-      ? { data: at.data, loading: false, offline: false, retry: city.retry, exact: at.exact, onPosition: true }
+      ? {
+          data: at.data,
+          loading: false,
+          offline: false,
+          failed: positionFailed,
+          retry: retryPracticalCalendar,
+          exact: at.exact,
+          onPosition: true,
+        }
       : { ...city, exact: null, onPosition: false },
     outing,
     busy,

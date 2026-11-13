@@ -103,6 +103,17 @@ describe("le cycle de lecture : une issue remplace les échéances (suite R8q, t
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("« Réessayer » pendant une lecture en vol : l'issue de la plus ancienne est ignorée", () => {
+    const { cycle } = setup();
+    const old = cycle.begin();
+    cycle.manual();
+    const fresh = cycle.begin();
+    expect(cycle.current(old)).toBe(false);
+    expect(cycle.current(fresh)).toBe(true);
+    cycle.reset();
+    expect(cycle.current(fresh)).toBe(false);
+  });
+
   it("une erreur inconnue (TypeError) : aucune relance, aucune reprise automatique, jusqu'à « Réessayer »", () => {
     const { run, cycle } = setup();
     cycle.begin();
@@ -196,5 +207,86 @@ describe("le calendrier unique de la position (suite R8q, tour 6)", () => {
     release();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("l'issue est gardée par le calendrier de position (suite R8q, tour 7)", () => {
+  it("démontage puis remontage après un refus : aucune lecture avant 60 s, une après", async () => {
+    const { pending, refresh, calendar } = position();
+    const release = calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("refused");
+    await vi.advanceTimersByTimeAsync(0);
+    release();
+    await vi.advanceTimersByTimeAsync(3_000);
+    calendar.retain();
+    await vi.advanceTimersByTimeAsync(10_000);
+    calendar.resume();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(calendar.failed()).toBe(true);
+    await vi.advanceTimersByTimeAsync(55_000);
+    calendar.resume();
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("démontage puis remontage après une erreur inconnue : aucune relance automatique", async () => {
+    const { pending, refresh, calendar } = position();
+    const release = calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    release();
+    calendar.retain();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    calendar.resume();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(calendar.failed()).toBe(true);
+  });
+
+  it("erreur inconnue puis une nouvelle position partielle : un nouveau calendrier, les relectures reprennent", async () => {
+    const { pending, refresh, calendar } = position();
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(true);
+    calendar.setPartial(true, "B");
+    expect(calendar.failed()).toBe(false);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("l'erreur tardive de l'ancienne position est sans effet sur la nouvelle", async () => {
+    const { pending, refresh, calendar } = position();
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // L'ancienne relecture est toujours en vol quand la position change.
+    calendar.setPartial(true, "B");
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(false);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("partielle, erreur inconnue, « Réessayer » : « Réessayer » est proposé, la reprise manuelle relit tout de suite", async () => {
+    const { pending, refresh, calendar } = position();
+    calendar.retain();
+    calendar.setPartial(true, "A");
+    await vi.advanceTimersByTimeAsync(3_000);
+    pending[0]?.("unknown");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calendar.failed()).toBe(true);
+    calendar.retry();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(calendar.failed()).toBe(false);
+    pending[1]?.("ok");
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(refresh).toHaveBeenCalledTimes(3);
   });
 });

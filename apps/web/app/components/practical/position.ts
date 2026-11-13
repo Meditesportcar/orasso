@@ -73,13 +73,20 @@ const calendar = createPositionCalendar({
 /** Un écran de « Pratique » est monté : le calendrier travaille tant qu'il l'est. */
 export const retainPracticalCalendar = () => calendar.retain();
 
+/** Le calendrier est arrêté (refus, erreur inconnue) : « Réessayer » est proposé. */
+export const usePracticalCalendarFailed = () => useSyncExternalStore(calendar.subscribe, calendar.failed, () => false);
+
+/** « Réessayer » : tout repart à 0 et les lieux de la position sont relus tout de suite. */
+export const retryPracticalCalendar = () => calendar.retry();
+
 // Suivi de la météo : une tentative par lieu pour la séance, remise à zéro à chaque changement de compte.
 const follow = createFollowTracker();
 
 if (typeof window !== "undefined") {
   // Comme « Ma météo » (R8m) : toute annonce de session qui change le compte (déconnexion = « aucun compte », ou un autre compte) efface
   // la position, invalide les demandes en cours (modèle de demande en vol conservé) et remet le suivi de la météo à zéro.
-  store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true));
+  // La clé du calendrier est la position gardée (`coarse` change à chaque position donnée) : une nouvelle position, un nouveau calendrier.
+  store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true, store.view().coarse));
   // Retour sur l'onglet ou retour en ligne : la relecture due part (jamais depuis un onglet masqué), un refus est relu après 60 s.
   document.addEventListener("visibilitychange", () => calendar.resume());
   window.addEventListener("online", () => calendar.resume());

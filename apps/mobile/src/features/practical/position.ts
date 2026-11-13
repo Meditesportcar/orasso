@@ -60,13 +60,20 @@ const calendar = createPositionCalendar({
     return "unknown";
   },
 });
-store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true));
+// La clé du calendrier est la position gardée (`coarse` change à chaque position donnée) : une nouvelle position, un nouveau calendrier.
+store.subscribe(() => calendar.setPartial(store.view().at?.data.partial === true, store.view().coarse));
 AppState.addEventListener("change", (next) => {
   if (next === "active") calendar.resume();
 });
 
 /** Un écran de « Pratique » est monté : le calendrier travaille tant qu'il l'est. */
 export const retainPracticalCalendar = () => calendar.retain();
+
+/** Le calendrier est arrêté (refus, erreur inconnue) : « Réessayer » est proposé. */
+export const usePracticalCalendarFailed = () => useSyncExternalStore(calendar.subscribe, calendar.failed, () => false);
+
+/** « Réessayer » : tout repart à 0 et les lieux de la position sont relus tout de suite. */
+export const retryPracticalCalendar = () => calendar.retry();
 
 // Chaque fin de session invalide les demandes en cours, même sans position gardée (comme « Ma météo »).
 // Une autre session : le suivi de la météo repart de zéro (une première position du même lieu n'est pas ignorée).

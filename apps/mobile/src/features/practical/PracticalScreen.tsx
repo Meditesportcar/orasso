@@ -144,20 +144,18 @@ export function PracticalScreen() {
         </View>
       ) : null}
       {read.offline && data ? <Notice>{L.offline}</Notice> : null}
+      {read.failed && !read.loading ? (
+        <View style={styles.gps}>
+          <SmButton kind="s" icon="undo" onPress={read.retry} testID="practical-retry">
+            {L.retry}
+          </SmButton>
+        </View>
+      ) : null}
 
       {!data ? (
-        <>
-          <Text variant="caption" color={c.inkMuted} testID="practical-state">
-            {read.loading ? L.loading : L.unavailable}
-          </Text>
-          {read.failed && !read.loading ? (
-            <View style={styles.gps}>
-              <SmButton kind="s" icon="undo" onPress={read.retry} testID="practical-retry">
-                {L.retry}
-              </SmButton>
-            </View>
-          ) : null}
-        </>
+        <Text variant="caption" color={c.inkMuted} testID="practical-state">
+          {read.loading ? L.loading : L.unavailable}
+        </Text>
       ) : list.length === 0 ? (
         <Text variant="caption" color={c.inkMuted} testID="practical-empty">
           {data.partial && data.places.length === 0 ? L.unavailable : L.nothingNear}

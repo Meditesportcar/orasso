@@ -27,7 +27,9 @@ import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 import {
   askPracticalPosition,
   retainPracticalCalendar,
+  retryPracticalCalendar,
   useFollowWeatherPosition,
+  usePracticalCalendarFailed,
   usePracticalPosition,
 } from "./position";
 
@@ -112,9 +114,10 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       return;
     }
     lastStart.current = Date.now();
-    cycle.begin();
+    const token = cycle.begin();
     const gen = generation.current;
-    const valid = () => alive.current && gen === generation.current && guard.valid(ticket);
+    // Une lecture plus ancienne que « Réessayer » ou qu'une remise à zéro est ignorée (jamais deux lectures qui se disputent l'issue).
+    const valid = () => alive.current && gen === generation.current && cycle.current(token) && guard.valid(ticket);
     let outcome: ReadCycleOutcome;
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
@@ -232,14 +235,15 @@ export function usePracticalSources(eventId?: string): PracticalSources {
   const outing = useRead("outing", true, eventId);
   // Un seul calendrier de relecture des lieux partiels, porté par le magasin de position et partagé par tous les écrans montés.
   useEffect(() => retainPracticalCalendar(), []);
+  const positionFailed = usePracticalCalendarFailed();
   return {
     me: at
       ? {
           data: at.data,
           loading: false,
           offline: false,
-          failed: false,
-          retry: city.retry,
+          failed: positionFailed,
+          retry: retryPracticalCalendar,
           exact: at.exact,
           onPosition: true,
         }
