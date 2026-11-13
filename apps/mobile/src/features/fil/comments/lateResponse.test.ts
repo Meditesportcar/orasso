@@ -145,4 +145,14 @@ describe("lateResponse : la réponse reçue APRÈS le passage de A à B", () => 
     expect(applyCommentsOff(set, server, true, tA as never)).toBe(true);
     expect((set.apply(server) as { commentsOff: boolean }).commentsOff).toBe(true);
   });
+
+  it("parentGone : un parent qui n'existe que chez A est retiré chez A, même reçu sous B (jamais cherché dans le fil de B)", () => {
+    const { set, tA } = world();
+    // « seul » n'existe que dans le fil d'A.
+    set.updateSheet("p", (s) => ({ ...s, items: [...s.items, item("seul")] }), tA as never);
+    expect(ids(set)).toEqual(["k2", "parent"]);
+    expect(parentGone(set, "p", "seul", tA as never, () => undefined)).toBe("done");
+    expect(ids(set, tA as never)).toEqual(["k1", "parent"]);
+    expect(ids(set)).toEqual(["k2", "parent"]);
+  });
 });
