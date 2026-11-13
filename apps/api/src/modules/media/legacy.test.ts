@@ -1,8 +1,8 @@
 // Lot R9e : la façade des routes `media-contents` d'avant, pour l'APK en ligne. Une galerie reprise en album se sert **au champ près**
 // comme avant (même identifiant, mêmes photos, mêmes vues, `featured` = album officiel) ; une galerie créée par l'ancien chemin devient
 // un album publié ; modifier, supprimer, mettre en avant et compter les vues passent par l'album ; les liens ne changent pas.
-import { desc, eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { desc, eq, sql } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
@@ -366,6 +366,57 @@ describe("modifier, supprimer, mettre en avant, compter les vues d'une galerie (
     expect((await call(leo, "POST", `/media-contents/${gallery.id}/view`)).json.views).toBe(6);
     expect((await call(null, "POST", `/media-contents/${crypto.randomUUID()}/view`)).status).toBe(404);
     expect((await db.select().from(eventAlbums).where(eq(eventAlbums.id, gallery.id)))[0]?.views).toBe(6);
+  });
+});
+
+describe("tour 3 : finition", () => {
+  it("un envoi consommé puis copié n'est plus servi par /api/files, même si l'effacement de l'original a échoué", async () => {
+    const a = await sendUpload(leo, "media_content");
+    expect((await app.request(`/api/files/${a.key}`)).status).toBe(200); // envoyé, pas encore publié : comme avant
+    vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("disque occupé"));
+    const res = await call(leo, "POST", "/me/media-contents", {
+      eventId,
+      kind: "gallery",
+      title: "Galerie",
+      photoKeys: [a.key],
+    });
+    vi.restoreAllMocks();
+    expect(res.status).toBe(201);
+    // L'original est encore sur le disque (effacement en échec, replanifié), mais plus servi.
+    expect(await storage.get(a.key)).not.toBeNull();
+    expect((await app.request(`/api/files/${a.key}`)).status).toBe(404);
+    expect((await app.request(`/api/files/${a.key.replace("media-contents/", "MEDIA-CONTENTS/")}`)).status).toBe(404);
+  });
+
+  it("le rejeu exact du POST d'une galerie publiée avant le correctif (album repris, photos sans client_id) rend le contenu existant", async () => {
+    const gallery = await legacyGallery({}, 2);
+    await adoptLegacyGalleries(db);
+    const body = { eventId, kind: "gallery", title: gallery.title, photoKeys: gallery.photoKeys };
+    const again = await call(leo, "POST", "/me/media-contents", body);
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(gallery.id);
+    expect(await db.select().from(eventAlbums)).toHaveLength(1);
+  });
+
+  it("la page presse ne montre que les albums visibles ; « Mes contenus » garde l'album du titulaire avec des adresses qu'il peut lire", async () => {
+    const album = await publishedAlbum(leo, eventId, 1);
+    const orgaList = () =>
+      call(orga, "GET", `/events/${eventId}/accreditations`).then((r) => r.json[0].contents as { id: string }[]);
+    expect((await orgaList()).map((c) => c.id)).toEqual([album.id]);
+    await db.execute(sql`update applications set status = 'withdrawn' where media_profile_id = ${leoMedia}`);
+    expect(await orgaList()).toHaveLength(0);
+    const mine = await call(leo, "GET", "/me/media-contents");
+    expect(mine.json).toHaveLength(1);
+    const url = mine.json[0].photos[0].url as string;
+    expect(url).toMatch(/^\/api\/albums\//);
+    expect((await app.request(url, { headers: { cookie: leo.cookie } })).status).toBe(200);
+    // Un album repris, invisible : même règle pour ses photos en clé publique (la route publique répondrait 404).
+    const gallery = await legacyGallery({}, 1);
+    await adoptLegacyGalleries(db);
+    const again = await call(leo, "GET", "/me/media-contents");
+    const reprise = again.json.find((c: { id: string }) => c.id === gallery.id);
+    expect(reprise.photos[0].url).toMatch(/^\/api\/albums\//);
+    expect((await app.request(reprise.photos[0].url, { headers: { cookie: leo.cookie } })).status).toBe(200);
   });
 });
 

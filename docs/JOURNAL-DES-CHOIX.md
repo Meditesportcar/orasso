@@ -6138,3 +6138,13 @@ Défauts appliqués (T31 à T36 de la fiche, Damien n'avait pas encore répondu)
 - **Pagination effective** : `GET /me/albums` (`limit` 50 par défaut, 100 au plus, `cursor`) et `GET /events/:id/albums` et `/events/by-slug/:slug/albums` (`limit` 20, `cursor`, officiel d'abord) rendent `nextCursor` ; plus de plafond silencieux de 200 ou 100.
 - **Envoi sans fichier refusé** : `POST /me/media-contents` en galerie refuse (400) un envoi dont le fichier manque, comme un envoi inconnu ; les trois fixtures de `media.test.ts` qui insèrent des lignes d'envoi écrivent maintenant un vrai fichier (l'exigence des tests est la même). Le repli « clé gardée sur place » du tour 1 est supprimé.
 - **Points 4 et 5 de Codex** (déjà traités au tour 1) vérifiés contre leurs scénarios : photo d'album neuf non lisible par `/api/files` (test), photo signalée gardée puis effacée à la décision (tests).
+
+### Lot R9e, partie 1, tour 3 (13/11/2026) : finition
+
+- **Envoi consommé puis copié** : `/api/files` répond 404 pour un original `media-contents/<uuid>.webp` dont une photo d'album porte la trace de la copie (`client_id` déterministe tiré de la clé), que l'effacement physique ait réussi ou non. Un envoi non publié reste servi comme avant.
+- **Rejeu d'une galerie publiée avant le correctif** : `sameGallery` compare `coalesce(client_id, storage_key)` aux identifiants **ou** aux clés d'envoi d'origine ; une galerie reprise (photos sans `client_id`, clés gardées sur place) est reconnue par ses clés : le rejeu rend le contenu existant, jamais un 400.
+- **`RETRY_REMOVABLE`** accepte aussi `seed/media/<nom>.webp` (photos du seed reprises).
+- **Page presse de l'organisateur** : seulement les albums **visibles** (`albumVisibleSql`) ; un album devenu invisible n'est plus proposé à « Mettre en avant ». **« Mes contenus » du titulaire** : l'album invisible reste listé (c'est le sien), avec des adresses de photos par la route protégée (jamais une adresse publique en 404), y compris pour une photo reprise en clé publique.
+- **Préfixe des anciennes galeries** testé sans tenir compte de la casse, clé passée en minuscules avant `legacyFileState`.
+- **Dossier de modération** : `imageUrl` passe à `null` (et `imageUrls` à `[]`) quand le fichier a été effacé à la décision.
+- **Non traité** : la recherche de la trace de copie (`client_id` seul) n'a pas d'index dédié (l'unique est sur `(album_id, client_id)`) ; elle ne sert que pour une clé d'ancienne galerie sans photo d'album, rare.

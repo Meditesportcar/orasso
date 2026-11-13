@@ -174,6 +174,8 @@ const RETRY_REMOVABLE = [
   /^private\/albums\/[0-9a-f-]{36}\/[0-9a-f]{32}\.webp$/,
   /^private\/album-uploads\/[0-9a-f-]{36}\.webp$/,
   /^media-contents\/[0-9a-f-]{36}\.webp$/,
+  // Les photos du seed reprises dans un album (`seed/media/beziers-night-0.webp`).
+  /^seed\/media\/[A-Za-z0-9_-]+\.webp$/,
 ];
 
 /** Tâche `storage.remove` : seules les clés de `RETRY_REMOVABLE` sont concernées. */

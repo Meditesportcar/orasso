@@ -5,6 +5,8 @@
 // tout autre le voit seulement s'il est publié, non supprimé, d'un média en règle **accrédité (`accepted`) maintenant** à
 // l'événement (règle V6, gardée dans la durée), sur un événement non brouillon et pas sur invitation, et si le compte du média
 // n'est ni suspendu ni banni ni supprimé.
+
+import { createHash } from "node:crypto";
 import { ALBUM_COVER_PHOTOS, type AlbumPhotoView, type AlbumSummary, albumTitle, authorKeyOf } from "@orasso/shared";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 
@@ -51,7 +53,20 @@ export const isPrivateAlbumKey = (storageKey: string) => storageKey.startsWith("
 
 /** Les dossiers des anciennes galeries : leurs fichiers restent sous `/api/files` (clé publique) et suivent la visibilité de l'album. */
 export const LEGACY_GALLERY_PREFIXES = ["media-contents/", "seed/media/"] as const;
-export const isLegacyGalleryKey = (key: string) => LEGACY_GALLERY_PREFIXES.some((p) => key.startsWith(p));
+/** Le préfixe se teste sans tenir compte de la casse (le disque de Windows ne distingue pas `MEDIA-CONTENTS/` de `media-contents/`). */
+export const isLegacyGalleryKey = (key: string) => {
+  const lower = key.toLowerCase();
+  return LEGACY_GALLERY_PREFIXES.some((p) => lower.startsWith(p));
+};
+
+/**
+ * Le `client_id` de la photo copiée sous un album quand une galerie est publiée par l'ancien chemin : un identifiant **déterministe** tiré
+ * de la clé d'envoi (`media-contents/<uuid>.webp`). Il sert à reconnaître une tentative rejouée avec les mêmes clés et la trace de la copie.
+ */
+export const uploadIdOf = (key: string): string => {
+  const h = createHash("sha256").update(key).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+};
 
 // --- Qui voit quoi ------------------------------------------------------------------------------------------------------
 
@@ -83,8 +98,16 @@ export async function legacyFileState(key: string, at: Date): Promise<"visible" 
     .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
     .where(eq(eventAlbumPhotos.storageKey, key))
     .limit(1);
-  if (!row) return "unknown";
-  return row.visible ? "visible" : "hidden";
+  if (row) return row.visible ? "visible" : "hidden";
+  // Un envoi `media_content` **consommé puis copié** sous un album (publication par l'ancien chemin) n'est plus servi : l'original public
+  // devait être effacé ; s'il est encore là (effacement en échec), la base le dit — la copie porte son identifiant déterministe.
+  const [copied] = await db
+    .select({ id: eventAlbumPhotos.id })
+    .from(eventAlbumPhotos)
+    .where(eq(eventAlbumPhotos.clientId, uploadIdOf(key)))
+    .limit(1);
+  if (copied) return "hidden";
+  return "unknown";
 }
 
 /** La base de toute lecture d'album : l'album, son événement, son média. */

@@ -512,6 +512,11 @@ describe("effacement persistant des fichiers (Codex 6)", () => {
       await retryRemove(k);
       expect(await storage.get(k)).toBeNull();
     }
+    // Une photo du seed reprise dans un album (`seed/media/…`) : premier effacement en échec, puis reprise.
+    const seedKey = "seed/media/beziers-night-0.webp";
+    await storage.put(seedKey, Buffer.from("x"));
+    await retryRemove(seedKey);
+    expect(await storage.get(seedKey)).toBeNull();
     // Une clé qui n'est pas d'un album n'est jamais effacée par cette tâche.
     await storage.put("avatars/x/y.webp", Buffer.from("x"));
     await retryRemove("avatars/x/y.webp");
@@ -548,6 +553,9 @@ describe("une photo signalée garde son fichier jusqu'à la décision", () => {
     // La décision efface le fichier gardé.
     expect((await decide(mod, report.id)).status).toBe(200);
     expect(await storage.get(photos[0]?.storageKey as string)).toBeNull();
+    // Le fichier effacé : le dossier ne propose plus d'adresse vers un 404.
+    const after = await call(mod, "GET", `/admin/reports/${report.id}`);
+    expect(JSON.stringify(after.json)).not.toMatch(/\/media\//);
   });
 
   it("une photo non signalée part tout de suite", async () => {

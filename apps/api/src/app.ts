@@ -213,7 +213,7 @@ app.get("/files/*", async (c) => {
   // Lot R9e (Codex 1) : les clés des anciennes galeries suivent la visibilité de leur album (404 s'il n'est plus visible) et se
   // revalident (`no-cache` + ETag), au lieu d'un cache d'un an : un média dont l'accréditation tombe ne reste pas en ligne.
   const legacy = allowed && isLegacyGalleryKey(key);
-  if (legacy && (await legacyFileState(key, now())) === "hidden") throw notFound("Fichier introuvable");
+  if (legacy && (await legacyFileState(key.toLowerCase(), now())) === "hidden") throw notFound("Fichier introuvable");
   const data = allowed ? await storage.get(key) : null;
   if (!data) throw notFound("Fichier introuvable");
   const type = FILE_TYPES[key.slice(key.lastIndexOf(".") + 1)] ?? "application/octet-stream";

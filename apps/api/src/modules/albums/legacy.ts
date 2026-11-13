@@ -3,7 +3,7 @@
 // officiel). Une galerie reprise garde l'identifiant de son ancien contenu (la migration pose `event_albums.id = media_contents.id`) :
 // un appareil qui garde l'ancienne liste continue de modifier, supprimer et compter ses vues. Une façade se retire à la vague suivante.
 
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   albumTitle,
   MEDIA_GALLERY_MAX_PHOTOS,
@@ -34,14 +34,16 @@ import {
   type AlbumPhotoRow,
   albumBase,
   albumPhotoKey,
+  albumPhotoUrl,
   albumPublicPhotoUrl,
   albumVisibleSql,
   isPrivateAlbumKey,
   loadFirstPhotos,
+  uploadIdOf,
 } from "./view";
 
 /** Un album en `MediaContentView`, avec la forme d'avant au champ près. */
-function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[]): MediaContentView {
+function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[], protectedUrls = false): MediaContentView {
   // `contentView` fait le gros du travail ; seules les photos changent d'adresse quand leur clé est privée.
   const row: MediaContentRow = {
     id: a.id,
@@ -64,20 +66,28 @@ function legacyView({ a, e, m }: AlbumJoin, photos: AlbumPhotoRow[]): MediaConte
     photos: photos
       .slice(0, MEDIA_GALLERY_MAX_PHOTOS)
       .map((p) =>
-        isPrivateAlbumKey(p.storageKey)
-          ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
-          : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
+        protectedUrls
+          ? { key: isPrivateAlbumKey(p.storageKey) ? p.id : p.storageKey, url: albumPhotoUrl(a.id, p.storageKey) }
+          : isPrivateAlbumKey(p.storageKey)
+            ? { key: p.id, url: albumPublicPhotoUrl(a.id, p.storageKey) }
+            : { key: p.storageKey, url: storage.url(p.storageKey) ?? "" },
       ),
   };
 }
 
-async function viewsOf(rows: AlbumJoin[]): Promise<MediaContentView[]> {
-  const photos = await loadFirstPhotos(
-    db,
-    rows.map((r) => r.a.id),
-    MEDIA_GALLERY_MAX_PHOTOS,
-  );
-  return rows.map((r) => legacyView(r, photos.get(r.a.id) ?? []));
+/**
+ * `ownerOf` : la liste du titulaire (« Mes contenus ») : un album devenu invisible (accréditation retombée…) reste listé, avec des adresses de
+ * photos qu'il peut lire (route protégée), jamais une adresse publique qui répondrait 404.
+ */
+async function viewsOf(rows: AlbumJoin[], ownerOf = false): Promise<MediaContentView[]> {
+  const ids = rows.map((r) => r.a.id);
+  const photos = await loadFirstPhotos(db, ids, MEDIA_GALLERY_MAX_PHOTOS);
+  const visible = new Set<string>();
+  if (ownerOf && ids.length) {
+    const seen = await albumBase().where(and(inArray(eventAlbums.id, ids), albumVisibleSql(now())));
+    for (const r of seen) visible.add(r.a.id);
+  }
+  return rows.map((r) => legacyView(r, photos.get(r.a.id) ?? [], ownerOf && !visible.has(r.a.id)));
 }
 
 /** Les liens d'un côté, les albums de l'autre : l'album mis en avant (officiel) d'abord, puis les plus récents. */
@@ -113,26 +123,19 @@ async function contentById(id: string): Promise<MediaContentView> {
 }
 
 /**
- * Le `client_id` de la photo copiée sous l'album : un identifiant **déterministe** tiré de la clé d'envoi (`media-contents/<uuid>.webp`),
- * pour reconnaître une tentative rejouée avec les mêmes clés (`sameGallery`).
- */
-const uploadIdOf = (key: string): string => {
-  const h = createHash("sha256").update(key).digest("hex");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-};
-
-/**
  * Album déjà publié par ce média sur cet événement avec exactement ces envois (tentative rejouée). Les photos ont été copiées sous des
  * clés d'album : on reconnaît les envois d'origine par leur identifiant, gardé dans `client_id`.
  */
 async function sameGallery(mediaProfileId: string, input: MediaContentCreate): Promise<string | null> {
   if (!input.photoKeys.length) return null;
   const ids = input.photoKeys.map(uploadIdOf);
+  // Deux façons de reconnaître la même galerie : les identifiants des envois (copie faite par ce code) ou, pour une galerie publiée avant
+  // le correctif ou reprise par la migration (photos sans `client_id`, clés d'origine gardées sur place), les clés d'envoi elles-mêmes.
   const res = await db.execute<{ id: string }>(sql`
     select a.id from event_albums a
     where a.media_profile_id = ${mediaProfileId} and a.event_id = ${input.eventId} and a.deleted_at is null
-      and (select array_agg(p.client_id::text order by p.position) from event_album_photos p
-           where p.album_id = a.id and p.deleted_at is null) = ${sql.param(ids)}::text[]
+      and (select array_agg(coalesce(p.client_id::text, p.storage_key) order by p.position) from event_album_photos p
+           where p.album_id = a.id and p.deleted_at is null) in (${sql.param(ids)}::text[], ${sql.param(input.photoKeys)}::text[])
     limit 1`);
   return res.rows[0]?.id ?? null;
 }
@@ -161,9 +164,8 @@ export const albumsLegacy = {
 
   /** `GET /events/:id/accreditations` (organisation) : les albums publiés de l'événement, sans filtre d'accréditation (comme les contenus d'avant). */
   async forOrganizer(eventId: string): Promise<MediaContentView[]> {
-    const rows = await albumBase().where(
-      and(eq(eventAlbums.eventId, eventId), eq(eventAlbums.status, "published"), isNull(eventAlbums.deletedAt)),
-    );
+    // Seulement les albums **visibles** : un album devenu invisible n'est plus proposé à « Mettre en avant ».
+    const rows = await albumBase().where(and(eq(eventAlbums.eventId, eventId), albumVisibleSql(now())));
     return viewsOf(rows);
   },
 
@@ -202,7 +204,7 @@ export const albumsLegacy = {
         isNull(eventAlbums.deletedAt),
       ),
     );
-    return viewsOf(rows);
+    return viewsOf(rows, true);
   },
 
   /**

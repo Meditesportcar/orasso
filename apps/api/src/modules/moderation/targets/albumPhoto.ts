@@ -58,11 +58,13 @@ export const albumPhotoTarget: TargetRules = {
     // Le nom dans l'adresse est l'identifiant de la photo (une photo reprise garde le nom de son ancienne clé, qui n'a pas la forme
     // attendue par la route des médias de modération) ; le fichier d'une photo retirée est gardé tant que le signalement attend.
     const url = reportMediaUrl(report.id, `${report.targetId}.webp`);
+    // Le fichier a pu être effacé à la décision (aucun signalement ouvert ne le garde) : plus d'adresse vers un 404.
+    const present = (await storage.size(row.key)) !== null;
     return {
       title: `Photo d'un album de ${row.media}`,
       text: null,
-      imageUrl: url,
-      imageUrls: [url],
+      imageUrl: present ? url : null,
+      imageUrls: present ? [url] : [],
       link: null,
       gone: false,
       removed: Boolean(row.deletedAt),
