@@ -42,6 +42,13 @@ export const casquettesLabels = {
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",
+  /** Le site (lot R9h) : la pastille de la barre du haut d'un espace, la rangée de navigation de la casquette, le Fil d'une page indisponible. */
+  siteChipOpen: (name: string) => `Page de ${name}`,
+  siteNav: (name: string) => `Navigation de ${name}`,
+  filUnavailable: "Le Fil de cette page n'est pas disponible.",
+  filUnavailableText:
+    "Une page suspendue, ou survolée en assistance, ne lit ni n'agit en son nom. Reviens à l'espace de la page.",
+  filUnavailableBack: "Retour à l'espace",
 } as const;
 
 /** « Abonnements » vu par une casquette (maquette `filR9`, choix 12) : ce que la casquette suit, pas ce que la personne suit. */

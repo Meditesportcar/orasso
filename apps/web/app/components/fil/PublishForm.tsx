@@ -9,6 +9,7 @@ import {
   type AttachableEventItem,
   acceptEvents,
   accountCheckOf,
+  actorKeyOfPublishAuthor,
   attachableQuery,
   attachDateLabel,
   attachLeadOf,
@@ -83,6 +84,7 @@ import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
 import { latchStale } from "../../lib/sessionGuard";
+import { PublishKind } from "../casquette/PublishKind";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
@@ -146,6 +148,7 @@ export function PublishForm({
   vehicles,
   optionsFailed,
   start,
+  back = "/app/fil",
 }: {
   userId: string;
   pseudo: string;
@@ -154,7 +157,16 @@ export function PublishForm({
   vehicles: { id: string; label: string }[];
   optionsFailed: boolean;
   /** Lot R8d : « Publier pour cet événement » (`?structure=&evenement=`) pose la structure et l'événement de départ. */
-  start?: { structure?: string | null; evenement?: string | null; fiche?: string | null; etiquette?: string | null };
+  start?: {
+    structure?: string | null;
+    evenement?: string | null;
+    fiche?: string | null;
+    etiquette?: string | null;
+    /** Lot R9h (T18, T51) : `?auteur=<clé>` depuis le Fil d'une casquette (`s:`, `p:`, `v:`, `m:` ou `me`). */
+    auteur?: string | null;
+  };
+  /** Où mènent ✕ et « Retour au Fil » : le Fil de la casquette quand on vient de lui (R9h). */
+  back?: string;
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
@@ -640,7 +652,7 @@ export function PublishForm({
   if (sessionStale) {
     return (
       <div className="fil" data-testid="fil-publish-stale">
-        <FicheBar title={L.publishTitle} back="/app/fil" />
+        <FicheBar title={L.publishTitle} back={back} />
         <p className="o-t-body" role="alert">
           {T.accountChanged}
         </p>
@@ -654,7 +666,7 @@ export function PublishForm({
   if (done) {
     return (
       <div className="fil" data-testid="fil-publish-done">
-        <FicheBar title={L.published} back="/app/fil" />
+        <FicheBar title={L.published} back={back} />
         <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
         {doneOffer ? (
           <p className="o-t-body" data-testid="fil-publish-done-offer">
@@ -666,7 +678,7 @@ export function PublishForm({
             {CO.sent(invitedName)}
           </p>
         ) : null}
-        <a className="fil-publish" href="/app/fil" data-testid="fil-publish-back">
+        <a className="fil-publish" href={back} data-testid="fil-publish-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
         {fan ? (
@@ -688,7 +700,13 @@ export function PublishForm({
         void publish();
       }}
     >
-      <FicheBar title={L.publishTitle} facts={L.publishSubtitle} back="/app/fil" />
+      <FicheBar title={L.publishTitle} facts={L.publishSubtitle} back={back} />
+      {/* Lot R9h (T18) : un seul geste « Publier » ; « Story » ouvre le composeur de story au nom de la même casquette. */}
+      <PublishKind
+        current="post"
+        auteur={actorKeyOfPublishAuthor(choice.authorKey)}
+        dirty={items.length > 0 || caption.trim() !== ""}
+      />
       {cropTarget ? (
         <SquareCrop
           key={cropTarget.key}
@@ -1107,7 +1125,7 @@ export function PublishForm({
       >
         {uncertain ? T.uncertainRetry : L.publish}
       </Button>
-      <a className="fil-link" href="/app/fil">
+      <a className="fil-link" href={back}>
         <Icon name="close" size={16} /> Annuler
       </a>
     </form>

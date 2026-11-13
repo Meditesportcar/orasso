@@ -1,0 +1,131 @@
+/* Les espaces de casquette du site (lot R9h) : la barre du haut d'un espace, la pastille « Tu lis en tant que », la sous-navigation
+   Média et Prestataire, le segment « Publication | Story ». Jetons seulement, aucune valeur en dur. */
+
+/* Un espace à barre latérale (`/orga`, `/pro`) : la barre du haut au-dessus du contenu, pas de son retrait. */
+.orga__col {
+  flex: 999 1 560px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.orga__col > .orga__content {
+  flex: 1 1 auto;
+}
+.cas-bar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+.cas-bar__chip {
+  text-decoration: none;
+}
+.cas-bar__chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Sous 860 px la barre latérale passe au-dessus : la barre du haut passe sous elle (ordre naturel du flux). */
+@media (max-width: 860px) {
+  .orga__col {
+    flex: 1 1 100%;
+  }
+}
+
+/* La pastille du Fil d'une casquette : logo, « Tu lis en tant que », nom (jamais tronqué), « Changer ». */
+.cas-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.cas-line__logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 900;
+}
+.cas-line__logo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--night);
+}
+.cas-line__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+.cas-line__text small {
+  color: var(--ink-muted);
+}
+.cas-line__name {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.cas-line__change {
+  flex: none;
+}
+
+/* La sous-navigation Média et Prestataire : la pastille de la page, puis la rangée d'onglets collante. */
+.cas-tabs {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+.cas-tabs__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  color: var(--ink);
+  text-decoration: none;
+}
+.cas-tabs__who .cas-line__name {
+  font-size: 14px;
+}
+.cas-tabs .utabs {
+  margin-inline: var(--space-4);
+}
+
+/* Le segment « Publication | Story » en haut de « Publier » : deux liens, l'actif à l'encre. */
+.cas-kind {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.cas-kind__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.cas-kind__tab.is-on {
+  background: var(--ink);
+  color: var(--ground);
+}
+.cas-kind__tab:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}

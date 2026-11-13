@@ -9,6 +9,7 @@ import { Button, Icon } from "@orasso/design-system/web";
 import {
   applyFeedPage,
   CONTACT_EMAIL,
+  casquetteFeedPhrases,
   caughtUpIndex,
   emptyFeedList,
   type FeedCard,
@@ -33,6 +34,7 @@ import {
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
+import { useCasquette } from "../../lib/actor";
 import { apiFetch } from "../../lib/api.client";
 import { ReportDialog } from "../ReportDialog";
 import { cardFor } from "./Cards";
@@ -48,6 +50,10 @@ const asFilter = (v: string | null): FeedFilter =>
   (feedFilters as readonly string[]).includes(v ?? "") ? (v as FeedFilter) : "for_you";
 
 export function Fil({ userId }: { userId: string }) {
+  // Lot R9h (T49, T51) : dans un espace de casquette, le Fil se lit au nom de la page (« Abonnements » = ce qu'elle suit), « Publier »
+  // se fait en son nom ; hors espace de casquette, `null` et rien ne change.
+  const casquette = useCasquette();
+  const actor = casquette?.key ?? null;
   const [filter, setFilter] = useState<FeedFilter>("for_you");
   // Le filtre de l'adresse est lu une seule fois, au premier affichage : aucune lecture ne part avant.
   const [ready, setReady] = useState(false);
@@ -78,24 +84,27 @@ export function Fil({ userId }: { userId: string }) {
   const menuRef = useRef<HTMLDialogElement>(null);
   const whyRef = useRef<HTMLDialogElement>(null);
 
-  const load = useCallback(async (f: FeedFilter) => {
-    const mine = ++seq.current;
-    const res = await apiFetch<FeedPage>(`/fil?filter=${f}`);
-    if (mine !== seq.current) return;
-    if (!res.ok) {
-      setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.loadError);
-      setErrorSource("reload");
-      return;
-    }
-    const applied = applyFeedPage(emptyFeedList(f), res.data, null);
-    if (applied) {
-      setList(applied.state);
-      setError(null);
-      setErrorSource(null);
-      setFresh(0);
-      setRound((n) => n + 1);
-    }
-  }, []);
+  const load = useCallback(
+    async (f: FeedFilter) => {
+      const mine = ++seq.current;
+      const res = await apiFetch<FeedPage>(`/fil?filter=${f}`, { actor });
+      if (mine !== seq.current) return;
+      if (!res.ok) {
+        setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.loadError);
+        setErrorSource("reload");
+        return;
+      }
+      const applied = applyFeedPage(emptyFeedList(f), res.data, null);
+      if (applied) {
+        setList(applied.state);
+        setError(null);
+        setErrorSource(null);
+        setFresh(0);
+        setRound((n) => n + 1);
+      }
+    },
+    [actor],
+  );
 
   // Le filtre vient de l'adresse au premier affichage (après l'hydratation : jamais de décalage serveur/navigateur).
   useEffect(() => {
@@ -104,12 +113,13 @@ export function Fil({ userId }: { userId: string }) {
     // un départ du Fil la remet à sa place (R8c2). `mineRead` : le mode strict de développement rejoue l'effet.
     if (!mineRead.current) {
       mineRead.current = true;
-      const found = justPublished(readPublished(userId), Date.now());
+      // Une page lit son propre Fil : les publications que la personne vient d'envoyer en son nom propre n'y sont pas montrées.
+      const found = actor ? [] : justPublished(readPublished(userId), Date.now());
       for (const c of found) forgetPublished(c.id);
       setMineCards(found);
     }
     setReady(true);
-  }, [userId]);
+  }, [userId, actor]);
   useEffect(() => {
     if (!ready) return;
     setList(null);
@@ -154,7 +164,7 @@ export function Fil({ userId }: { userId: string }) {
     const sent = current.nextCursor;
     const mine = seq.current;
     setLoadingMore(true);
-    const res = await apiFetch<FeedPage>(`/fil?filter=${current.filter}&cursor=${encodeURIComponent(sent)}`);
+    const res = await apiFetch<FeedPage>(`/fil?filter=${current.filter}&cursor=${encodeURIComponent(sent)}`, { actor });
     setLoadingMore(false);
     if (mine !== seq.current) return;
     if (!res.ok) {
@@ -195,11 +205,12 @@ export function Fil({ userId }: { userId: string }) {
       if (document.visibilityState !== "visible") return;
       const res = await apiFetch<{ count: number }>(
         `/fil/fresh?filter=${filterRef.current}&since=${encodeURIComponent(ref)}`,
+        { actor },
       );
       if (res.ok && listRef.current?.ref === ref) setFresh(res.data.count);
     }, FRESH_EVERY_MS);
     return () => window.clearInterval(timer);
-  }, [ref]);
+  }, [ref, actor]);
 
   useEffect(() => {
     if (menu) menuRef.current?.showModal();
@@ -288,31 +299,44 @@ export function Fil({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
-        <details className="fil-choose" ref={chooseRef}>
-          <summary className="fil-publish fil-publish--icon" data-testid="fil-publish-open" aria-label={L.publish}>
+        {actor ? (
+          // Lot R9h (T18, T51) : en casquette, « Publier » est un seul geste : l'écran « Publier » au nom de la page, où le segment
+          // « Publication | Story » bascule vers la story.
+          <a
+            className="fil-publish fil-publish--icon"
+            href={`/app/fil/publier?auteur=${encodeURIComponent(actor)}`}
+            data-testid="fil-publish-open"
+            aria-label={L.publish}
+          >
             <Icon name="camera" size={20} />
-          </summary>
-          <div className="fil-choose__list">
-            <a className="fil-choose__option" href="/app/story/publier" data-testid="fil-publish-choose-story">
+          </a>
+        ) : (
+          <details className="fil-choose" ref={chooseRef}>
+            <summary className="fil-publish fil-publish--icon" data-testid="fil-publish-open" aria-label={L.publish}>
               <Icon name="camera" size={20} />
-              <span>
-                <strong>{S.chooseStory}</strong>
-                <small>{S.chooseStoryHint}</small>
-              </span>
-            </a>
-            <a className="fil-choose__option" href="/app/fil/publier" data-testid="fil-publish-choose-post">
-              <Icon name="feed" size={20} />
-              <span>
-                <strong>{S.choosePost}</strong>
-                <small>{S.choosePostHint}</small>
-              </span>
-            </a>
-          </div>
-        </details>
+            </summary>
+            <div className="fil-choose__list">
+              <a className="fil-choose__option" href="/app/story/publier" data-testid="fil-publish-choose-story">
+                <Icon name="camera" size={20} />
+                <span>
+                  <strong>{S.chooseStory}</strong>
+                  <small>{S.chooseStoryHint}</small>
+                </span>
+              </a>
+              <a className="fil-choose__option" href="/app/fil/publier" data-testid="fil-publish-choose-post">
+                <Icon name="feed" size={20} />
+                <span>
+                  <strong>{S.choosePost}</strong>
+                  <small>{S.choosePostHint}</small>
+                </span>
+              </a>
+            </div>
+          </details>
+        )}
       </div>
       <div className="fil-phrase">
         <p className="o-t-caption" data-testid="fil-phrase">
-          {feedPhrases[filter]}
+          {casquette && filter === "following" ? casquetteFeedPhrases.following(casquette.name) : feedPhrases[filter]}
         </p>
         <button
           type="button"
@@ -351,6 +375,9 @@ export function Fil({ userId }: { userId: string }) {
         <HotRail
           cards={hot}
           scope={filter === "nearby" ? "nearby" : "following"}
+          scopeLabel={
+            casquette && filter === "following" ? casquetteFeedPhrases.hotFollowing(casquette.name) : undefined
+          }
           onOpen={(card) => noteSeenAction(userId, card.id, "open")}
         />
       ) : null}

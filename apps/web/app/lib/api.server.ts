@@ -3,6 +3,7 @@
 import { type ApiError, CLOCK_OFFSET_HEADER, type Me } from "@orasso/shared";
 import { redirect } from "react-router";
 
+import { actorHeaders } from "./actorRoutes";
 import { applyClockHeader } from "./clock";
 import { collectSessionCookies } from "./session-cookie.server";
 
@@ -28,6 +29,8 @@ type Init = {
   body?: BodyInit;
   /** Cookie à envoyer à la place de celui du visiteur (session qui vient d'être créée par cette même requête). */
   cookie?: string;
+  /** Lot R9h (T49) : la clé d'auteur de la casquette de l'espace ; posée en `x-orasso-actor` seulement sur la liste blanche. */
+  actor?: string | null;
 };
 
 /** En-tête `Cookie` correspondant aux `Set-Cookie` d'une réponse de l'API (nom=valeur seulement). */
@@ -49,6 +52,8 @@ export async function api<T>(request: Request, path: string, init: Init = {}): P
   // Appareil du visiteur : alerte « nouvelle connexion » et liste des appareils connectés (lot 15).
   const userAgent = request.headers.get("user-agent");
   if (userAgent) headers.set("user-agent", userAgent);
+  for (const [name, value] of Object.entries(actorHeaders(init.method ?? "GET", path, init.actor)))
+    headers.set(name, value);
   let body = init.body;
   if (init.json !== undefined) {
     headers.set("content-type", "application/json");

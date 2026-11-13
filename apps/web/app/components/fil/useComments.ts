@@ -36,6 +36,7 @@ import {
 } from "@orasso/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { useActor } from "../../lib/actor";
 import { apiFetch } from "../../lib/api.client";
 import { parentOfReply, parentToReread } from "./commentParent";
 import { onAccountChange, postLive } from "./commentsLive";
@@ -50,7 +51,7 @@ class CallError extends Error {
   }
 }
 
-async function call<T>(path: string, init?: { method?: string; json?: unknown }): Promise<T> {
+async function call<T>(path: string, init?: { method?: string; json?: unknown; actor?: string | null }): Promise<T> {
   const res = await apiFetch<T>(path, init);
   if (!res.ok) throw new CallError(res.status, res.error.code, res.error.message);
   return res.data;
@@ -87,6 +88,12 @@ export function useComments(
   active: boolean,
   onPost: (next: FeedPostView) => void,
 ): CommentsController {
+  // Lot R9h (T49) : dans un espace de casquette, lire et commenter se font au nom de la page (`x-orasso-actor`, seulement sur ces deux
+  // appels : la liste blanche). Passer d'un espace à l'autre est un chargement complet de la page : le magasin ne traverse jamais deux
+  // acteurs. Hors espace de casquette, l'acteur est nul et rien ne change.
+  const actor = useActor();
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
   const version = useSyncExternalStore(postLive.subscribe, postLive.version, postLive.version);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` relit le magasin.
   const sheet = useMemo(() => postLive.sheetOf(post.id), [post.id, version]);
@@ -160,7 +167,9 @@ export function useComments(
       // La marque se prend au départ de **chaque** lecture, pagination comprise.
       const since = sheetMark(postLive.sheetOf(id));
       try {
-        const page = await call<FeedCommentPage>(`/feed-posts/${id}/comments${cursorQs(from)}`);
+        const page = await call<FeedCommentPage>(`/feed-posts/${id}/comments${cursorQs(from)}`, {
+          actor: actorRef.current,
+        });
         if (!postLive.fresh(t)) return;
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
@@ -207,6 +216,7 @@ export function useComments(
         const created = await call<FeedCommentCreated>(`/feed-posts/${id}/comments`, {
           method: "POST",
           json: { text: p.text.trim(), parentId: p.parentId, clientId },
+          actor: actorRef.current,
         });
         if (!postLive.alive(t)) return;
         let counted = 1;

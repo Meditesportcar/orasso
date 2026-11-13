@@ -1,5 +1,6 @@
 import { AppBar, Ground, Icon, TabBar, type TabItem, tabSets, useTheme } from "@orasso/design-system/web";
 import {
+  casquettesLabels,
   type InboxSummary,
   type MyApplication,
   type MyStaffEvent,
@@ -87,6 +88,8 @@ function activeTab(pathname: string): string {
   if (/^\/app\/(sorties|acces|billets|vote|recap)(\/|$)/.test(pathname)) return "home";
   if (pathname.startsWith("/app/explorer")) return "explore";
   if (pathname.startsWith("/app/fil")) return "feed";
+  // Lot R9h : le Fil et la Page d'une casquette (média, prestataire) ont leur propre sous-navigation : pas d'onglet de la barre du passionné.
+  if (/^\/app\/(media|prestataire)\/(fil|page)(\/|$)/.test(pathname)) return "";
   if (pathname === "/app/crew") return "crew";
   return /^\/app\/(moi|securite|sanctions|aide|reseau|profil-public|crews|garage|passeport|media|prestataire|structure|pro)(\/|$)/.test(
     pathname,
@@ -162,6 +165,11 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
                 {loaderData.suspension.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
               </a>
             </div>
+          )}
+          {pathname === "/app/moi" && new URLSearchParams(search).get("casquette") === "indisponible" && (
+            <p className="s-notice" role="status" data-testid="casquette-gone">
+              <strong>{casquettesLabels.gone}</strong> {casquettesLabels.goneText}
+            </p>
           )}
           <Outlet />
           <div className="app__theme">

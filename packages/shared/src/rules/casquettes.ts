@@ -126,3 +126,27 @@ export function storyAuthorAllowed(
           : true),
   );
 }
+
+// --- La casquette d'un espace du site (lot R9h, T48) -------------------------------------------------------------------
+
+/** Les espaces du site qui portent une casquette : `/orga/:structure`, `/pro/:pro`, `/app/media`, `/app/prestataire`. */
+export type CasquetteSpace = "organizer" | "pro" | "media" | "provider";
+
+const SPACE_PREFIX: Record<CasquetteSpace, string> = { organizer: "s", pro: "p", media: "m", provider: "v" };
+
+/**
+ * La clé d'auteur (l'en-tête `X-Orasso-Actor`) de la casquette que porte un espace du site : `s:<structure>` pour
+ * `/orga/:structure/*`, `p:<fiche>` pour `/pro/:pro/*`, `m:<média>` et `v:<prestataire>` pour `/app/media/*` et
+ * `/app/prestataire/*`. Sur le site, la casquette est portée par l'espace (jamais par un cookie) ; partout ailleurs, et sans
+ * identifiant, la clé est nulle : on agit en son propre nom. Le mode assistance et une page suspendue n'agissent jamais au nom
+ * de la page : l'appelant passe `assisted` ou `suspended`.
+ */
+export function actorKeyOfSpace(input: {
+  space: CasquetteSpace | null | undefined;
+  id: string | null | undefined;
+  assisted?: boolean;
+  suspended?: boolean;
+}): string | null {
+  if (!input.space || !input.id || input.assisted || input.suspended) return null;
+  return `${SPACE_PREFIX[input.space]}:${input.id}`;
+}
