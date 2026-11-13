@@ -189,6 +189,14 @@ export function PublishForm({
   const [sessionStale, setSessionStale] = useState(false);
   // Un envoi est parti sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être ; un refus net (4xx) le lève.
   const [maybePosted, setMaybePosted] = useState(false);
+  // Un envoi antérieur est parti sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être ; un refus ultérieur (4xx, y
+  // compris 409 `account_changed`) ne le prouve pas, l'incertitude reste jusqu'à une réponse positive.
+  const uncertainBefore = useRef(false);
+  const settlePost = (res: { ok: boolean; status: number }) => {
+    if (res.ok) return;
+    if (res.status === 0 || res.status >= 500) uncertainBefore.current = true;
+    else if (res.status >= 400 && !uncertainBefore.current) setMaybePosted(false);
+  };
   useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
   // Lot R7g : la vidéo choisie (jamais en même temps qu'une photo), ses clés d'envoi gardées pour une reprise.
@@ -429,7 +437,7 @@ export function PublishForm({
       clipKeys.current = null;
       return setDone(res.data);
     }
-    if (res.status >= 400 && res.status < 500) setMaybePosted(false);
+    settlePost(res);
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.status >= 400 && res.status < 500) clipKeys.current = null;
     setError(res.error.message);
@@ -492,7 +500,7 @@ export function PublishForm({
       uploaded.current = null;
       return setDone(res.data);
     }
-    if (res.status >= 400 && res.status < 500) setMaybePosted(false);
+    settlePost(res);
     if (res.status === 429) return setError(L.tooManyRequests);
     // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
     if (res.status === 400) uploaded.current = null;
@@ -500,8 +508,19 @@ export function PublishForm({
   }
 
   // Une story déjà publiée garde son écran de réussite (le message reste vrai) même si la session change ensuite.
-  // Pendant l'envoi, le formulaire (verrouillé) reste : on ne dit rien tant qu'on ne sait pas.
-  if (sessionStale && !done && !busy) {
+  // Pendant l'envoi, le brouillon de l'autre compte est masqué tout de suite (désactiver ne masque pas) : un état d'envoi neutre, sans
+  // aucune donnée, puis l'issue (empêchée, incertaine ou confirmée) à la fin.
+  if (sessionStale && !done && busy) {
+    return (
+      <div className="fil" data-testid="story-stale-sending">
+        <FicheBar title={L.title} back={back} />
+        <p className="o-t-body" role="status">
+          {L.publishing}
+        </p>
+      </div>
+    );
+  }
+  if (sessionStale && !done) {
     return (
       <div className="fil" data-testid="story-stale">
         <FicheBar title={L.title} back={back} />

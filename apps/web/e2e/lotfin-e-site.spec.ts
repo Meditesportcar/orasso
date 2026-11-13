@@ -3,6 +3,7 @@ import { type Browser, type BrowserContext, expect, type Page, test } from "@pla
 import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
 import { postText } from "./lotr6a-setup";
+import { landscape, who } from "./lotr7f3-setup";
 import { RELAIS } from "./relais";
 
 // Petit lot de fin, partie E (option B « Comme le Profil » choisie par Damien le 13/11), côté site : le haut compact de
@@ -427,7 +428,7 @@ test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () =
         ).__reactRouterDataRouter.state.loaderData["routes/app-crew"]?.userId ?? null,
     );
 
-  test("sans crew : les invitations de A ne restent pas affichées sous B (annonce d'un autre onglet)", async ({
+  test("sans crew : les invitations de A sont masquées dès l'annonce de B, avant que la page se relise", async ({
     browser,
   }) => {
     test.setTimeout(240_000);
@@ -437,14 +438,61 @@ test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () =
     ).toBe(201);
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const a = await ctx.newPage();
+    // La relecture déclenchée par l'annonce est retenue : on voit ce que l'écran montre PENDANT l'attente des données de B.
+    let armed = false;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached: () => void = () => undefined;
+    const reading = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    await a.route(/\/app\/crew\.data/, async (route) => {
+      if (armed) {
+        armed = false;
+        reached();
+        await held;
+      }
+      return route.continue();
+    });
     await setTheme(a, "beton");
     await loginInBrowser(a, crew.sarah.email, undefined, "/app/crew");
     await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
-    // B se connecte dans un autre onglet : l'annonce de session arrive à A.
+    armed = true;
     await signInOther(browser, ctx, crew.paul.email);
-    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0, { timeout: 30_000 });
+    await reading;
+    // Avant la réponse du chargeur : rien de A n'est affiché, le masquage est là.
+    await expect(a.getByTestId("crew-refreshing")).toBeVisible();
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
+    await expect(a.getByTestId("crew-tab-invitations")).toHaveCount(0);
+    release();
     await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
     await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("une annonce périmée (le compte de la page est confirmé par la relecture) est réconciliée : la page de A revient", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await loginInBrowser(a, crew.chef.email, undefined, `/app/crew?crew=${crew.slug}`);
+    await expect(a.getByTestId("crew-outings")).toBeAttached();
+    // Un autre onglet annonce « un autre compte » sans que la session change : les relectures confirment A.
+    await a.evaluate(() => {
+      const c = new BroadcastChannel("orasso-session");
+      c.postMessage({ userId: "un-autre-compte" });
+      c.close();
+    });
+    await expect(a.getByTestId("crew-outings")).toBeAttached({ timeout: 30_000 });
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0, { timeout: 30_000 });
+    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
+    expect(await loadedUser(a)).toBe(crew.chef.id);
     await ctx.close();
   });
 
@@ -484,6 +532,95 @@ test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () =
     await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
     await expect(a.getByTestId("crew-refreshing")).toHaveCount(0, { timeout: 30_000 });
     await expect(a.getByTestId("crew-outings")).toHaveCount(0);
+    await ctx.close();
+  });
+});
+
+test.describe("partie B1, tour 4 : composeur de story du site", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  async function toSend(page: Page, email: string, caption: string) {
+    await loginInBrowser(page, email, undefined, "/app/story/publier");
+    await page.getByTestId("story-file").setInputFiles(landscape());
+    await expect(page.getByTestId("story-fit")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("story-plate-none").click();
+    await page.getByTestId("story-plate-none-yes").click();
+    await page.getByTestId("story-caption").fill(caption);
+    await expect(page.getByTestId("story-publish-send")).toBeEnabled();
+  }
+
+  test("l'annonce de B pendant l'envoi : le brouillon de A est masqué tout de suite, état neutre, puis l'issue", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const author = await who("StB1Neutre");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    const SECRET = "Brouillon secret de A";
+    await toSend(a, author.email, SECRET);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached: () => void = () => undefined;
+    const arrived = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    await a.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      reached();
+      await held;
+      return route.continue();
+    });
+    await a.getByTestId("story-publish-send").click();
+    await arrived;
+    await signInOther(browser, ctx, "sarah@orasso.local");
+    // Pendant l'envoi encore en cours : rien du brouillon de A (photo, légende) n'est affiché.
+    await expect(a.getByTestId("story-stale-sending")).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByTestId("story-caption")).toHaveCount(0);
+    await expect(a.getByTestId("story-fit")).toHaveCount(0);
+    await expect(a.getByText(SECRET)).toHaveCount(0);
+    release();
+    // L'issue : l'API refuse (la session est celle de B) ; aucune donnée de A.
+    await expect(a.getByTestId("story-stale")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByText(SECRET)).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("un envoi enregistré dont la réponse se perd, puis un refus, puis le changement de compte : « peut-être publiée »", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const author = await who("StB1Perte");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await toSend(a, author.email, "Envoi à réponse perdue");
+    let calls = 0;
+    await a.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      calls += 1;
+      if (calls === 1) {
+        // La création est réellement enregistrée, la réponse se perd.
+        await route.fetch();
+        return route.abort("failed");
+      }
+      return route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "forbidden", message: "Accès refusé" } }),
+      });
+    });
+    await a.getByTestId("story-publish-send").click();
+    await expect(a.getByTestId("story-error")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    await a.getByTestId("story-publish-send").click();
+    await expect.poll(() => calls, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled({ timeout: 60_000 });
+    await signInOther(browser, ctx, "sarah@orasso.local");
+    await expect(a.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 30_000 });
+    await expect(a.getByTestId("story-stale")).not.toContainText("recharge la page avant de publier");
     await ctx.close();
   });
 });

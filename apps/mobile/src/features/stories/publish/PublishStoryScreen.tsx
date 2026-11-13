@@ -184,6 +184,11 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const stale = locked || staleKind !== null || accountMismatch;
   // La création est partie sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être, jusqu'à la réponse ou un refus net.
   const [maybeSent, setMaybeSent] = useState(false);
+  // Un envoi antérieur est parti sans réponse certaine : un refus ultérieur (4xx, `account_changed`, verrou) ne prouve pas qu'il n'a rien
+  // créé. L'incertitude reste jusqu'à une confirmation ; `outcomeOf` ne laisse jamais « pas partie » après un tel envoi.
+  const uncertainBefore = useRef(false);
+  const outcomeOf = (o: StoryAccountOutcome): StoryAccountOutcome =>
+    o === "confirmed" ? o : uncertainBefore.current ? "uncertain" : o;
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
   const kindKey = asPerson ? "me" : (frozen.current?.key ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
@@ -527,7 +532,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent) return guard.current() ? undefined : setStaleKind("prevented");
+      if (!result.sent) return guard.current() ? undefined : setStaleKind(outcomeOf("prevented"));
       // Acceptée par l'API, mais le compte a changé : la story existe, sous le compte qui a ouvert l'écran.
       if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: true, answered: true }));
       videoKeys.current = {};
@@ -539,12 +544,15 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setStep("done");
     } catch (e) {
       // Annulé parce que l'écran a été quitté : rien à dire à personne.
-      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
+      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind(outcomeOf("prevented"));
       // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
       const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
-      if (refused) setMaybeSent(false);
+      if (refused && !uncertainBefore.current) setMaybeSent(false);
+      if (!refused && creating) uncertainBefore.current = true;
       if (!guard.current())
-        return setStaleKind(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false }));
+        return setStaleKind(
+          outcomeOf(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false })),
+        );
       if (isUploadCancelled(e)) return;
       if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
       else if (isUploadTimeout(e)) setError(V.uploadTimeout);
@@ -613,7 +621,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent) return guard.current() ? undefined : setStaleKind("prevented");
+      if (!result.sent) return guard.current() ? undefined : setStaleKind(outcomeOf("prevented"));
       if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: true, answered: true }));
       const story = result.value;
       // La story est partie : la barre la montre en tête, les JPEG non floutés s'effacent.
@@ -625,12 +633,15 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setCreated(story);
       setStep("done");
     } catch (e) {
-      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
+      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind(outcomeOf("prevented"));
       // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
       const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
-      if (refused) setMaybeSent(false);
+      if (refused && !uncertainBefore.current) setMaybeSent(false);
+      if (!refused && creating) uncertainBefore.current = true;
       if (!guard.current())
-        return setStaleKind(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false }));
+        return setStaleKind(
+          outcomeOf(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false })),
+        );
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(L.offline);
       else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {

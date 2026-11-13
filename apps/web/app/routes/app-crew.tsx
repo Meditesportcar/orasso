@@ -160,17 +160,42 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   // Une relecture reprise par une navigation en cours peut ne pas relire le Crew : tant que la discordance dure et qu'aucune relecture
   // n'est en cours, on relit de nouveau (trois fois au plus, sans boucle).
   const tries = useRef(0);
+  const [gaveUp, setGaveUp] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: seuls la discordance et la fin d'une relecture comptent
   useEffect(() => {
     if (!foreign) {
       tries.current = 0;
+      setGaveUp(false);
       return;
     }
-    if (revalidator.state === "idle" && tries.current < 3) {
+    if (revalidator.state !== "idle") return;
+    // Une relecture authentifiée vient de finir et la mise en page dit le même compte que les données : seule l'annonce est périmée
+    // (un autre onglet l'a faite puis est revenu au compte de la page). Elle est réconciliée, pas obéie.
+    if (tries.current >= 1 && layout?.userId === owner) {
+      tries.current = 0;
+      setAnnounced(undefined);
+      return;
+    }
+    if (tries.current < 3) {
       tries.current += 1;
       void revalidator.revalidate();
+    } else {
+      setGaveUp(true);
     }
   }, [foreign, revalidator.state]);
+  if (foreign && gaveUp) {
+    // Les relectures n'ont pas résolu la discordance : jamais « Mise à jour… » à vie, une action de reprise.
+    return (
+      <div className="s-narrow s-stack" data-testid="crew-refresh-failed">
+        <p className="s-error" role="alert">
+          {L.refreshFailed}
+        </p>
+        <Button variant="secondary" icon="undo" onClick={() => window.location.reload()}>
+          {L.refreshReload}
+        </Button>
+      </div>
+    );
+  }
   if (foreign) {
     return (
       <p className="s-muted" role="status" data-testid="crew-refreshing">

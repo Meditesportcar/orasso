@@ -407,3 +407,36 @@ test("le public annoncé après la réussite est figé : une story de crew reste
   await expect(page.getByTestId("story-done")).not.toContainText("Tes abonnés");
   await ctx.close();
 });
+
+test("un envoi enregistré dont la réponse se perd, puis un refus net, puis le changement de compte : toujours « peut-être publiée »", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const author = await who("StB1Garde");
+  const { ctx, page } = await open(browser, author.email);
+  let calls = 0;
+  await page.route(/\/api\/me\/stories$/, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    calls += 1;
+    if (calls === 1) {
+      // La création est réellement enregistrée, la réponse se perd.
+      await route.fetch();
+      return route.abort("failed");
+    }
+    return route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "forbidden", message: "Accès refusé" } }),
+    });
+  });
+  await toPreview(page);
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-publish")).toBeEnabled({ timeout: 60_000 });
+  await page.getByTestId("story-publish").click();
+  await expect.poll(() => calls, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId("story-publish")).toBeEnabled({ timeout: 60_000 });
+  await switchAccountUnderneath(page, OTHER);
+  await expect(page.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 15_000 });
+  await expect(page.getByTestId("story-stale")).not.toContainText("n'est pas partie");
+  await ctx.close();
+});
