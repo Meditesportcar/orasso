@@ -493,7 +493,8 @@ export function PublishForm({
     setError(res.error.message);
   }
 
-  if (sessionStale) {
+  // Une story déjà publiée garde son écran de réussite (le message reste vrai) même si la session change ensuite.
+  if (sessionStale && !done) {
     return (
       <div className="fil" data-testid="story-stale">
         <FicheBar title={L.title} back={back} />

@@ -329,3 +329,75 @@ test.describe("partie B1, tour 1 : page demandée que le compte ne tient pas", (
     await expect(page.getByTestId("story-author-lost")).toHaveCount(0);
   });
 });
+
+test.describe("partie B1, tour 2 : le compte change pendant le retrait de `publier`", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("site : rien du Crew de A n'est affiché sous B ; la page se relit", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    // Aucune annonce de session n'arrive : seul le chargeur parent relu dit que le compte a changé.
+    await ctx.addInitScript(() => {
+      class Silent {
+        onmessage = null;
+        postMessage() {}
+        close() {}
+        addEventListener() {}
+        removeEventListener() {}
+      }
+      (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = Silent;
+      window.addEventListener("storage", (e) => e.stopImmediatePropagation(), true);
+    });
+    const a = await ctx.newPage();
+    // La relecture des chargeurs parents (déclenchée par le retrait de `publier`) attend que B soit connecté.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let parentRead: () => void = () => undefined;
+    const parentReading = new Promise<void>((resolve) => {
+      parentRead = resolve;
+    });
+    await a.route(/\/app\/crew\.data/, async (route) => {
+      const routes = new URL(route.request().url()).searchParams.get("_routes");
+      if (routes !== null && !routes.split(",").includes("routes/app-crew")) {
+        parentRead();
+        await held;
+      }
+      return route.continue();
+    });
+    await setTheme(a, "beton");
+    await loginInBrowser(a, crew.chef.email, undefined, "/app/fil");
+    // (Pas de `loginInBrowser` ici : sa fin d'attente `networkidle` ne viendrait jamais avec la lecture retenue.)
+    await a.goto(`/app/crew?crew=${crew.slug}&publier=1`);
+    await parentReading;
+    // La page de A (ses sorties) est affichée tant que rien n'a changé.
+    await expect(a.getByTestId("crew-outings")).toBeAttached();
+    // B se connecte dans un autre onglet (le cookie de session change), puis la relecture parent répond pour B.
+    const other = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await loginInBrowser(await other.newPage(), "sarah@orasso.local", undefined, "/app/fil");
+    const cookies = await other.cookies();
+    await other.close();
+    await ctx.clearCookies();
+    await ctx.addCookies(cookies);
+    release();
+    // B n'a aucun crew : la page se relit sous B (le chargeur ne rend plus le crew de A) et montre « Pas encore de crew ».
+    await expect
+      .poll(
+        () =>
+          a.evaluate(() => {
+            const st = (
+              window as unknown as {
+                __reactRouterDataRouter: { state: { loaderData: Record<string, { mode?: string }> } };
+              }
+            ).__reactRouterDataRouter.state.loaderData;
+            return st["routes/app-crew"]?.mode;
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe("none");
+    await expect(a.getByTestId("crew-outings")).toHaveCount(0);
+    await ctx.close();
+  });
+});

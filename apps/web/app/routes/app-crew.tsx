@@ -14,7 +14,8 @@ import {
   explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { data, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useEffect, useState } from "react";
+import { data, redirect, type ShouldRevalidateFunctionArgs, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
@@ -22,6 +23,7 @@ import { CrewRowR2, PeopleEmpty, PeopleSection, PrivacyNote } from "../component
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewLastCookie, crewLastOf, pickCrew } from "../lib/crew-last.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
+import { listenSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/app-crew";
 
 // Onglet Crew (lot R7b2, D38, maquette R7.11), comme l'appli : le sélecteur de crew (plusieurs crews ; le dernier ouvert
@@ -138,6 +140,27 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AppCrew({ loaderData, actionData }: Route.ComponentProps) {
+  // Les données du Crew (sorties, garage, demandes) sont celles du compte qui les a chargées (`userId`). Si le compte courant est un
+  // autre (la mise en page parent relue, ou l'annonce d'un autre onglet) : rien n'en est affiché, et la page se relit.
+  const layout = useRouteLoaderData("layouts/app") as { userId?: string } | undefined;
+  const [announced, setAnnounced] = useState<string | null | undefined>(undefined);
+  useEffect(() => listenSession(setAnnounced), []);
+  const owner = loaderData.mode === "crew" ? loaderData.userId : null;
+  const foreign =
+    owner !== null &&
+    ((layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner));
+  const revalidator = useRevalidator();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le passage à « autre compte » relance la lecture
+  useEffect(() => {
+    if (foreign) void revalidator.revalidate();
+  }, [foreign]);
+  if (foreign) {
+    return (
+      <p className="s-muted" role="status" data-testid="crew-refreshing">
+        {L.refreshing}
+      </p>
+    );
+  }
   if (loaderData.mode === "error") {
     return (
       <div className="s-narrow s-stack" data-testid="load-error">

@@ -17,6 +17,7 @@ import {
   pruneForAudience,
   removeTag,
   sendIfAlive,
+  storyAccountOutcome,
   storyAccountStale,
   storyAudienceOptions,
   storyBody,
@@ -353,6 +354,14 @@ describe("storyAccountStale : le brouillon appartient au compte qui l'a ouvert (
   it("autre compte, ou plus de compte (déconnexion) : périmé", () => {
     expect(storyAccountStale("u1", "u2")).toBe(true);
     expect(storyAccountStale("u1", null)).toBe(true);
+  });
+});
+
+describe("storyAccountOutcome : trois issues distinctes", () => {
+  it("rien n'est parti : empêchée ; parti sans réponse : incertaine ; réponse reçue : confirmée", () => {
+    expect(storyAccountOutcome({ accepted: false, answered: false })).toBe("prevented");
+    expect(storyAccountOutcome({ accepted: true, answered: false })).toBe("uncertain");
+    expect(storyAccountOutcome({ accepted: true, answered: true })).toBe("confirmed");
   });
 });
 

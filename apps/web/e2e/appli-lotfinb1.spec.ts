@@ -215,3 +215,65 @@ test("page perdue à l'ouverture sous une casquette active : l'écran ne garde p
   await shot(page, "04-page-perdue-casquette-active-beton-384-x1");
   await ctx.close();
 });
+
+// Tour 2 : trois issues distinctes quand le compte change autour de l'envoi (empêchée, incertaine, confirmée) ; une story déjà
+// publiée garde son écran de réussite.
+async function toPreview(page: Page) {
+  await toPlate(page);
+  await validatePlate(page);
+  await page.getByTestId("story-to-preview").click();
+  await expect(page.getByTestId("story-preview-canvas")).toBeVisible({ timeout: 30_000 });
+}
+
+test("le compte change pendant l'envoi : réponse reçue après = « publiée » ; envoi sans réponse = « peut-être publiée »", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  for (const answer of ["confirmed", "uncertain"] as const) {
+    const author = await who(`StB1${answer === "confirmed" ? "Ok" : "Inc"}`);
+    const { ctx, page } = await open(browser, author.email);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let seen: () => void = () => undefined;
+    const arrived = new Promise<void>((resolve) => {
+      seen = resolve;
+    });
+    await page.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      seen();
+      await held;
+      return answer === "confirmed" ? route.continue() : route.abort("failed");
+    });
+    await toPreview(page);
+    await page.getByTestId("story-publish").click();
+    await arrived;
+    // L'envoi est parti ; le compte change avant la réponse : on ne dit pas « pas partie » tant qu'on ne sait pas.
+    await switchAccountUnderneath(page, OTHER);
+    await expect(page.getByTestId("story-stale")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("story-stale")).not.toContainText("n'est pas partie");
+    release();
+    if (answer === "confirmed") {
+      await expect(page.getByTestId("story-stale")).toContainText("Ta story a été publiée", { timeout: 60_000 });
+    } else {
+      await expect(page.getByTestId("story-stale")).toContainText("a peut-être été publiée", { timeout: 60_000 });
+    }
+    await shot(page, `05-envoi-${answer}-beton-384-x1`);
+    await ctx.close();
+  }
+});
+
+test("le compte change après la réussite : l'écran de réussite reste, son message reste vrai", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const author = await who("StB1Apres");
+  const { ctx, page } = await open(browser, author.email);
+  await toPreview(page);
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 90_000 });
+  await switchAccountUnderneath(page, OTHER);
+  await page.waitForTimeout(1_500);
+  await expect(page.getByTestId("story-done")).toBeVisible();
+  await expect(page.getByTestId("story-stale")).toHaveCount(0);
+  await ctx.close();
+});

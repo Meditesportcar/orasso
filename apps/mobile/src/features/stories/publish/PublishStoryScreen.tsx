@@ -15,10 +15,12 @@ import {
   storyPublishLabels as L,
   partnershipLabels,
   resolveStoryAuthor,
+  type StoryAccountOutcome,
   type StoryAudienceOption,
   type StoryAuthor,
   type StoryCreated,
   sendIfAlive,
+  storyAccountOutcome,
   storyAccountStale,
   storyAudienceOptions,
   storyAuthorAllowed,
@@ -172,8 +174,10 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     asPerson || waitingProfile || (!frozen.current?.lostAtOpen && storyAuthorAllowed(base, me?.personas ?? []));
   // Le brouillon appartient au compte qui a ouvert l'écran : s'il change (déconnexion, autre compte, 409 `account_changed`), l'écran
   // se verrouille pour de bon (même repassé au premier compte) et rien ne part.
-  const [staleLatched, setStaleLatched] = useState(false);
-  const stale = staleLatched || storyAccountStale(frozen.current?.account ?? null, me?.user.id ?? null);
+  // Ce qu'on sait de l'envoi quand le compte a changé : empêché (rien n'est parti), incertain (la création était partie, la réponse
+  // n'a pas été appliquée) ou confirmé (l'API a accepté la story avant le changement). `null` : pas (encore) tranché.
+  const [staleKind, setStaleKind] = useState<StoryAccountOutcome | null>(null);
+  const stale = staleKind !== null || storyAccountStale(frozen.current?.account ?? null, me?.user.id ?? null);
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
   const kindKey = asPerson ? "me" : (frozen.current?.key ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
@@ -280,11 +284,15 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   // Compte changé : le brouillon d'avant est abandonné (envois annulés, JPEG non floutés effacés), l'écran reste verrouillé.
   useEffect(() => {
     if (!stale) return;
-    setStaleLatched(true);
     generation.current++;
     uploadAbort.current?.abort();
     discardTempPhotos();
   }, [stale]);
+
+  // Sans envoi en cours, le changement de compte vaut « empêché » ; avec un envoi en cours, c'est l'envoi qui dit l'issue en finissant.
+  useEffect(() => {
+    if (stale && !busy) setStaleKind((k) => k ?? "prevented");
+  }, [stale, busy]);
 
   const goBack = useCallback(() => {
     const before = video ? videoStepBefore(step) : stepBefore(step, draft?.plate.photo ?? null);
@@ -457,6 +465,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     const expectedUserId = frozen.current.account;
     const epoch = aliveFor(generation.current);
     const alive = () => epoch() && guard.current();
+    // La création est-elle partie ? (le verrou de compte joue avant ; après, l'issue est incertaine tant qu'on n'a pas la réponse.)
+    let creating = false;
     const abort = new AbortController();
     uploadAbort.current = abort;
     setBusy(true);
@@ -494,6 +504,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           setVideoRatio(0.99);
         },
         async () => {
+          creating = true;
           const send = () =>
             api.createStory({ ...body(videoKeys.current.video ?? "", videoKeys.current.poster ?? ""), expectedUserId });
           try {
@@ -504,7 +515,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent || !guard.current()) return;
+      if (!result.sent) return guard.current() ? undefined : setStaleKind("prevented");
+      // Acceptée par l'API, mais le compte a changé : la story existe, sous le compte qui a ouvert l'écran.
+      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: true, answered: true }));
       videoKeys.current = {};
       markStoryPublished(result.value);
       discardTempPhotos();
@@ -512,8 +525,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setStep("done");
     } catch (e) {
       // Annulé parce que l'écran a été quitté : rien à dire à personne.
-      if (isUploadCancelled(e) || !guard.current()) return;
-      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleLatched(true);
+      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
+      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: creating, answered: false }));
+      if (isUploadCancelled(e)) return;
       if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
       else if (isUploadTimeout(e)) setError(V.uploadTimeout);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
@@ -538,6 +552,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     const expectedUserId = frozen.current.account;
     const epoch = aliveFor(generation.current);
     const alive = () => epoch() && guard.current();
+    let creating = false;
     setBusy(true);
     setError(null);
     setSent(0);
@@ -569,6 +584,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
         // Une réponse perdue peut laisser un 400 « image déjà utilisée » si le premier envoi n'est pas encore enregistré :
         // on refait la requête une fois avec la même clé (elle retrouve la story) avant d'oublier la clé.
         async () => {
+          creating = true;
           const send = () => api.createStory({ ...body(keys.current[draft.upload.uri] ?? ""), expectedUserId });
           try {
             return await send();
@@ -578,7 +594,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent || !guard.current()) return;
+      if (!result.sent) return guard.current() ? undefined : setStaleKind("prevented");
+      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: true, answered: true }));
       const story = result.value;
       // La story est partie : la barre la montre en tête, les JPEG non floutés s'effacent.
       keys.current = {};
@@ -587,9 +604,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setCreated(story);
       setStep("done");
     } catch (e) {
-      if (!guard.current()) return;
-      if (e instanceof ApiRequestError && e.code === "account_changed") setStaleLatched(true);
-      else if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
+      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind("prevented");
+      if (!guard.current()) return setStaleKind(storyAccountOutcome({ accepted: creating, answered: false }));
+      if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(L.offline);
       else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
         // L'API n'a pas vu de décision de plaque : on rouvre l'étape, rien n'est parti.
@@ -606,12 +623,21 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     }
   }
 
-  // Compte changé : plus rien à publier ici (le brouillon était celui de l'autre compte).
-  if (stale) {
+  // Compte changé : plus rien à publier ici (le brouillon était celui de l'autre compte). Une story déjà publiée garde son écran de
+  // réussite (le message reste vrai) ; sinon le message dit ce qu'on sait : rien n'est parti, peut-être partie, ou publiée.
+  if (stale && !created) {
+    // Pendant un envoi dont l'issue n'est pas encore connue, on ne dit pas « pas partie ».
+    const kind = staleKind ?? (busy ? "uncertain" : "prevented");
     return (
       <FlowScreen title={L.title} onClose={close}>
         <View style={styles.lost} testID="story-stale">
-          <Notice tone="error">{L.accountChanged}</Notice>
+          <Notice tone={kind === "confirmed" ? "info" : "error"}>
+            {kind === "prevented"
+              ? L.accountChanged
+              : kind === "uncertain"
+                ? L.accountChangedUncertain
+                : L.accountChangedPublished}
+          </Notice>
           <SmButton kind="s" icon="close" onPress={close} testID="story-stale-close">
             {L.close}
           </SmButton>
