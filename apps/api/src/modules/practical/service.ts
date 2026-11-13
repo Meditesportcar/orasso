@@ -1,6 +1,8 @@
 // « Pratique » (lot R8q, maquette R8.12) : la station-service et le lavage les plus proches, de moi ou de ma sortie.
-// Sources : lavage = OpenStreetMap par Overpass (cache `wash:<département>`, une semaine), stations-service = jeu public des
-// prix des carburants (cache `fuel:<département>`, un jour). Les sources ne reçoivent JAMAIS une position : seulement un code de
+// Sources : OpenStreetMap par Overpass, en une seule requête par département (cache `wash:<département>`, une semaine) : les lavages
+// et les stations-service ; jeu public des prix des carburants (cache `fuel:<département>`, un jour) : les stations-service. Les
+// stations des deux sources sont fusionnées (petit lot de fin D) : le jeu public gagne un doublon, OpenStreetMap ajoute les stations
+// qui ne déclarent pas de prix. Les sources ne reçoivent JAMAIS une position : seulement un code de
 // département. La position d'une personne n'arrive ici qu'arrondie à la case de 0,1° (`weatherCell`, dès la route) ; elle
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
@@ -15,6 +17,7 @@ import {
   practicalPlaceId,
   practicalTexts,
   type WeatherCell,
+  withoutTwins,
 } from "@orasso/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
@@ -24,7 +27,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { EXTERNAL_BUDGET_MS, withinBudget } from "../../lib/external/cache";
 import { FUEL_MAX_STALE_MS, fuelNear } from "../../lib/external/fuel";
-import { washNear } from "../../lib/external/overpass";
+import { type CachedOsmPlace, isFuel, isWash, osmNear } from "../../lib/external/overpass";
 import type { Viewer } from "../../lib/session";
 
 /** Ce que la route donne au service : la case de 0,1° (jamais la position reçue), ou le choix « ville » / « sortie ». */
@@ -38,13 +41,17 @@ type OutingEvent = { id: string; title: string; lat: number | null; lng: number 
 /** Au-delà, la source ne sert plus sa liste périmée (lavage : 30 jours dans `overpass.ts`, stations : `FUEL_MAX_STALE_MS`). */
 const STALE_LIMIT_MS = { wash: 30 * 24 * 3_600_000, fuel: FUEL_MAX_STALE_MS } as const;
 
-const attribution = { wash: homeLabels.washAttribution, fuel: homeLabels.fuelAttribution };
+/** Qui a servi les stations : le jeu public, OpenStreetMap, ou les deux (alors les deux sont cités). */
+const fuelAttribution = (gov: boolean, osm: boolean) =>
+  gov && osm ? practicalTexts.fuelSourcesBoth : osm ? practicalTexts.fuelSourcesOsm : homeLabels.fuelAttribution;
+const baseAttribution = { wash: homeLabels.washAttribution, fuel: homeLabels.fuelAttribution };
+type Attribution = { wash: string; fuel: string };
 
 export const practicalService = {
   async get(v: Viewer, target: PracticalTarget, budgetMs = EXTERNAL_BUDGET_MS): Promise<PracticalData> {
     const origin = await this.origin(v, target);
-    if (!origin) return { origin: null, places: [], partial: false, attribution };
-    return { origin, ...(await this.placesAround(origin, budgetMs)), attribution };
+    if (!origin) return { origin: null, places: [], partial: false, attribution: baseAttribution };
+    return { origin, ...(await this.placesAround(origin, budgetMs)) };
   },
 
   async origin(v: Viewer, target: PracticalTarget): Promise<PracticalOrigin | null> {
@@ -128,32 +135,27 @@ export const practicalService = {
   },
 
   /**
-   * Les lieux des deux départements les plus proches de l'origine, dans le rayon, du plus proche au plus loin. `partial` :
-   * une source n'a pas répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
+   * Les lieux des départements qui coupent la zone, dans le rayon, du plus proche au plus loin. `partial` : une source n'a pas
+   * répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
    */
   async placesAround(
     origin: PracticalOrigin,
     budgetMs: number,
-  ): Promise<{ places: PracticalPlace[]; partial: boolean }> {
+  ): Promise<{ places: PracticalPlace[]; partial: boolean; attribution: Attribution }> {
     // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
     const departments = departmentsAround(origin);
-    type Listed = {
-      kind: PracticalKind;
-      key: string;
-      list: { name: string; address: string | null; lat: number; lng: number }[] | null;
-    };
+    type Place = { name: string; address: string | null; lat: number; lng: number };
+    type Listed =
+      | { source: "osm"; key: string; list: CachedOsmPlace[] | null }
+      | { source: "gov"; key: string; list: Place[] | null };
     // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
     const loads: Promise<Listed>[] = departments.flatMap((d) => [
-      withinBudget<Listed["list"]>(washNear(d), null, budgetMs).then((list) => ({
-        kind: "wash" as const,
-        key: `wash:${d}`,
-        list,
-      })),
-      withinBudget<Listed["list"]>(fuelNear(d), null, budgetMs).then((list) => ({
-        kind: "fuel" as const,
-        key: `fuel:${d}`,
-        list,
-      })),
+      withinBudget<CachedOsmPlace[] | null>(osmNear(d), null, budgetMs).then(
+        (list): Listed => ({ source: "osm", key: `wash:${d}`, list }),
+      ),
+      withinBudget<Place[] | null>(fuelNear(d), null, budgetMs).then(
+        (list): Listed => ({ source: "gov", key: `fuel:${d}`, list }),
+      ),
     ]);
     const listed = await Promise.all(loads);
     const keys = listed.map((l) => l.key);
@@ -165,27 +167,52 @@ export const practicalService = {
     const servable = new Map(
       rows
         .filter((r) => t - r.fetchedAt.getTime() < STALE_LIMIT_MS[r.key.startsWith("wash:") ? "wash" : "fuel"])
-        .map((r) => [r.key, r.data as Listed["list"]]),
+        .map((r) => [r.key, r.data as unknown]),
     );
     let partial = false;
-    const all: PracticalPlace[] = [];
+    const osm: CachedOsmPlace[] = [];
+    const gov: Place[] = [];
     for (const l of listed) {
       // Source lente : partiel, même si un cache toléré est servi (l'écran relit une fois).
       if (l.list === null) partial = true;
       // Une source muette (rien de servable en cache : en panne, désactivée) rend aussi la réponse partielle.
       if (!servable.has(l.key)) partial = true;
-      // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
-      for (const p of l.list ?? servable.get(l.key) ?? []) {
-        all.push({
-          id: practicalPlaceId(l.kind, p.lat, p.lng),
-          kind: l.kind,
-          name: p.name,
-          address: p.address,
-          lat: p.lat,
-          lng: p.lng,
-        });
-      }
+      const list = (l.list ?? servable.get(l.key) ?? []) as Place[];
+      if (l.source === "osm") osm.push(...(list as CachedOsmPlace[]));
+      else gov.push(...list);
     }
-    return { places: placesAround(all, origin), partial };
+    // Stations : le jeu public d'abord ; une station d'OpenStreetMap à moins de 60 m d'une du jeu public est la même (elle perd).
+    const osmFuel = withoutTwins(gov, osm.filter(isFuel));
+    // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
+    const place = (kind: PracticalKind, p: Place): PracticalPlace => ({
+      id: practicalPlaceId(kind, p.lat, p.lng),
+      kind,
+      name: p.name,
+      address: p.address,
+      lat: p.lat,
+      lng: p.lng,
+    });
+    const all: PracticalPlace[] = [
+      ...osm.filter(isWash).map((p) =>
+        // Une station avec lavage sans nom : le libellé d'un lavage, pas celui d'une station.
+        place(
+          "wash",
+          p.as === "both" && p.name === homeLabels.fuelUnnamed ? { ...p, name: homeLabels.washUnnamed } : p,
+        ),
+      ),
+      ...gov.map((p) => place("fuel", p)),
+      ...osmFuel.map((p) => place("fuel", p)),
+    ];
+    const places = placesAround(all, origin);
+    // Les deux sources sont citées quand les deux ont servi une station de la réponse.
+    const govIds = new Set(gov.map((p) => practicalPlaceId("fuel", p.lat, p.lng)));
+    const fuelPlaces = places.filter((p) => p.kind === "fuel");
+    const usedGov = fuelPlaces.some((p) => govIds.has(p.id));
+    const usedOsm = fuelPlaces.some((p) => !govIds.has(p.id));
+    return {
+      places,
+      partial,
+      attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
+    };
   },
 };
