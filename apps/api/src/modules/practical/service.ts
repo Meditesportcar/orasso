@@ -7,9 +7,10 @@
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
   departmentsAround,
-  type LatLng,
+  departmentsInZone,
   distanceKm,
   homeLabels,
+  type LatLng,
   myWeatherPlaces,
   PRACTICAL_RADIUS_KM,
   type PracticalData,
@@ -19,12 +20,11 @@ import {
   type PracticalZone,
   placesAround,
   placesInZone,
-  zoneContains,
-  departmentsInZone,
-  zoneCenter,
   practicalPlaceId,
   practicalTexts,
   type WeatherCell,
+  zoneCenter,
+  zoneContains,
 } from "@orasso/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
@@ -59,7 +59,8 @@ type Attribution = { wash: string; fuel: string };
 export const practicalService = {
   async get(v: Viewer, target: PracticalTarget, budgetMs = EXTERNAL_BUDGET_MS): Promise<PracticalData> {
     // Une zone de carte : pas d'origine (aucune position), les lieux DANS la zone (plus de rayon de 30 km pour ce mode).
-    if (target.near === "zone") return { origin: null, ...(await this.placesAround(zoneCenter(target.zone), budgetMs, target.zone)) };
+    if (target.near === "zone")
+      return { origin: null, ...(await this.placesAround(zoneCenter(target.zone), budgetMs, target.zone)) };
     const origin = await this.origin(v, target);
     if (!origin) return { origin: null, places: [], partial: false, attribution: baseAttribution };
     return { origin, ...(await this.placesAround(origin, budgetMs)) };

@@ -59,7 +59,9 @@ describe("POST /practical : near zone", () => {
     // Les sources ne reçoivent que des codes de département.
     for (const c of stub.calls) {
       expect(c.department).toMatch(/^[0-9][0-9AB]$/);
-      expect(decodeURIComponent(`${c.url}\n${c.body}`)).not.toMatch(/42\.4|42\.5|2\.96|3\.07|around|latitude|longitude/i);
+      expect(decodeURIComponent(`${c.url}\n${c.body}`)).not.toMatch(
+        /42\.4|42\.5|2\.96|3\.07|around|latitude|longitude/i,
+      );
     }
     expect(new Set(stub.calls.map((c) => c.department)).has("66")).toBe(true);
   });
@@ -68,7 +70,13 @@ describe("POST /practical : near zone", () => {
     practicalSources(data);
     const u = await signUp("Fan_Arrondi");
     // Le bord nord reçu (42,5496 - 0,0001) laisserait « La Laveuse » (42,5496) dehors ; arrondi au 0,1° vers le haut (42,6), il est dedans.
-    const res = await call(u, "POST", "/practical", { near: "zone", south: 42.51, west: 3.01, north: 42.5495, east: 3.04 });
+    const res = await call(u, "POST", "/practical", {
+      near: "zone",
+      south: 42.51,
+      west: 3.01,
+      north: 42.5495,
+      east: 3.04,
+    });
     expect(res.status).toBe(200);
     expect((res.json.places as { name: string }[]).map((p) => p.name)).toContain("La Laveuse");
   });
@@ -109,7 +117,13 @@ describe("POST /practical : near zone", () => {
     const stub = practicalSources({ wash: { "66": [], "11": [] }, fuel: { "66": [], "11": [] } });
     const u = await signUp("Fan_Deps");
     // La zone chevauche le 66 et l'Aude (11) autour de Leucate.
-    const res = await call(u, "POST", "/practical", { near: "zone", south: 42.75, west: 2.85, north: 42.95, east: 3.1 });
+    const res = await call(u, "POST", "/practical", {
+      near: "zone",
+      south: 42.75,
+      west: 2.85,
+      north: 42.95,
+      east: 3.1,
+    });
     expect(res.status).toBe(200);
     const departments = new Set(stub.calls.map((c) => c.department));
     expect(departments.has("66")).toBe(true);
@@ -144,6 +158,7 @@ describe("POST /practical : near zone", () => {
     practicalSources(data);
     const u = await signUp("Fan_Liste");
     const res = await call(u, "POST", "/practical", zoneArgelès);
-    for (const p of res.json.places) expect(Object.keys(p).sort()).toEqual(["address", "id", "kind", "lat", "lng", "name"]);
+    for (const p of res.json.places)
+      expect(Object.keys(p).sort()).toEqual(["address", "id", "kind", "lat", "lng", "name"]);
   });
 });

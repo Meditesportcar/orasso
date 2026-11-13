@@ -4,16 +4,16 @@
 // `searchHere` (l'appui sur « Rechercher dans cette zone ») est la seule lecture, et la zone demandée est la zone regardée élargie d'une
 // demi-zone. Un chargement en cours côté API (`loading`) est relu à intervalles espacés et bornés (`readCycle`), puis « Réessayer ».
 import type { PracticalData, PracticalPlace } from "./practical";
+import { PRACTICAL_RADIUS_KM } from "./practical";
 import {
   coverContains,
   mergeStore,
   type PracticalZone,
   viewCovered,
+  type ZoneCover,
   zoneForRequest,
   zoneTooBig,
-  type ZoneCover,
 } from "./practicalZone";
-import { PRACTICAL_RADIUS_KM } from "./practical";
 import { createReadCycle } from "./readCycle";
 
 export type ZoneState = {
@@ -87,7 +87,11 @@ export function createPracticalZone(deps: ZoneDeps) {
       }
       // Lieux encore partiels : ils sont gardés, mais la zone n'est pas « chargée » ; relecture espacée de la même zone, bornée.
       cycle.settled(data.loading ? "loading" : "partialOnce");
-      set(cycle.exhausted() ? { places, loading: false, failed: true, offline: false } : { places, loading: true, failed: false, offline: false });
+      set(
+        cycle.exhausted()
+          ? { places, loading: false, failed: true, offline: false }
+          : { places, loading: true, failed: false, offline: false },
+      );
     } catch (error) {
       reading = false;
       if (!alive || gen !== generation || !cycle.current(token)) return;

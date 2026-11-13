@@ -148,7 +148,14 @@ describe("vue de la carte", () => {
     // Reprise d'une zone connue : le zoom 11,4 de la maquette montre environ 7,5 km sur 352 px.
     expect(zoom).toBeGreaterThan(11);
     expect(zoom).toBeLessThan(12.5);
-    const fit = fitView([{ lat: 42.5, lng: 3.0 }, { lat: 42.55, lng: 3.08 }], 352, 400);
+    const fit = fitView(
+      [
+        { lat: 42.5, lng: 3.0 },
+        { lat: 42.55, lng: 3.08 },
+      ],
+      352,
+      400,
+    );
     const shown = viewZone(fit, 352, 400);
     expect(zoneContains(shown, { lat: 42.5, lng: 3.0 })).toBe(true);
     expect(zoneContains(shown, { lat: 42.55, lng: 3.08 })).toBe(true);

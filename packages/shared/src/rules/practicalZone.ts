@@ -5,6 +5,7 @@
 // part au serveur ; les distances se calculent sur le téléphone.
 import { BOUNDS_MARGIN_KM, departmentBounds } from "../departmentBounds";
 import { departmentCentroids, distanceKm, type LatLng, nearestDepartment } from "../geo";
+import { departmentPrefectures } from "../prefectures";
 import { PRACTICAL_DEPARTMENTS_MAX, PRACTICAL_MAX, type PracticalKind } from "./practical";
 
 /** Une zone de carte : sud, ouest, nord, est (degrés). */
@@ -114,7 +115,8 @@ export function departmentsInZone(z: PracticalZone): string[] {
     if (!box) continue;
     const [bs, bw, bn, be] = box;
     const lngMargin = margin / (KM_PER_DEG * Math.max(0.2, Math.cos((((bs + bn) / 2) * Math.PI) / 180)));
-    if (bs - marginLat > z.north || bn + marginLat < z.south || bw - lngMargin > z.east || be + lngMargin < z.west) continue;
+    if (bs - marginLat > z.north || bn + marginLat < z.south || bw - lngMargin > z.east || be + lngMargin < z.west)
+      continue;
     const clamped = { lat: Math.min(Math.max(centre.lat, bs), bn), lng: Math.min(Math.max(centre.lng, bw), be) };
     found.push({ code, km: distanceKm(centre, clamped) });
   }
@@ -171,7 +173,12 @@ export function viewCovered(cover: readonly ZoneCover[], view: PracticalZone): b
 }
 
 /** Le voile de la carte : les rectangles de la zone regardée (agrandie de `pad`) qui ne sont pas chargés, en bandes de cases de 0,05°. */
-export function unloadedBands(cover: readonly ZoneCover[], view: PracticalZone, pad = 0.2, step = 0.05): PracticalZone[] {
+export function unloadedBands(
+  cover: readonly ZoneCover[],
+  view: PracticalZone,
+  pad = 0.2,
+  step = 0.05,
+): PracticalZone[] {
   const south = Math.floor((view.south - pad) / step) * step;
   const north = Math.ceil((view.north + pad) / step) * step;
   const west = Math.floor((view.west - pad) / step) * step;
@@ -199,12 +206,7 @@ export function unloadedBands(cover: readonly ZoneCover[], view: PracticalZone, 
 
 /** Sans accents ni majuscules : « Argelès » et « argeles » se valent. */
 export const normalizeSearch = (s: string): string =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
 /** Le titre d'un lieu contient-il le texte cherché ? (Le texte vide convient à tous.) */
 export const matchesSearch = (title: string, text: string): boolean => {
@@ -231,7 +233,10 @@ export function zoneAround(p: LatLng, widthKm: number, heightKm = widthKm): Prac
 }
 
 /** Ce que l'écran garde en mémoire (jamais écrit) : les lieux reçus, sans doublon, `PRACTICAL_STORE_MAX` au plus (les plus anciens sortent). */
-export function mergeStore<T extends { id: string }>(store: ReadonlyMap<string, T>, incoming: readonly T[]): Map<string, T> {
+export function mergeStore<T extends { id: string }>(
+  store: ReadonlyMap<string, T>,
+  incoming: readonly T[],
+): Map<string, T> {
   const next = new Map(store);
   for (const p of incoming) {
     next.delete(p.id);
@@ -316,4 +321,27 @@ export function fitView(
   const mx = (a[0] + c[0]) / 2;
   const my = (a[1] + c[1]) / 2 - (top + (height - bottom) - height) / 2;
   return { ...unproject(mx, my, zoom), zoom };
+}
+
+/**
+ * Le nom de la commune la plus proche du centre de la zone : la ville de l'adresse du lieu le plus proche (« 66700 Argelès-sur-Mer »), à
+ * défaut la préfecture la plus proche. Sert à la ligne « Autour de Canet-en-Roussillon, la zone de la carte. ».
+ */
+export function nearestTownName(
+  centre: LatLng,
+  places: readonly { address: string | null; lat: number; lng: number }[],
+): string {
+  let best: { km: number; town: string } | null = null;
+  for (const p of places) {
+    const town = /\b\d{5}\s+(.+)$/.exec(p.address ?? "")?.[1]?.trim();
+    if (!town) continue;
+    const km = distanceKm(centre, p);
+    if (!best || km < best.km) best = { km, town };
+  }
+  const pref = Object.values(departmentPrefectures).reduce<{ km: number; town: string } | null>((acc, p) => {
+    const km = distanceKm(centre, p);
+    return !acc || km < acc.km ? { km, town: p.city } : acc;
+  }, null);
+  if (best && (!pref || best.km <= 15 || best.km < pref.km)) return best.town;
+  return pref?.town ?? best?.town ?? "";
 }

@@ -182,7 +182,8 @@ describe("champ loading : relectures bornées, puis « Réessayer »", () => {
     expect(read).toHaveBeenCalledTimes(1 + PRACTICAL_LOADING_MAX_READS);
     expect(z.getState()).toMatchObject({ loading: false, failed: true });
     expect(zoneNeedsSearch(z.getState())).toBe(true);
-    for (let i = 5; i < starts.length; i++) expect((starts[i] as number) - (starts[i - 1] as number)).toBeGreaterThanOrEqual(15_000);
+    for (let i = 5; i < starts.length; i++)
+      expect((starts[i] as number) - (starts[i - 1] as number)).toBeGreaterThanOrEqual(15_000);
     // « Réessayer » repart à zéro.
     z.retry();
     await vi.advanceTimersByTimeAsync(0);

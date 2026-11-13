@@ -120,14 +120,17 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     if (!alive.current || !guard.valid(ticket)) return;
     // La suite d'une lecture : transitoire (relance espacée), refus (aucune minuterie), partielle (calendrier 3/6/12/24 s), complète (tout à 0).
     const outcome: PracticalReadOutcome = res.ok
-      ? res.data.partial
-        ? "partial"
-        : "complete"
+      ? res.data.loading
+        ? "loading"
+        : res.data.partial
+          ? "partial"
+          : "complete"
       : practicalFailureOutcome(res.status);
     cycle.settled(outcome);
     if (res.ok) {
       memory.set(`${ticket.who}|${near}`, res.data);
-      setState({ data: res.data, loading: false, offline: false });
+      // Petit lot de fin F : un chargement (`loading`) qui épuise ses relectures bornées : « Réessayer » est proposé.
+      setState({ data: res.data, loading: false, offline: false, ...(cycle.exhausted() ? { failed: true } : {}) });
     } else {
       // « Hors ligne » seulement pour le réseau ; un 5xx ou un refus garde la réponse connue, sans mention.
       setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: res.status === 0, failed: true }));
