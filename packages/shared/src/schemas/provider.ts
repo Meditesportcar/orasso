@@ -15,6 +15,7 @@ import { type MenuItem, parseMenuLines } from "../rules/menu";
 import { PROVIDER_REVIEW_MAX_RATING, PROVIDER_REVIEW_MIN_RATING } from "../rules/missions";
 import { optionalText } from "./common";
 import type { PageFollowState } from "./pageFollows";
+import type { StoriesSummary } from "./stories";
 
 /** Texte facultatif : absent reste absent (inchangé), vide devient `null` (effacé). */
 const nullIfEmpty = (v: string | null | undefined) => (v === undefined ? undefined : v ? v : null);
@@ -391,7 +392,14 @@ export type ProviderReviewsSummary = {
 export type ProviderPublicWithReviews = ProviderPublic & { reviews: ProviderReviewsSummary };
 
 /** `GET /providers/:id` : la vitrine, ses avis et son état d'abonnement (`followersCount`, `isFollowing` pour l'acteur, lot R9a). */
-export type ProviderPage = ProviderPublicWithReviews & PageFollowState;
+export type ProviderPage = ProviderPublicWithReviews &
+  PageFollowState & {
+    /** Lot R9b : le résumé de ses stories selon le regard (l'anneau de sa page). */
+    stories?: StoriesSummary;
+    /** Lot R9b (T24) : ses missions (candidatures retenues sur des événements publiés) et les organisateurs distincts. */
+    missionsCount?: number;
+    organizersCount?: number;
+  };
 
 /** Ce que cherche un événement (fiche publique, sans les candidats). */
 export type EventNeedPublic = Omit<EventNeedView, "filled" | "notes" | "position" | "clientKey">;

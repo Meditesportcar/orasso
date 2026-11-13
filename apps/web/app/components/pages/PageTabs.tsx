@@ -10,6 +10,8 @@ const ICON: Record<PageTab, IconName> = {
   presentation: "briefcase",
   publications: "gallery",
   offers: "ticket",
+  services: "truck",
+  contents: "gallery",
   mentions: "bubble",
 };
 

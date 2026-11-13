@@ -23,6 +23,7 @@ import { clientIp } from "../after-event/helpers";
 import { authorCountsFor } from "../feed/lists";
 import { registerPersonaSource } from "../profiles/personas";
 import { pageFollowState } from "../social/pageFollows";
+import { storiesSummaryFor } from "../stories/bar";
 import { mediaOfUser, mediaService } from "./service";
 
 // Casquette Média : une entrée dans `GET /me → personas` dès que le profil existe ; badge = décisions non vues.
@@ -73,10 +74,13 @@ export const mediaRoutes = new Hono<AppEnv>()
     const actor = await readActor(c, v);
     noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un média n'a pas de slug à citer).
+    // Lot R9b : `stories` (l'anneau de la page, selon le regard) et `accreditationsCount` (la bande de compteurs).
     return c.json({
       ...(await mediaService.getPublic(id)),
       ...(await authorCountsFor("media", id, v)),
       ...(await pageFollowState(actor, { kind: "media", id })),
+      stories: await storiesSummaryFor(v, "media", id),
+      accreditationsCount: await mediaService.accreditationsCount(id),
     });
   })
   .get("/media/:id/contents", async (c) => {

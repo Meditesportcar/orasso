@@ -8,6 +8,7 @@ import {
   explicitPageTab,
   isPageManager,
   mentionLine,
+  type PageKind,
   pageCounters,
   pageEmptyText,
   pageFilterSlug,
@@ -16,8 +17,8 @@ import {
   pageTabs,
 } from "./publicPage";
 
-const ids = (kind: "structure" | "pro", session: boolean, mentionsCount?: number | null) =>
-  pageTabs(kind, { session, mentionsCount }).map((t) => t.id);
+const ids = (kind: PageKind, session: boolean, mentionsCount?: number | null, owner = false) =>
+  pageTabs(kind, { session, mentionsCount, owner }).map((t) => t.id);
 
 describe("pageTabs : les onglets d'une page", () => {
   it("structure : Événements, Publications, Mentions · N", () => {
@@ -217,5 +218,95 @@ describe("aspectOfPhotos : le cadrage d'une publication sans session", () => {
     ).toBe("square");
     expect(aspectOfPhotos([{ width: 1350, height: 1080 }])).toBe("landscape");
     expect(aspectOfPhotos([])).toBe("portrait_4_5");
+  });
+});
+
+describe("lot R9b : les onglets du prestataire et du média", () => {
+  it("prestataire : Publications, Prestations, Mentions · N", () => {
+    expect(ids("provider", true, 3)).toEqual(["publications", "services", "mentions"]);
+    const items = pageTabs("provider", { session: true, mentionsCount: 3 });
+    expect(items.map((t) => t.label)).toEqual(["Publications", "Prestations", "Mentions"]);
+    expect(items[2]?.count).toBe(3);
+  });
+  it("média : Publications, Contenus, Mentions · N", () => {
+    expect(ids("media", true, 0)).toEqual(["publications", "contents", "mentions"]);
+    expect(pageTabs("media", { session: true, mentionsCount: 0 }).map((t) => t.label)).toEqual([
+      "Publications",
+      "Contenus",
+      "Mentions",
+    ]);
+  });
+  it("sans session (T4) : « Prestations » seule, « Contenus » seul ; la structure garde Événements et Publications", () => {
+    expect(ids("provider", false)).toEqual(["services"]);
+    expect(ids("media", false)).toEqual(["contents"]);
+    expect(ids("structure", false)).toEqual(["events", "publications"]);
+    expect(ids("pro", false)).toEqual(["presentation"]);
+  });
+  it("le propriétaire d'un pro n'a pas « Présentation » : Publications, Offres, Mentions ; les autres genres ne changent pas", () => {
+    expect(ids("pro", true, 1, true)).toEqual(["publications", "offers", "mentions"]);
+    expect(ids("structure", true, 1, true)).toEqual(["events", "publications", "mentions"]);
+    expect(ids("provider", true, 1, true)).toEqual(["publications", "services", "mentions"]);
+    expect(ids("media", true, 1, true)).toEqual(["publications", "contents", "mentions"]);
+  });
+  it("ouverture : Publications si elle en a, sinon Prestations, Contenus (Offres pour le propriétaire d'un pro)", () => {
+    expect(pageOpenTab("provider", { publications: 4 }, true)).toBe("publications");
+    expect(pageOpenTab("provider", { publications: 0 }, true)).toBe("services");
+    expect(pageOpenTab("media", { publications: 0 }, true)).toBe("contents");
+    expect(pageOpenTab("media", {}, true)).toBe("contents");
+    expect(pageOpenTab("provider", { publications: 9 }, false)).toBe("services");
+    expect(pageOpenTab("media", { publications: 9 }, false)).toBe("contents");
+    expect(pageOpenTab("pro", { publications: 0 }, true, true)).toBe("offers");
+    expect(pageOpenTab("pro", { publications: 0 }, true)).toBe("presentation");
+    expect(pageOpenTab("pro", { publications: 2 }, true, true)).toBe("publications");
+  });
+  it("l'adresse : ?onglet=prestations (prestataire), ?onglet=contenus (média), ignoré pour un autre genre ou sans session", () => {
+    expect(explicitPageTab("provider", "prestations", true)).toBe("services");
+    expect(explicitPageTab("media", "contenus", true)).toBe("contents");
+    expect(explicitPageTab("structure", "prestations", true)).toBeNull();
+    expect(explicitPageTab("provider", "mentions", false)).toBeNull();
+    expect(explicitPageTab("pro", "presentation", true, true)).toBeNull();
+    expect(pageShownTab("media", { raw: "mentions", counts: { publications: 0 }, session: true })).toBe("mentions");
+    expect(pageShownTab("media", { raw: "x", counts: { publications: 0 }, session: true })).toBe("contents");
+  });
+});
+
+describe("lot R9b : les compteurs du prestataire et du média", () => {
+  it("prestataire (T24) : abonnés, missions, organisateurs", () => {
+    const cells = pageCounters("provider", { followers: 198, missions: 6, organizers: 4 });
+    expect(cells.map((c) => [c.key, c.value, c.label])).toEqual([
+      ["followers", 198, "abonnés"],
+      ["missions", 6, "missions"],
+      ["organizers", 4, "organisateurs"],
+    ]);
+  });
+  it("prestataire : un nombre non lu garde sa case (« – »), un zéro aussi, le singulier s'accorde", () => {
+    expect(pageCounters("provider", { followers: 1 }).map((c) => [c.value, c.label])).toEqual([
+      [1, "abonné"],
+      [null, "missions"],
+      [null, "organisateurs"],
+    ]);
+    expect(
+      pageCounters("provider", { followers: 0, missions: 1, organizers: 0 }).map((c) => [c.value, c.label]),
+    ).toEqual([
+      [0, "abonné"],
+      [1, "mission"],
+      [0, "organisateur"],
+    ]);
+  });
+  it("média (T22) : abonnés, accréditations, publications", () => {
+    const cells = pageCounters("media", { followers: 524, accreditations: 3, publications: 12 });
+    expect(cells.map((c) => [c.key, c.value, c.label])).toEqual([
+      ["followers", 524, "abonnés"],
+      ["accreditations", 3, "accréditations"],
+      ["publications", 12, "publications"],
+    ]);
+    expect(pageCounters("media", { followers: 2 }).map((c) => c.value)).toEqual([2, null, null]);
+  });
+  it("isPageManager : le propriétaire d'un prestataire ou d'un média", () => {
+    for (const kind of ["provider", "media"] as const) {
+      expect(isPageManager(kind, { isOwner: true })).toBe(true);
+      expect(isPageManager(kind, { isOwner: false })).toBe(false);
+      expect(isPageManager(kind, {})).toBe(false);
+    }
   });
 });

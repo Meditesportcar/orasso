@@ -24,6 +24,7 @@ import { body, query, uuidParam } from "../../lib/validate";
 import { authorCountsFor } from "../feed/lists";
 import { registerPersonaSource } from "../profiles/personas";
 import { pageFollowState } from "../social/pageFollows";
+import { storiesSummaryFor } from "../stories/bar";
 import { missionsService } from "./missions";
 import { loadProvider } from "./serializers";
 import { providerOfUser, providersService } from "./service";
@@ -87,10 +88,13 @@ export const providersRoutes = new Hono<AppEnv>()
     const actor = await readActor(c, v);
     noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
     // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un prestataire n'a pas de slug à citer).
+    // Lot R9b : `stories` (l'anneau de la page, selon le regard), `missionsCount` et `organizersCount` (la bande de compteurs).
     return c.json({
       ...(await providersService.getPublic(id)),
       ...(await authorCountsFor("provider", id, v)),
       ...(await pageFollowState(actor, { kind: "provider", id })),
+      stories: await storiesSummaryFor(v, "provider", id),
+      ...(await providersService.pageCounts(id)),
     });
   })
   .get("/me/provider-applications", async (c) => {
