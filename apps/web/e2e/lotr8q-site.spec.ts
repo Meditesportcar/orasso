@@ -217,12 +217,16 @@ for (const width of [390, 1280]) {
     await expect(list.getByText("Station-service ·", { exact: false })).toHaveCount(0);
     await expect(list).toContainText("Lavage ·");
     await page.getByTestId("practical-filter-all").click();
-    // La carte : une épingle par lieu, le plus proche déjà choisi, « Y aller » principal.
-    await page.getByTestId("map-toggle").click();
+    // La carte, le plus proche déjà choisi, « Y aller » principal. Petit lot de fin F : à 900 px et plus, la liste et la carte sont côte à
+    // côte (pas de bascule) ; plus étroit, la bascule « Liste | Carte » reste.
+    if (width < 900) await page.getByTestId("map-toggle").click();
+    else await expect(page.getByTestId("map-toggle")).toHaveCount(0);
     await expect(page.getByTestId("practical-map-view")).toBeVisible();
     const pins = page.locator('[data-testid^="practical-pin-"]');
     await expect(pins.first()).toBeVisible({ timeout: 30_000 });
-    expect(await pins.count()).toBe(all);
+    // Les épingles proches se regroupent (pastille avec leur nombre) : chaque lieu de la zone est une épingle ou compté dans une pastille.
+    const grouped = (await page.getByTestId("practical-group").allInnerTexts()).reduce((n, t) => n + Number(t), 0);
+    expect((await pins.count()) + grouped).toBeGreaterThanOrEqual(all);
     await expect(page.getByTestId("practical-selected")).toContainText(/ · \d+,\d\skm/);
     await shot(page, `site-carte-${width}`);
     const before = await page.getByTestId("practical-selected").innerText();
@@ -231,8 +235,8 @@ for (const width of [390, 1280]) {
     await page.getByTestId("practical-selected-go-go").click();
     await expect(page.getByTestId("practical-selected").getByTestId("go-maps")).toBeVisible();
     await shot(page, `site-carte-y-aller-${width}`);
-    // Retour à la liste.
-    await page.getByTestId("list-toggle").click();
+    // Retour à la liste (à 1280 px, elle est toujours là).
+    if (width < 900) await page.getByTestId("list-toggle").click();
     await expect(page.getByTestId("practical-list")).toBeVisible();
     // Pas de défilement horizontal.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

@@ -258,59 +258,61 @@ export function PracticalScreen() {
 
   const mapNode =
     initial.current && (data || zs.places.size > 0) ? (
-      <div className="pq-mapwrap" data-testid="practical-map-view">
-        <PracticalMap
-          pins={pool.map((p) => ({ id: p.id, kind: p.kind, title: titleOf(p), lat: p.lat, lng: p.lng }))}
-          origin={from ? { kind: searched ? "searched" : active === "outing" ? "outing" : "me", at: from } : null}
-          selectedId={selected?.id ?? null}
-          onSelect={setPicked}
-          onGroup={setGroupIds}
-          initial={resume.current ?? initial.current}
-          command={command}
-          cover={zs.cover}
-          onView={(z, zoom) => {
-            zone.setView(z);
-            resume.current = { ...zoneCenter(z), zoom };
-          }}
-        />
-        <p className="pq-plaque o-t-meta" data-testid="practical-count">
-          <Icon name="layers" size={14} />
-          <span>{countLine}</span>
-        </p>
-        {!originInView ? (
-          <button
-            type="button"
-            className="pq-recenter"
-            aria-label={L.recenter}
-            title={L.recenter}
-            onClick={() => from && flyTo(from)}
-            data-testid="practical-recenter"
-          >
-            <Icon name="target" size={18} />
-          </button>
-        ) : null}
-        <div className="pq-bottom">
-          {tooWide ? (
-            <p className="pq-note o-t-caption" data-testid="practical-zoom-note">
-              <Icon name="info" size={14} />
-              <span>{L.zoomIn}</span>
-            </p>
-          ) : (
-            zoneButton
-          )}
-          {selected && !tooWide ? (
-            <div className="pq-selected">
-              <PracticalRow
-                kind={selected.kind}
-                title={titleOf(selected)}
-                detail={mapDetail(selected)}
-                lat={selected.lat}
-                lng={selected.lng}
-                primary
-                testId="practical-selected"
-              />
-            </div>
+      <div data-testid="practical-map-view">
+        <div className="pq-mapwrap">
+          <PracticalMap
+            pins={pool.map((p) => ({ id: p.id, kind: p.kind, title: titleOf(p), lat: p.lat, lng: p.lng }))}
+            origin={from ? { kind: searched ? "searched" : active === "outing" ? "outing" : "me", at: from } : null}
+            selectedId={selected?.id ?? null}
+            onSelect={setPicked}
+            onGroup={setGroupIds}
+            initial={resume.current ?? initial.current}
+            command={command}
+            cover={zs.cover}
+            onView={(z, zoom) => {
+              zone.setView(z);
+              resume.current = { ...zoneCenter(z), zoom };
+            }}
+          />
+          <p className="pq-plaque o-t-meta" data-testid="practical-count">
+            <Icon name="layers" size={14} />
+            <span>{countLine}</span>
+          </p>
+          {!originInView ? (
+            <button
+              type="button"
+              className="pq-recenter"
+              aria-label={L.recenter}
+              title={L.recenter}
+              onClick={() => from && flyTo(from)}
+              data-testid="practical-recenter"
+            >
+              <Icon name="target" size={18} />
+            </button>
           ) : null}
+          <div className="pq-bottom">
+            {tooWide ? (
+              <p className="pq-note o-t-caption" data-testid="practical-zoom-note">
+                <Icon name="info" size={14} />
+                <span>{L.zoomIn}</span>
+              </p>
+            ) : (
+              zoneButton
+            )}
+            {selected && !tooWide ? (
+              <div className="pq-selected">
+                <PracticalRow
+                  kind={selected.kind}
+                  title={titleOf(selected)}
+                  detail={mapDetail(selected)}
+                  lat={selected.lat}
+                  lng={selected.lng}
+                  primary
+                  testId="practical-selected"
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
         <p className="o-t-caption s-muted pq-credit">{L.mapAttribution}</p>
       </div>
