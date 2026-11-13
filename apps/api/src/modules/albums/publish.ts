@@ -1,7 +1,7 @@
 // Publication d'un album et purge des brouillons (lot R9e). Publier : au moins une photo, média encore accrédité, idempotent. Aucune
 // notification en R9e (`album_published` est posé par R9a, émis par R9g aux responsables). Un brouillon jamais publié est purgé
 // après 7 jours sans activité (tâche quotidienne `albums.draft-purge`) : l'album et ses fichiers disparaissent.
-import { type AlbumView, albumIssue, albumLabels, draftPurgeBefore } from "@orasso/shared";
+import { type AlbumView, albumIssue, albumLabels, draftPurgeBefore, isDraftExpired } from "@orasso/shared";
 import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -39,13 +39,15 @@ export async function purgeDrafts(at: Date = now()): Promise<number> {
     const keys: string[] = [];
     const n = await withTx(async (tx) => {
       const old = await tx
-        .select({ id: eventAlbums.id })
+        .select({ id: eventAlbums.id, updatedAt: eventAlbums.updatedAt })
         .from(eventAlbums)
         .where(and(eq(eventAlbums.status, "draft"), isNull(eventAlbums.deletedAt), lte(eventAlbums.updatedAt, limit)))
         .limit(PURGE_BATCH)
         .for("update", { skipLocked: true });
-      if (!old.length) return 0;
-      const ids = old.map((a) => a.id);
+      // La règle commune : sans activité (`updated_at`, renouvelé à chaque ajout) depuis 7 jours.
+      const expired = old.filter((a) => isDraftExpired(a.updatedAt, at));
+      if (!expired.length) return 0;
+      const ids = expired.map((a) => a.id);
       const photos = await tx
         .select({ key: eventAlbumPhotos.storageKey })
         .from(eventAlbumPhotos)
@@ -56,7 +58,7 @@ export async function purgeDrafts(at: Date = now()): Promise<number> {
     });
     await removeFiles(keys);
     total += n;
-    if (n < PURGE_BATCH) break;
+    if (n < PURGE_BATCH || n === 0) break;
   }
   return total;
 }

@@ -11,10 +11,10 @@ import {
   type AlbumView,
   albumLabels,
 } from "@orasso/shared";
-import { and, desc, eq, isNull, ne, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, events, mediaProfiles } from "../../db/schema";
+import { eventAlbumPhotos, eventAlbums, events, mediaProfiles, reports } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { conflict, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -35,6 +35,25 @@ export async function albumViewOf(join: AlbumJoin, viewerId: string | null): Pro
 /** Les fichiers à effacer après la validation de la transaction (jamais avant : un retour en arrière les laisserait orphelins de leur ligne). */
 export async function removeFiles(keys: readonly string[]): Promise<void> {
   for (const key of keys) await storage.remove(key).catch(() => undefined);
+}
+
+/**
+ * Les photos (parmi `photoIds`) visées par un signalement ouvert (`pending` ou `reviewing`) : leur fichier est **gardé** quand on les
+ * retire (preuve pour la modération, comme une publication du Fil) et n'est effacé qu'à la décision (`albumPhotoTarget.afterDecision`).
+ */
+export async function photosHeldByReport(tx: Tx, photoIds: readonly string[]): Promise<Set<string>> {
+  if (!photoIds.length) return new Set();
+  const rows = await tx
+    .select({ id: reports.targetId })
+    .from(reports)
+    .where(
+      and(
+        eq(reports.targetType, "album_photo"),
+        inArray(reports.targetId, [...photoIds]),
+        inArray(reports.status, ["pending", "reviewing"]),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
 }
 
 export const albumsService = {
@@ -142,12 +161,17 @@ export const albumsService = {
         .update(eventAlbumPhotos)
         .set({ deletedAt: now() })
         .where(and(eq(eventAlbumPhotos.albumId, album.id), isNull(eventAlbumPhotos.deletedAt)))
-        .returning({ key: eventAlbumPhotos.storageKey });
+        .returning({ id: eventAlbumPhotos.id, key: eventAlbumPhotos.storageKey });
       await tx
         .update(eventAlbums)
         .set({ deletedAt: now(), officialAt: null, photosCount: 0 })
         .where(eq(eventAlbums.id, album.id));
-      return photos.map((p) => p.key);
+      // Une photo signalée garde son fichier jusqu'à la décision de la modération.
+      const held = await photosHeldByReport(
+        tx,
+        photos.map((p) => p.id),
+      );
+      return photos.filter((p) => !held.has(p.id)).map((p) => p.key);
     });
     await removeFiles(keys);
   },
@@ -179,9 +203,9 @@ export const albumsService = {
         .update(eventAlbums)
         .set({ photosCount: sql`greatest(${eventAlbums.photosCount} - 1, 0)` })
         .where(eq(eventAlbums.id, album.id));
-      return photo.storageKey;
+      return (await photosHeldByReport(tx, [photo.id])).has(photo.id) ? null : photo.storageKey;
     });
-    await removeFiles([key]);
+    if (key) await removeFiles([key]);
   },
 
   // --- Listes ---------------------------------------------------------------------------------------------------------

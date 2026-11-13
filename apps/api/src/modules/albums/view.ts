@@ -30,8 +30,13 @@ export const albumPhotoKey = (albumId: string, hex: string) => `${ALBUM_PHOTO_FO
 /** Nom d'une photo dans une adresse : la fin de sa clé. */
 export const albumPhotoName = (storageKey: string) => storageKey.slice(storageKey.lastIndexOf("/") + 1);
 
-/** Nom de fichier accepté dans l'adresse d'une photo : un identifiant hexadécimal (avec ou sans tirets), `.webp`. */
-export const ALBUM_PHOTO_NAME_RE = /^[0-9a-f-]{32,36}\.webp$/;
+/**
+ * Nom de fichier accepté dans l'adresse d'une photo : la fin de sa clé (lettres, chiffres, tirets, soulignés) et `.webp` (tout ce que
+ * le serveur écrit est en WebP). Les photos neuves ont un nom hexadécimal ; les photos reprises gardent le nom de leur ancienne clé
+ * (`beziers-night-0.webp` dans le seed). La photo est cherchée dans **cet album** par la fin exacte de sa clé : le nom ne désigne
+ * jamais un autre dossier.
+ */
+export const ALBUM_PHOTO_NAME_RE = /^[A-Za-z0-9_-]{8,80}\.webp$/;
 
 /** Adresse protégée d'une photo : la route revérifie, à chaque lecture, que la personne connectée peut voir l'album. */
 export const albumPhotoUrl = (albumId: string, storageKey: string) =>
@@ -54,7 +59,7 @@ export const albumAccreditedSql = sql`exists (select 1 from applications ap wher
 export function albumVisibleSql(at: Date): SQL {
   return sql`(${eventAlbums.status} = 'published' and ${eventAlbums.deletedAt} is null
     and ${mediaProfiles.deletedAt} is null
-    and ${events.status} <> 'draft' and ${events.admission} <> 'invite_only'
+    and ${events.status} = 'published' and ${events.admission} <> 'invite_only'
     and ${albumAccreditedSql}
     and exists (select 1 from profiles ow where ow.user_id = ${mediaProfiles.userId} and ${profileOkSql("ow", at)}))`;
 }

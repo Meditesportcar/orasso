@@ -75,6 +75,8 @@ JOIN "media_contents" mc ON mc."id" = a."legacy_media_content_id"
 CROSS JOIN LATERAL unnest(mc."photo_keys") WITH ORDINALITY AS k("key", "ord")
 WHERE mc."kind" = 'gallery' AND mc."deleted_at" IS NULL
 ON CONFLICT DO NOTHING;--> statement-breakpoint
+UPDATE "event_albums" a SET "photos_count" = (SELECT count(*)::int FROM "event_album_photos" p WHERE p."album_id" = a."id" AND p."deleted_at" IS NULL)
+WHERE a."legacy_media_content_id" IN (SELECT mc."id" FROM "media_contents" mc WHERE mc."kind" = 'gallery' AND mc."deleted_at" IS NULL);--> statement-breakpoint
 UPDATE "media_contents" mc SET "deleted_at" = now()
 WHERE mc."kind" = 'gallery' AND mc."deleted_at" IS NULL
   AND EXISTS (SELECT 1 FROM "event_albums" a WHERE a."legacy_media_content_id" = mc."id");

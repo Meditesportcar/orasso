@@ -170,6 +170,23 @@ describe("reprise des galeries", () => {
     expect(await totals()).toEqual(now);
   });
 
+  it("photos_count est recalculé après l'insertion des photos (une clé en double n'est comptée qu'une fois)", async () => {
+    const { event } = await organizerEvent();
+    const { mediaId } = await mediaUser("Leo_Media");
+    await db.insert(mediaContents).values({
+      mediaProfileId: mediaId,
+      eventId: event.id,
+      kind: "gallery",
+      title: "Doublon",
+      photoKeys: ["media-contents/dup.webp", "media-contents/dup.webp", "media-contents/autre.webp"],
+      publishedAt: paris(11, 10, 9),
+    });
+    await adoptLegacyGalleries(db);
+    const [album] = await db.select().from(eventAlbums);
+    expect(album?.photosCount).toBe(2);
+    expect(await db.select().from(eventAlbumPhotos)).toHaveLength(2);
+  });
+
   it("un album neuf déjà présent (reprise interrompue puis rejouée) n'est pas dupliqué", async () => {
     const { event } = await organizerEvent();
     const { mediaId } = await mediaUser("Leo_Media");

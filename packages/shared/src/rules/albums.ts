@@ -33,9 +33,12 @@ export function draftPurgeBefore(now: Date): Date {
   return new Date(now.getTime() - ALBUM_DRAFT_TTL_DAYS * DAY_MS);
 }
 
-/** Le brouillon, créé à `createdAt`, est-il périmé (7 jours sans publication) ? */
-export function isDraftExpired(createdAt: Date, now: Date): boolean {
-  return createdAt.getTime() <= draftPurgeBefore(now).getTime();
+/**
+ * Le brouillon est-il périmé : sans activité depuis 7 jours ? `lastActivityAt` est `updated_at` (chaque ajout de photo le renouvelle) :
+ * un brouillon qu'on complète reste vivant. C'est la seule règle, appliquée par la tâche `albums.draft-purge`.
+ */
+export function isDraftExpired(lastActivityAt: Date, now: Date): boolean {
+  return lastActivityAt.getTime() <= draftPurgeBefore(now).getTime();
 }
 
 /** L'état de plaque gardé pour une décision du média. */

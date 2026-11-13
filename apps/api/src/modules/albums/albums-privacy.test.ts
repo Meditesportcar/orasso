@@ -7,6 +7,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
+import { mediaContents } from "../../db/schema";
+import { storage } from "../../lib/storage";
 import {
   accredit,
   addPhoto,
@@ -21,6 +23,7 @@ import {
   setAccreditation,
   softDeleteMedia,
 } from "./albums-test-helpers";
+import { adoptLegacyGalleries } from "./reprise";
 
 afterAll(async () => {
   await pool.end();
@@ -164,6 +167,60 @@ describe("accréditation retirée après la publication (V6 gardée)", () => {
     expect((await call(kenji, "GET", `/albums/${album.id}`)).status).toBe(404);
     expect((await call(kenji, "GET", `/events/${eventId}/albums`)).status).toBe(404);
     expect((await call(null, "GET", `/events/by-slug/${eventSlug}/media-contents`)).status).toBe(404);
+  });
+});
+
+describe("photos reprises d'une ancienne galerie (nom de clé libre)", () => {
+  it("chaque photo d'un album repris se sert par les deux routes, même au nom non hexadécimal", async () => {
+    const keys = [0, 1, 2].map((i) => `seed/media/beziers-night-${i}.webp`);
+    for (const key of keys) await storage.put(key, Buffer.from(`photo ${key}`));
+    const [row] = await db
+      .insert(mediaContents)
+      .values({
+        mediaProfileId: leoMedia,
+        eventId,
+        kind: "gallery",
+        title: "Béziers Night en images",
+        photoKeys: keys,
+        publishedAt: paris(11, 4, 9),
+      })
+      .returning();
+    await adoptLegacyGalleries(db);
+    const album = await call(kenji, "GET", `/albums/${row?.id}`);
+    expect(album.status).toBe(200);
+    expect(album.json.photos).toHaveLength(3);
+    expect(album.json.photos[0]).toMatchObject({ width: null, height: null });
+    for (const p of album.json.photos as { url: string }[]) {
+      const protectedRes = await app.request(p.url, { headers: { cookie: kenji.cookie } });
+      expect(protectedRes.status).toBe(200);
+      expect(await protectedRes.text()).toMatch(/^photo seed\/media\/beziers-night-\d\.webp$/);
+      const publicRes = await app.request(p.url.replace("/api/albums/", "/api/public/albums/"));
+      expect(publicRes.status).toBe(200);
+    }
+    // Un nom qui n'est pas la fin d'une clé de cet album, ou qui sort du dossier : 404.
+    const unknown = await app.request(`/api/albums/${row?.id}/photos/inconnu-photo.webp`, {
+      headers: { cookie: kenji.cookie },
+    });
+    expect(unknown.status).toBe(404);
+    const traversal = await app.request(`/api/albums/${row?.id}/photos/..%2Fbeziers-night-0.webp`, {
+      headers: { cookie: kenji.cookie },
+    });
+    expect(traversal.status).toBe(404);
+  });
+});
+
+describe("événement annulé", () => {
+  it("un album d'un événement annulé n'est plus servi (lecture, listes, photos, façade)", async () => {
+    const album = await publishedAlbum(leo, eventId, 1);
+    const [photo] = await photoRows(album.id);
+    const name = photo?.storageKey.split("/").pop();
+    await db.execute(sql`update events set status = 'cancelled' where id = ${eventId}`);
+    expect((await call(kenji, "GET", `/albums/${album.id}`)).status).toBe(404);
+    expect((await call(kenji, "GET", `/media/${leoMedia}/albums`)).json.items).toHaveLength(0);
+    expect((await call(null, "GET", `/public/albums/${album.id}/photos/${name}`)).status).toBe(404);
+    expect((await call(kenji, "GET", `/media/${leoMedia}`)).json).toMatchObject({ albumsCount: 0 });
+    // Son titulaire garde la main pour le lire et le retirer.
+    expect((await call(leo, "GET", `/albums/${album.id}`)).status).toBe(200);
   });
 });
 

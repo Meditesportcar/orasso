@@ -2,6 +2,8 @@
 // `media_contents` et les **albums** publiés, mis en forme `contentView` (`kind: "gallery"`, 30 photos au plus, `featured` = album
 // officiel). Une galerie reprise garde l'identifiant de son ancien contenu (la migration pose `event_albums.id = media_contents.id`) :
 // un appareil qui garde l'ancienne liste continue de modifier, supprimer et compter ses vues. Une façade se retire à la vague suivante.
+
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   albumTitle,
   MEDIA_GALLERY_MAX_PHOTOS,
@@ -10,7 +12,7 @@ import {
   type MediaContentView,
   mediaLabels,
 } from "@orasso/shared";
-import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { eventAlbumPhotos, eventAlbums, events } from "../../db/schema";
@@ -31,6 +33,7 @@ import {
   type AlbumJoin,
   type AlbumPhotoRow,
   albumBase,
+  albumPhotoKey,
   albumPublicPhotoUrl,
   albumVisibleSql,
   isPrivateAlbumKey,
@@ -109,14 +112,27 @@ async function contentById(id: string): Promise<MediaContentView> {
   return view;
 }
 
-/** Album déjà publié par ce média sur cet événement avec exactement ces clés (tentative rejouée). */
+/**
+ * Le `client_id` de la photo copiée sous l'album : un identifiant **déterministe** tiré de la clé d'envoi (`media-contents/<uuid>.webp`),
+ * pour reconnaître une tentative rejouée avec les mêmes clés (`sameGallery`).
+ */
+const uploadIdOf = (key: string): string => {
+  const h = createHash("sha256").update(key).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+};
+
+/**
+ * Album déjà publié par ce média sur cet événement avec exactement ces envois (tentative rejouée). Les photos ont été copiées sous des
+ * clés d'album : on reconnaît les envois d'origine par leur identifiant, gardé dans `client_id`.
+ */
 async function sameGallery(mediaProfileId: string, input: MediaContentCreate): Promise<string | null> {
   if (!input.photoKeys.length) return null;
+  const ids = input.photoKeys.map(uploadIdOf);
   const res = await db.execute<{ id: string }>(sql`
     select a.id from event_albums a
     where a.media_profile_id = ${mediaProfileId} and a.event_id = ${input.eventId} and a.deleted_at is null
-      and (select array_agg(p.storage_key order by p.position) from event_album_photos p
-           where p.album_id = a.id and p.deleted_at is null) = ${sql.param(input.photoKeys)}::text[]
+      and (select array_agg(p.client_id::text order by p.position) from event_album_photos p
+           where p.album_id = a.id and p.deleted_at is null) = ${sql.param(ids)}::text[]
     limit 1`);
   return res.rows[0]?.id ?? null;
 }
@@ -143,6 +159,40 @@ export const albumsLegacy = {
     return viewsOf(rows);
   },
 
+  /** `GET /events/:id/accreditations` (organisation) : les albums publiés de l'événement, sans filtre d'accréditation (comme les contenus d'avant). */
+  async forOrganizer(eventId: string): Promise<MediaContentView[]> {
+    const rows = await albumBase().where(
+      and(eq(eventAlbums.eventId, eventId), eq(eventAlbums.status, "published"), isNull(eventAlbums.deletedAt)),
+    );
+    return viewsOf(rows);
+  },
+
+  /** « Mes accréditations » : par média et événement, le nombre d'albums publiés et leurs vues (la couverture). */
+  async coverage(
+    profileIds: string[],
+    eventIds: string[],
+  ): Promise<{ profileId: string; eventId: string; n: number; views: number }[]> {
+    if (!profileIds.length || !eventIds.length) return [];
+    const rows = await db
+      .select({
+        profileId: eventAlbums.mediaProfileId,
+        eventId: eventAlbums.eventId,
+        n: sql<number>`count(*)::int`,
+        views: sql<number>`coalesce(sum(${eventAlbums.views}), 0)::int`,
+      })
+      .from(eventAlbums)
+      .where(
+        and(
+          inArray(eventAlbums.mediaProfileId, profileIds),
+          inArray(eventAlbums.eventId, eventIds),
+          eq(eventAlbums.status, "published"),
+          isNull(eventAlbums.deletedAt),
+        ),
+      )
+      .groupBy(eventAlbums.mediaProfileId, eventAlbums.eventId);
+    return rows;
+  },
+
   /** `GET /me/media-contents` : mes albums publiés (jamais un brouillon : l'ancienne forme ne les connaît pas). */
   async mine(mediaProfileId: string): Promise<MediaContentView[]> {
     const rows = await albumBase().where(
@@ -167,21 +217,38 @@ export const albumsLegacy = {
       if (again) return contentById(again);
     }
     rateLimit("mediaContent", v.user.id);
+    const written: string[] = [];
+    const sources: string[] = [];
+    let committed = false;
     try {
       const id = await withTx(async (tx) => {
         const media = await requireMedia(tx, v);
         const [event] = await tx.select().from(events).where(eq(events.id, input.eventId));
         if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
         if (!(await isAccredited(tx, input.eventId, media.id))) throw forbidden(mediaLabels.notAccredited);
-        const uploaded = [];
+        // Comme `addPhoto` : les photos sont copiées sous une clé **privée** d'album (jamais lisibles par `/api/files`) ; l'envoi
+        // d'origine (public) est effacé après la validation. L'identifiant de l'envoi sert de `client_id` : c'est ce qui permet de
+        // reconnaître une tentative rejouée avec les mêmes clés (`sameGallery`).
+        const albumId = randomUUID();
+        const uploaded: { key: string; width: number | null; height: number | null; clientId: string }[] = [];
         for (const key of input.photoKeys) {
           const up = await uploadsService.consume(tx, v.user.id, key, "media_content");
           if (!up) throw validation(mediaLabels.imageUnknown);
-          uploaded.push(up);
+          const data = await storage.get(up.key);
+          // Fichier absent (état qui ne devrait pas exister) : la clé d'envoi est gardée sur place plutôt que de refuser.
+          let target = up.key;
+          if (data) {
+            target = albumPhotoKey(albumId, randomBytes(16).toString("hex"));
+            await storage.put(target, data);
+            written.push(target);
+            sources.push(up.key);
+          }
+          uploaded.push({ key: target, width: up.width, height: up.height, clientId: uploadIdOf(up.key) });
         }
         const [album] = await tx
           .insert(eventAlbums)
           .values({
+            id: albumId,
             eventId: input.eventId,
             mediaProfileId: media.id,
             authorId: v.user.id,
@@ -199,14 +266,18 @@ export const albumsLegacy = {
             width: up.width,
             height: up.height,
             position,
+            clientId: up.clientId,
             // Cette galerie vient du chemin d'avant : on ne sait pas si l'envoi a été flouté (l'état est « inconnu »).
             plateState: "unknown" as const,
           })),
         );
         return album.id;
       });
+      committed = true;
+      for (const key of sources) await storage.remove(key).catch(() => undefined);
       return await contentById(id);
     } catch (error) {
+      if (!committed) for (const key of written) await storage.remove(key).catch(() => undefined);
       // Deux envois simultanés de la même galerie : le second échoue sur les clés que le premier vient de consommer.
       const media = await mediaOfUser(db, v.user.id);
       const winner = media ? await sameGallery(media.id, input) : null;
@@ -220,8 +291,8 @@ export const albumsLegacy = {
   async update(v: Viewer, id: string, input: MediaContentUpdate): Promise<MediaContentView | null> {
     const profile = await mediaOfUser(db, v.user.id);
     if (!profile || !(await ownPublished(id, profile.id))) return null;
+    // La limite d'écriture est comptée une seule fois, par `albumsService.patch`.
     assertWritable(v);
-    rateLimit("mediaWrite", v.user.id);
     // Seul le titre compte pour un album (ni adresse, ni plateforme) : sans titre, l'album est rendu tel quel.
     if (input.title !== undefined) await albumsService.patch(v, id, { title: input.title });
     return contentById(id);

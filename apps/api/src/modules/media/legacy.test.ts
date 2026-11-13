@@ -5,6 +5,7 @@ import { desc, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { eventAlbumPhotos, eventAlbums, events, mediaContents, mediaProfiles, notifications } from "../../db/schema";
 import { storage } from "../../lib/storage";
@@ -178,8 +179,21 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
       views: 0,
       media: { id: leoMedia, name: "Sud Cars" },
     });
-    expect(res.json.photos.map((p: { key: string }) => p.key)).toEqual([a.key, b.key]);
-    expect(res.json.photos[0].url).toBe(`/api/files/${a.key}`);
+    // Les photos sont copiées sous des clés **privées** d'album : la façade donne l'identifiant de la photo et l'adresse publique de l'album.
+    const stored = await photoRows(res.json.id);
+    expect(res.json.photos.map((p: { key: string }) => p.key)).toEqual(stored.map((p) => p.id));
+    expect(res.json.photos[0].url).toMatch(
+      new RegExp(`^/api/public/albums/${res.json.id}/photos/[0-9a-f]{32}\\.webp$`),
+    );
+    expect(stored.every((p) => p.storageKey.startsWith("private/albums/"))).toBe(true);
+    // L'envoi d'origine (public) est effacé ; la photo d'un album neuf n'est pas lisible par `/api/files`.
+    expect(await storage.get(a.key)).toBeNull();
+    for (const p of stored) {
+      expect((await app.request(`/api/files/${p.storageKey}`)).status).not.toBe(200);
+    }
+    const shown = await app.request(res.json.photos[0].url);
+    expect(shown.status).toBe(200);
+    expect(shown.headers.get("content-type")).toBe("image/webp");
     const [album] = await db.select().from(eventAlbums);
     expect(album).toMatchObject({ id: res.json.id, status: "published", photosCount: 2, allowSave: false });
     const photos = await photoRows(res.json.id);
@@ -325,6 +339,73 @@ describe("modifier, supprimer, mettre en avant, compter les vues d'une galerie (
     expect((await call(leo, "POST", `/media-contents/${gallery.id}/view`)).json.views).toBe(6);
     expect((await call(null, "POST", `/media-contents/${crypto.randomUUID()}/view`)).status).toBe(404);
     expect((await db.select().from(eventAlbums).where(eq(eventAlbums.id, gallery.id)))[0]?.views).toBe(6);
+  });
+});
+
+describe("les autres lectures des galeries (relecture Opus, tour 1)", () => {
+  it("page presse de l'organisateur : la galerie reprise et l'album neuf y sont, « Mettre en avant » les retrouve", async () => {
+    const gallery = await legacyGallery({ featuredAt: paris(11, 11, 9) }, 2);
+    await adoptLegacyGalleries(db);
+    const fresh = await publishedAlbum(leo, eventId, 1);
+    const list = await call(orga, "GET", `/events/${eventId}/accreditations`);
+    expect(list.status).toBe(200);
+    const mine = list.json.find((a: { media: { id: string } }) => a.media.id === leoMedia);
+    const ids = mine.contents.map((c: { id: string }) => c.id).sort();
+    expect(ids).toEqual([gallery.id, fresh.id].sort());
+    expect(mine.contents.find((c: { id: string }) => c.id === gallery.id)).toMatchObject({
+      kind: "gallery",
+      featured: true,
+    });
+    expect(mine.contents.find((c: { id: string }) => c.id === fresh.id)).toMatchObject({
+      kind: "gallery",
+      featured: false,
+    });
+    // Mettre en avant l'album neuf depuis cette liste : il devient l'officiel.
+    expect(
+      (await call(orga, "PATCH", `/events/${eventId}/media-contents/${fresh.id}/feature`, { featured: true })).status,
+    ).toBe(200);
+    const again = await call(orga, "GET", `/events/${eventId}/accreditations`);
+    const contents = again.json.find((a: { media: { id: string } }) => a.media.id === leoMedia).contents;
+    expect(contents.filter((c: { featured: boolean }) => c.featured).map((c: { id: string }) => c.id)).toEqual([
+      fresh.id,
+    ]);
+    // Un lien y reste aussi.
+    await linkContent("Article", paris(11, 11, 10));
+    const withLink = await call(orga, "GET", `/events/${eventId}/accreditations`);
+    expect(withLink.json.find((a: { media: { id: string } }) => a.media.id === leoMedia).contents).toHaveLength(3);
+  });
+
+  it("« Mes accréditations » : un événement couvert par un album n'est plus « pas encore couvert » (contenus et vues)", async () => {
+    await legacyGallery({ views: 40 }, 1);
+    await adoptLegacyGalleries(db);
+    await publishedAlbum(leo, eventId, 1);
+    await linkContent("Article", paris(11, 11, 10), { views: 5 });
+    const res = await call(leo, "GET", "/me/accreditations?scope=all");
+    expect(res.status).toBe(200);
+    expect(res.json[0].coverage).toEqual({ contents: 3, views: 45 });
+    // Sans rien d'autre que des albums : couvert quand même.
+    await db.delete(mediaContents);
+    expect((await call(leo, "GET", "/me/accreditations?scope=all")).json[0].coverage).toEqual({
+      contents: 2,
+      views: 40,
+    });
+  });
+
+  it("accueil du média : les trois derniers contenus comptent les albums et leurs vues", async () => {
+    const old = await linkContent("Vieux lien", paris(11, 1, 9), { views: 3 });
+    const gallery = await legacyGallery({ views: 280, publishedAt: paris(11, 10, 9) }, 1);
+    await adoptLegacyGalleries(db);
+    const fresh = await publishedAlbum(leo, eventId, 1);
+    await db
+      .update(eventAlbums)
+      .set({ views: 9, publishedAt: paris(11, 11, 9) })
+      .where(eq(eventAlbums.id, fresh.id));
+    const res = await call(leo, "GET", "/me/home?persona=media");
+    expect(res.status).toBe(200);
+    const contents = res.json.media.contents as { id: string; title: string; views: number }[];
+    expect(contents.map((c) => c.id)).toEqual([fresh.id, gallery.id, old.id]);
+    expect(contents.map((c) => c.views)).toEqual([9, 280, 3]);
+    expect(contents[0]?.title).toBe("Les photos du Rassemblement du Lydia");
   });
 });
 

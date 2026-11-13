@@ -71,7 +71,13 @@ describe("envois en attente", () => {
     expect(published.status).toBe(201);
     expect(published.json.photos).toHaveLength(30);
     expect((await call(u, "DELETE", `/me/uploads/${sent[0]!.id}`)).status).toBe(404);
-    expect(await storage.get(sent[0]!.key)).not.toBeNull();
+    // Lot R9e (relecture Opus, tour 1) : une galerie est un album, ses photos sont **copiées** sous une clé privée d'album et l'envoi
+    // public d'origine est effacé (il ne reste pas lisible par `/api/files`). Même exigence qu'avant : la photo rattachée n'est pas
+    // perdue, elle se sert encore (par l'album), et l'envoi n'est plus supprimable.
+    expect(await storage.get(sent[0]!.key)).toBeNull();
+    const shown = await app.request(published.json.photos[0].url);
+    expect(shown.status).toBe(200);
+    expect((await app.request(`/api/files/${sent[0]!.key}`)).status).not.toBe(200);
   });
 
   it("conserve une marge, borne le quota et permet le remplacement immédiat des photos retirées", async () => {

@@ -9,22 +9,17 @@ import { eventAlbumPhotos, eventAlbums, mediaProfiles } from "../../../db/schema
 import { now } from "../../../lib/deps";
 import { notFound } from "../../../lib/errors";
 import { storage } from "../../../lib/storage";
-import { shiftPositions } from "../../albums/service";
-import { albumPhotoName, loadAlbum } from "../../albums/view";
+import { photosHeldByReport, shiftPositions } from "../../albums/service";
+import { loadAlbum } from "../../albums/view";
 import { registerReportMedia, reportMediaUrl } from "../media";
 import { goneView, type TargetRules, UUID_RE } from "./types";
 
 registerReportMedia("album_photo", async (report, name) => {
-  if (!UUID_RE.test(report.targetId)) return null;
+  if (!UUID_RE.test(report.targetId) || name !== `${report.targetId}.webp`) return null;
   const [photo] = await db
     .select({ key: eventAlbumPhotos.storageKey })
     .from(eventAlbumPhotos)
-    .where(
-      and(
-        eq(eventAlbumPhotos.id, report.targetId),
-        sql`right(${eventAlbumPhotos.storageKey}, ${name.length + 1}) = ${`/${name}`}`,
-      ),
-    );
+    .where(eq(eventAlbumPhotos.id, report.targetId));
   if (!photo) return null;
   const data = await storage.get(photo.key);
   return data ? { data, contentType: "image/webp" } : null;
@@ -60,12 +55,14 @@ export const albumPhotoTarget: TargetRules = {
       .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
       .where(eq(eventAlbumPhotos.id, report.targetId));
     if (!row) return goneView("Photo d'un album");
-    const url = reportMediaUrl(report.id, albumPhotoName(row.key));
+    // Le nom dans l'adresse est l'identifiant de la photo (une photo reprise garde le nom de son ancienne clé, qui n'a pas la forme
+    // attendue par la route des médias de modération) ; le fichier d'une photo retirée est gardé tant que le signalement attend.
+    const url = reportMediaUrl(report.id, `${report.targetId}.webp`);
     return {
       title: `Photo d'un album de ${row.media}`,
       text: null,
-      imageUrl: row.deletedAt ? null : url,
-      imageUrls: row.deletedAt ? [] : [url],
+      imageUrl: url,
+      imageUrls: [url],
       link: null,
       gone: false,
       removed: Boolean(row.deletedAt),
@@ -74,7 +71,9 @@ export const albumPhotoTarget: TargetRules = {
   async remove(tx, _v, report) {
     if (!UUID_RE.test(report.targetId)) return [];
     const [photo] = await tx.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.id, report.targetId));
-    if (!photo || photo.deletedAt) return [];
+    if (!photo) return [];
+    // Déjà retirée par le média (fichier gardé pour la preuve) : la décision l'efface.
+    if (photo.deletedAt) return [photo.storageKey];
     await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
     await shiftPositions(tx, photo.albumId, photo.position);
     const [album] = await tx
@@ -89,6 +88,15 @@ export const albumPhotoTarget: TargetRules = {
         .set({ deletedAt: now(), officialAt: null })
         .where(and(eq(eventAlbums.id, photo.albumId), isNull(eventAlbums.deletedAt)));
     }
+    return [photo.storageKey];
+  },
+  // Retirée par le média pendant que le signalement attendait : le fichier était gardé pour la preuve ; une fois la dernière décision
+  // prise sur cette photo, il part.
+  async afterDecision(tx, report) {
+    if (!UUID_RE.test(report.targetId)) return [];
+    const [photo] = await tx.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.id, report.targetId));
+    if (!photo?.deletedAt) return [];
+    if ((await photosHeldByReport(tx, [photo.id])).has(photo.id)) return [];
     return [photo.storageKey];
   },
 };

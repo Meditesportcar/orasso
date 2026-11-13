@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { eventAlbums, reports, uploads } from "../../db/schema";
 import { storage } from "../../lib/storage";
@@ -443,6 +444,73 @@ describe("signalement d'une photo (cible album_photo)", () => {
       reason: "scam",
     });
     expect(wrong.status).toBe(400);
+  });
+});
+
+describe("une photo signalée garde son fichier jusqu'à la décision", () => {
+  async function reported() {
+    const album = await publishedAlbum(leo, eventId, 2);
+    const photos = await photoRows(album.id);
+    const fan = await signUp("Kenji_66");
+    const mod = await signUp("Moderateur", { role: "moderator", twoFactor: true });
+    const report = await call(fan, "POST", "/reports", {
+      targetType: "album_photo",
+      targetId: photos[0]?.id,
+      reason: "plate_or_face",
+    });
+    expect(report.status).toBe(201);
+    return { album, photos, fan, mod, report: report.json };
+  }
+  const decide = (mod: TestUser, reportId: string) =>
+    call(mod, "POST", `/admin/reports/${reportId}/status`, { status: "resolved_no_action", note: null });
+
+  it("le média retire la photo signalée : la ligne part, le fichier reste, la décision l'efface", async () => {
+    const { album, photos, mod, report } = await reported();
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${photos[0]?.id}`)).status).toBe(204);
+    expect(await storage.get(photos[0]?.storageKey as string)).not.toBeNull();
+    // La modération la voit toujours dans le dossier du signalement.
+    const detail = await call(mod, "GET", `/admin/reports/${report.id}`);
+    const url = JSON.stringify(detail.json).match(/\/api\/admin\/reports\/[^"]+\.webp/)?.[0] as string;
+    expect(url).toContain(`/media/${photos[0]?.id}.webp`);
+    expect((await app.request(url, { headers: { cookie: mod.cookie } })).status).toBe(200);
+    // La décision efface le fichier gardé.
+    expect((await decide(mod, report.id)).status).toBe(200);
+    expect(await storage.get(photos[0]?.storageKey as string)).toBeNull();
+  });
+
+  it("une photo non signalée part tout de suite", async () => {
+    const { album, photos } = await reported();
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}/photos/${photos[1]?.id}`)).status).toBe(204);
+    expect(await storage.get(photos[1]?.storageKey as string)).toBeNull();
+    expect(await storage.get(photos[0]?.storageKey as string)).not.toBeNull();
+  });
+
+  it("l'album supprimé garde aussi la photo signalée, et seulement elle", async () => {
+    const { album, photos, mod, report } = await reported();
+    expect((await call(leo, "DELETE", `/me/albums/${album.id}`)).status).toBe(204);
+    expect(await storage.get(photos[0]?.storageKey as string)).not.toBeNull();
+    expect(await storage.get(photos[1]?.storageKey as string)).toBeNull();
+    await decide(mod, report.id);
+    expect(await storage.get(photos[0]?.storageKey as string)).toBeNull();
+  });
+
+  it("plusieurs signalements sur la même photo : tant qu'aucune décision n'est prise le fichier reste, une décision les clôt tous", async () => {
+    const { album, photos, mod, report } = await reported();
+    const second = await signUp("Nina_34");
+    const other = await call(second, "POST", "/reports", {
+      targetType: "album_photo",
+      targetId: photos[0]?.id,
+      reason: "spam",
+    });
+    expect(other.status).toBe(201);
+    await call(leo, "DELETE", `/me/albums/${album.id}/photos/${photos[0]?.id}`);
+    expect(await storage.get(photos[0]?.storageKey as string)).not.toBeNull();
+    expect((await decide(mod, report.id)).status).toBe(200);
+    const open = await db.execute(
+      sql`select count(*)::int as n from reports where target_id = ${photos[0]?.id} and status in ('pending', 'reviewing')`,
+    );
+    expect((open.rows[0] as { n: number }).n).toBe(0);
+    expect(await storage.get(photos[0]?.storageKey as string)).toBeNull();
   });
 });
 

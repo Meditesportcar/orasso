@@ -499,10 +499,19 @@ export const mediaService = {
               inArray(mediaContents.mediaProfileId, profileIds),
               inArray(mediaContents.eventId, eventIds),
               isNull(mediaContents.deletedAt),
+              eq(mediaContents.kind, "link"),
             ),
           )
           .groupBy(mediaContents.mediaProfileId, mediaContents.eventId)
       : [];
+    // Lot R9e : les galeries sont des albums, ils comptent aussi dans la couverture (contenus et vues).
+    for (const a of await albumsLegacy.coverage(profileIds, eventIds)) {
+      const same = coverage.find((c) => c.profileId === a.profileId && c.eventId === a.eventId);
+      if (same) {
+        same.n += a.n;
+        same.views += a.views;
+      } else coverage.push(a);
+    }
     return rows.map(({ a, e, structureName }) => {
       const pass = passes.find((p) => p.applicationId === a.id);
       const s = settingsOf.get(e.id);
@@ -537,8 +546,14 @@ export const mediaService = {
       .innerJoin(mediaProfiles, eq(mediaProfiles.id, applications.mediaProfileId))
       .where(and(eq(applications.eventId, eventId), eq(applications.kind, "media")))
       .orderBy(asc(applications.createdAt));
+    // Lot R9e : les liens d'ici et les albums publiés (façade), pour que « Mettre en avant » retrouve les galeries.
     const contents = rows.length
-      ? await loadContents(and(eq(mediaContents.eventId, eventId), isNull(mediaContents.deletedAt)))
+      ? mergeContents(
+          await loadContents(
+            and(eq(mediaContents.eventId, eventId), isNull(mediaContents.deletedAt), eq(mediaContents.kind, "link")),
+          ),
+          await albumsLegacy.forOrganizer(eventId),
+        )
       : [];
     return rows.map(({ a, m }) => ({
       id: a.id,
