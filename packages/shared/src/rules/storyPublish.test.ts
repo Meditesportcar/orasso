@@ -17,6 +17,7 @@ import {
   pruneForAudience,
   removeTag,
   sendIfAlive,
+  storyAccountStale,
   storyAudienceOptions,
   storyBody,
   storyEffectiveVisibility,
@@ -340,6 +341,18 @@ describe("envoi d'une story", () => {
       ),
     ).rejects.toThrow("hors ligne");
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("storyAccountStale : le brouillon appartient au compte qui l'a ouvert (appli)", () => {
+  it("même compte, ou profil pas encore lu à l'ouverture : rien de périmé", () => {
+    expect(storyAccountStale("u1", "u1")).toBe(false);
+    expect(storyAccountStale(null, "u1")).toBe(false);
+    expect(storyAccountStale(null, null)).toBe(false);
+  });
+  it("autre compte, ou plus de compte (déconnexion) : périmé", () => {
+    expect(storyAccountStale("u1", "u2")).toBe(true);
+    expect(storyAccountStale("u1", null)).toBe(true);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   type StoryAuthor,
   type StoryCreated,
   sendIfAlive,
+  storyAccountStale,
   storyAudienceOptions,
   storyAuthorAllowed,
   storyBody,
@@ -35,9 +36,11 @@ import { Alert, BackHandler, Platform, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { isUploadCancelled, isUploadTimeout } from "@/lib/api/storiesVideo";
 import { ApiRequestError, errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
 import { usePersona } from "@/lib/persona";
 import { fitStory, type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
+import { RECETTE } from "@/lib/recette";
 import { useSession } from "@/lib/session";
 import { type PickedVideo, pickGalleryVideo, prepareStoryVideo, VideoRefused, type VideoStage } from "@/lib/storyVideo";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
@@ -48,7 +51,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { withDetection } from "../../fil/publish/model";
-import { storyAuthorFor, storyHeaderPlain } from "./author";
+import { askedPageUnavailable, storyAuthorFor, storyHeaderPlain } from "./author";
 import { Capture } from "./Capture";
 import { commercialText, useCommercialLine } from "./CommercialLine";
 import { Details } from "./Details";
@@ -109,7 +112,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const { me } = useSession();
+  const { me, refreshMe } = useSession();
   const { persona, active } = usePersona();
   const visibility = me?.profile.visibility ?? "public";
   const actor = useActor();
@@ -123,18 +126,40 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     () => storyAuthorFor(choice, actor, persona, active.label),
     [choice, actor, persona, active.label],
   );
-  const frozen = useRef<{ author: StoryAuthor; key: string } | null>(null);
-  if (frozen.current === null) {
+  // Recette seulement (jamais dans l'APK) : relire le profil du compte, comme le fait l'appli au retour au premier plan, pour qu'une
+  // recette change le compte pendant la rédaction sans quitter l'écran.
+  useEffect(() => {
+    if (!RECETTE) return;
+    const g = globalThis as { __orassoRefreshMe?: () => Promise<unknown> };
+    g.__orassoRefreshMe = () => refreshMe();
+    return () => {
+      g.__orassoRefreshMe = undefined;
+    };
+  }, [refreshMe]);
+  // L'auteur et le compte sont figés dès que le profil est lu (jamais avant : sans profil, une page demandée paraîtrait absente et
+  // l'écran se figerait sur la personne). Une page demandée par `?auteur=` que le compte ne tient pas est « perdue » dès l'ouverture :
+  // jamais remplacée en silence par la casquette active ni par « Moi ».
+  const frozen = useRef<{ author: StoryAuthor; key: string; lostAtOpen: boolean; account: string } | null>(null);
+  if (frozen.current === null && me) {
     frozen.current = {
       author: resolved,
       key: choice?.kind === "me" ? "me" : choice?.kind === "page" ? choice.key : (actor ?? "me"),
+      lostAtOpen: askedPageUnavailable(auteur, choice),
+      account: me.user.id,
     };
   }
   const [asPerson, setAsPerson] = useState(false);
-  const author: StoryAuthor = asPerson ? { persona: "fan" } : frozen.current.author;
-  const allowed = asPerson || storyAuthorAllowed(frozen.current.author, me?.personas ?? []);
+  const base = frozen.current?.author ?? resolved;
+  const author: StoryAuthor = asPerson ? { persona: "fan" } : base;
+  const waitingProfile = frozen.current === null;
+  const allowed =
+    asPerson || waitingProfile || (!frozen.current?.lostAtOpen && storyAuthorAllowed(base, me?.personas ?? []));
+  // Le brouillon appartient au compte qui a ouvert l'écran : s'il change (déconnexion, autre compte, 409 `account_changed`), l'écran
+  // se verrouille pour de bon (même repassé au premier compte) et rien ne part.
+  const [staleLatched, setStaleLatched] = useState(false);
+  const stale = staleLatched || storyAccountStale(frozen.current?.account ?? null, me?.user.id ?? null);
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
-  const kindKey = asPerson ? "me" : frozen.current.key;
+  const kindKey = asPerson ? "me" : (frozen.current?.key ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
 
   const [step, setStep] = useState<StoryStep>("media");
@@ -229,6 +254,15 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       discardTempPhotos();
     };
   }, []);
+
+  // Compte changé : le brouillon d'avant est abandonné (envois annulés, JPEG non floutés effacés), l'écran reste verrouillé.
+  useEffect(() => {
+    if (!stale) return;
+    setStaleLatched(true);
+    generation.current++;
+    uploadAbort.current?.abort();
+    discardTempPhotos();
+  }, [stale]);
 
   const goBack = useCallback(() => {
     const before = video ? videoStepBefore(step) : stepBefore(step, draft?.plate.photo ?? null);
@@ -374,7 +408,10 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
     );
   };
 
-  const lostIssue = allowed ? null : casquettesLabels.authorLost(frozen.current.author.name ?? "");
+  const lostIssue =
+    allowed || !frozen.current
+      ? null
+      : casquettesLabels.authorLost(frozen.current.lostAtOpen ? casquettesLabels.authorLostUnknown : (base.name ?? ""));
   const issue = lostIssue
     ? lostIssue
     : draft
@@ -392,8 +429,12 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
 
   /** Vidéo : envoi (progression réelle), vignette, création. Rien n'est gardé hors ligne : on le dit, on ne met rien en file. */
   async function publishVideo(clip: PickedVideo) {
-    if (!draft || busy || issue) return;
-    const alive = aliveFor(generation.current);
+    if (!draft || busy || issue || stale || !frozen.current) return;
+    // Le compte au départ : si ce n'est plus le même après une attente, rien ne part et rien n'est écrit.
+    const guard = accountGuard();
+    const expectedUserId = frozen.current.account;
+    const epoch = aliveFor(generation.current);
+    const alive = () => epoch() && guard.current();
     const abort = new AbortController();
     uploadAbort.current = abort;
     setBusy(true);
@@ -431,7 +472,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           setVideoRatio(0.99);
         },
         async () => {
-          const send = () => api.createStory(body(videoKeys.current.video ?? "", videoKeys.current.poster ?? ""));
+          const send = () =>
+            api.createStory({ ...body(videoKeys.current.video ?? "", videoKeys.current.poster ?? ""), expectedUserId });
           try {
             return await send();
           } catch (e) {
@@ -440,7 +482,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent) return;
+      if (!result.sent || !guard.current()) return;
       videoKeys.current = {};
       markStoryPublished(result.value);
       discardTempPhotos();
@@ -448,7 +490,8 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setStep("done");
     } catch (e) {
       // Annulé parce que l'écran a été quitté : rien à dire à personne.
-      if (isUploadCancelled(e)) return;
+      if (isUploadCancelled(e) || !guard.current()) return;
+      if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleLatched(true);
       if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
       else if (isUploadTimeout(e)) setError(V.uploadTimeout);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
@@ -466,9 +509,13 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
 
   async function publish() {
     if (video) return publishVideo(video);
-    if (!draft || busy || issue) return;
-    // L'écran peut être fermé malgré tout (appli tuée, route quittée) : rien ne part après son démontage.
-    const alive = aliveFor(generation.current);
+    if (!draft || busy || issue || stale || !frozen.current) return;
+    // L'écran peut être fermé malgré tout (appli tuée, route quittée) : rien ne part après son démontage ni après un changement de
+    // compte (`accountGuard`) ; l'envoi porte le compte attendu (409 `account_changed` si la session n'est plus la sienne).
+    const guard = accountGuard();
+    const expectedUserId = frozen.current.account;
+    const epoch = aliveFor(generation.current);
+    const alive = () => epoch() && guard.current();
     setBusy(true);
     setError(null);
     setSent(0);
@@ -500,7 +547,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
         // Une réponse perdue peut laisser un 400 « image déjà utilisée » si le premier envoi n'est pas encore enregistré :
         // on refait la requête une fois avec la même clé (elle retrouve la story) avant d'oublier la clé.
         async () => {
-          const send = () => api.createStory(body(keys.current[draft.upload.uri] ?? ""));
+          const send = () => api.createStory({ ...body(keys.current[draft.upload.uri] ?? ""), expectedUserId });
           try {
             return await send();
           } catch (e) {
@@ -509,7 +556,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
           }
         },
       );
-      if (!result.sent) return;
+      if (!result.sent || !guard.current()) return;
       const story = result.value;
       // La story est partie : la barre la montre en tête, les JPEG non floutés s'effacent.
       keys.current = {};
@@ -518,7 +565,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setCreated(story);
       setStep("done");
     } catch (e) {
-      if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
+      if (!guard.current()) return;
+      if (e instanceof ApiRequestError && e.code === "account_changed") setStaleLatched(true);
+      else if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(L.offline);
       else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
         // L'API n'a pas vu de décision de plaque : on rouvre l'étape, rien n'est parti.
@@ -533,6 +582,20 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setBusy(false);
       setSent(null);
     }
+  }
+
+  // Compte changé : plus rien à publier ici (le brouillon était celui de l'autre compte).
+  if (stale) {
+    return (
+      <FlowScreen title={L.title} onClose={close}>
+        <View style={styles.lost} testID="story-stale">
+          <Notice tone="error">{L.accountChanged}</Notice>
+          <SmButton kind="s" icon="close" onPress={close} testID="story-stale-close">
+            {L.close}
+          </SmButton>
+        </View>
+      </FlowScreen>
+    );
   }
 
   // --- Étapes plein écran : l'appareil et « Ajuster » ----------------------------------------------------------------
@@ -654,7 +717,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
               big
               wide
               icon={primary.icon}
-              disabled={busy || Boolean(blocking)}
+              disabled={busy || waitingProfile || Boolean(blocking)}
               onPress={primary.onPress}
               testID={
                 step === "preview" ? "story-publish" : step === "details" ? "story-to-preview" : "story-plate-validate"

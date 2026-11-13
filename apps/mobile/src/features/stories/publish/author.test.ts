@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authorOf, storyAuthorFor, storyHeaderPlain, storyPublishHref } from "./author";
+import { askedPageUnavailable, authorOf, storyAuthorFor, storyHeaderPlain, storyPublishHref } from "./author";
 
 const orga = { kind: "organizer", structureId: "s-1" } as const;
 
@@ -51,5 +51,20 @@ describe("storyHeaderPlain : l'en-tête de l'écran de story", () => {
   it("une page, ou la personne sous une casquette de page : « en tant que »", () => {
     expect(storyHeaderPlain({ persona: "organizer", structureId: "s", name: "X" }, "organizer")).toBe(false);
     expect(storyHeaderPlain({ persona: "fan" }, "organizer")).toBe(false);
+  });
+});
+
+describe("askedPageUnavailable : une page demandée que le compte ne tient pas", () => {
+  it("une clé de page sans casquette correspondante : indisponible (jamais un repli silencieux)", () => {
+    for (const key of ["s:abc", "p:abc", "v:abc", "m:abc"]) expect(askedPageUnavailable(key, null)).toBe(true);
+  });
+  it("une page résolue, 'me', une clé inconnue ou l'absence de paramètre : non", () => {
+    const page = { kind: "page", persona: "organizer", id: "s-1", name: "X", key: "s:s-1" } as const;
+    expect(askedPageUnavailable("s:s-1", page)).toBe(false);
+    expect(askedPageUnavailable("me", { kind: "me" })).toBe(false);
+    expect(askedPageUnavailable("x:abc", null)).toBe(false);
+    expect(askedPageUnavailable("s:", null)).toBe(false);
+    expect(askedPageUnavailable(undefined, null)).toBe(false);
+    expect(askedPageUnavailable("", null)).toBe(false);
   });
 });

@@ -143,6 +143,9 @@ export const storyPublishLabels = {
   preparing: "Préparation de la photo…",
   missingCrew: "Choisis le crew de ta story.",
   audienceLost: "Choisis à nouveau qui la voit.",
+  /** Le compte connecté n'est plus celui qui a ouvert l'écran (appli) : rien ne part, le brouillon est abandonné. */
+  accountChanged:
+    "Le compte connecté a changé pendant la rédaction : ta story n'est pas partie. Ferme cet écran, puis rouvre « Publier une story » avec ce compte.",
   close: "Fermer",
   leaveTitle: "Quitter sans publier ?",
   leaveBody: "Ta photo et tes réglages ne sont pas gardés.",
