@@ -3,6 +3,7 @@
 // structure : l'API refuse, l'appli n'affiche que ce qu'elle reçoit. Aucune règle métier ici.
 import type {
   AccreditationForOrganizer,
+  ActivityPage,
   AnnouncementCreate,
   AnnouncementPage,
   AudiencePrizeBoard,
@@ -22,7 +23,10 @@ import type {
   MessagingQuota,
   OrganizerInboxSummary,
   ProviderSpotInput,
+  RequestsPage,
   StaffConversationState,
+  StructureActivityCount,
+  StructureActivityFilter,
   StructureCreate,
   StructureMember,
   StructureOrganizer,
@@ -105,6 +109,14 @@ export const orgaApi = {
   audienceBoard: (eventId: string) => request<AudiencePrizeBoard>(`/api/events/${eventId}/audience-prize`),
 
   // Boîte de la structure.
+  // Lot R9d : l'Activité de la structure (la cloche de l'organisateur), adressée par la structure.
+  structureActivity: (structureId: string, filter: StructureActivityFilter = "all", cursor?: string) =>
+    request<ActivityPage>(`/api/structures/${structureId}/activity${qs({ filter, cursor })}`),
+  structureActivityCount: (structureId: string) =>
+    request<StructureActivityCount>(`/api/structures/${structureId}/activity/count`),
+  markStructureActivitySeen: (structureId: string) =>
+    request<unknown>(`/api/structures/${structureId}/activity/seen`, { method: "POST" }),
+  structureRequests: (structureId: string) => request<RequestsPage>(`/api/structures/${structureId}/requests`),
   orgInboxSummary: (structureId: string) =>
     request<OrganizerInboxSummary>(`/api/structures/${structureId}/inbox/summary`),
   orgConversations: (structureId: string, cursor?: string) =>

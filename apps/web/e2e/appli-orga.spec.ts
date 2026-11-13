@@ -205,11 +205,16 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
   // Lot C4a : la page d'un événement est un écran de flux sans barre ni Boîte : on revient à l'onglet.
   await page.goBack();
-  await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+  // Lot R9d : la Boîte a disparu, la bulle ouvre « Messages · <structure> » (chips Tout · Participants · Équipe) ; un message
+  // groupé s'écrit par « Nouveau message » (feuille à deux lignes).
+  await page
+    .getByRole("button", { name: /^Messages/ })
+    .first()
+    .click();
   await expect(page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(page, "07-boite-participants-beton");
-  await page.getByRole("tab", { name: "Groupés" }).click();
-  await page.getByTestId("orga-group-new").click();
+  await page.getByTestId("orga-new-message").click();
+  await page.getByTestId("new-message-group").click();
   await pickOption(page, "Événement", /Salon Argelès/);
   await pickOption(page, "Destinataires", /Retenus/);
   const text = `Rendez-vous à l'entrée B ${Date.now()}`;
@@ -219,7 +224,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await page.getByTestId("orga-group-send").click();
   await expect(page.getByTestId("orga-group-row").first()).toContainText(text, { timeout: 30_000 });
   await shot(page, "09-boite-groupes-beton");
-  await page.getByRole("tab", { name: /Staff/ }).click();
+  await page.getByRole("tab", { name: /Équipe/ }).click();
   await expect(page.getByTestId("orga-staff-chat").first()).toBeVisible({ timeout: 20_000 });
   await shot(page, "10-boite-staff-beton");
 
@@ -282,7 +287,10 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(s.page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "22-evenement-sable");
   await s.page.goBack(); // Lot C4a : page d'événement en flux, sans Boîte.
-  await s.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+  await s.page
+    .getByRole("button", { name: /^Messages/ })
+    .first()
+    .click();
   await expect(s.page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
   await s.page.getByRole("button", { name: "Fermer" }).first().click();
@@ -385,11 +393,18 @@ test("organisateur sans 2FA : écran « Double authentification requise » à la
   await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("team-bubble")).toHaveCount(0);
   await page.screenshot({ path: `${DIR}/42-garde-2fa-equipe-sable.png` });
-  // La Boîte (bouton du haut).
-  await tab(page, "Direct").click();
-  await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
-  await expect(page).toHaveURL(/\/messages\/orga/, { timeout: 20_000 });
-  await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
-  await page.screenshot({ path: `${DIR}/43-garde-2fa-boite-sable.png` });
+  // Lot R9d : la cloche (Activité de la structure) et la bulle (Messages, l'ancienne Boîte) de la barre du haut sont gardées de la
+  // même façon : chaque écran est attendu à son adresse, puis sa garde visible.
+  for (const [name, url, shot] of [
+    [/^Activité/, /\/activite\/orga/, "43-garde-2fa-activite-sable"],
+    [/^Messages/, /\/messages\/orga/, "44-garde-2fa-messages-sable"],
+  ] as const) {
+    await tab(page, "Événements").click();
+    await page.getByRole("button", { name }).first().click();
+    await expect(page).toHaveURL(url, { timeout: 20_000 });
+    await expect(visibleGate()).toBeVisible({ timeout: 20_000 });
+    await page.screenshot({ path: `${DIR}/${shot}.png` });
+    await page.goBack();
+  }
   await ctx.close();
 });

@@ -156,4 +156,8 @@ export type OrganizerInboxSummary = {
   staffDiscussions: number;
   /** Demandes pour devenir staff en attente de réponse (lot 24). */
   staffRequests: number;
+  /** Lot R9d : lignes de l'Activité de la structure non vues depuis mon dernier passage (absent d'un serveur plus ancien). */
+  activityUnseen?: number;
+  /** Lot R9d : invitations à publier adressées à la structure et en attente (absent d'un serveur plus ancien). */
+  coauthorRequests?: number;
 };

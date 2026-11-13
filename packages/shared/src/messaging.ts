@@ -213,3 +213,6 @@ export function topBarCounts(summary: InboxCountsInput | null): { activity: numb
     messages: (summary?.unreadMessages ?? 0) + messageRequests,
   };
 }
+
+// Lot R9d : les pastilles de la barre du haut d'un organisateur (cloche = Activité de la structure, bulle = Messages).
+export { type StructureInboxCountsInput, structureTopBarCounts } from "./rules/structureActivity";

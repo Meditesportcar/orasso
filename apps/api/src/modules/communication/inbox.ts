@@ -8,12 +8,13 @@ import {
   messagePreview,
   type OrganizerInboxSummary,
 } from "@orasso/shared";
-import { and, count, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversations, structureMembers } from "../../db/schema";
+import { conversations } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
+import { requestedStaffCount, structureActivityService } from "../activity/structure";
 import { isMySide, lastMessageOf, resolveAccess, unreadCountOf } from "../messaging/core";
 import { unreadConversationCount } from "../messaging/inbox";
 import { registerOrganizerBadge } from "../profiles/personas";
@@ -21,13 +22,8 @@ import { requireStructureReader } from "./guards";
 import { staffChatsService } from "./staff-chats";
 
 /** Demandes pour devenir staff en attente (lot 22 : lues ici, traitées sur le site ; l'acceptation est au lot 24). */
-export async function requestedStaffCount(structureId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
-    .from(structureMembers)
-    .where(and(eq(structureMembers.structureId, structureId), eq(structureMembers.status, "requested")));
-  return row?.n ?? 0;
-}
+// Lot R9d : le même filtre que la liste « Demandes » de l'Activité de la structure (ni banni, ni supprimé).
+export { requestedStaffCount };
 
 // Pastille de la casquette Organisateur (lot 22) : discussions du staff avec du non lu et demandes de staff à traiter,
 // en plus des candidatures à trier et des messages des participants (déjà comptés ailleurs).
@@ -44,6 +40,9 @@ export const organizerInboxService = {
       participantMessages: await unreadConversationCount(v.user.id, { includeStructure: true, structureId }),
       staffDiscussions: await staffChatsService.unreadFor(v, structureId),
       staffRequests: await requestedStaffCount(structureId),
+      // Lot R9d : la cloche de la structure (anciens champs gardés, l'APK en ligne les lit).
+      activityUnseen: await structureActivityService.unseen(v.user.id, structureId),
+      coauthorRequests: (await structureActivityService.requestCounts(v.user.id, structureId)).coauthor,
     };
   },
 

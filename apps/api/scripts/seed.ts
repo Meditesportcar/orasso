@@ -55,6 +55,7 @@ import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedStaff } from "./seed/staff";
 import { seedStories } from "./seed/stories";
+import { seedStructureActivity } from "./seed/structure-activity";
 import { seedMyWeather, seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
@@ -208,6 +209,8 @@ async function main() {
   await seedEventNotifications();
   // Lot R9a : La Brasa et Roues Libres 66 suivent, Damien_66 suit La Brasa et Sud Cars, une story de page chacune.
   await seedPageFollows();
+  // Lot R9d : l'Activité de la structure (la cloche de l'organisateur), une ligne par responsable.
+  await seedStructureActivity();
   // Lot R9e : les galeries d'avant reprises en albums, un album publié (Sud Cars, 12 photos) et un brouillon de 3 photos.
   await seedAlbums();
 }

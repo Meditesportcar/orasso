@@ -1,0 +1,4 @@
+ALTER TABLE "notifications" ADD COLUMN "structure_id" uuid;--> statement-breakpoint
+ALTER TABLE "structure_members" ADD COLUMN "activity_seen_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_structure_id_structures_id_fk" FOREIGN KEY ("structure_id") REFERENCES "public"."structures"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "notifications_user_structure_idx" ON "notifications" USING btree ("user_id","structure_id","delivered_at" DESC NULLS LAST) WHERE "notifications"."structure_id" is not null;
