@@ -1,0 +1,2 @@
+CREATE INDEX "applications_media_profile_idx" ON "applications" USING btree ("media_profile_id") WHERE "applications"."media_profile_id" is not null;--> statement-breakpoint
+CREATE INDEX "applications_provider_profile_idx" ON "applications" USING btree ("provider_profile_id") WHERE "applications"."provider_profile_id" is not null;
