@@ -1,0 +1,94 @@
+// Cible « photo d'un album » (lot R9e) : signalable par qui peut voir l'album (404 sinon, comme sa lecture). La modération voit la
+// photo dans le dossier du signalement (`GET /admin/reports/:id/media/:name`, tracé, `no-store`). Retrait = photo retirée de
+// l'album, fichier effacé après la validation, rangs et compteur ajustés ; si c'était la dernière photo, l'album est retiré aussi.
+// Le propriétaire est le titulaire du profil média (sanctionnable) : il ne sait jamais qui a signalé.
+import { and, eq, isNull, sql } from "drizzle-orm";
+
+import { db } from "../../../db/client";
+import { eventAlbumPhotos, eventAlbums, mediaProfiles } from "../../../db/schema";
+import { now } from "../../../lib/deps";
+import { notFound } from "../../../lib/errors";
+import { storage } from "../../../lib/storage";
+import { shiftPositions } from "../../albums/service";
+import { albumPhotoName, loadAlbum } from "../../albums/view";
+import { registerReportMedia, reportMediaUrl } from "../media";
+import { goneView, type TargetRules, UUID_RE } from "./types";
+
+registerReportMedia("album_photo", async (report, name) => {
+  if (!UUID_RE.test(report.targetId)) return null;
+  const [photo] = await db
+    .select({ key: eventAlbumPhotos.storageKey })
+    .from(eventAlbumPhotos)
+    .where(
+      and(
+        eq(eventAlbumPhotos.id, report.targetId),
+        sql`right(${eventAlbumPhotos.storageKey}, ${name.length + 1}) = ${`/${name}`}`,
+      ),
+    );
+  if (!photo) return null;
+  const data = await storage.get(photo.key);
+  return data ? { data, contentType: "image/webp" } : null;
+});
+
+export const albumPhotoTarget: TargetRules = {
+  type: "album_photo",
+  // Même verrou que les écritures de l'album (ajout, retrait, publication) : un seul à la fois.
+  async lock(tx, targetId) {
+    if (!UUID_RE.test(targetId)) return;
+    const [photo] = await tx
+      .select({ albumId: eventAlbumPhotos.albumId })
+      .from(eventAlbumPhotos)
+      .where(eq(eventAlbumPhotos.id, targetId));
+    if (photo) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${photo.albumId}`}))`);
+  },
+  async resolve(v, targetId) {
+    if (!UUID_RE.test(targetId)) throw notFound("Photo introuvable");
+    const [photo] = await db
+      .select({ albumId: eventAlbumPhotos.albumId })
+      .from(eventAlbumPhotos)
+      .where(and(eq(eventAlbumPhotos.id, targetId), isNull(eventAlbumPhotos.deletedAt)));
+    const join = photo ? await loadAlbum(db, photo.albumId, v.user.id, now()) : null;
+    if (!join) throw notFound("Photo introuvable");
+    return { ownerId: join.m.userId };
+  },
+  async view(report) {
+    if (!UUID_RE.test(report.targetId)) return goneView("Photo d'un album");
+    const [row] = await db
+      .select({ key: eventAlbumPhotos.storageKey, deletedAt: eventAlbumPhotos.deletedAt, media: mediaProfiles.name })
+      .from(eventAlbumPhotos)
+      .innerJoin(eventAlbums, eq(eventAlbums.id, eventAlbumPhotos.albumId))
+      .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
+      .where(eq(eventAlbumPhotos.id, report.targetId));
+    if (!row) return goneView("Photo d'un album");
+    const url = reportMediaUrl(report.id, albumPhotoName(row.key));
+    return {
+      title: `Photo d'un album de ${row.media}`,
+      text: null,
+      imageUrl: row.deletedAt ? null : url,
+      imageUrls: row.deletedAt ? [] : [url],
+      link: null,
+      gone: false,
+      removed: Boolean(row.deletedAt),
+    };
+  },
+  async remove(tx, _v, report) {
+    if (!UUID_RE.test(report.targetId)) return [];
+    const [photo] = await tx.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.id, report.targetId));
+    if (!photo || photo.deletedAt) return [];
+    await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));
+    await shiftPositions(tx, photo.albumId, photo.position);
+    const [album] = await tx
+      .update(eventAlbums)
+      .set({ photosCount: sql`greatest(${eventAlbums.photosCount} - 1, 0)` })
+      .where(eq(eventAlbums.id, photo.albumId))
+      .returning({ count: eventAlbums.photosCount });
+    // Plus aucune photo : l'album n'a plus de raison d'être servi.
+    if (album && album.count === 0) {
+      await tx
+        .update(eventAlbums)
+        .set({ deletedAt: now(), officialAt: null })
+        .where(and(eq(eventAlbums.id, photo.albumId), isNull(eventAlbums.deletedAt)));
+    }
+    return [photo.storageKey];
+  },
+};
