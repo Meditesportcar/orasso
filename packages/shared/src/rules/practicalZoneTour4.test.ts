@@ -94,10 +94,15 @@ describe("zone dense : répartition par case", () => {
     expect(zoneNeedsSearch(z.getState())).toBe(true);
     z.searchHere();
     await vi.advanceTimersByTimeAsync(0);
+    // Tour 6 : « trop de lieux » seulement après la zone RESSERRÉE : la dernière page de la zone large ne le pose pas, la recherche suivante
+    // (zone resserrée sur la vue) le pose si elle revient coupée aussi.
+    expect(z.getState().tooDense).toBe(false);
+    expect(z.searchHere()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
     expect(z.getState().tooDense).toBe(true);
     expect(zoneNeedsSearch(z.getState())).toBe(false);
     expect(z.searchHere()).toBe(false);
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledTimes(3);
     expect(viewCovered(z.getState().cover, vue)).toBe(false);
   });
 });

@@ -255,14 +255,55 @@ describe("POST /practical : near zone", () => {
     expect(junk.status).toBe(400);
   });
 
-  it("au plus dix pages par zone : la page 10 (indice 10) est refusée, l'indice 9 est servi (la dixième page n'a pas de curseur)", async () => {
-    practicalSources({ wash: { "66": [{ name: "Lavage", lat: 42.5, lon: 2.9 }] }, fuel: { "66": [] } });
+  it("dix pages au plus : avec plus de 2 000 lieux, l'indice 9 rend sans nextCursor alors qu'il en reste (plafond réel)", async () => {
+    // Deux départements voisins (66 et 11), 1 500 lieux chacun (le plafond du cache d'OpenStreetMap) : 3 000 lieux dans la zone.
+    const grid = (lat0: number, n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        name: `P${lat0}-${i}`,
+        lat: lat0 + (i % 50) * 0.0006,
+        lon: 2.82 + Math.floor(i / 50) * 0.0006,
+      }));
+    practicalSources({ wash: { "66": grid(42.82, 1500), "11": grid(42.92, 1500) }, fuel: { "66": [], "11": [] } });
     const u = await signUp("Fan_Dix");
+    const zone = { near: "zone", south: 42.8, west: 2.8, north: 43.0, east: 3.1 };
+    let cursor: string | undefined;
+    let pages = 0;
+    let last: { truncated?: boolean; nextCursor?: string; places: unknown[] } | null = null;
+    for (; pages < 14; pages++) {
+      const res = await call(u, "POST", "/practical", { ...zone, ...(cursor ? { cursor } : {}) });
+      expect(res.status).toBe(200);
+      last = res.json;
+      cursor = res.json.nextCursor;
+      if (!cursor) break;
+    }
+    expect(pages + 1).toBe(10);
+    expect(last?.truncated).toBe(true);
+    expect(last?.nextCursor).toBeUndefined();
+    expect(last?.places).toHaveLength(200);
+  });
+
+  it("curseur lié aux données : le cache change entre deux pages, la page suivante est refusée (409) et l'écran repart de la première", async () => {
+    const wash = (tag: string, shift = 0) =>
+      Array.from({ length: 270 }, (_, i) => ({
+        name: `${tag}${i}`,
+        lat: 42.4 + Math.floor(i / 90) * 0.1 + 0.001 + (i % 30) * 0.0002 + shift,
+        lon: 2.8 + Math.floor((i % 90) / 30) * 0.1 + 0.001 + (i % 30) * 0.0002,
+      }));
+    practicalSources({ wash: { "66": wash("A") }, fuel: { "66": [] } });
+    const u = await signUp("Fan_Version");
     const zone = { near: "zone", south: 42.4, west: 2.8, north: 42.7, east: 3.1 };
-    const cursorFor = (p: number) => Buffer.from(JSON.stringify({ p, z: "42.4,2.8,42.7,3.1" })).toString("base64url");
-    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(9) })).status).toBe(200);
-    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(10) })).status).toBe(400);
-    expect((await call(u, "POST", "/practical", { ...zone, cursor: cursorFor(0) })).status).toBe(400);
+    const first = await call(u, "POST", "/practical", zone);
+    expect(first.status).toBe(200);
+    expect(first.json.nextCursor).toBeTruthy();
+    // Entre deux pages, les données sont renouvelées (autres lieux).
+    await db.delete(externalCache);
+    practicalSources({ wash: { "66": wash("B", 0.00003) }, fuel: { "66": [] } });
+    const second = await call(u, "POST", "/practical", { ...zone, cursor: first.json.nextCursor });
+    expect(second.status).toBe(409);
+    // Reprise depuis la première page : servie normalement.
+    const again = await call(u, "POST", "/practical", zone);
+    expect(again.status).toBe(200);
+    expect(again.json.places[0].name.startsWith("B")).toBe(true);
   });
 
   it("les modes d'avant ne changent pas (APK en ligne) : ville et position servent toujours l'origine et les 30 km", async () => {

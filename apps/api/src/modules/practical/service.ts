@@ -32,7 +32,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { applications, eventDays, events, externalCache, profileWeatherPlaces, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { notFound, validation } from "../../lib/errors";
+import { conflict, notFound, validation } from "../../lib/errors";
 import { EXTERNAL_BUDGET_MS, withinBudget } from "../../lib/external/cache";
 import { FUEL_MAX_STALE_MS, fuelState } from "../../lib/external/fuel";
 import { osmState, WASH_MAX_STALE_MS } from "../../lib/external/overpass";
@@ -48,20 +48,25 @@ export type PracticalTarget =
 
 /** Le curseur d'une page de zone : opaque, lié à la zone (arrondie) ; il ne porte aucune géographie de plus que la zone déjà envoyée. */
 const zoneKey = (z: PracticalZone) => `${z.south},${z.west},${z.north},${z.east}`;
-const encodeCursor = (page: number, z: PracticalZone) =>
-  Buffer.from(JSON.stringify({ p: page, z: zoneKey(z) })).toString("base64url");
+const encodeCursor = (page: number, z: PracticalZone, version: string) =>
+  Buffer.from(JSON.stringify({ p: page, z: zoneKey(z), v: version })).toString("base64url");
 /** La page demandée (0 sans curseur) ; un curseur illisible, d'une autre zone ou hors des pages permises est refusé (400). */
-function decodeCursor(cursor: string | undefined, z: PracticalZone): number {
-  if (cursor === undefined) return 0;
+function decodeCursor(cursor: string | undefined, z: PracticalZone): { page: number; version: string } {
+  if (cursor === undefined) return { page: 0, version: "" };
   try {
-    const raw = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { p?: unknown; z?: unknown };
+    const raw = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      p?: unknown;
+      z?: unknown;
+      v?: unknown;
+    };
     if (
       Number.isInteger(raw.p) &&
       (raw.p as number) >= 1 &&
       (raw.p as number) < PRACTICAL_ZONE_MAX_PAGES &&
-      raw.z === zoneKey(z)
+      raw.z === zoneKey(z) &&
+      typeof raw.v === "string"
     ) {
-      return raw.p as number;
+      return { page: raw.p as number, version: raw.v };
     }
   } catch {
     // illisible : refusé plus bas
@@ -282,8 +287,13 @@ export const practicalService = {
     // Mode zone : la coupe (plus de 200 lieux, ou plus de 12 départements) est signalée, jamais « en moins » en silence : l'écran ne marque
     // comme chargé que le disque couvert (0 km : rien de sûr quand des départements manquent).
     // Mode zone : la page demandée (curseur) de la répartition par case ; le curseur est lié à CETTE zone (une autre zone le refuse).
-    const pageIndex = zone ? decodeCursor(cursor, zone) : 0;
+    const asked = zone ? decodeCursor(cursor, zone) : { page: 0, version: "" };
+    const pageIndex = asked.page;
     const zonePage = zone ? placesInZonePage(all, zone, pageIndex) : null;
+    // Le curseur est lié à la version des données : si le cache a changé entre deux pages, l'écran repart de la première page (409).
+    if (zone && cursor !== undefined && zonePage && zonePage.version !== asked.version) {
+      throw conflict("conflict", "Les lieux de cette zone ont changé : reprends depuis le début.");
+    }
     const inZone = zonePage
       ? { places: zonePage.places, cut: zonePage.more, partialCells: zonePage.partialCells }
       : null;
@@ -310,7 +320,7 @@ export const practicalService = {
             ...(coveredKm !== undefined ? { coveredKm: Math.round(coveredKm * 100) / 100 } : {}),
             ...(partialCells ? { partialCells } : {}),
             ...(zone && !cutDepartments && inZone?.cut && pageIndex + 1 < PRACTICAL_ZONE_MAX_PAGES
-              ? { nextCursor: encodeCursor(pageIndex + 1, zone) }
+              ? { nextCursor: encodeCursor(pageIndex + 1, zone, zonePage?.version ?? "") }
               : {}),
           }
         : {}),

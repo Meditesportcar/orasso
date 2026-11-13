@@ -150,7 +150,7 @@ describe("pagination de la même zone", () => {
     expect(zoneContains(read.mock.calls[0]?.[0] as PracticalZone, { lat: 48.95, lng: 2.45 })).toBe(true);
   });
 
-  it("plafond de pages : après dix pages, « trop de lieux » et plus de bouton", async () => {
+  it("plafond de pages : dix pages de la zone large puis dix de la zone resserrée, alors seulement « trop de lieux » et plus de bouton", async () => {
     const big = Array.from({ length: 3000 }, (_, i) =>
       place(`g${i}`, 48.805 + (i % 50) * 0.00001, 2.305 + Math.floor(i / 50) * 0.00001),
     );
@@ -170,11 +170,12 @@ describe("pagination de la même zone", () => {
     });
     const z = createPracticalZone({ read: read as never, visible: () => true, statusOf: () => null });
     z.setView({ south: 48.803, west: 2.303, north: 48.807, east: 2.307 });
-    for (let k = 0; k < PRACTICAL_ZONE_MAX_PAGES + 3; k++) {
+    for (let k = 0; k < PRACTICAL_ZONE_MAX_PAGES * 3; k++) {
       if (!z.searchHere()) break;
       await vi.advanceTimersByTimeAsync(0);
     }
-    expect(read).toHaveBeenCalledTimes(PRACTICAL_ZONE_MAX_PAGES);
+    // Dix pages de la zone large (la dixième sans curseur), puis la zone resserrée sur la vue : dix pages encore, puis « trop de lieux ».
+    expect(read).toHaveBeenCalledTimes(PRACTICAL_ZONE_MAX_PAGES * 2);
     expect(z.getState().tooDense).toBe(true);
     expect(zoneNeedsSearch(z.getState())).toBe(false);
   });

@@ -447,9 +447,9 @@ export function placesInZonePage<T extends { id: string; lat: number; lng: numbe
   z: PracticalZone,
   page: number,
   max = PRACTICAL_MAX,
-): { places: T[]; more: boolean; partialCells: [number, number][] } {
+): { places: T[]; more: boolean; partialCells: [number, number][]; version: string } {
   const all = placesInZone(places, z, Number.POSITIVE_INFINITY);
-  if (all.length <= max && page === 0) return { places: all, more: false, partialCells: [] };
+  if (all.length <= max && page === 0) return { places: all, more: false, partialCells: [], version: "" };
   const cells = new Map<string, { i: number; j: number; list: T[]; km: number }>();
   for (const p of all) {
     const i = cellDown(p.lat);
@@ -488,7 +488,25 @@ export function placesInZonePage<T extends { id: string; lat: number; lng: numbe
     places: sequence.slice(page * max, (page + 1) * max).map((x) => x.p),
     more: sequence.length > (page + 1) * max,
     partialCells,
+    // L'empreinte de la séquence COMPLÈTE de la zone : une page suivante lue sur d'autres données (cache renouvelé) est reconnue.
+    version: fingerprint(sequence.map((x) => x.p.id)),
   };
+}
+
+/** Une empreinte courte (deux condensats de 32 bits, base 36) d'une liste d'identifiants : jamais une donnée de position. */
+export function fingerprint(ids: readonly string[]): string {
+  let a = 0x811c9dc5;
+  let b = 0x9747b28c;
+  for (const id of ids) {
+    for (let i = 0; i < id.length; i++) {
+      const c = id.charCodeAt(i);
+      a = Math.imul(a ^ c, 16777619);
+      b = Math.imul(b ^ c, 2654435761);
+    }
+    a = Math.imul(a ^ 124, 16777619);
+    b = Math.imul(b ^ 124, 2654435761);
+  }
+  return `${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`;
 }
 
 /**

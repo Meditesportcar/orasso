@@ -61,7 +61,7 @@ export const zoneNeedsSearch = (
 /** « Zoome sur un secteur pour voir ses lieux. » : la zone regardée dépasse 60 km. */
 export const zoneIsTooWide = (s: Pick<ZoneState, "view">): boolean => s.view !== null && zoneTooBig(s.view);
 
-const sameZone = (a: PracticalZone, b: PracticalZone) =>
+const zoneEquals = (a: PracticalZone, b: PracticalZone) =>
   a.south === b.south && a.west === b.west && a.north === b.north && a.east === b.east;
 const insideZone = (outer: PracticalZone | null, view: PracticalZone) =>
   outer !== null &&
@@ -71,8 +71,12 @@ const insideZone = (outer: PracticalZone | null, view: PracticalZone) =>
  * Ce qu'une réponse couvre : sans coupe, toute son emprise (`whole`) ; coupée, seulement le disque dont tous les lieux sont servis
  * (`coveredKm` envoyé par l'API ; à défaut, ancien serveur : le rayon du plus lointain lieu reçu quand 200 sont arrivés).
  */
+/** Une réponse est-elle coupée ? Zone (sans origine) : `truncated` seul (une dernière page de 200 lieux exactement est complète) ; ouverture : aussi 200 lieux reçus. */
+const isCut = (data: PracticalData): boolean =>
+  data.truncated === true || (data.origin !== null && data.places.length >= PRACTICAL_MAX);
+
 function coveredBy(data: PracticalData, centre: { lat: number; lng: number }, whole: ZoneCover): ZoneCover[] {
-  const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
+  const cut = isCut(data);
   if (!cut) return [whole];
   // Réponse coupée et répartie par case : toute la zone est chargée, sauf les cases dont tous les lieux n'ont pas été servis.
   if (whole.t === "rect" && data.partialCells) {
@@ -106,6 +110,8 @@ export function createPracticalZone(deps: ZoneDeps) {
   let pageState: { zone: PracticalZone; token: string } | null = null;
   /** Le curseur de la lecture en cours ou du dernier échec (« Réessayer » relit la même page). */
   let cursorUsed: string | undefined;
+  /** Les lieux reçus par les pages de la série en cours (page 0 et suivantes) : une case complétée remplace les ANCIENNES lectures, jamais ceux-ci. */
+  let seriesIds = new Set<string>();
   let resumeTimer: ReturnType<typeof setTimeout> | null = null;
   const clearResume = () => {
     if (resumeTimer !== null) clearTimeout(resumeTimer);
@@ -132,12 +138,27 @@ export function createPracticalZone(deps: ZoneDeps) {
     gone: (p: PracticalPlace) => boolean,
     incoming: readonly PracticalPlace[],
     covered: readonly ZoneCover[],
-  ): Pick<ZoneState, "places" | "cover"> => {
+    /** Une page suivante d'une zone : ses lieux déjà en mémoire sont gardés, l'éviction vise d'abord les autres zones. */
+    keepZone?: PracticalZone,
+  ): Pick<ZoneState, "places" | "cover"> & { restart?: true } => {
     const places = replaceInStore(state.places, gone, incoming);
     const remaining = [...state.places.values()].filter((p) => !gone(p));
     const known = new Set(remaining.map((p) => p.id));
     const total = remaining.length + incoming.filter((p) => !known.has(p.id)).length;
     if (total > PRACTICAL_STORE_MAX) {
+      if (keepZone) {
+        // Les lieux de la zone (pages précédentes comprises) restent ; les autres zones sortent, avec leur couverture.
+        const inZone = remaining.filter((p) => zoneContains(keepZone, p));
+        const have = new Set(inZone.map((p) => p.id));
+        const size = inZone.length + incoming.filter((p) => !have.has(p.id)).length;
+        if (size <= PRACTICAL_STORE_MAX) {
+          const merged = replaceInStore(new Map(inZone.map((p) => [p.id, p])), () => false, incoming);
+          const sameZone = state.cover.filter((c) => c.t === "rect" && zoneEquals(c.zone, keepZone));
+          return { places: merged, cover: [...sameZone, ...covered] };
+        }
+        // Impossible : rien n'est déclaré couvert, on repart de la première page.
+        return { places: replaceInStore(new Map(), () => true, incoming), cover: [], restart: true };
+      }
       // Le plafond est dépassé : des lieux sortiraient. On ne garde que ce que cette réponse apporte et sa couverture, tout le reste (lieux
       // et couverture) est évincé ensemble : jamais une zone « chargée » dont les lieux manquent.
       return { places: replaceInStore(new Map(), () => true, incoming), cover: [...covered] };
@@ -165,22 +186,25 @@ export function createPracticalZone(deps: ZoneDeps) {
       if (!data.partial && !data.loading) {
         // Lecture complète : elle REMPLACE les lieux de son emprise (une station vue seule puis fusionnée n'existe qu'une fois) ; la zone
         // demandée est chargée, sauf si la réponse est coupée (plus de 200 lieux, ou plus de 12 départements) : seul le disque couvert l'est.
-        const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
+        const cut = isCut(data);
         const covered = coveredBy(data, zoneCenter(zone), { t: "rect", zone });
         if (cut) dense = [...dense, zone];
         // Les anciennes entrées de l'emprise GARANTIE (zone entière, ou disque et cases servis si la réponse est coupée) sont remplacées.
         // Une page suivante (curseur) AJOUTE ses lieux à ceux des pages précédentes de la même zone : rien n'est remplacé.
-        const next = store(cursor !== undefined ? () => false : (p) => coverContains(covered, p), data.places, covered);
-        if (!away) pageState = cut && data.nextCursor ? { zone, token: data.nextCursor } : null;
+        if (cursor === undefined) seriesIds = new Set();
+        for (const p of data.places) seriesIds.add(p.id);
+        const next = store(
+          (p) => coverContains(covered, p) && !seriesIds.has(p.id),
+          data.places,
+          covered,
+          cursor !== undefined ? zone : undefined,
+        );
+        if (next.restart) pageState = null;
+        if (!away && !next.restart) pageState = cut && data.nextCursor ? { zone, token: data.nextCursor } : null;
         // Toujours coupé après un resserrement : des cases de la vue ne seront jamais complètes à ce zoom.
         // (Seulement si la réponse concerne toujours la recherche et la vue courantes, et s'il n'y a plus de page suivante.)
         const crowded =
-          !away &&
-          cut &&
-          !data.nextCursor &&
-          (data.partialCells !== undefined || askedTight) &&
-          view !== null &&
-          !viewCovered(next.cover, view);
+          !away && cut && !data.nextCursor && askedTight && view !== null && !viewCovered(next.cover, view);
         set({
           ...next,
           loading: false,
@@ -212,6 +236,13 @@ export function createPracticalZone(deps: ZoneDeps) {
       reading = false;
       if (!alive || !cycle.current(token)) return;
       const status = deps.statusOf(error);
+      if (status === 409 && cursor !== undefined && asked === zone) {
+        // Les données ont changé entre deux pages : on repart de la première page de la même zone (les lieux lus remplacent les anciens).
+        pageState = null;
+        cursorUsed = undefined;
+        void load();
+        return;
+      }
       if (status === null) deps.onUnknown?.(error);
       // Aucune relance automatique d'un échec : « Réessayer » (le calendrier de `readCycle` ne s'applique qu'aux chargements).
       cycle.settled("unknown");
@@ -251,7 +282,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       }
       const inDisk = (p: PracticalPlace) => distanceKm(o, p) <= PRACTICAL_RADIUS_KM;
       const covered = coveredBy(data, o, { t: "disk", lat: o.lat, lng: o.lng, km: PRACTICAL_RADIUS_KM });
-      const cut = data.truncated === true || data.places.length >= PRACTICAL_MAX;
+      const cut = isCut(data);
       const known = covered.every(
         (c) =>
           c.t === "disk" &&
@@ -262,7 +293,7 @@ export function createPracticalZone(deps: ZoneDeps) {
     /** Fin d'un geste sur la carte : la zone regardée. Ne lit rien. */
     setView(view: PracticalZone) {
       const v = state.view;
-      if (v && sameZone(v, view)) return;
+      if (v && zoneEquals(v, view)) return;
       // La vue change : un refus de l'API ne vaut plus pour la nouvelle zone.
       const patch: Partial<ZoneState> = { view, refused: false, tooDense: false };
       // La vue sort de la zone demandée : une relecture attendue de l'ancienne zone est abandonnée (le bouton redevient actif pour la
@@ -286,11 +317,11 @@ export function createPracticalZone(deps: ZoneDeps) {
       // Une zone déjà coupée (trop de lieux) : on ne l'élargit plus, la zone se resserre sur la vue (toujours en cases entières).
       const centre = zoneCenter(v);
       clearResume();
-      if (pageState && zoneContains(pageState.zone, centre)) {
+      if (pageState && insideZone(pageState.zone, v)) {
         // La vue touche une case incomplète de la dernière zone coupée : la page suivante de CETTE zone (rien de géographique de plus).
         asked = pageState.zone;
         cursorUsed = pageState.token;
-        askedTight = false;
+        // (La série garde sa nature : zone large ou resserrée.)
       } else {
         pageState = null;
         cursorUsed = undefined;
