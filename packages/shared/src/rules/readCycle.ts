@@ -43,6 +43,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
   // Une panne transitoire a épuisé le calendrier (aucune relance programmée) : la lecture reste due, `dispose` ne l'efface pas (un
   // remontage la relit) et « Réessayer » est proposé, comme pour un refus.
   let stalled = false;
+  // Lot de fin F : un chargement (`loading`) ou une réponse partielle a épuisé ses relectures : « Réessayer » est proposé.
+  let exhausted = false;
 
   // La seule programmation : l'échéance mémorisée et la minuterie se mettent à jour ensemble (`settled`, `resume`, `rearm`).
   const schedule = (delay: number) => {
@@ -71,6 +73,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
     halted = false;
     pending = false;
     stalled = false;
+    exhausted = false;
   };
 
   return {
@@ -88,6 +91,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
       timer.cancel();
       pending = false;
       stalled = false;
+      exhausted = false;
       if (outcome === "unknown") {
         halted = true;
         refusedAt = 0;
@@ -100,6 +104,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
       networkAttempt = step.networkAttempt;
       scheduledDelay = null;
       if (step.delay !== null) schedule(step.delay);
+      else if (outcome === "loading" || outcome === "partialOnce") exhausted = true;
       // Un échec transitoire reprend au retour sur l'écran même quand la série de relances est finie.
       if (outcome === "transient") {
         pending = true;
@@ -149,6 +154,10 @@ export function createReadCycle(deps: ReadCycleDeps) {
     stalledByFailure(): boolean {
       return stalled;
     },
+    /** Un chargement (`loading`) ou une réponse partielle a épuisé ses relectures : plus rien d'automatique, « Réessayer » est proposé. */
+    exhausted(): boolean {
+      return exhausted;
+    },
     /** « Réessayer » : tout repart à 0 (le hook lance la lecture). */
     manual,
     /** Nouvelles entrées ou autre compte : plus rien d'avant. */
@@ -165,7 +174,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
       else if (scheduled) pending = true;
     },
     /** Pour les tests. */
-    state: () => ({ calendarStep, networkAttempt, refusedAt, halted, pending, scheduled: timer.pending() }),
+    state: () => ({ calendarStep, networkAttempt, refusedAt, halted, pending, scheduled: timer.pending(), exhausted }),
   };
 }
 

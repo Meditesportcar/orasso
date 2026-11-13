@@ -213,7 +213,7 @@ export const matchesSearch = (title: string, text: string): boolean => {
 };
 
 /** « Argelès-sur-Mer (66) » → « Argelès-sur-Mer » : le nom d'une commune proposée par `GET /geo/cities`. */
-export const cityNameOf = (label: string): string => label.replace(/\s*\(\d{2,3}[AB]?\)\s*$/, "").trim();
+export const cityNameOf = (label: string): string => label.replace(/\s*\(\d{1,3}[AB]?\)\s*$/, "").trim();
 
 /** « de », « du », « des » ou « d' » devant un nom de lieu : « Autour d'Argelès… », « du Boulou ». */
 export function elide(name: string): string {
