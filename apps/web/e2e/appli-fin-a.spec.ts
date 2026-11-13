@@ -142,11 +142,15 @@ test("la mesure « mot coupé » repère un mot coupé exprès et laisse un mot 
 });
 
 const FLOOR = 9;
+/** L'échelle de police du titre du rail est plafonnée à ×1,12 (`data-fsmax` des maquettes). */
+const TITLE_SCALE_MAX = 1.12;
 const RAIL_TITLES = [
   // Un seul mot, trop long pour tenir même au plancher : le corps y arrive (c'est ce qui prouve le plancher).
   "Anticonstitutionnellement",
   // Un mot long qui tient après réduction : jamais coupé.
   "Exposition",
+  // Le mot courant des titres d'événements : entier même à ×1,3 (l'échelle du titre est plafonnée à ×1,12).
+  "Rassemblement",
   "Expo des Pilotes Catalans",
 ];
 
@@ -184,13 +188,16 @@ for (const scale of [1, 1.3]) {
     const by = (t: string) => titles.find((x) => x.title === t);
     for (const t of titles) {
       expect(t.found, `${t.title} : titre trouvé`).toBe(true);
-      expect(t.size, `${t.title} : corps (plancher ${FLOOR} × ${scale})`).toBeGreaterThanOrEqual(FLOOR * scale - 0.01);
+      expect(
+        t.size,
+        `${t.title} : corps (plancher ${FLOOR} × ${Math.min(scale, TITLE_SCALE_MAX)})`,
+      ).toBeGreaterThanOrEqual(FLOOR * Math.min(scale, TITLE_SCALE_MAX) - 0.01);
       expect(t.ellipsis, `${t.title} : pas de « … »`).toBe(false);
     }
     // Le mot trop long atteint le plancher (et pas en dessous : l'ancien plancher de 8 donnait 8,5).
     const longest = by(RAIL_TITLES[0] as string);
     expect(longest, "le mot le plus long est dans le rail").toBeDefined();
-    expect(longest?.size).toBeLessThanOrEqual(9.5 * scale + 0.01);
+    expect(longest?.size).toBeLessThanOrEqual(9.5 * Math.min(scale, TITLE_SCALE_MAX) + 0.01);
     // Un mot qui tient après réduction n'est jamais coupé.
     for (const t of RAIL_TITLES.slice(1)) {
       expect(by(t), `${t} est dans le rail`).toBeDefined();
