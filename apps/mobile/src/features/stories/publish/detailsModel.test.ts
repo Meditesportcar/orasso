@@ -7,6 +7,7 @@ import {
   audienceOptionDisabled,
   chooseAudience,
   type DetailsState,
+  eventStickerFor,
   initialDetails,
   settleAudience,
   withPlace,
@@ -113,5 +114,21 @@ describe("détails d'une story", () => {
   it("sans option (rien chargé), rien ne change", () => {
     const state = initialDetails([]);
     expect(chooseAudience(state, [], "x")).toEqual({ state, dropped: false });
+  });
+});
+
+describe("autocollant d'événement : la visibilité de l'auteur (R9h)", () => {
+  it("compte privé : permis pour une page de média ou de prestataire (publique par nature), refusé pour la personne, une structure, une fiche pro", () => {
+    const allowed = (persona: "fan" | "organizer" | "pro" | "provider" | "media") =>
+      eventStickerFor({ persona }, "private", "public").allowed;
+    expect(allowed("media")).toBe(true);
+    expect(allowed("provider")).toBe(true);
+    expect(allowed("fan")).toBe(false);
+    expect(allowed("organizer")).toBe(false);
+    expect(allowed("pro")).toBe(false);
+  });
+  it("une story de crew n'a jamais d'autocollant, et un compte public le permet partout", () => {
+    expect(eventStickerFor({ persona: "media" }, "public", "crew").allowed).toBe(false);
+    expect(eventStickerFor({ persona: "fan" }, "public", "followers").allowed).toBe(true);
   });
 });
