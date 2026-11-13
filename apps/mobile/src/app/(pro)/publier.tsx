@@ -25,7 +25,7 @@ export default function ProPublier() {
   const { t } = useTheme();
   const router = useRouter();
   // Lot M7, tour 2 : le ✕ revient à Ma fiche (le retour des onglets Pro mènerait au Scanner).
-  const close = useCloseTo("/(pro)/fiche");
+  const close = useCloseTo("/(pro)/page");
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   const offers = useOffers(pro ? authorKeyOf("pro", pro.id) : null);

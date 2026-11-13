@@ -23,6 +23,11 @@ const EM_100 = 0.75;
 /** Plus petit corps affiché d'un libellé d'onglet (après l'échelle de police). */
 const MIN_SHOWN = 7.5;
 const BASE = 9.5;
+/**
+ * Lot R9n (tour de recette, 384 px × 1,3) : la colonne d'un onglet fait ~73 px à 384 px ; avec la police agrandie « Événements » (10 capitales,
+ * 115 %) mesurait 77,8 px pour 78 de place et passait sur deux lignes (« ÉVÉNEMENT / S »). Police agrandie : on vise 72 px, pas 78.
+ */
+const SCALED_ROOM = 72;
 
 /**
  * Lot R6-police (« EXPLORE / R » sur le Pixel de Damien, police système agrandie) : avec une échelle de police
@@ -36,11 +41,11 @@ export function tabBarLabelFits(
 ): { fontFamily?: string; fontSize?: number }[] {
   if (!(fontScale > 1)) return labels.map(tabLabelFit);
   const n = Math.max(1, ...labels.map((l) => l.length));
-  const wide = Math.min(BASE, LABEL_ROOM / (n * EM_115 * fontScale));
+  const wide = Math.min(BASE, SCALED_ROOM / (n * EM_115 * fontScale));
   if (wide * fontScale >= MIN_SHOWN) {
     const style = wide < BASE ? { fontSize: wide } : {};
     return labels.map(() => style);
   }
-  const size = Math.min(BASE, LABEL_ROOM / (n * EM_100 * fontScale));
+  const size = Math.min(BASE, SCALED_ROOM / (n * EM_100 * fontScale));
   return labels.map(() => ({ fontFamily: archivoAt(100, 800), fontSize: size }));
 }

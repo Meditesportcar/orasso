@@ -287,8 +287,12 @@ export function feedCopyCards(items: readonly FeedCard[]): FeedCard[] {
   return items.filter((c) => c.kind !== "spot_meetup" && c.kind !== "sponsored").slice(0, FEED_COPY_MAX);
 }
 
-/** La copie gardée d'un onglet : sa clé dans `offlineCopy`. */
-export const feedCopyKey = (filter: FeedFilter): string => `fil.${filter}`;
+/**
+ * La copie gardée d'un onglet : sa clé dans `offlineCopy`. Lot R9n (T20) : rangée par acteur — la copie d'une casquette (clé d'auteur
+ * `s:…`, `p:…`…) n'écrase pas celle de la personne, ni celle d'une autre casquette.
+ */
+export const feedCopyKey = (filter: FeedFilter, actor: string | null = null): string =>
+  actor ? `fil.${actor}.${filter}` : `fil.${filter}`;
 
 /** Une copie relue du disque : seulement des cartes bien formées du bon onglet, filtrées de nouveau (elle peut venir d'une version plus ancienne). */
 export function parseFeedCopy(raw: unknown, filter: FeedFilter): FeedCard[] | null {

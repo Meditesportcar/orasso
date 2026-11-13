@@ -19,7 +19,8 @@ export type StoryViewers = {
 };
 
 export const storiesApi = {
-  storiesBar: () => request<StoryBar>("/api/stories/bar"),
+  /** Lot R9n (liste blanche, T19) : avec `actor`, `mine` = les stories de la page. */
+  storiesBar: (actor?: string | null) => request<StoryBar>("/api/stories/bar", { actor }),
   storiesByAuthor: (key: string) => request<StoriesByAuthor>(`/api/stories/by-author/${encodeURIComponent(key)}`),
   /** Idempotent : une vue par personne et par story. */
   storyView: (id: string) => request<unknown>(`/api/stories/${id}/view`, { method: "POST" }),

@@ -52,29 +52,29 @@ const TABS: Record<Kind, [string, string][]> = {
     ["Événements", "evenements"],
     ["Tri", "tri"],
     ["Direct", "direct"],
-    ["Équipe", "equipe"],
-    ["Structure", "structure"],
+    ["Le Fil", "fil"],
+    ["Page", "page"],
   ],
   pro: [
     ["Scanner", "scanner"],
-    ["Ma fiche", "fiche"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
     ["Stats", "stats"],
-    ["Profil", "profil"],
+    ["Page", "page"],
   ],
   provider: [
     ["Missions", "missions"],
-    ["Candidatures", "candidatures"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Vitrine", "vitrine"],
-    ["Profil", "profil"],
+    ["Candidatures", "candidatures"],
+    ["Page", "page"],
   ],
   media: [
     ["Explorer", "explorer"],
-    ["Presse", "presse"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Contenus", "contenus"],
-    ["Profil", "profil"],
+    ["Presse", "presse"],
+    ["Page", "page"],
   ],
   admin: [
     ["Accueil", "administration"],
@@ -419,29 +419,31 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
     page: /\/reglages(\?|$)/,
   },
   organizer: {
-    tab: ["Structure", "structure"],
+    tab: ["Page", "page"],
     open: (page) => page.getByTestId("tile-bans").first().click(),
     page: /\/bannis/,
   },
   pro: {
-    tab: ["Ma fiche", "fiche"],
+    tab: ["Page", "page"],
     open: async (page) => {
       await page.getByText("Publications", { exact: true }).first().click();
       await page.getByTestId("pro-new-post").first().click();
     },
     page: /\/publier/,
   },
+  // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la recherche, ouverte
+  // par la loupe depuis l'onglet Missions. Média : la ligne « Mon profil média » de la Page ouvre un écran B.
   provider: {
-    tab: ["Profil", "profil"],
-    // Lot R5b : les réglages sont derrière la roue dentée de la carte du profil (écran « Réglages », mode fiche).
-    open: (page) => page.getByTestId("profil-gear").first().click(),
-    page: /\/reglages(\?|$)/,
+    tab: ["Missions", "missions"],
+    // Le compte du prestataire de la recette n'a aucune mission et « Voir » d'une mission mène à l'onglet Candidatures : l'écran B est la
+    // recherche, ouverte par la loupe de la bande du haut depuis l'onglet Missions.
+    open: (page) => page.getByRole("button", { name: "Rechercher" }).filter({ visible: true }).first().click(),
+    page: /\/recherche/,
   },
   media: {
-    tab: ["Profil", "profil"],
-    // Lot R5b : les réglages sont derrière la roue dentée de la carte du profil (écran « Réglages », mode fiche).
-    open: (page) => page.getByTestId("profil-gear").first().click(),
-    page: /\/reglages(\?|$)/,
+    tab: ["Page", "page"],
+    open: (page) => page.getByTestId("page-row-media-profile").first().click(),
+    page: /\/media\/modifier/,
   },
   admin: {
     tab: ["Registres", "registres"],

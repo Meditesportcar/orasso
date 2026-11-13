@@ -5,11 +5,14 @@
 // Lot 35d : l'Administration est une casquette ajoutée par l'appli pour les rôles `moderator` et `super_admin`, et le
 // mode assistance (« Survoler l'espace ») ouvre la casquette Organisateur d'une structure qui n'est pas la sienne, sans
 // la mémoriser : au lancement suivant on retrouve la casquette d'avant.
-import type { ProfileTab } from "@orasso/shared";
+import { casquettesLabels, type ProfileTab } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { announce } from "@/ui/Announce";
+import { forbiddenIsCurrent } from "./actor";
 import { type AssistedStructure, adminEntryOf } from "./adminModel";
+import { setActorForbiddenListener } from "./http";
 import { kvDel, kvGet, kvSet } from "./kv";
 import {
   type AppPersonaEntry,
@@ -33,6 +36,25 @@ import { useSession } from "./session";
 import { openStandalone } from "./standalone";
 
 const KEY = "persona";
+
+/** Lot R9n : l'avis « Cette casquette n'est plus disponible » (une fois par casquette). */
+function announceGone(persona: Persona) {
+  const id =
+    persona.kind === "organizer"
+      ? persona.structureId
+      : persona.kind === "pro"
+        ? persona.proProfileId
+        : persona.kind === "media"
+          ? persona.mediaProfileId
+          : persona.kind;
+  announce({
+    id: `casquette-gone:${persona.kind}:${id}`,
+    tone: "info",
+    icon: "alert",
+    title: casquettesLabels.gone,
+    text: casquettesLabels.goneText,
+  });
+}
 
 type PersonaValue = {
   /** La casquette mémorisée est lue (avant, on ne sait pas encore où ouvrir l'appli). */
@@ -71,7 +93,7 @@ type PersonaValue = {
 const PersonaContext = createContext<PersonaValue | null>(null);
 
 export function PersonaProvider({ children }: { children: ReactNode }) {
-  const { status, me } = useSession();
+  const { status, me, refreshMe } = useSession();
   const router = useRouter();
   /** `undefined` : le trousseau n'a pas encore été lu. */
   const [stored, setStored] = useState<Persona | null | undefined>(undefined);
@@ -112,8 +134,31 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     if (gone) {
       setStored(base);
       void kvSet(KEY, serializePersona(base));
+      // Lot R9n : une casquette de page qui disparaît (structure quittée, fiche supprimée) : un avis, pas un retour muet.
+      if (!isBaseKind(stored.kind) && stored.kind !== "admin") announceGone(stored);
     }
   }, [status, me, stored, entries, base]);
+
+  // Lot R9n : l'API refuse l'acteur (403 `persona_forbidden`) : on relit les casquettes (`GET /me`). Si la casquette a disparu de la liste,
+  // l'effet ci-dessus ramène à la casquette de base avec l'avis ; si elle y est toujours (structure suspendue : l'en-tête n'est alors plus
+  // posé), on y reste. Tour 1, point 5 : un 403 tardif d'une casquette déjà quittée (autre acteur actif) ne touche pas la casquette en cours.
+  const personaRef = useRef(persona);
+  personaRef.current = persona;
+  const forbiddenRefresh = useRef(false);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  useEffect(() => {
+    setActorForbiddenListener((refused) => {
+      if (!forbiddenIsCurrent(refused, personaRef.current, entriesRef.current)) return;
+      // Une rafale de 403 (Fil, stories, commentaires) ne relit `GET /me` qu'une fois.
+      if (forbiddenRefresh.current) return;
+      forbiddenRefresh.current = true;
+      void refreshMe().finally(() => {
+        forbiddenRefresh.current = false;
+      });
+    });
+    return () => setActorForbiddenListener(null);
+  }, [refreshMe]);
 
   const choose = useCallback(
     (next: Persona, to?: string) => {

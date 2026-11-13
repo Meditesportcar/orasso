@@ -216,7 +216,6 @@ test("la publication juste envoyée : en tête avec son bandeau, qui repart quan
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "following");
   await page.getByTestId("fil-publish-open").click();
-  await page.getByTestId("fil-publish-choose-post").click();
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("fil-publish-add").click();

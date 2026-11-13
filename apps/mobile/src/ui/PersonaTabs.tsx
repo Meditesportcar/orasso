@@ -15,6 +15,7 @@ import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, u
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CasquettesSheetHost } from "@/features/casquettes/CasquettesSheet";
 import { neighbourRoute, preloadOrder } from "@/features/nav/swipe";
 import { TabSwipeContext, useTabSwipe } from "@/features/nav/useTabSwipe";
 import { NextAccessBar } from "@/features/sorties/NextAccessBar";
@@ -136,6 +137,8 @@ export function PersonaTabs({
           >
             {children}
           </Tabs>
+          {/* Lot R9n : la feuille « Mes casquettes » (pastille de la barre du haut, « Changer » du Fil, ligne de la Page). */}
+          <CasquettesSheetHost />
         </View>
       </TabBandProvider>
     </TabSwipeContext.Provider>

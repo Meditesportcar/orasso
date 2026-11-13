@@ -46,6 +46,7 @@ import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
+import { usePageFooter } from "./pageFooter";
 import { revealOffset, type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
 import { endReached } from "./scrollEnd";
 import { TabTitle } from "./TabTitle";
@@ -156,6 +157,8 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays }:
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   useRefreshOnFocus();
+  // Lot R9n (T21) : le pied de l'onglet « Page » (la ligne « Mes casquettes »), posé par `PageFooterProvider` ; nul ailleurs.
+  const pageFooter = usePageFooter();
   return (
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
@@ -173,9 +176,14 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays }:
                   <>
                     {title ? <TabTitle title={title} label={facts} /> : null}
                     {children}
+                    {pageFooter}
                   </>
                 ) : (
-                  [...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []), ...flat]
+                  [
+                    ...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []),
+                    ...flat,
+                    ...(pageFooter ? [<Fragment key="page-footer">{pageFooter}</Fragment>] : []),
+                  ]
                 )}
               </Body>
               {footer ? (

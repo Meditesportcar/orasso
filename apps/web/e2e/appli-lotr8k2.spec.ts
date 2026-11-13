@@ -468,7 +468,6 @@ test("l'auteur coupe puis rouvre les commentaires ; le bouton « Commenter » re
   await afterOpening(page);
   await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("fil-publish-open").click();
-  await page.getByTestId("fil-publish-choose-post").click();
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("fil-publish-add").click();

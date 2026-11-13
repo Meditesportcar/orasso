@@ -74,6 +74,16 @@ describe("casquettes dans GET /me", () => {
     }
   });
 
+  it("R9n : une structure suspendue reste une casquette et porte `suspended: true` (champ absent sinon)", async () => {
+    const owner = await signUp("Patron");
+    const s = await createStructure(owner.id);
+    const before = (await call(owner, "GET", "/me")).json.personas[1];
+    expect(before).not.toHaveProperty("suspended");
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, s.id));
+    const after = (await call(owner, "GET", "/me")).json.personas[1];
+    expect(after).toMatchObject({ kind: "organizer", id: s.id, suspended: true });
+  });
+
   it("une structure supprimée disparaît des casquettes", async () => {
     const owner = await signUp("Patron");
     const s = await createStructure(owner.id);
