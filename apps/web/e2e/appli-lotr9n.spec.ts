@@ -143,23 +143,37 @@ for (const [theme, width, scale] of [
       for (const label of spec.labels) {
         const box = await tab(page, label).boundingBox();
         expect(box, `onglet ${label}`).not.toBeNull();
-        const over = await tab(page, label).evaluate((el) =>
-          Math.max(...[el, ...el.querySelectorAll("*")].map((n) => n.scrollWidth - n.clientWidth)),
-        );
-        expect(over, `libellé ${label} qui déborde`).toBeLessThanOrEqual(1);
+        // Le libellé tient sur une seule ligne (rectangles de largeur non nulle, comme appli-lotr6police) et aucun mot n'est coupé.
+        const fit = await tab(page, label).evaluate((el) => {
+          const tops = new Set<number>();
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!(n.textContent ?? "").trim()) continue;
+            const r = document.createRange();
+            r.selectNodeContents(n);
+            for (const q of r.getClientRects()) if (q.width > 0) tops.add(Math.round(q.top));
+          }
+          return { lines: tops.size };
+        });
+        expect(fit.lines, `libellé ${label} sur plusieurs lignes`).toBe(1);
       }
       await shot(page, `n-barre-${kind}-${theme}-${width}-x${scale}`);
 
       // La pastille de la barre du haut : le logo de la casquette, elle ouvre « Mes casquettes ».
-      await expect(page.getByTestId("topbar-persona")).toBeVisible();
-      await page.getByTestId("topbar-persona").click();
+      const chip = page.getByTestId("topbar-persona").filter({ visible: true }).first();
+      await expect(chip).toBeVisible();
+      await chip.click();
       await expect(page.getByTestId("casquettes-intro")).toBeVisible();
       await expect(page.getByTestId("casquettes-me")).toBeVisible();
       // Les lignes de la nouvelle feuille : `casquettes-<rôle>` (pas les `casquette-<rôle>` du Profil).
       await expect(page.getByTestId(spec.testId.replace("casquette-", "casquettes-")).first()).toBeVisible();
       await shot(page, `n-feuille-${kind}-${theme}-${width}-x${scale}`);
       await page.keyboard.press("Escape").catch(() => undefined);
-      await page.getByRole("button", { name: "Fermer" }).first().click();
+      await page
+        .getByRole("button", { name: "Fermer" })
+        .filter({ visible: true })
+        .last()
+        .click({ position: { x: 8, y: 8 } });
       await expect(page.getByTestId("casquettes-intro")).toHaveCount(0, { timeout: 5_000 });
 
       // Le Fil en casquette : « Tu lis en tant que » + le nom, jamais tronqué.

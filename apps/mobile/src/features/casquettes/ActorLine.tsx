@@ -1,7 +1,7 @@
 // La pastille « Tu lis en tant que » du Fil en casquette (lot R9n, maquette R9 `r9as`) : le logo de la casquette (petit), le
 // nom en gras (jamais tronqué : il passe à la ligne) et le bouton « Changer » (icône) qui ouvre « Mes casquettes ». Rien pour
 // le passionné et le visiteur, ni pour l'administration ou le survol : on ne lit « en tant que » que d'une page.
-import { OrgLogo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { OrgLogo, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import { casquettesLabels as L } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 import { mediaSource } from "@/lib/media";
@@ -29,9 +29,10 @@ export function ActorLine() {
         <Text variant="caption" color={t.color.inkMuted}>
           {L.readingAs}
         </Text>
-        <Text variant="bodyStrong" color={t.color.ink} testID="fil-actor-name">
+        {/* Le nom ne se coupe jamais au milieu d'un mot (corps réduit au besoin), il passe à la ligne entre les mots. */}
+        <WordSafeText base={15} variant="bodyStrong" color={t.color.ink} testID="fil-actor-name">
           {active.label}
-        </Text>
+        </WordSafeText>
       </View>
       <SmButton icon="sort" onPress={openCasquettes} testID="fil-actor-change" accessibilityLabel={L.changeHint}>
         {L.change}
