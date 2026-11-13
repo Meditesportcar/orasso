@@ -33,7 +33,9 @@ async function open(page: Page, email: string, path: string, theme: "beton" | "s
 test.describe("grand écran (1 280 px)", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("chef : la ligne du haut, Discussion sur la ligne, onglets et « Publier », sorties à droite", async ({ page }) => {
+  test("chef : la ligne du haut, Discussion sur la ligne, onglets et « Publier », sorties à droite", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     const crew = await r5Crew(unique());
     await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`);
@@ -91,7 +93,9 @@ test.describe("grand écran (1 280 px)", () => {
 test.describe("téléphone (390 px)", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("chef : Discussion sous la ligne, « plus » avec l'Instagram, la vignette ouvre la couverture", async ({ page }) => {
+  test("chef : Discussion sous la ligne, « plus » avec l'Instagram, la vignette ouvre la couverture", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     const crew = await r5Crew(unique());
     await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`, "sable");
@@ -134,7 +138,9 @@ test.describe("téléphone (390 px)", () => {
     test.setTimeout(180_000);
     const crew = await r5Crew(unique());
     await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}&onglet=membres`);
-    const position = await page.getByTestId("crew-tabs").evaluate((el) => getComputedStyle(el.parentElement as Element).position);
+    const position = await page
+      .getByTestId("crew-tabs")
+      .evaluate((el) => getComputedStyle(el.parentElement as Element).position);
     expect(position).toBe("sticky");
     const pub = page.getByTestId("crew-feed-publish");
     await expect(pub).toHaveAttribute("href", /onglet=|publier=1/);

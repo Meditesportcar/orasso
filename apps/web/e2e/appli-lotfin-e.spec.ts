@@ -70,7 +70,11 @@ async function box(page: Page, id: string) {
 async function longCrew(posts = 8): Promise<R5Crew> {
   const crew = await r5Crew(unique());
   for (let i = 1; i <= posts; i += 1) {
-    await postText(crew, crew.chef, `Publication n° ${i} : rendez-vous au parking de la cave coopérative de Thuir à 9 h.`);
+    await postText(
+      crew,
+      crew.chef,
+      `Publication n° ${i} : rendez-vous au parking de la cave coopérative de Thuir à 9 h.`,
+    );
   }
   return crew;
 }
@@ -151,7 +155,9 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
   const feed = await box(page, "crew-feed");
   expect(feed.y, `premier contenu du fil à ${feed.y} px à ×1,3`).toBeLessThanOrEqual(MAX_Y_X13);
   // Les onglets défilent de côté (quatre onglets et « Publier » à ×1,3) : aucun ne déborde de l'écran.
-  const row = await page.getByTestId("crew-tabs").evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  const row = await page
+    .getByTestId("crew-tabs")
+    .evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
   expect(row.client).toBeLessThanOrEqual(384);
   const pub = await box(page, "crew-feed-publish");
   expect(pub.x + pub.width).toBeLessThanOrEqual(384);
