@@ -1,7 +1,7 @@
 // Lot R9f, partie 1, tour 1 : les corrections des relectures. Compte suspendu qui retire son identification, « Enregistrer » avec les plaques
 // floutées (`kept`) ou refusé (`unknown`), course entre la modération et « En story » (verrou commun), deux « En story » simultanés, story reprise
 // qui suit la visibilité de l'album (lecture, fichier, export), notification durable par album et par personne, « Tes photos » paginée en base.
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -22,7 +22,8 @@ import {
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { albumPhotoTarget } from "../moderation/targets/albumPhoto";
-import { INSIDE, paris, RECT } from "./albums-test-helpers";
+import { INSIDE, paris, publishedAlbum, RECT } from "./albums-test-helpers";
+import { shiftPositions } from "./service";
 import { shareToStoryTestHooks } from "./share-to-story";
 import { type Ref, tagScenario } from "./tags-test-helpers";
 
@@ -310,5 +311,166 @@ describe("« Tes photos » : les albums sont paginés en base", () => {
     // Curseur inconnu (album disparu entre deux pages) : page vide, pas le début.
     const unknown = await call(s.dam, "GET", "/me/album-tags?limit=20&cursor=00000000-0000-4000-8000-000000000000");
     expect(unknown.json).toEqual({ items: [], nextCursor: null });
+  });
+});
+
+/** Un album publié de Sud Cars avec une photo où la voiture de Dam est identifiée (insertions directes). */
+async function oneTaggedAlbum(publishedAt: Date) {
+  const [album] = await db
+    .insert(eventAlbums)
+    .values({
+      eventId: s.event.id,
+      mediaProfileId: s.leoMedia,
+      authorId: s.leo.id,
+      status: "published",
+      publishedAt,
+      photosCount: 1,
+    })
+    .returning({ id: eventAlbums.id });
+  const albumId = album?.id as string;
+  const [p] = await db
+    .insert(eventAlbumPhotos)
+    .values({ albumId, storageKey: `private/albums/${albumId}/seed.webp`, position: 0, plateState: "none" })
+    .returning({ id: eventAlbumPhotos.id });
+  await db.insert(albumPhotoTags).values({
+    photoId: p?.id as string,
+    targetKind: "vehicle",
+    vehicleId: s.car.dam.vehicle.id,
+    userId: s.dam.id,
+    taggedBy: s.leo.id,
+    taggedAs: "media",
+    notifiedAt: new Date(),
+  });
+  return albumId;
+}
+
+describe("« Tes photos » : curseur exact et comptes exacts", () => {
+  it("plusieurs albums publiés au même instant, à la microseconde près : aucun n'est sauté d'une page à l'autre", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push(await oneTaggedAlbum(new Date(Date.now() - 400 * 86_400_000)));
+    // Même instant, microsecondes comprises (`Date` les perdrait).
+    await db.execute(
+      sql`update event_albums set published_at = '2025-10-10 10:00:00.123456+00'::timestamptz where id = any(${sql.param(ids)}::uuid[])`,
+    );
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const res: { json: { items: { albumId: string }[]; nextCursor: string | null } } = await call(
+        s.dam,
+        "GET",
+        `/me/album-tags?limit=2${cursor ? `&cursor=${cursor}` : ""}`,
+      );
+      seen.push(...res.json.items.map((i) => i.albumId));
+      cursor = res.json.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(new Set(seen).size).toBe(5);
+    expect([...seen].sort()).toEqual([...ids].sort());
+  });
+
+  it("un album de plus de 12 000 photos identifiées garde son compte exact (l'ancien plafond de lignes le coupait)", async () => {
+    const [album] = await db
+      .insert(eventAlbums)
+      .values({
+        eventId: s.event.id,
+        mediaProfileId: s.leoMedia,
+        authorId: s.leo.id,
+        status: "published",
+        publishedAt: new Date(Date.now() - 500 * 86_400_000),
+        photosCount: 12_100,
+      })
+      .returning({ id: eventAlbums.id });
+    const albumId = album?.id as string;
+    await db.execute(sql`insert into event_album_photos (album_id, storage_key, position, plate_state)
+      select ${albumId}::uuid, 'private/albums/' || ${albumId} || '/' || g || '.webp', g, 'none'::album_plate_state
+      from generate_series(0, 12099) g`);
+    await db.execute(sql`insert into album_photo_tags (photo_id, target_kind, vehicle_id, user_id, tagged_by, tagged_as, notified_at)
+      select id, 'vehicle'::album_tag_target, ${s.car.dam.vehicle.id}::uuid, ${s.dam.id}, ${s.leo.id}, 'media'::album_tagger, now()
+      from event_album_photos where album_id = ${albumId}::uuid`);
+    const res = await call(s.dam, "GET", "/me/album-tags");
+    const big = res.json.items.find((i: { albumId: string }) => i.albumId === albumId);
+    expect(big.count).toBe(12_100);
+    expect(big.photos).toHaveLength(6);
+    // La fiche de la voiture : le même compte exact.
+    const sheet = await call(s.kenji, "GET", `/vehicles/${s.car.dam.vehicle.id}`);
+    expect(sheet.json.albumMentions.find((m: { albumId: string }) => m.albumId === albumId).count).toBe(12_100);
+  }, 120_000);
+});
+
+describe("le plafond de 50 stories ne compte pas une reprise masquée", () => {
+  it("publication, perte d'accréditation, nouvelle publication possible", async () => {
+    const marcAlbum = await publishedAlbum(s.marc, s.event.id, 2);
+    const [marcPhoto] = await db
+      .select()
+      .from(eventAlbumPhotos)
+      .where(eq(eventAlbumPhotos.albumId, marcAlbum.id))
+      .orderBy(eventAlbumPhotos.position);
+    expect((await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id })).status).toBe(201);
+    expect((await pose(s.marc, marcPhoto?.id as string, { vehicleId: s.car.dam.vehicle.id })).status).toBe(201);
+    expect((await toStory(s.dam, photo(0))).status).toBe(201);
+    // 49 stories ordinaires : 50 vivantes en tout.
+    for (let i = 0; i < 49; i++) {
+      await db.insert(stories).values({
+        authorId: s.dam.id,
+        audience: "public",
+        storageKey: `private/stories/cap${i}/a.webp`,
+        plateState: "none_confirmed",
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
+    }
+    const full = await toStory(s.dam, marcPhoto?.id as string);
+    expect(full.status).toBe(409);
+    expect(full.json.error.code).toBe("too_many_stories");
+    // L'accréditation de Sud Cars tombe : sa reprise est masquée, elle ne compte plus.
+    await db.update(applications).set({ status: "withdrawn" }).where(eq(applications.mediaProfileId, s.leoMedia));
+    expect((await toStory(s.dam, marcPhoto?.id as string)).status).toBe(201);
+  });
+});
+
+describe("modération : la photo est relue sous le verrou de l'album", () => {
+  it("retirée par le média pendant l'attente de la modération : positions et compteur ne bougent qu'une fois", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    // Le média retire la photo 2 (verrou de l'album tenu jusqu'à `release`).
+    const holder = withTx(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${s.albumId}`}))`);
+      await tx
+        .update(eventAlbumPhotos)
+        .set({ deletedAt: new Date() })
+        .where(eq(eventAlbumPhotos.id, photo(2)));
+      await shiftPositions(tx, s.albumId, 2);
+      await tx.update(eventAlbums).set({ photosCount: 7 }).where(eq(eventAlbums.id, s.albumId));
+      await gate;
+    });
+    await sleep(200);
+    // La modération a lu la photo vivante, puis attend le verrou : elle doit la relire après.
+    let moderated = false;
+    const moderation = withTx(
+      async (tx) =>
+        (await albumPhotoTarget.remove?.(tx, undefined as never, { targetId: photo(2) } as never, () => undefined)) ??
+        [],
+    ).then((keys) => {
+      moderated = true;
+      return keys;
+    });
+    await sleep(400);
+    expect(moderated).toBe(false);
+    release();
+    const [, keys] = await Promise.all([holder, moderation]);
+    // Déjà retirée : la décision n'efface que le fichier, sans décaler une seconde fois.
+    expect(keys).toEqual([s.photos[2]?.storageKey]);
+    const [album] = await db.select().from(eventAlbums).where(eq(eventAlbums.id, s.albumId));
+    expect(album?.photosCount).toBe(7);
+    expect(album?.deletedAt).toBeNull();
+    const live = await db
+      .select({ position: eventAlbumPhotos.position })
+      .from(eventAlbumPhotos)
+      .where(and(eq(eventAlbumPhotos.albumId, s.albumId), isNull(eventAlbumPhotos.deletedAt)))
+      .orderBy(eventAlbumPhotos.position);
+    expect(live.map((p) => p.position)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 });

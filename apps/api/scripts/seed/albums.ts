@@ -190,13 +190,15 @@ async function tag(
 
 /**
  * Une place à l'événement (« une place ou une présence » : la personne peut être identifiée par son pseudo) : sa candidature **retenue**
- * avec sa première voiture active, entrée (pointée) après celle de Damien (qui garde le n° 1 du plateau). Aucune présence GPS : ces lignes
- * alimentent le direct, le récap et les tampons. Rend `false` si la personne n'a pas de voiture active (pas d'identification alors).
+ * avec sa première voiture active, entrée (pointée) après celle de Damien (qui garde le n° 1 du plateau). Aucune présence GPS ; une candidature
+ * retenue et pointée alimente aussi le souvenir, le passeport, le récap, les points et les votes de cet événement d'il y a un an. Rend `false` si la personne n'a pas de voiture active (pas d'identification alors).
  */
 async function seatAt(event: typeof t.events.$inferSelect, userId: string, decidedBy: string, enteredAt: Date) {
   const existing = await db.query.applications.findFirst({
     where: and(eq(t.applications.eventId, event.id), eq(t.applications.userId, userId)),
   });
+  // Seule une candidature **retenue** est pointée : en attente, refusée ou retirée, elle reste telle quelle (pas de place, pas d'identification).
+  if (existing && existing.status !== "accepted") return false;
   let applicationId = existing?.id;
   if (!applicationId) {
     const [car] = await db

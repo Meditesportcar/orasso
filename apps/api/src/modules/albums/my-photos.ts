@@ -73,15 +73,15 @@ async function loadMentions(
   page?: { limit: number; after?: string },
 ): Promise<{ items: { eventId: string; mention: AlbumMention }[]; more: boolean }> {
   const at = now();
-  let after: { startsAt: Date; publishedAt: Date; id: string } | null = null;
-  if (page?.after) {
+  // Le curseur est comparé **en base** (jamais ramené à une `Date` : les microsecondes d'une publication reprise seraient perdues et des albums
+  // du même instant sautés).
+  const after = page?.after?.toLowerCase();
+  if (after) {
     const [c] = await ex
-      .select({ startsAt: events.startsAt, publishedAt: eventAlbums.publishedAt, id: eventAlbums.id })
+      .select({ id: eventAlbums.id })
       .from(eventAlbums)
-      .innerJoin(events, eq(events.id, eventAlbums.eventId))
-      .where(eq(eventAlbums.id, page.after.toLowerCase()));
-    if (!c?.publishedAt) return { items: [], more: false };
-    after = { startsAt: c.startsAt, publishedAt: c.publishedAt, id: c.id };
+      .where(and(eq(eventAlbums.id, after), sql`${eventAlbums.publishedAt} is not null`));
+    if (!c) return { items: [], more: false };
   }
   const rows = await ex
     .select({
@@ -114,7 +114,9 @@ async function loadMentions(
         scope.userId ? eq(albumPhotoTags.userId, scope.userId) : undefined,
         scope.eventIds ? inArray(events.id, [...scope.eventIds]) : undefined,
         after
-          ? sql`(${events.startsAt}, ${eventAlbums.publishedAt}, ${eventAlbums.id}) < (${after.startsAt.toISOString()}::timestamptz, ${after.publishedAt.toISOString()}::timestamptz, ${after.id}::uuid)`
+          ? sql`(${events.startsAt}, ${eventAlbums.publishedAt}, ${eventAlbums.id}) < (
+              select ce.starts_at, ca.published_at, ca.id from event_albums ca
+              join events ce on ce.id = ca.event_id where ca.id = ${after}::uuid)`
           : undefined,
       ) as SQL,
     )

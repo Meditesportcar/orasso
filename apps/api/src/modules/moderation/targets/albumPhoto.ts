@@ -73,11 +73,19 @@ export const albumPhotoTarget: TargetRules = {
   },
   async remove(tx, _v, report) {
     if (!UUID_RE.test(report.targetId)) return [];
-    const [photo] = await tx.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.id, report.targetId));
-    if (!photo) return [];
+    const [seen] = await tx.select().from(eventAlbumPhotos).where(eq(eventAlbumPhotos.id, report.targetId));
+    if (!seen) return [];
     // Le verrou de l'album, comme le retrait par le média et « En story » (lot R9f) : une photo retirée par la modération ne finit jamais
     // dans une story créée entre-temps (le partage tient aussi la ligne de la photo jusqu'à l'insertion).
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${photo.albumId.toLowerCase()}`}))`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${seen.albumId.toLowerCase()}`}))`);
+    // La photo est relue **sous le verrou** : le média a pu la retirer pendant l'attente (positions jamais décalées deux fois, album retiré
+    // seulement s'il n'a plus de photo).
+    const [photo] = await tx
+      .select()
+      .from(eventAlbumPhotos)
+      .where(eq(eventAlbumPhotos.id, report.targetId))
+      .for("update");
+    if (!photo) return [];
     // Déjà retirée par le média (fichier gardé pour la preuve) : la décision l'efface.
     if (photo.deletedAt) return [photo.storageKey];
     await tx.update(eventAlbumPhotos).set({ deletedAt: now() }).where(eq(eventAlbumPhotos.id, photo.id));

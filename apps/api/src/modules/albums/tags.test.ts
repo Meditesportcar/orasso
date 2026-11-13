@@ -219,18 +219,20 @@ describe("la recherche d'une personne par son pseudo (T5)", () => {
   });
 
   it("la recherche de soi-même ne dépend pas des vingt premières correspondances", async () => {
-    // Vingt-cinq comptes publics qui précèdent « Zed_66 » par l'ordre alphabétique et par le début du pseudo.
+    // Vingt-cinq comptes publics qui précèdent « Zed_Fan99 » par l'ordre alphabétique, avec le **même fragment** « Fan » que lui.
     for (let i = 0; i < 25; i++) {
-      const u = await signUp(`Aaa_${String(i).padStart(2, "0")}`);
+      const u = await signUp(`Aaa_Fan${String(i).padStart(2, "0")}`);
       await presentAt(s.event.id, u.id);
     }
-    const zed = await signUp("Zed_66");
+    const zed = await signUp("Zed_Fan99");
     await presentAt(s.event.id, zed.id);
-    // Le média : la liste est bornée à vingt, « Zed_66 » n'y est pas ; l'intéressé, lui, se retrouve.
-    const media = await taggable(s.leo, "?q=_");
-    expect(media.json.people.length).toBeLessThanOrEqual(20);
-    const self = await taggable(zed, "?q=_6");
-    expect(self.json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual(["Zed_66"]);
+    // La recherche générale est bornée à vingt et ne rend pas « Zed_Fan99 » (il vient après les vingt premiers) ...
+    const media = await taggable(s.leo, "?q=Fan");
+    expect(media.json.people).toHaveLength(20);
+    expect(media.json.people.map((p: { pseudo: string }) => p.pseudo)).not.toContain("Zed_Fan99");
+    // ... la recherche personnelle le retrouve (avec l'ancien filtre, appliqué après la limite, elle ne rendait rien).
+    const self = await taggable(zed, "?q=Fan");
+    expect(self.json.people.map((p: { pseudo: string }) => p.pseudo)).toEqual(["Zed_Fan99"]);
     expect(self.json.people[0].mine).toBe(true);
   });
 
