@@ -79,7 +79,10 @@ async function mine(status: "published" | "draft") {
 async function noOverflow(page: Page, width: number) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
-  const box = await page.getByTestId("album-step-label").boundingBox().catch(() => null);
+  const box = await page
+    .getByTestId("album-step-label")
+    .boundingBox()
+    .catch(() => null);
   if (box) expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
 }
 

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme, unique } from "./helpers";
+import { sql } from "./helpers/lot48";
 import { RELAIS } from "./relais";
 
 // Captures du lot R9e, partie 2 (« après ») : l'appli (`APP_URL`, version compilée) et le site, Béton et Sable. Appli : 390 px police ×1 et 384 px
@@ -146,12 +147,15 @@ test("captures de l'appli : trois étapes, album ouvert, onglet Albums, carte du
         for (const d of drafts.data.items.filter((x) => x.event.slug === "rassemblement-cote-vermeille-2025"))
           await apiCall(album.cookie, "DELETE", `/me/albums/${d.id}`);
 
-        // Damien : la carte « album » du Fil.
+        // Damien : la carte « album » du Fil (les cartes déjà vues d'une passe précédente sont oubliées : sinon « Déjà vu »).
+        await sql("delete from feed_seen");
+        await sql("delete from feed_seen_floor");
         const damien = await openApp(browser, "damien@orasso.local", theme, cfg.width, cfg.scale);
         await damien.page.goto("/fil");
         await afterOpening(damien.page);
         await damien.page.getByRole("tab", { name: "Abonnements", exact: true }).click();
-        const card = damien.page.getByTestId("feed-card-album").filter({ hasText: title }).first();
+        // Une carte « album » du Fil (la plus haute : celle de cette passe, ou celle du seed).
+        const card = damien.page.getByTestId("feed-card-album").first();
         await expect(card).toBeVisible({ timeout: 60_000 });
         await card.scrollIntoViewIfNeeded();
         await shot(damien.page, `${tag}-fil-carte`);

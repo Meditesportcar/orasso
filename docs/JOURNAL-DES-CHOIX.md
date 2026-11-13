@@ -6456,6 +6456,13 @@ Les écrans de la partie 1 (API, migration `0089_event-albums`, aucune migration
 
 - `appli-lot55` : la création d'une galerie passe par « Nouvel album » (mêmes attentes sur le floutage proposé : un cadre sur la première photo, aucun sur la seconde, deux envois), onglet « Albums » à la place de « Contenus », « Couvert · N contenus » compte les albums, « Vérifié » et pas de `page-pending` inchangés. `appli-lotr9b` : onglet « Albums », compteurs albums et photos. `lot57` (site) : mêmes trois gestes (galerie, envoi retardé, galerie de 8 photos), par le nouvel album et l'album ouvert. `lot56-corrections` : la galerie posée en base est reprise en album par les mêmes instructions que la migration.
 
+### Vérifié et limites (lot R9e, partie 2)
+
+- **Envoi interrompu au remontage** : le mode strict de React (développement du site) démonte puis remonte un composant ; l’indicateur « arrêté » du formulaire du site restait vrai et l’envoi s’arrêtait aussitôt (« Envoi interrompu »). Le montage le remet à faux (site et appli, même motif). Trouvé par les captures, pas par les recettes (le mode strict n’agit pas dans la version compilée de l’appli).
+- **Captures « avant »** : pas de captures de l’ancien code (elles devaient être prises avant d’écrire, ce que la reprise de cette partie n’a pas permis) ; `avant/` ne contient que les images « avant » de la maquette (`m-album-avant`, `n-page-avant_cs_med`). Les paires « maquette | réel » sont dans `paires/` (Béton et Sable, appli 390 et 384 ×1,3, site 390 et 1280). Photos de démonstration seulement.
+- **Recettes qui dépendent de l’état** : la recette de pagination de `lot57` crée 31 événements au nom de Damien (ils inondent son Fil « Abonnements » et font échouer `lotr8c2-site` « la publication juste envoyée ») : relancer `db:seed --reset` avant de rejouer, comme le disait déjà `AVANCEMENT.md`. `appli-lotr9b` (T14) lit l’API par `API_URL` (défaut : un autre port) : le poser sur celui du lot.
+- **Fil de Damien et cartes vues** : une carte « album » déjà montrée à Damien n’est plus proposée (« Déjà vu ») ; les captures vident `feed_seen` avant de la photographier.
+
 ## Petit lot recettes (13/11/2026)
 
 Trois recettes de l'appli périmées par des changements voulus (R8d, R9n), remises à jour sans retirer aucune attente de fond : chaque vérification d'avant passe par le nouveau chemin. Aucun code du produit touché, aucun défaut du produit trouvé. Fichiers : `apps/web/e2e/appli-orga.spec.ts`, `apps/web/e2e/appli-structure-staff.spec.ts`, `apps/web/e2e/appli-lot52.spec.ts`.
