@@ -492,7 +492,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     // Publications : création, modification, suppression avec confirmation.
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
     await page.getByRole("tab", { name: "Page", exact: true }).click();
-    await page.getByText("Publications", { exact: true }).click();
+    await page.getByText("Publications", { exact: true }).locator("visible=true").first().click();
     await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     // Vérification R8-V2 : depuis R9c, l'écran n'a plus de formulaire titre + texte (journal des choix, lot R9c) : une offre
