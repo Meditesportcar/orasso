@@ -127,6 +127,7 @@ test.afterAll(async () => {
 });
 
 const COMBOS: { theme: string; width: number; scale: number }[] = [
+  { theme: "beton", width: 384, scale: 1 },
   { theme: "sable", width: 384, scale: 1 },
   { theme: "beton", width: 390, scale: 1 },
   { theme: "sable", width: 390, scale: 1 },

@@ -202,8 +202,7 @@ for (const width of [390, 1280]) {
     await expect(list).toBeVisible();
     const rows = list.getByTestId(/practical-row-\d+$/);
     const all = await rows.count();
-    const rowTitles = (await rows.allInnerTexts()).map((t) => t.split("
-")[0]?.trim() ?? "");
+    const rowTitles = (await rows.allInnerTexts()).map((t) => t.split("\n")[0]?.trim() ?? "");
     expect(all).toBeGreaterThan(2);
     const kms = (await rows.allInnerTexts()).map((t) =>
       Number((/(\d+(?:,\d)?)\skm/.exec(t) ?? [])[1]?.replace(",", ".")),

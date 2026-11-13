@@ -199,9 +199,13 @@ test("hors du chargé : le bouton, un seul appel, la zone arrondie au 0,1° et �
   expect(zoneCalls()).toHaveLength(0);
   // Le bouton est asphalte dans les deux thèmes (jeton `bar`), jamais crème.
   const lum = await button.evaluate((el) => {
-    const m =
-      /rgba?((d+), (d+), (d+)/.exec(getComputedStyle(el.parentElement ?? el).backgroundColor) ??
-      /rgba?((d+), (d+), (d+)/.exec(getComputedStyle(el).backgroundColor);
+    // Le bouton, ou le plus proche parent qui porte un fond (react-native-web pose le fond sur un élément voisin).
+    let node: Element | null = el;
+    let m: RegExpExecArray | null = null;
+    while (node && !m) {
+      m = /rgb\((\d+), (\d+), (\d+)\)/.exec(getComputedStyle(node).backgroundColor);
+      node = node.parentElement;
+    }
     return m ? (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3 : 255;
   });
   expect(lum).toBeLessThan(60);

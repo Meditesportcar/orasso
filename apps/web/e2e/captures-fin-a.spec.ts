@@ -83,7 +83,10 @@ for (const [theme, width, scale] of variants) {
     await rail.scrollIntoViewIfNeeded();
     await rail.screenshot({ path: name("rail", theme, width, scale) });
     // L'affiche suivante (« Expo Rivesaltes ») : le rail défile jusqu'à elle.
-    const expo = rail.getByTestId("home-rail-item").filter({ hasText: /Rivesaltes/i }).first();
+    const expo = rail
+      .getByTestId("home-rail-item")
+      .filter({ hasText: /Rivesaltes/i })
+      .first();
     await expo.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     await rail.screenshot({ path: name("rail-expo", theme, width, scale) });
