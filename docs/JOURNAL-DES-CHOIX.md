@@ -6158,3 +6158,7 @@ Quatorze points mineurs de la livraison 2 (P08, P13, P21, P25, P28, P29, P31, P3
 - **Lecture qui lève une exception** : `.catch` en erreur inconnue, `reading` ne reste jamais bloqué.
 - Test du tour 7 corrigé (« Réessayer » : l'état d'échec reste vrai pendant la lecture, au lieu de faux) : c'est la règle voulue par ce tour, pas un assouplissement.
 - Fichiers : `packages/shared/src/rules/{readCycle.ts,readCycle.test.ts}`.
+
+### Pratique, suite : tour 10 (relecture Codex du tour 9, 13/11/2026)
+
+- **Une seule programmation** : `schedule(delay)` met à jour ensemble l'échéance mémorisée et la minuterie, pour toutes les programmations (`settled`, `resume`, `rearm`). Avant, `resume()` reportait la lecture à l'écart de 15 s sans mettre l'échéance à jour : un remontage relançait trop tôt et épuisait les tentatives. Test : lecture à 3 s, échéance à 9 s écran masqué, retour à 10 s : lecture à 18 s ; démontage/remontage à 12 s : toujours 18 s. Fichiers : `packages/shared/src/rules/{readCycle.ts,readCycle.test.ts}`.

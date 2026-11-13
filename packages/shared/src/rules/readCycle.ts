@@ -41,6 +41,13 @@ export function createReadCycle(deps: ReadCycleDeps) {
   // Un numéro par reprise manuelle ou remise à zéro : l'issue d'une lecture partie avant est ignorée (pas de double lecture).
   let epoch = 0;
 
+  // La seule programmation : l'échéance mémorisée et la minuterie se mettent à jour ensemble (`settled`, `resume`, `rearm`).
+  const schedule = (delay: number) => {
+    scheduledDelay = delay;
+    dueAt = now() + delay;
+    timer.schedule(fire, delay);
+  };
+
   const fire = () => {
     if (!deps.visible()) {
       pending = true;
@@ -86,9 +93,8 @@ export function createReadCycle(deps: ReadCycleDeps) {
       const step = nextPracticalRead(outcome, calendarStep, networkAttempt);
       calendarStep = step.calendarStep;
       networkAttempt = step.networkAttempt;
-      scheduledDelay = step.delay;
-      dueAt = now() + (step.delay ?? 0);
-      if (step.delay !== null) timer.schedule(fire, step.delay);
+      scheduledDelay = null;
+      if (step.delay !== null) schedule(step.delay);
       // Un échec transitoire reprend au retour sur l'écran même quand la série de relances est finie.
       if (outcome === "transient") pending = true;
     },
@@ -107,7 +113,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
           deps.run();
           return "started";
         }
-        timer.schedule(fire, wait);
+        schedule(wait);
         return "scheduled";
       }
       if (refusedAt > 0) {
@@ -125,7 +131,7 @@ export function createReadCycle(deps: ReadCycleDeps) {
      */
     rearm() {
       if (halted || refusedAt > 0 || scheduledDelay === null) return;
-      timer.schedule(fire, Math.max(0, dueAt - now()));
+      schedule(Math.max(0, dueAt - now()));
     },
     /** Un refus ou une erreur inconnue : aucune relecture automatique d'ici là (sauf le retour après `PRACTICAL_STALE_MS` d'un refus). */
     blocked(): boolean {

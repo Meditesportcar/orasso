@@ -450,4 +450,33 @@ describe("un calendrier commencé se réarme, il ne se recommence pas (suite R8q
     vi.advanceTimersByTime(1);
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it("reprise différée puis remontage avant l'échéance : la lecture reste à 18 s, pas à 12 s", () => {
+    vi.setSystemTime(3_000_000);
+    const env = { visible: true };
+    const run = vi.fn();
+    const cycle = createReadCycle({ run, visible: () => env.visible });
+    cycle.begin();
+    cycle.settled("partial");
+    // Lecture à 3 s ; la suivante est due à 9 s, écran masqué.
+    vi.advanceTimersByTime(3_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    run.mockClear();
+    cycle.begin();
+    cycle.settled("partial");
+    env.visible = false;
+    vi.advanceTimersByTime(6_000);
+    // L'échéance est tombée masquée (t = 9 s) ; retour à 10 s : l'écart de 15 s depuis la lecture de 3 s la reporte à 18 s.
+    env.visible = true;
+    vi.advanceTimersByTime(1_000);
+    expect(cycle.resume()).toBe("scheduled");
+    // Démontage puis remontage à 12 s : toujours 18 s.
+    vi.advanceTimersByTime(2_000);
+    cycle.dispose();
+    cycle.rearm();
+    vi.advanceTimersByTime(5_999);
+    expect(run).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
 });
