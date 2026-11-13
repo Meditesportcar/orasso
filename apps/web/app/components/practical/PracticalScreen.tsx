@@ -108,7 +108,7 @@ export function PracticalScreen() {
           <p className="o-t-caption s-muted" data-testid="practical-state">
             {read.loading ? L.loading : L.unavailable}
           </p>
-          {read.offline && !read.loading ? (
+          {(read.offline || read.failed) && !read.loading ? (
             <div className="pq-gps">
               <Button type="button" variant="secondary" icon="undo" onClick={read.retry} data-testid="practical-retry">
                 {L.retry}

@@ -246,3 +246,21 @@ describe("le département qui contient le point n'est jamais écarté (suite R8q
     expect(departmentsAround(point, 5)).toContain("94");
   });
 });
+
+describe("le département du point : par l'emprise, pas par le centre (suite R8q, tour 5)", () => {
+  it("à la limite du 66 et de l'Ariège, le centre le plus proche est celui de l'Ariège (09) mais le point est dans le 66 : l'Ariège n'est pas lue", () => {
+    const point = { lat: 42.4, lng: 1.75 };
+    expect(nearestDepartments(point, 1)[0]).toBe("09");
+    // Un rayon d'un kilomètre : seule l'emprise du 66 contient le point (celle du 09 en est loin au nord).
+    const around = departmentsAround(point, 1);
+    expect(around).toContain("66");
+    expect(around).not.toContain("09");
+  });
+
+  it("au plafond, quand beaucoup d'emprises coupent le carré, celle qui contient le point est lue", () => {
+    const point = { lat: 48.8566, lng: 2.3522 };
+    const around = departmentsAround(point, 300);
+    expect(around.length).toBe(PRACTICAL_DEPARTMENTS_MAX);
+    expect(around).toContain("75");
+  });
+});

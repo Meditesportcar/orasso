@@ -8,12 +8,15 @@ import {
   createSingleTimer,
   type LatLng,
   nextPracticalRead,
+  PRACTICAL_STALE_MS,
   type PracticalChoice,
   type PracticalData,
   type PracticalFilter,
   type PracticalReadOutcome,
+  practicalFailureOutcome,
   practicalPendingDelay,
   practicalReadAllowed,
+  practicalRefusedReadAllowed,
   shouldRetryPractical,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
@@ -52,8 +55,8 @@ const remembered = (near: string, eventId?: string): PracticalData | null => {
 /** Un état de lecture : la réponse (ou la dernière connue), et si le réseau n'a pas répondu. */
 type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
 
-/** Relit au retour sur l'écran quand la réponse a plus d'une minute. */
-const STALE_MS = 60_000;
+/** Relit au retour sur l'écran quand la réponse a plus d'une minute (et un refus, seulement après ce délai). */
+const STALE_MS = PRACTICAL_STALE_MS;
 
 /** Le compte et la génération de session sont capturés au départ d'une lecture et revérifiés à son arrivée (lot R8q, tour 2). */
 const guard = createSessionGuard(cacheScope);
@@ -78,8 +81,11 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   const attempts = useRef(0);
   const lastStart = useRef(0);
   const focused = useRef(false);
-  // Un refus (4xx) n'est jamais relancé ; une relance tombée sans focus ou en arrière-plan reprend au retour.
-  const refused = useRef(false);
+  // Un refus (4xx) : aucune minuterie, l'heure est retenue et il n'est relu au retour qu'après `STALE_MS` ; une relance tombée sans
+  // focus ou en arrière-plan reprend au retour (une seule).
+  const refusedAt = useRef(0);
+  // Une génération par effet (entrées : événement, mode) : la réponse d'une ancienne sortie ne s'affiche jamais pour la nouvelle.
+  const generation = useRef(0);
   const resumePending = useRef(false);
   // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée.
   const latest = useRef<() => Promise<void>>(async () => undefined);
@@ -102,26 +108,28 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       return;
     }
     lastStart.current = Date.now();
+    const gen = generation.current;
+    const valid = () => alive.current && gen === generation.current && guard.valid(ticket);
     let outcome: PracticalReadOutcome;
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse devenue étrangère (autre compte, autre génération de session, écran fermé) est jetée.
-      if (!alive.current || !guard.valid(ticket)) return;
+      if (!valid()) return;
       memory.set(`${ticket.who}|${near}|${eventId ?? ""}`, data);
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
-      refused.current = false;
+      refusedAt.current = 0;
       setState({ data, loading: false, offline: false });
       outcome = data.partial ? "partial" : "complete";
     } catch (error) {
-      if (!alive.current || !guard.valid(ticket)) return;
-      // Seule une erreur réseau est « hors ligne » et se relance ; un refus (403, 404, 429) n'est jamais relancé, ni au retour sur l'écran.
-      const network = error instanceof ApiRequestError && error.isNetwork;
-      refused.current = !network;
-      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: network }));
-      outcome = network ? "network" : "refused";
+      if (!valid()) return;
+      // Réseau ou 5xx : transitoire (relance espacée) ; tout 4xx (403, 429…) : refus, aucune minuterie. « Hors ligne » : le réseau seul.
+      const status = error instanceof ApiRequestError ? error.status : 0;
+      outcome = practicalFailureOutcome(status);
+      refusedAt.current = outcome === "refused" ? Date.now() : 0;
+      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: status === 0 }));
     }
-    // La suite : réseau (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
+    // La suite : transitoire (relance espacée), refus (rien), partielle (calendrier 3/6/12/24 s), complète (compteurs à 0).
     const step = nextPracticalRead(outcome, retried.current, attempts.current);
     retried.current = step.calendarStep;
     attempts.current = step.networkAttempt;
@@ -151,8 +159,12 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     fetchedAt.current = 0;
     attempts.current = 0;
     lastStart.current = 0;
-    refused.current = false;
+    refusedAt.current = 0;
     resumePending.current = false;
+    // Nouvelles entrées : plus aucune minuterie de l'ancienne lecture, et sa réponse tardive est jetée (M1, M2).
+    generation.current += 1;
+    retryTimer.cancel();
+    waitTimer.cancel();
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
       return;
@@ -167,6 +179,11 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     if (shownFor.current !== null && shownFor.current !== who) {
       shownFor.current = null;
       fetchedAt.current = 0;
+      retryTimer.cancel();
+      waitTimer.cancel();
+      retried.current = 0;
+      attempts.current = 0;
+      refusedAt.current = 0;
       setState({ data: remembered(near, eventId), loading: enabled, offline: false });
       void load();
     }
@@ -175,14 +192,20 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   // Retour sur l'écran et retour de l'appli au premier plan : relit quand la réponse a plus d'une minute, ou quand aucune lecture
   // n'a encore réussi (premier échec réseau).
   const refresh = useCallback(() => {
-    if (!enabled || refused.current) return;
-    // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran).
-    if (!practicalReadAllowed(lastStart.current, Date.now())) return;
+    if (!enabled) return;
+    // Une relance tombée hors focus est reprise au retour, même si la dernière lecture date de moins de 15 s (une seule, sans boucle).
     if (resumePending.current) {
       resumePending.current = false;
       void load();
       return;
     }
+    // Un refus (4xx) : relu seulement après `STALE_MS` (et jamais deux lectures à moins de 15 s).
+    if (refusedAt.current > 0) {
+      if (practicalRefusedReadAllowed(refusedAt.current, lastStart.current, Date.now())) void load();
+      return;
+    }
+    // Jamais deux lectures à moins de 15 s l'une de l'autre (retours répétés sur l'écran).
+    if (!practicalReadAllowed(lastStart.current, Date.now())) return;
     if (!fetchedAt.current || Date.now() - fetchedAt.current > STALE_MS) void load();
   }, [enabled, load]);
   useFocusEffect(

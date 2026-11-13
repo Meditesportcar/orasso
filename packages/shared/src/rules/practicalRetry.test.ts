@@ -6,8 +6,11 @@ import {
   createSingleTimer,
   nextPracticalRead,
   PRACTICAL_MIN_GAP_MS,
+  PRACTICAL_STALE_MS,
+  practicalFailureOutcome,
   practicalPendingDelay,
   practicalReadAllowed,
+  practicalRefusedReadAllowed,
   practicalRetryDelay,
   shouldRetryPractical,
   weatherFollowKey,
@@ -110,9 +113,9 @@ describe("une lecture à la fois sans en perdre (suite R8q, tour 3)", () => {
 
 describe("suite d'une lecture (suite R8q, tour 4)", () => {
   it("réseau : relance espacée et bornée ; 403 et 429 : aucune relance", () => {
-    let step = nextPracticalRead("network", 0, 0);
+    let step = nextPracticalRead("transient", 0, 0);
     expect(step).toEqual({ delay: 15_000, calendarStep: 0, networkAttempt: 1 });
-    step = nextPracticalRead("network", step.calendarStep, step.networkAttempt);
+    step = nextPracticalRead("transient", step.calendarStep, step.networkAttempt);
     expect(step.delay).toBe(30_000);
     // Un refus (4xx) n'est jamais relancé, quel que soit l'état.
     expect(nextPracticalRead("refused", 0, 0).delay).toBeNull();
@@ -122,7 +125,7 @@ describe("suite d'une lecture (suite R8q, tour 4)", () => {
   it("partielle puis panne réseau : le calendrier continue ; au bout de la série il s'arrête", () => {
     let step = nextPracticalRead("partial", 0, 0);
     expect(step).toEqual({ delay: 3_000, calendarStep: 1, networkAttempt: 0 });
-    step = nextPracticalRead("network", step.calendarStep, step.networkAttempt);
+    step = nextPracticalRead("transient", step.calendarStep, step.networkAttempt);
     expect(step.delay).toBe(6_000);
     step = nextPracticalRead("partial", step.calendarStep, step.networkAttempt);
     expect(step.delay).toBe(12_000);
@@ -136,5 +139,36 @@ describe("suite d'une lecture (suite R8q, tour 4)", () => {
     const done = nextPracticalRead("complete", 3, 2);
     expect(done).toEqual({ delay: null, calendarStep: 0, networkAttempt: 0 });
     expect(nextPracticalRead("partial", done.calendarStep, done.networkAttempt).delay).toBe(3_000);
+  });
+});
+
+describe("refus, transitoire, complète : une règle unique (suite R8q, tour 5)", () => {
+  it("transitoire : réseau (0) et 5xx ; refus : tout 4xx", () => {
+    expect(practicalFailureOutcome(0)).toBe("transient");
+    expect(practicalFailureOutcome(502)).toBe("transient");
+    expect(practicalFailureOutcome(503)).toBe("transient");
+    for (const status of [400, 401, 403, 404, 429])
+      expect(practicalFailureOutcome(status), String(status)).toBe("refused");
+  });
+
+  it("un 502 est relancé à 15 s ; un refus n'a aucune minuterie", () => {
+    expect(nextPracticalRead(practicalFailureOutcome(502), 0, 0)).toEqual({
+      delay: 15_000,
+      calendarStep: 0,
+      networkAttempt: 1,
+    });
+    expect(nextPracticalRead(practicalFailureOutcome(429), 0, 0).delay).toBeNull();
+  });
+
+  it("un refus : retour à 10 s, aucune lecture ; retour à 61 s, une lecture", () => {
+    const refusedAt = 1_000_000;
+    const lastStart = refusedAt - 100;
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + 10_000)).toBe(false);
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + PRACTICAL_STALE_MS - 1)).toBe(false);
+    expect(practicalRefusedReadAllowed(refusedAt, lastStart, refusedAt + 61_000)).toBe(true);
+    // Sans refus retenu, aucune relecture de refus.
+    expect(practicalRefusedReadAllowed(0, 0, 9_999_999)).toBe(false);
+    // `practicalReadAllowed` garde la main : une lecture partie il y a moins de 15 s l'empêche.
+    expect(practicalRefusedReadAllowed(refusedAt, refusedAt + 61_000 - 5_000, refusedAt + 61_000)).toBe(false);
   });
 });

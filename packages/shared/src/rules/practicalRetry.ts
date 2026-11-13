@@ -113,13 +113,29 @@ export function createReadGate() {
 }
 
 /** Ce qu'une lecture a donné, pour décider de la suite. */
-export type PracticalReadOutcome = "complete" | "partial" | "network" | "refused";
+export type PracticalReadOutcome = "complete" | "partial" | "transient" | "refused";
+
+/** Une réponse relue au plus toutes les 60 s au retour sur l'écran (et un refus, seulement après ce délai). */
+export const PRACTICAL_STALE_MS = 60_000;
+
+/** L'issue d'une lecture en échec : réseau (statut 0) ou 5xx (502 pendant un déploiement) = transitoire ; tout 4xx (403, 429…) = refus. */
+export function practicalFailureOutcome(status: number): "transient" | "refused" {
+  return status === 0 || status >= 500 ? "transient" : "refused";
+}
 
 /**
- * La suite d'une lecture de « Pratique » : `calendarStep` (relectures 3/6/12/24 s tant que des chargements sont en cours) et `networkAttempt`
- * (relances d'une panne réseau : 15 s, 30 s, 60 s, 2 min). Une réponse complète remet les deux compteurs à 0 ; un refus (403, 404, 429…)
- * n'est jamais relancé ; une panne réseau poursuit le calendrier s'il est commencé, sinon relance espacée ; une réponse partielle avance le
- * calendrier. `delay: null` : rien à relancer.
+ * Un refus (4xx) n'est relu qu'au retour sur l'écran (onglet visible, appli au premier plan, retour en ligne), seulement après
+ * `PRACTICAL_STALE_MS` et si `practicalReadAllowed` le permet ; jamais par une minuterie.
+ */
+export function practicalRefusedReadAllowed(refusedAt: number, lastStartedAt: number, now: number): boolean {
+  return refusedAt > 0 && now - refusedAt >= PRACTICAL_STALE_MS && practicalReadAllowed(lastStartedAt, now);
+}
+
+/**
+ * La suite d'une lecture de « Pratique », trois issues : **transitoire** (réseau ou 5xx) : relance espacée (15 s, 30 s, 60 s, 2 min) ou
+ * poursuite du calendrier s'il est commencé ; **refus** (4xx) : aucune minuterie (voir `practicalRefusedReadAllowed`) ; **complète** :
+ * calendrier (`calendarStep`, 3/6/12/24 s tant que des chargements sont en cours) et compteur de relances (`networkAttempt`) à 0. Une
+ * réponse partielle avance le calendrier. `delay: null` : rien à relancer.
  */
 export function nextPracticalRead(
   outcome: PracticalReadOutcome,
@@ -136,7 +152,7 @@ export function nextPracticalRead(
       networkAttempt: outcome === "partial" ? 0 : networkAttempt,
     };
   }
-  if (outcome === "network" && calendarStep === 0) {
+  if (outcome === "transient" && calendarStep === 0) {
     return { delay: practicalRetryDelay(networkAttempt), calendarStep, networkAttempt: networkAttempt + 1 };
   }
   return { delay: null, calendarStep, networkAttempt };

@@ -11,7 +11,9 @@ import {
   type PracticalData,
   type PracticalFilter,
   type PracticalReadOutcome,
+  practicalFailureOutcome,
   practicalPendingDelay,
+  practicalRefusedReadAllowed,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -38,7 +40,7 @@ const remembered = (near: string): PracticalData | null => {
   return key ? (memory.get(key) ?? null) : null;
 };
 
-type Read = { data: PracticalData | null; loading: boolean; offline: boolean; retry: () => void };
+type Read = { data: PracticalData | null; loading: boolean; offline: boolean; failed?: boolean; retry: () => void };
 
 /** Le compte et la génération de session sont capturés au départ d'une lecture et revérifiés à son arrivée (lot R8q, tour 2). */
 const guard = createSessionGuard(currentSession);
@@ -64,7 +66,10 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   // Une nouvelle lecture sur demande (« Réessayer », retour en ligne) : le chargement repart, le compteur de relance aussi.
   const reload = useRef<() => void>(() => undefined);
   const retry = useCallback(() => reload.current(), []);
+  // `failed` : une reprise est due au retour sur l'écran (échec transitoire) ; `refusedAt` : heure d'un refus (4xx), relu au retour seulement après `STALE_MS`.
   const failed = useRef(false);
+  const refusedAt = useRef(0);
+  const lastStart = useRef(0);
   // La dernière version de `load` : les minuteries ne rappellent jamais une version périmée (changement de compte ou d'entrées).
   const latest = useRef<() => Promise<void>>(async () => undefined);
   const retried = useRef(0);
@@ -95,6 +100,7 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       gate.leave();
       return;
     }
+    lastStart.current = Date.now();
     let res: Awaited<ReturnType<typeof apiFetch<PracticalData>>>;
     try {
       res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near }, timeoutMs: 15_000 });
@@ -111,19 +117,20 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       ? res.data.partial
         ? "partial"
         : "complete"
-      : res.status === 0
-        ? "network"
-        : "refused";
+      : practicalFailureOutcome(res.status);
     const step = nextPracticalRead(outcome, retried.current, attempts.current);
     retried.current = step.calendarStep;
     attempts.current = step.networkAttempt;
     if (res.ok) {
       failed.current = false;
+      refusedAt.current = 0;
       memory.set(`${ticket.who}|${near}`, res.data);
       setState({ data: res.data, loading: false, offline: false });
     } else {
-      failed.current = true;
-      setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
+      // Transitoire (réseau, 5xx) : reprise au retour ; refus (4xx) : l'heure est retenue, aucune minuterie ; « hors ligne » seulement pour le réseau.
+      failed.current = outcome === "transient";
+      refusedAt.current = outcome === "refused" ? Date.now() : 0;
+      setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: res.status === 0, failed: true }));
     }
     if (step.delay !== null) {
       // Jamais la relance d'un onglet masqué : elle reprend au retour sur la page (`failed` : voir la reprise plus bas).
@@ -143,6 +150,8 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   useEffect(() => {
     retried.current = 0;
     attempts.current = 0;
+    failed.current = false;
+    refusedAt.current = 0;
     retryTimer.cancel();
     partialTimer.cancel();
     if (!enabled) {
@@ -159,9 +168,12 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
     };
     // Retour en ligne et retour sur la page : une lecture qui n'a jamais réussi est reprise tout de suite.
     const resume = () => {
-      if (!failed.current) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      reload.current();
+      if (failed.current) {
+        reload.current();
+        return;
+      }
+      if (practicalRefusedReadAllowed(refusedAt.current, lastStart.current, Date.now())) reload.current();
     };
     // Retour en ligne et page redevenue visible (une relance tombée dans un onglet masqué n'est pas perdue).
     window.addEventListener("online", resume);
