@@ -154,12 +154,21 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
   await expect(page.getByTestId("crew-name")).toHaveText(crew.name);
   const feed = await box(page, "crew-feed");
   expect(feed.y, `premier contenu du fil à ${feed.y} px à ×1,3`).toBeLessThanOrEqual(MAX_Y_X13);
-  // Les onglets défilent de côté (quatre onglets et « Publier » à ×1,3) : aucun ne déborde de l'écran.
+  // Les onglets défilent de côté à ×1,3 (le contenu est plus large que la rangée) et le dernier reste atteignable, sans passer
+  // sous « Publier ».
+  const tabs = await box(page, "crew-tabs");
   const row = await page
     .getByTestId("crew-tabs")
     .evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-  expect(row.client).toBeLessThanOrEqual(384);
+  expect(row.scroll, "la rangée d'onglets déborde (elle défile de côté)").toBeGreaterThan(row.client + 4);
+  await page.getByTestId("crew-tabs").evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.waitForTimeout(400);
+  const spots = await box(page, "crew-tab-spots");
   const pub = await box(page, "crew-feed-publish");
+  expect(spots.x + spots.width, "« Spots » entier dans la rangée").toBeLessThanOrEqual(tabs.x + tabs.width + 1);
+  expect(tabs.x + tabs.width).toBeLessThanOrEqual(pub.x + 1);
   expect(pub.x + pub.width).toBeLessThanOrEqual(384);
   await shot(page, "chef-repos-384-x13-sable");
   await ctx.close();
@@ -237,5 +246,110 @@ test("plusieurs crews : le nom ▾ ouvre « Mes crews », le rôle reste sous le
   await expect(page.getByTestId("crew-selector-list")).toBeVisible();
   await expect(page.getByTestId("crew-choice-more")).toBeVisible();
   await shot(page, "multi-selecteur-384-x1");
+  await ctx.close();
+});
+
+/** Le bas de la rangée d'onglets collée : le début du contenu visible est dessous. */
+async function tabsBottom(page: Page) {
+  const t = await box(page, "crew-tabs");
+  return t.y + t.height;
+}
+
+test("tour 1 : changer d'onglet après avoir défilé ramène le début du nouvel onglet sous la barre collée", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const crew = await longCrew(10);
+  const { ctx, page } = await open(browser, crew.chef.email);
+  await go(page, `/crew?crew=${crew.slug}`);
+  await expect(page.getByTestId("crew-post").first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("crew-tab").evaluate((el) => {
+    el.scrollTop = 1200;
+  });
+  await page.waitForTimeout(500);
+  for (const [tab, content] of [
+    ["members", "crew-members"],
+    ["outings", "crew-outings"],
+  ] as const) {
+    await page.getByTestId(`crew-tab-${tab}`).click();
+    await expect(page.getByTestId(content)).toBeVisible();
+    await page.waitForTimeout(400);
+    const c = await box(page, content);
+    expect(c.y, `le début de ${tab} est sous la barre collée`).toBeGreaterThanOrEqual((await tabsBottom(page)) - 2);
+    expect(c.y, `le début de ${tab} est à l'écran`).toBeLessThan(500);
+    // Avoir défilé n'est pas requis pour la suite : une zone déjà en haut ne bouge pas.
+  }
+  // Non défilé : on ne bouge pas.
+  await page.getByTestId("crew-tab").evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.getByTestId("crew-tab-feed").click();
+  await page.waitForTimeout(400);
+  expect(await page.getByTestId("crew-tab").evaluate((el) => el.scrollTop)).toBe(0);
+  await ctx.close();
+});
+
+test("tour 1 : un détail du crew en échec laisse « Mes crews » à un toucher", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser, "theo@orasso.local");
+  await page.route("**/api/crews/by-slug/**", (route) => route.fulfill({ status: 500, body: '{"message":"Panne"}' }));
+  await page.goto("/crew");
+  await afterOpening(page);
+  await expect(page.getByTestId("crew-selector")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("crew-head")).toHaveCount(0);
+  await page.getByTestId("crew-selector").click();
+  await expect(page.getByTestId("crew-selector-list")).toBeVisible();
+  await expect(page.getByTestId("crew-choice-more")).toBeVisible();
+  await shot(page, "multi-erreur-selecteur-384-x1");
+  await ctx.close();
+});
+
+test("tour 1 : la pastille des nouvelles publications ramène le début de la publication sous les onglets", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const crew = await longCrew(14);
+  const { ctx, page } = await open(browser, crew.chef.email);
+  await go(page, `/crew?crew=${crew.slug}`);
+  await expect(page.getByTestId("crew-post").first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("crew-tab").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await page.waitForTimeout(500);
+  const fresh = `Nouveauté du bas ${unique()}`;
+  await postText(crew, crew.lea, fresh);
+  const pill = page.getByTestId("crew-feed-new");
+  await expect(pill).toBeVisible({ timeout: 20_000 });
+  await pill.click();
+  const post = page.getByTestId("crew-post").filter({ hasText: fresh });
+  await expect(post).toHaveCount(1, { timeout: 15_000 });
+  await page.waitForTimeout(800);
+  const pb = (await post.boundingBox()) as { y: number };
+  expect(pb.y, "le début de la publication est sous la rangée d'onglets").toBeGreaterThanOrEqual(
+    (await tabsBottom(page)) - 2,
+  );
+  expect(pb.y).toBeLessThan(400);
+  await shot(page, "pastille-touchee-384-x1");
+  await ctx.close();
+});
+
+test("tour 1 : Sorties n'a qu'un bouton principal (« Publier »), « Proposer une sortie » est secondaire", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const crew = await r5Crew(unique());
+  const { ctx, page } = await open(browser, crew.chef.email);
+  await go(page, `/crew?crew=${crew.slug}&onglet=sorties`);
+  await expect(page.getByTestId("crew-propose-outing")).toBeVisible({ timeout: 30_000 });
+  const publish = await page.getByTestId("crew-feed-publish").evaluate((el) => {
+    const nodes = [el, ...Array.from(el.querySelectorAll("*"))];
+    return nodes.map((n) => getComputedStyle(n).backgroundColor).find((c) => c !== "rgba(0, 0, 0, 0)") ?? "";
+  });
+  const propose = await page.getByTestId("crew-propose-outing").evaluate((el) => {
+    const nodes = [el, ...Array.from(el.querySelectorAll("*"))];
+    return nodes.map((n) => getComputedStyle(n).backgroundColor).find((c) => c !== "rgba(0, 0, 0, 0)") ?? "";
+  });
+  expect(publish).not.toBe("");
+  expect(propose, "« Proposer une sortie » n'a pas le fond moutarde de « Publier »").not.toBe(publish);
   await ctx.close();
 });

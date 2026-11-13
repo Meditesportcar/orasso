@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { loginInBrowser, setTheme, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
+import { postText } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Petit lot de fin, partie E (option B « Comme le Profil » choisie par Damien le 13/11), côté site : le haut compact de
@@ -138,17 +139,92 @@ test.describe("téléphone (390 px)", () => {
     test.setTimeout(180_000);
     const crew = await r5Crew(unique());
     await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}&onglet=membres`);
-    const position = await page
-      .getByTestId("crew-tabs")
-      .evaluate((el) => getComputedStyle(el.parentElement as Element).position);
-    expect(position).toBe("sticky");
     const pub = page.getByTestId("crew-feed-publish");
-    await expect(pub).toHaveAttribute("href", /onglet=|publier=1/);
+    await expect(pub).toHaveAttribute("href", `/app/crew?crew=${crew.slug}&publier=1`);
     await pub.click();
     await expect(page.getByTestId("crew-publish")).toBeVisible({ timeout: 20_000 });
-    // L'adresse perd `publier=1` quand la fenêtre se referme.
+    // Une fois la fenêtre ouverte, l'adresse perd `publier` (navigation du routeur) : un F5 ne la rouvre pas.
+    await expect.poll(() => new URL(page.url()).searchParams.has("publier")).toBe(false);
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("crew-publish")).toBeHidden();
-    await expect.poll(() => new URL(page.url()).searchParams.has("publier")).toBe(false);
+    await page.reload();
+    await expect(page.getByTestId("crew-head")).toBeVisible();
+    await expect(page.getByTestId("crew-publish")).toBeHidden();
+  });
+});
+
+/** Le haut et le bas de la rangée d'onglets collée, dans la fenêtre. */
+async function bar(page: Page) {
+  const b = await page.locator(".crw-tabsbar").boundingBox();
+  expect(b).not.toBeNull();
+  return b as { y: number; height: number };
+}
+
+test.describe("tour 1", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("la rangée d'onglets reste à sa place réelle après défilement, et un début d'onglet est dessous", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    for (let i = 1; i <= 10; i += 1)
+      await postText(crew, crew.chef, `Publication n° ${i} : rendez-vous à Thuir à 9 h.`);
+    await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`);
+    await expect(page.getByTestId("crew-post").first()).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await page.waitForTimeout(400);
+    const b = await bar(page);
+    // Collée juste sous la barre du haut (--bar-top : 64 px), pas ailleurs dans la page.
+    expect(Math.abs(b.y - 64), `rangée à ${b.y} px`).toBeLessThanOrEqual(2);
+    await expect(page.getByTestId("crew-cover-open")).not.toBeInViewport();
+    // Changer d'onglet : le début du nouvel onglet est sous la rangée.
+    await page.getByTestId("crew-tab-membres").click();
+    await expect(page.getByTestId("crew-members")).toBeVisible();
+    await page.waitForTimeout(400);
+    const m = (await page.getByTestId("crew-members").boundingBox()) as { y: number };
+    const b2 = await bar(page);
+    expect(m.y).toBeGreaterThanOrEqual(b2.y + b2.height - 2);
+    expect(m.y).toBeLessThan(600);
+  });
+
+  test("la pastille des nouvelles publications ramène la publication sous la rangée d'onglets", async ({ page }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    for (let i = 1; i <= 14; i += 1)
+      await postText(crew, crew.chef, `Publication n° ${i} : rendez-vous à Thuir à 9 h.`);
+    await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`);
+    await expect(page.getByTestId("crew-post").first()).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(500);
+    const fresh = `Nouveauté du bas ${unique()}`;
+    await postText(crew, crew.lea, fresh);
+    await expect(page.getByTestId("crew-feed-new")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("crew-feed-new").click();
+    const post = page.getByTestId("crew-post").filter({ hasText: fresh });
+    await expect(post).toHaveCount(1, { timeout: 15_000 });
+    await page.waitForTimeout(1200);
+    const pb = (await post.boundingBox()) as { y: number };
+    const b = await bar(page);
+    expect(pb.y, "le début de la publication est sous la rangée collée").toBeGreaterThanOrEqual(b.y + b.height - 2);
+    expect(pb.y).toBeLessThan(500);
+  });
+
+  test("« Mes crews » passe au-dessus de la rangée collée : chaque choix est cliquable", async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, "theo@orasso.local", "/app/crew");
+    await page.getByTestId("crew-selector").click();
+    const links = page.locator('[data-testid="crew-selector-list"] a');
+    const n = await links.count();
+    expect(n).toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < n; i += 1) {
+      const covered = await links.nth(i).evaluate((a) => {
+        const r = a.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !top || !a.contains(top);
+      });
+      expect(covered, `le choix n° ${i + 1} est recouvert`).toBe(false);
+    }
+    await shot(page, "multi-selecteur-390");
   });
 });
