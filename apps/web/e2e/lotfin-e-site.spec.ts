@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { feedPublishLabels } from "@orasso/shared";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
@@ -387,14 +388,17 @@ test.describe("partie B1, tour 2 : le compte change pendant le retrait de `publi
     await expect
       .poll(
         () =>
-          a.evaluate(() => {
-            const st = (
-              window as unknown as {
-                __reactRouterDataRouter: { state: { loaderData: Record<string, { mode?: string }> } };
-              }
-            ).__reactRouterDataRouter.state.loaderData;
-            return st["routes/app-crew"]?.mode;
-          }),
+          a
+            .evaluate(() => {
+              const st = (
+                window as unknown as {
+                  __reactRouterDataRouter?: { state: { loaderData: Record<string, { mode?: string }> } };
+                }
+              ).__reactRouterDataRouter?.state.loaderData;
+              return st?.["routes/app-crew"]?.mode;
+            })
+            // Le Crew se recharge en entier (tour 6) : pendant le rechargement, le contexte est détruit ; le sondage reprend.
+            .catch(() => undefined),
         { timeout: 30_000 },
       )
       .toBe("none");
@@ -415,193 +419,29 @@ async function signInOther(browser: Browser, ctx: BrowserContext, email: string)
   await b.goto("/app/fil");
 }
 
-test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
-
-  const loadedUser = (page: Page) =>
-    page.evaluate(
+// Aides communes aux recettes de l'annonce de session (tours 3 et 6).
+const loadedUser = (page: Page) =>
+  page
+    .evaluate(
       () =>
         (
           window as unknown as {
-            __reactRouterDataRouter: { state: { loaderData: Record<string, { userId?: string }> } };
+            __reactRouterDataRouter?: { state: { loaderData: Record<string, { userId?: string }> } };
           }
-        ).__reactRouterDataRouter.state.loaderData["routes/app-crew"]?.userId ?? null,
-    );
+        ).__reactRouterDataRouter?.state.loaderData["routes/app-crew"]?.userId ?? null,
+    )
+    // Le Crew se recharge en entier (tour 6) : pendant le rechargement, le contexte de la page est détruit ; le sondage reprend.
+    .catch(() => null);
 
-  test("sans crew : les invitations de A sont masquées dès l'annonce de B, avant que la page se relise", async ({
-    browser,
-  }) => {
-    test.setTimeout(240_000);
-    const crew = await r5Crew(unique());
-    expect(
-      (await apiCall(crew.chef.cookie, "POST", `/crews/${crew.id}/invitations`, { pseudo: crew.sarah.pseudo })).status,
-    ).toBe(201);
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const a = await ctx.newPage();
-    // La relecture déclenchée par l'annonce est retenue : on voit ce que l'écran montre PENDANT l'attente des données de B.
-    let armed = false;
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let reached: () => void = () => undefined;
-    const reading = new Promise<void>((resolve) => {
-      reached = resolve;
-    });
-    await a.route(/\/app\/crew\.data/, async (route) => {
-      if (armed) {
-        armed = false;
-        reached();
-        await held;
-      }
-      return route.continue();
-    });
-    await setTheme(a, "beton");
-    await loginInBrowser(a, crew.sarah.email, undefined, "/app/crew");
-    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
-    armed = true;
-    await signInOther(browser, ctx, crew.paul.email);
-    await reading;
-    // Avant la réponse du chargeur : rien de A n'est affiché, le masquage est là.
-    await expect(a.getByTestId("crew-refreshing")).toBeVisible();
-    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
-    await expect(a.getByTestId("crew-tab-invitations")).toHaveCount(0);
-    release();
-    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
-    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
-    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
-    await ctx.close();
-  });
+const announce = (page: Page, userId: string | null) =>
+  page.evaluate((id) => {
+    const c = new BroadcastChannel("orasso-session");
+    c.postMessage({ userId: id });
+    c.close();
+  }, userId);
 
-  const announce = (page: Page, userId: string | null) =>
-    page.evaluate((id) => {
-      const c = new BroadcastChannel("orasso-session");
-      c.postMessage({ userId: id });
-      c.close();
-    }, userId);
-
-  test("une annonce périmée (le compte de la page est confirmé par la relecture) : masquée pendant la relecture, puis la page de A revient", async ({
-    browser,
-  }) => {
-    test.setTimeout(240_000);
-    const crew = await r5Crew(unique());
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const a = await ctx.newPage();
-    let armed = false;
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let reached: () => void = () => undefined;
-    const reading = new Promise<void>((resolve) => {
-      reached = resolve;
-    });
-    await a.route(/\/app\/crew\.data/, async (route) => {
-      if (armed) {
-        armed = false;
-        reached();
-        await held;
-      }
-      return route.continue();
-    });
-    await setTheme(a, "beton");
-    await loginInBrowser(a, crew.chef.email, undefined, `/app/crew?crew=${crew.slug}`);
-    await expect(a.getByTestId("crew-outings")).toBeAttached();
-    armed = true;
-    // Un autre onglet annonce « un autre compte » sans que la session change : les relectures confirmeront A.
-    await announce(a, "un-autre-compte");
-    await reading;
-    // La relecture est arrivée au serveur mais pas revenue : la page de A est masquée.
-    await expect(a.getByTestId("crew-refreshing")).toBeVisible();
-    await expect(a.getByTestId("crew-outings")).toHaveCount(0);
-    release();
-    await expect(a.getByTestId("crew-outings")).toBeAttached({ timeout: 30_000 });
-    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0, { timeout: 30_000 });
-    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
-    expect(await loadedUser(a)).toBe(crew.chef.id);
-    await ctx.close();
-  });
-
-  test("des annonces qui reviennent pendant chaque relecture : après trois relectures, erreur et « Recharger la page »", async ({
-    browser,
-  }) => {
-    test.setTimeout(240_000);
-    const crew = await r5Crew(unique());
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const a = await ctx.newPage();
-    let armed = false;
-    let reads = 0;
-    await a.route(/\/app\/crew\.data/, async (route) => {
-      if (armed) {
-        reads += 1;
-        // Une annonce arrive pendant chaque relecture : aucune ne peut réconcilier la précédente.
-        await announce(a, "un-autre-compte");
-      }
-      return route.continue();
-    });
-    await setTheme(a, "beton");
-    await loginInBrowser(a, crew.chef.email, undefined, `/app/crew?crew=${crew.slug}`);
-    await expect(a.getByTestId("crew-outings")).toBeAttached();
-    armed = true;
-    await announce(a, "un-autre-compte");
-    await expect(a.getByTestId("crew-refresh-failed")).toBeVisible({ timeout: 60_000 });
-    await expect(a.getByTestId("crew-refresh-failed")).toContainText("Impossible de mettre ton compte à jour");
-    await expect(a.getByRole("button", { name: "Recharger la page" })).toBeVisible();
-    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
-    await expect(a.getByTestId("crew-outings")).toHaveCount(0);
-    expect(reads, "trois relectures au plus").toBeLessThanOrEqual(3);
-    await ctx.close();
-  });
-
-  test("une déconnexion annoncée pendant la relecture de B n'est pas effacée : les données de B ne réapparaissent jamais", async ({
-    browser,
-  }) => {
-    test.setTimeout(240_000);
-    const crew = await r5Crew(unique());
-    expect(
-      (await apiCall(crew.chef.cookie, "POST", `/crews/${crew.id}/invitations`, { pseudo: crew.sarah.pseudo })).status,
-    ).toBe(201);
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const a = await ctx.newPage();
-    let armed = false;
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let reached: () => void = () => undefined;
-    const reading = new Promise<void>((resolve) => {
-      reached = resolve;
-    });
-    await a.route(/\/app\/crew\.data/, async (route) => {
-      if (!armed) return route.continue();
-      armed = false;
-      // La réponse de B est lue maintenant (avec ses invitations), mais rendue à la page plus tard.
-      const res = await route.fetch();
-      reached();
-      await held;
-      return route.fulfill({ response: res });
-    });
-    await setTheme(a, "beton");
-    await loginInBrowser(a, crew.paul.email, undefined, "/app/crew");
-    armed = true;
-    await signInOther(browser, ctx, crew.sarah.email);
-    await reading;
-    // Pendant la relecture : la déconnexion est annoncée, et la session n'existe plus.
-    await announce(a, null);
-    await ctx.clearCookies();
-    await a.evaluate(() => {
-      (window as unknown as { __leak: boolean }).__leak = false;
-      new MutationObserver(() => {
-        if (document.querySelector('[data-testid="crew-tab-invitation"]'))
-          (window as unknown as { __leak: boolean }).__leak = true;
-      }).observe(document.body, { childList: true, subtree: true });
-    });
-    release();
-    // La page ne montre jamais les invitations de B : elle relit (sans session) et part sur la connexion.
-    await a.waitForURL(/connexion/, { timeout: 60_000 });
-    expect(await a.evaluate(() => (window as unknown as { __leak?: boolean }).__leak ?? false)).toBe(false);
-    await ctx.close();
-  });
+test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
 
   test("l'annonce de B arrive pendant le retrait de `publier` : la page se relit sous B, jamais « Mise à jour… » à vie", async ({
     browser,
@@ -639,6 +479,309 @@ test.describe("partie B1, tour 3 : le compte annoncé par un autre onglet", () =
     await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
     await expect(a.getByTestId("crew-refreshing")).toHaveCount(0, { timeout: 30_000 });
     await expect(a.getByTestId("crew-outings")).toHaveCount(0);
+    await ctx.close();
+  });
+});
+
+// Tour 6 : le Crew ne réconcilie plus, il se recharge. Un observateur du DOM (installé avant tout script de la page, valable aussi
+// après un rechargement : il lit sessionStorage) note, à n'importe quel moment, qu'un élément interdit est apparu.
+const FORBID = "__b1forbid";
+const LEAK = "__b1leak";
+const SEEN = "__b1seen";
+
+async function watchLeaks(ctx: BrowserContext) {
+  await ctx.addInitScript(
+    ([forbidKey, leakKey, seenKey]) => {
+      const check = () => {
+        try {
+          const raw = sessionStorage.getItem(forbidKey as string);
+          const rule = raw ? (JSON.parse(raw) as { sel: string; origin: number | null }) : null;
+          // `origin` : l'interdiction ne vaut que pour le document qui l'a posée (le rechargé sous le même compte retrouve ses données).
+          if (
+            rule &&
+            (rule.origin === null || rule.origin === performance.timeOrigin) &&
+            document.querySelector(rule.sel)
+          ) {
+            sessionStorage.setItem(leakKey as string, rule.sel);
+          }
+          const seen = new Set<string>(JSON.parse(sessionStorage.getItem(seenKey as string) ?? "[]"));
+          for (const id of ["crew-refreshing", "crew-refresh-failed"]) {
+            if (document.querySelector(`[data-testid="${id}"]`)) seen.add(id);
+          }
+          sessionStorage.setItem(seenKey as string, JSON.stringify([...seen]));
+        } catch {
+          // Stockage indisponible : rien à noter.
+        }
+      };
+      new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
+      document.addEventListener("DOMContentLoaded", check);
+      window.addEventListener("load", check);
+    },
+    [FORBID, LEAK, SEEN],
+  );
+}
+const forbid = (page: Page, selector: string) =>
+  page.evaluate(
+    ([k, v]) => sessionStorage.setItem(k as string, JSON.stringify({ sel: v, origin: null })),
+    [FORBID, selector],
+  );
+const leaked = (page: Page) => page.evaluate((k) => sessionStorage.getItem(k), LEAK);
+/** Les écrans « Mise à jour… » / « Recharger la page » vus à un moment quelconque (survit aux rechargements). */
+const seen = (page: Page) => page.evaluate((k) => JSON.parse(sessionStorage.getItem(k) ?? "[]") as string[], SEEN);
+/** Annonce d'un autre compte (une autre fenêtre) ET interdit un élément, dans le même instant : rien n'est interdit avant l'annonce. */
+const announceForbidding = (page: Page, userId: string | null, selector: string, thisDocumentOnly = false) =>
+  page.evaluate(
+    ([id, k, sel, only]) => {
+      sessionStorage.setItem(k as string, JSON.stringify({ sel, origin: only ? performance.timeOrigin : null }));
+      const c = new BroadcastChannel("orasso-session");
+      c.postMessage({ userId: id });
+      c.close();
+    },
+    [userId, FORBID, selector, thisDocumentOnly],
+  );
+
+/** Les cookies de session d'un compte (connexion dans un contexte jetable). */
+async function cookiesOf(browser: Browser, email: string) {
+  const other = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await loginInBrowser(await other.newPage(), email, undefined, "/app/fil");
+  const cookies = await other.cookies();
+  await other.close();
+  return cookies;
+}
+async function swapCookies(ctx: BrowserContext, cookies: Awaited<ReturnType<typeof cookiesOf>>) {
+  await ctx.clearCookies();
+  await ctx.addCookies(cookies);
+}
+
+/** Retient le prochain chargement de document de /app/crew (le rechargement) jusqu'à `release()`. */
+async function holdNextDocument(page: Page) {
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reached: () => void = () => undefined;
+  const arrived = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let armed = false;
+  await page.route(/\/app\/crew(\?|$)/, async (route) => {
+    if (armed && route.request().resourceType() === "document") {
+      armed = false;
+      reached();
+      await held;
+    }
+    return route.continue();
+  });
+  return {
+    arm: () => {
+      armed = true;
+    },
+    arrived,
+    release,
+  };
+}
+
+const INVITATION = '[data-testid="crew-tab-invitation"]';
+const OUTINGS = '[data-testid="crew-outings"]';
+
+test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilier", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  /** Sarah est invitée par le chef (ses invitations sont les données privées de A) ; Paul n'a ni crew ni invitation. */
+  async function setup(browser: Browser) {
+    const crew = await r5Crew(unique());
+    expect(
+      (await apiCall(crew.chef.cookie, "POST", `/crews/${crew.id}/invitations`, { pseudo: crew.sarah.pseudo })).status,
+    ).toBe(201);
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await watchLeaks(ctx);
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await loginInBrowser(a, crew.sarah.email, undefined, "/app/crew");
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
+    return { crew, ctx, a };
+  }
+
+  test("A → annonce de B : les données de A sont masquées tout de suite, la page finit sous B", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a);
+    const paul = await cookiesOf(browser, crew.paul.email);
+    hold.arm();
+    await swapCookies(ctx, paul);
+    await announceForbidding(a, crew.paul.id, INVITATION);
+    // Le rechargement est parti mais pas revenu : rien de A n'est affiché (l'observateur le vérifie à chaque changement du DOM).
+    await hold.arrived;
+    hold.release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+    await expect(a.getByTestId("crew-tab-none")).toBeVisible();
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
+    expect(await leaked(a), "une donnée de A est apparue sous B").toBeNull();
+    expect(await seen(a), "« Mise à jour… » a été affiché").toContain("crew-refreshing");
+    await ctx.close();
+  });
+
+  test("A → B → C rapprochés : jamais les données de B, la page finit sous C", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a);
+    const other = await ctx.newPage();
+    await other.goto("/app/fil");
+    const chef = await cookiesOf(browser, crew.chef.email);
+    const paul = await cookiesOf(browser, crew.paul.email);
+    // Ni les invitations de A (Sarah) ni le crew de B (le chef) ne doivent jamais s'afficher.
+    hold.arm();
+    await swapCookies(ctx, chef);
+    await announceForbidding(a, crew.chef.id, `${INVITATION}, ${OUTINGS}`);
+    // Le premier rechargement (sous B) est retenu ; C se connecte et s'annonce avant qu'il revienne.
+    await hold.arrived;
+    await swapCookies(ctx, paul);
+    await announce(other, crew.paul.id);
+    hold.release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+    await expect(a.getByTestId("crew-tab-none")).toBeVisible();
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
+    expect(await leaked(a), "une donnée de A ou de B est apparue sous C").toBeNull();
+    expect(await seen(a), "« Mise à jour… » a été affiché").toContain("crew-refreshing");
+    await ctx.close();
+  });
+
+  test("A → B → A : la page finit sous A, sans « Recharger la page »", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a);
+    const other = await ctx.newPage();
+    await other.goto("/app/fil");
+    const paul = await cookiesOf(browser, crew.paul.email);
+    const sarah = await cookiesOf(browser, crew.sarah.email);
+    await forbid(a, '[data-testid="crew-refresh-failed"]');
+    hold.arm();
+    await swapCookies(ctx, paul);
+    await announce(a, crew.paul.id);
+    await hold.arrived;
+    await swapCookies(ctx, sarah);
+    await announce(other, crew.sarah.id);
+    hold.release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.sarah.id);
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
+    expect(await leaked(a), "« Recharger la page » est apparu").toBeNull();
+    await ctx.close();
+  });
+
+  test("une annonce d'un autre compte sans changement de session : masquée, puis la page de A revient", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a);
+    hold.arm();
+    await announceForbidding(a, "un-autre-compte", INVITATION, true);
+    await hold.arrived;
+    hold.release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.sarah.id);
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
+    await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
+    expect(await leaked(a), "une invitation de A est apparue pendant la mise à jour").toBeNull();
+    expect(await seen(a)).toContain("crew-refreshing");
+    await ctx.close();
+  });
+
+  test("déconnexion annoncée : la page de connexion, jamais les invitations de A", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const { ctx, a } = await setup(browser);
+    await ctx.clearCookies();
+    await announceForbidding(a, null, INVITATION);
+    await a.waitForURL(/connexion/, { timeout: 60_000 });
+    expect(await leaked(a), "une invitation de A est apparue après la déconnexion").toBeNull();
+    await ctx.close();
+  });
+
+  test("l'annonce de sa propre fenêtre (la mise en page) n'entraîne ni masquage ni rechargement", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { ctx, a } = await setup(browser);
+    // Un rechargement de la page fait annoncer de nouveau son compte par la mise en page : l'annonce arrive au Crew comme un message
+    // BroadcastChannel de la même fenêtre.
+    let loads = 0;
+    a.on("load", () => {
+      loads += 1;
+    });
+    await forbid(a, '[data-testid="crew-refreshing"]');
+    await a.reload();
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(1);
+    // Attente fixe : on prouve une absence (aucun signal ne marque la fin de la livraison asynchrone de l'annonce).
+    await a.waitForTimeout(1500);
+    expect(loads, "chargements de la page : le nôtre seul").toBe(1);
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    expect(await leaked(a), "« Mise à jour… » est apparu").toBeNull();
+    // Aucun rechargement automatique n'a été noté.
+    expect(await a.evaluate(() => sessionStorage.getItem("orasso-crew-reloads"))).toBeNull();
+    await ctx.close();
+  });
+
+  test("boucle forcée : après trois chargements, erreur et « Recharger la page » (qui remet le compteur à zéro)", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { ctx, a } = await setup(browser);
+    // Chaque page chargée reçoit sans fin l'annonce d'un autre compte : le rechargement ne résout jamais la discordance.
+    await ctx.addInitScript(() => {
+      setInterval(() => {
+        const c = new BroadcastChannel("orasso-session");
+        c.postMessage({ userId: "un-autre-compte" });
+        c.close();
+      }, 300);
+    });
+    let docs = 0;
+    a.on("request", (r) => {
+      if (r.isNavigationRequest() && /\/app\/crew(\?|$)/.test(r.url())) docs += 1;
+    });
+    await a.goto("/app/crew");
+    await expect(a.getByTestId("crew-refresh-failed")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByTestId("crew-refresh-failed")).toContainText("Impossible de mettre ton compte à jour");
+    await expect(a.getByRole("button", { name: "Recharger la page" })).toBeVisible();
+    await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
+    // Le chargement de départ et deux rechargements automatiques, pas un de plus.
+    expect(docs).toBe(3);
+    // Le geste de l'utilisateur remet le compteur à zéro : un rechargement manuel, puis de nouveau deux automatiques.
+    await a.getByRole("button", { name: "Recharger la page" }).click();
+    await expect.poll(() => docs, { timeout: 60_000 }).toBe(6);
+    await expect(a.getByTestId("crew-refresh-failed")).toBeVisible({ timeout: 60_000 });
+    expect(docs).toBe(6);
+    await ctx.close();
+  });
+
+  test("stockage indisponible : un seul rechargement automatique, puis « Recharger la page »", async ({ browser }) => {
+    test.setTimeout(240_000);
+    const { ctx, a } = await setup(browser);
+    await ctx.addInitScript(() => {
+      Object.defineProperty(window, "sessionStorage", {
+        get() {
+          throw new Error("stockage bloqué");
+        },
+      });
+      setInterval(() => {
+        const c = new BroadcastChannel("orasso-session");
+        c.postMessage({ userId: "un-autre-compte" });
+        c.close();
+      }, 300);
+    });
+    let docs = 0;
+    a.on("request", (r) => {
+      if (r.isNavigationRequest() && /\/app\/crew(\?|$)/.test(r.url())) docs += 1;
+    });
+    await a.goto("/app/crew");
+    await expect(a.getByTestId("crew-refresh-failed")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByRole("button", { name: "Recharger la page" })).toBeVisible();
+    // Le chargement de départ et un seul rechargement automatique.
+    expect(docs).toBe(2);
     await ctx.close();
   });
 });
@@ -765,9 +908,61 @@ test.describe("partie B1, tour 4 : composeur de story du site", () => {
     await a.getByTestId("story-publish-send").click();
     // Aucune annonce n'est arrivée : le 409 suffit à verrouiller l'écran, sans message d'erreur ni brouillon.
     await expect(a.getByTestId("story-stale")).toBeVisible({ timeout: 60_000 });
+    // Le message est celui du compte changé (recharge la page), pas « peut-être publiée » : aucun envoi antérieur n'est incertain.
+    await expect(a.getByTestId("story-stale")).toContainText(feedPublishLabels.accountChanged);
+    await expect(a.getByTestId("story-stale")).not.toContainText("peut-être");
     await expect(a.getByTestId("story-error")).toHaveCount(0);
     await expect(a.getByTestId("story-caption")).toHaveCount(0);
     await expect(a.getByText(SECRET)).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("un envoi enregistré dont la réponse se perd, puis un 409 account_changed sans annonce : « peut-être publiée »", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const author = await who("StB1Perte409");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    const SECRET = "Brouillon de A, réponse perdue puis 409";
+    await toSend(a, author.email, SECRET);
+    let calls = 0;
+    let created: { status: number; id: string | null } = { status: 0, id: null };
+    await a.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      calls += 1;
+      if (calls === 1) {
+        // La création est réellement enregistrée (201 et identifiant vérifiés plus bas), la réponse se perd.
+        const real = await route.fetch();
+        created = {
+          status: real.status(),
+          id: ((await real.json().catch(() => null)) as { id?: string } | null)?.id ?? null,
+        };
+        return route.abort("failed");
+      }
+      return route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "account_changed", message: "La session n'est plus celle de ce brouillon." },
+        }),
+      });
+    });
+    await a.getByTestId("story-publish-send").click();
+    await expect(a.getByTestId("story-error")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    await a.getByTestId("story-publish-send").click();
+    // Aucune annonce de session : le 409 verrouille l'écran, et l'envoi antérieur reste incertain.
+    await expect(a.getByTestId("story-stale")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByTestId("story-stale")).toContainText("a peut-être été publiée");
+    await expect(a.getByTestId("story-stale")).not.toContainText("recharge la page avant de publier");
+    await expect(a.getByText(SECRET)).toHaveCount(0);
+    expect(calls).toBe(2);
+    expect(created.status).toBe(201);
+    expect(created.id).toBeTruthy();
+    const stories = await storiesOf(author, author.id);
+    expect(stories.map((x) => x.id)).toEqual([created.id]);
     await ctx.close();
   });
 });
