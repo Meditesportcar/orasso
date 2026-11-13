@@ -428,6 +428,8 @@ for (const theme of THEMES) {
     await expect(page.getByTestId("page-gest-media")).toBeVisible({ timeout: 30_000 });
     // Le profil vérifié l'est dit dans l'en-tête de la Page (la ligne « Profil vérifié » d'hier).
     await expect(page.getByTestId("page-verified")).toBeVisible();
+    await expect(page.getByTestId("page-verified")).toContainText("Vérifié");
+    await expect(page.getByTestId("page-pending")).toHaveCount(0);
     await expect(page.getByTestId("page-row-casquettes")).toBeVisible();
     // Aucun écran de passionné : ni points, ni crew, ni véhicules archivés.
     await expect(page.getByTestId("profil-points")).toHaveCount(0);

@@ -11,8 +11,8 @@
 // L'abonnement se consulte seulement : aucun prix ni bouton de paiement dans l'appli, la souscription se fait sur le site.
 import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proAppLabels as L, PARTNERS_ON_FICHE, proActivityLabels, proV2Labels } from "@orasso/shared";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { PartnersManage } from "@/features/partnerships/PartnersManage";
@@ -56,7 +56,12 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   const { me } = useSession();
   // Fiche créée depuis Créer (lot 34) : un mot de confirmation.
   // Lot R9b : `segment` (view, edit, posts) et `bloc=abonnement` ouvrent le segment voulu (les chips « Modifier ma fiche » et « Abonnement » de la Page).
-  const { fait, segment, bloc } = useLocalSearchParams<{ fait?: string; segment?: string; bloc?: string }>();
+  const {
+    fait,
+    segment,
+    bloc,
+    t: opened,
+  } = useLocalSearchParams<{ fait?: string; segment?: string; bloc?: string; t?: string }>();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   // Lot R7m1 : mes partenaires (passionnés) et mes propositions en attente.
@@ -70,12 +75,12 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   );
   // L'écran reste monté sous la Page : un nouveau chip change le segment même si la fiche était déjà ouverte.
   // Relu à chaque prise de focus : chaque ouverture par un chip applique son segment, même si l'adresse n'a pas changé.
-  useFocusEffect(
-    useCallback(() => {
-      if (bloc === "abonnement") setMode("posts");
-      else if (segment === "edit" || segment === "posts" || segment === "view") setMode(segment);
-    }, [segment, bloc]),
-  );
+  // Lot R9b, tour 2 : seulement à une vraie ouverture (le jeton `t` des chips change) ; un retour sur l'écran garde son segment.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `opened` est le jeton d'ouverture
+  useEffect(() => {
+    if (bloc === "abonnement") setMode("posts");
+    else if (segment === "edit" || segment === "posts" || segment === "view") setMode(segment);
+  }, [segment, bloc, opened]);
   const [viewer, setViewer] = useState<number | null>(null);
   const siretPending: SiretPending = useRef(null);
   const [previewNote, setPreviewNote] = useState(false);

@@ -100,7 +100,6 @@ async function audit(page: Page): Promise<Audit> {
         // (même exemption que `audit.ts`, lot R8b1) : seulement si « plus » existe.
         .filter(
           (el) =>
-            !el.closest('[data-testid="page-bio"]') ||
             !el
               .closest('[data-testid="page-bio"]')
               ?.parentElement?.parentElement?.querySelector('[data-testid="page-bio-toggle"]'),

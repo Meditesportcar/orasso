@@ -254,6 +254,7 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
           }
           typeLabel={head.typeLabel}
           verifiedLabel={head.verifiedLabel}
+          pendingLabel={head.pendingLabel}
           follow={null}
           bio={head.bio}
           side={
@@ -351,6 +352,7 @@ function headOf(data: Loaded): {
   stories: Loaded["page"]["stories"];
   typeLabel: string;
   verifiedLabel: string | null;
+  pendingLabel?: string | null;
   bio: string | null;
   path: string | null;
 } {
@@ -406,7 +408,8 @@ function headOf(data: Loaded): {
         logoUrl: p.logoUrl,
         stories: p.stories,
         typeLabel: L.typeMedia,
-        verifiedLabel: p.verified ? L.verifiedMedia : L.pendingMedia,
+        verifiedLabel: p.verified ? L.verifiedMedia : null,
+        pendingLabel: p.verified ? null : L.pendingMedia,
         bio: p.description,
         path: publicPathOf("media", { id: p.id }),
       };
@@ -438,13 +441,13 @@ function gestOf(kind: OwnerKind, router: ReturnType<typeof useRouter>) {
           id: "fiche",
           icon: "edit" as const,
           label: L.gestFiche,
-          onPress: () => router.navigate("/(pro)/fiche?segment=edit" as never),
+          onPress: () => router.navigate(`/(pro)/fiche?segment=edit&t=${Date.now()}` as never),
         },
         {
           id: "subscription",
           icon: "star" as const,
           label: L.gestSubscription,
-          onPress: () => router.navigate("/(pro)/fiche?bloc=abonnement" as never),
+          onPress: () => router.navigate(`/(pro)/fiche?bloc=abonnement&t=${Date.now()}` as never),
         },
       ];
     case "provider":

@@ -94,6 +94,9 @@ export const pagesLabels = {
   qrPage: "QR de la page",
   settings: "Réglages",
   qrTitle: "QR de la page",
+  close: "Fermer",
+  /** Média : la vérification est en attente (lue de son profil, jamais d'un autre). */
+  pendingMedia: "Vérification en attente",
   qrHelp: "Montre ce code : il ouvre ta page.",
   /** Les chips de gestion (maquette `r9gest`). */
   gestTeam: "Équipe",
