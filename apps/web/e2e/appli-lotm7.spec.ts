@@ -405,7 +405,7 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Activité, Mon QR 
  * Lot M7, tour 2 (relecture Codex) : un écran B ouvert depuis un onglet se ferme sur cet onglet, une fois par casquette
  * (les groupes Pro et Organisateur gardent le retour par défaut des onglets, qui menait au premier onglet).
  */
-const CLOSINGS: Record<Kind, { tab: [string, string]; open: ((page: Page) => Promise<void>) | null; page: RegExp }> = {
+const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Promise<void>; page: RegExp }> = {
   fan: {
     // Lot R7a1 : le Garage n'est plus un onglet ; l'écran B de l'exposant s'ouvre depuis le Profil, comme pour le visiteur.
     tab: ["Profil", "profil"],
@@ -431,9 +431,13 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: ((page: Page) => Pro
     },
     page: /\/publier/,
   },
-  // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Média : la ligne « Mon profil média » de la Page
-  // ouvre un écran B ; prestataire : aucun écran B ne s'ouvre depuis sa Page (la Vitrine se modifie sur place) : sans fermeture à tester.
-  provider: { tab: ["Page", "page"], open: null, page: /./ },
+  // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la fiche de l'événement,
+  // ouverte depuis une carte des Missions (« Voir »). Média : la ligne « Mon profil média » de la Page ouvre un écran B.
+  provider: {
+    tab: ["Missions", "missions"],
+    open: (page) => page.getByTestId("mission-see").first().click(),
+    page: /\/e\//,
+  },
   media: {
     tab: ["Page", "page"],
     open: (page) => page.getByTestId("page-row-media-profile").first().click(),
@@ -452,7 +456,6 @@ test("fermeture : le ✕ d'un écran B ouvert depuis un onglet ramène à cet on
   test.setTimeout(600_000);
   for (const kind of Object.keys(CLOSINGS) as Kind[]) {
     const c = CLOSINGS[kind];
-    if (!c.open) continue;
     const { ctx, page } = await open(browser, "beton");
     await signIn(page, ACCOUNTS[kind]);
     await choose(page, kind);
