@@ -133,21 +133,29 @@ export function useAlbumUploads(albumId: string | null) {
   /** Ouvre la photothèque (30 photos au plus par ouverture, jamais au-delà des 200 de l'album) et lance la détection des plaques. */
   const pick = useCallback(
     async (inAlbum: number) => {
-      // Une opération en cours (retrait, « Continuer ») : « Ajouter » ne fait rien (des photos choisies pendant la lecture de l'album seraient perdues).
-      if (turn.busy() || !alive()) return;
-      const room = pickLimit(inAlbum + latest.current.length, 0);
-      if (room === 0) return;
-      const picked: PickedPhoto[] = await pickPhotos(room);
-      if (picked.length === 0 || !alive()) return;
-      const fresh: AlbumItem[] = picked.map((p) => ({
-        clientId: randomUUID(),
-        uri: p.uri,
-        width: p.width,
-        height: p.height,
-        rects: [],
-        detected: false,
-      }));
-      update((list) => [...list, ...fresh]);
+      // **La sélection et la conversion tiennent le tour** (tour 6) : tant que le sélecteur est ouvert et que les photos sont converties, ni
+      // « Continuer », ni un retrait ne partent (des photos arrivées pendant la transition ne seraient jamais envoyées). Le jeton est rendu dans
+      // un `finally` ; la détection des plaques, elle, se lit déjà par `detecting` (« Continuer » attend).
+      const token = takeTurn();
+      if (!token) return;
+      let fresh: AlbumItem[] = [];
+      try {
+        const room = pickLimit(inAlbum + latest.current.length, 0);
+        if (room === 0) return;
+        const picked: PickedPhoto[] = await pickPhotos(room);
+        if (picked.length === 0 || !alive()) return;
+        fresh = picked.map((p) => ({
+          clientId: randomUUID(),
+          uri: p.uri,
+          width: p.width,
+          height: p.height,
+          rects: [],
+          detected: false,
+        }));
+        update((list) => [...list, ...fresh]);
+      } finally {
+        endTurn(token);
+      }
       // Détection une photo à la fois (ML Kit) ; sans détecteur (web, Expo Go) : aucune plaque repérée, la photo part « aucune plaque ».
       // Un cadre posé entretemps à la main n'est jamais remplacé (`detectionPatch`).
       for (const item of fresh) {
@@ -162,7 +170,7 @@ export function useAlbumUploads(albumId: string | null) {
         if (now) patch(item.clientId, detectionPatch(now, found));
       }
     },
-    [alive, turn, update, patch],
+    [alive, endTurn, takeTurn, update, patch],
   );
 
   /** Règle à la main les cadres de plaque d'une photo (le détecteur peut en rater une) ; sa décision, déjà prise, est gardée. */

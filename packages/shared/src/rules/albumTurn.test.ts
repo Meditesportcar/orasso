@@ -89,3 +89,19 @@ describe("la sortie de l'écran", () => {
     expect(turn.busy()).toBe(false);
   });
 });
+
+describe("la sélection de photos tient le tour", () => {
+  it("sélecteur ouvert (conversion retardée) : « Continuer » et un retrait ne prennent rien ; le tour rendu, ils passent", async () => {
+    const turn = createAlbumTurn();
+    const picking = turn.take();
+    let released = false;
+    const conversion = new Promise<void>((resolve) => setTimeout(resolve, 20)).then(() => {
+      released = turn.end(picking);
+    });
+    // Pendant la sélection : « Continuer » (envoi/lecture) et un retrait ne passent pas.
+    expect(turn.take()).toBeNull();
+    await conversion;
+    expect(released).toBe(true);
+    expect(turn.take()).not.toBeNull();
+  });
+});

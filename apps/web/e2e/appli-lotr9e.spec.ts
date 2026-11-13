@@ -883,3 +883,68 @@ test("quitter pendant un retrait : ✕ est bloqué (message), après le 204 on q
     await sql(DROP_BEZIERS_DRAFTS);
   }
 });
+
+// --- Tour 6 (la sélection tient le tour ; requête sans réponse : délai d'abandon) ---------------------------------------------------
+
+test("sélecteur ouvert : « Continuer » et « Ajouter » ne passent pas pendant la sélection, la photo choisie après le délai est bien dans la liste et envoyée", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    const uploads: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith("/api/me/uploads")) uploads.push(r.url());
+    });
+    // « Ajouter » : le sélecteur s'ouvre, le choix tarde (la conversion n'est pas finie).
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("album-pick").click();
+    const open = await chooser;
+    await expect(page.getByTestId("album-step2-continue")).toBeDisabled();
+    await page.getByTestId("album-step2-continue").click({ force: true });
+    await page.waitForTimeout(800);
+    expect(uploads).toEqual([]);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    await open.setFiles([photo("car-mx5.jpg")]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(2, { timeout: 30_000 });
+    await expect(page.getByTestId("album-step2-continue")).toBeEnabled({ timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(2);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("requête qui ne répond jamais : délai d'abandon, échec affiché avec « Réessayer », la photo reste, la sortie est possible ensuite", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await oneAddedPhoto(page);
+    await page.route(CANCEL_ROUTE, () => new Promise(() => undefined));
+    await openFirstTile(page);
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-photo-remove")).toHaveText("Retrait…");
+    await expect(page.getByTestId("album-remove-error")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("album-photo-remove")).toHaveText("Réessayer");
+    await expect(page.getByTestId("album-tile")).toHaveCount(1);
+    // Le tour est rendu : on ferme la feuille (son fond), puis ✕ n'est pas retenu.
+    await page
+      .locator('button[aria-label="Fermer"]:not([data-testid])')
+      .first()
+      .click({ position: { x: 4, y: 4 } });
+    await expect(page.getByTestId("album-photo-remove")).toHaveCount(0);
+    await page.getByTestId("appbar-close").click();
+    await expect(page.getByTestId("album-step-label")).toHaveCount(0, { timeout: 30_000 });
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});

@@ -87,6 +87,7 @@ export const albumLabels = {
   sessionChanged: "Tu as changé de compte : recharge la page.",
   needNetwork: "Il faut du réseau pour retirer une photo.",
   removing: "Retrait…",
+  requestTimeout: "Le serveur ne répond pas : réessaie dans un instant.",
   sendingTile: "Envoi…",
   leaveBlocked: "Une opération est en cours : attends sa fin avant de quitter.",
   frameSet: "Cadre posé",

@@ -1053,6 +1053,29 @@ test("compte changé pendant la publication : le formulaire mort rend son tour, 
   }
 });
 
+test("requête qui ne répond jamais : délai d'abandon, échec affiché avec « Réessayer », la photo reste, le tour est rendu et la sortie est possible", async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  try {
+    await openBeziersStep2(page);
+    await oneAddedPhoto(page);
+    // L'annulation ne reçoit jamais de réponse.
+    await page.route(CANCEL_ROUTE, () => new Promise(() => undefined));
+    await page.getByTestId("album-remove").click();
+    await expect(page.getByTestId("album-tile-removing")).toBeVisible();
+    await expect(page.getByTestId("album-remove-error")).toContainText("Le serveur ne répond pas", { timeout: 45_000 });
+    await expect(page.getByTestId("album-tile")).toHaveCount(1);
+    await expect(page.getByTestId("album-remove-retry")).toBeVisible();
+    await expect(page.getByTestId("album-step2-continue")).toBeEnabled();
+    // Le tour est rendu : « Fermer » n'est pas retenu.
+    await page.getByRole("link", { name: "Fermer" }).first().click();
+    await expect(page).not.toHaveURL(/albums\/nouveau/, { timeout: 30_000 });
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
 test("visionneuse : après le retrait de la dernière photo de la suite, « précédente » et « suivante » changent bien de photo", async ({
   page,
 }) => {

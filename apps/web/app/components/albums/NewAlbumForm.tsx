@@ -79,12 +79,35 @@ async function json<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-const call = (path: string, init: RequestInit = {}) =>
-  fetch(`/api${path}`, {
-    credentials: "same-origin",
-    ...init,
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
-  });
+/**
+ * **Toute requête du formulaire a un délai d'abandon** (tour 6), les mêmes valeurs que l'appli (`http.ts` : 15 s par défaut, 60 s pour l'envoi
+ * d'un fichier et l'ajout d'une photo) : une requête suspendue ne garde pas le tour (donc la page) pour toujours. À l'abandon : un échec affiché
+ * (« Le serveur ne répond pas… »), le tour rendu, la photo gardée à l'écran jusqu'à la confirmation du serveur.
+ */
+const API_TIMEOUT_MS = 15_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+async function withTimeout(request: (signal: AbortSignal) => Promise<Response>, ms: number): Promise<Response> {
+  try {
+    return await request(AbortSignal.timeout(ms));
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError"))
+      throw new Error(L.requestTimeout);
+    throw e;
+  }
+}
+
+const call = (path: string, init: RequestInit = {}, ms = API_TIMEOUT_MS) =>
+  withTimeout(
+    (signal) =>
+      fetch(`/api${path}`, {
+        credentials: "same-origin",
+        ...init,
+        signal,
+        headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+      }),
+    ms,
+  );
 
 const uuid = () => (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -221,10 +244,11 @@ export function NewAlbumForm({
   const cleanups = useRef<Promise<unknown>[]>([]);
   const retireUpload = (u: { id: string }) => {
     cleanups.current.push(
-      fetch(`/api/me/uploads/${encodeURIComponent(u.id)}`, { method: "DELETE", credentials: "same-origin" }).then(
-        undefined,
-        () => undefined,
-      ),
+      fetch(`/api/me/uploads/${encodeURIComponent(u.id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      }).then(undefined, () => undefined),
     );
   };
   const settleCleanups = async () => {
@@ -388,7 +412,10 @@ export function NewAlbumForm({
           form.set("purpose", "album_photo");
           if (rects?.length) form.set("plateRects", JSON.stringify(rects));
           form.set("file", (local as Local).file);
-          const res = await fetch("/api/me/uploads", { method: "POST", body: form, credentials: "same-origin" });
+          const res = await withTimeout(
+            (signal) => fetch("/api/me/uploads", { method: "POST", body: form, credentials: "same-origin", signal }),
+            UPLOAD_TIMEOUT_MS,
+          );
           const body = await json<{ id: string; key: string }>(res);
           if (!alive()) throw new AlbumSendStopped();
           return { id: body.id, key: body.key };
@@ -396,7 +423,11 @@ export function NewAlbumForm({
         add: async (_item, body) => {
           if (!alive()) throw new AlbumSendStopped();
           const added = await json<{ id: string; url: string }>(
-            await call(`/me/albums/${album.id}/photos`, { method: "POST", body: JSON.stringify(body) }),
+            await call(
+              `/me/albums/${album.id}/photos`,
+              { method: "POST", body: JSON.stringify(body) },
+              UPLOAD_TIMEOUT_MS,
+            ),
           );
           if (!alive()) throw new AlbumSendStopped();
           return added;

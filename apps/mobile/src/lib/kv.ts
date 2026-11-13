@@ -211,6 +211,8 @@ async function scrubHomeCaches(scope: string): Promise<void> {
 export function bindCacheScope(accountId: string): Promise<void> {
   if (cacheScopeId === accountId) return Promise.resolve();
   return serial(async () => {
+    // Deux liaisons simultanées du même compte : la seconde, une fois la première faite, ne change rien (et n'invalide aucun billet).
+    if (cacheScopeId === accountId) return;
     const previous = (await kvGet(CACHE_SCOPE_KEY)) ?? cacheScopeId;
     if (previous && previous !== accountId) await dropScope(previous);
     await purgeLegacyCaches();

@@ -166,6 +166,18 @@ describe("billet de compte : la mort d'un formulaire est définitive (tour 5)", 
     expect(accountTicket().current()).toBe(true);
   });
 
+  it("deux liaisons simultanées du même compte : un billet pris entre les deux reste valable", async () => {
+    const first = bindCacheScope("compte-a");
+    const second = bindCacheScope("compte-a");
+    await first;
+    const ticket = accountTicket();
+    await second;
+    expect(ticket.current()).toBe(true);
+    // Une vraie liaison d'un autre compte, elle, invalide.
+    await bindCacheScope("compte-b");
+    expect(ticket.current()).toBe(false);
+  });
+
   it("le tour d'un album : changement de compte pendant une opération, puis retour au compte d'origine : toujours mort, aucun tour", async () => {
     await bindCacheScope("compte-a");
     const ticket = accountTicket();

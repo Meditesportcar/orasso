@@ -6581,6 +6581,14 @@ Source : `corrections-r9e2-t5.md` (relectures `opus-r9e2-t5.md` et `codex-relect
 | Envoi seul (reprise) | jeton pris et rendu par l'envoi | retrait impossible (« Envoi… ») | bloquée | AlbumSendStopped |
 | « Publier » | jeton, gardé jusqu'au rechargement | « Modifier les photos » désactivé | bloquée, sauf la navigation de la publication | rien appliqué |
 
+### Lot R9e, partie 2, tour 6 (13/11/2026) : la sélection tient le tour, délais d'abandon, liaison concurrente
+
+Source : `corrections-r9e2-t6.md` (Codex `codex-relecture-r9e2-t5.md`). Le point 2 de Codex (sortie retenue par un formulaire mort) était déjà réglé par le tour 5 bis.
+
+- **1. La sélection et la conversion tiennent le tour** (appli, `pick`) : le jeton est pris avant l'ouverture du sélecteur et rendu dans un `finally` après l'ajout des photos à la liste ; « Continuer », un retrait et « Ajouter » ne passent pas pendant ce temps (des photos arrivées pendant la transition n'étaient jamais envoyées). La détection des plaques se lit toujours par `detecting` (« Continuer » attend). Site : la lecture des fichiers est synchrone (`FileList` déjà en mémoire), rien à tenir de plus que le garde du tour déjà en tête de `pick`. Tests : `albumTurn.test.ts` (sélecteur ouvert, rien ne prend le tour), recette appli « sélecteur ouvert » (choix retardé : « Continuer » forcé sans effet, aucun envoi, la photo choisie ensuite est envoyée).
+- **2. Délai d'abandon sur toute requête du formulaire.** Appli : déjà acquis (`http.ts` : 15 s par défaut, 60 s pour l'envoi d'un fichier et l'ajout d'une photo ; l'abandon rend une erreur réseau, le tour est rendu dans les `finally`). **Site : ajouté** (il n'y en avait aucun) avec les **mêmes valeurs que l'appli** : 15 s par défaut (`call`), 60 s pour l'envoi du fichier et l'ajout (`UPLOAD_TIMEOUT_MS`), 15 s pour le nettoyage des envois inutilisés (au mieux). À l'abandon : « Le serveur ne répond pas : réessaie dans un instant. » (`requestTimeout`), le jeton est rendu, **la photo reste à l'écran** (jamais retirée sur un délai) avec « Réessayer », la sortie est possible. Recettes site et appli « requête qui ne répond jamais ».
+- **3. Liaison concurrente du même compte** (`kv.ts`) : le contrôle « compte déjà lié » est refait **dans** la tâche sérialisée de `bindCacheScope`, la génération n'augmente que sur un changement effectif ; test `cacheScope.test.ts` (deux `bindCacheScope("A")`, un billet pris entre les deux reste valable, un vrai changement d'autre compte l'invalide).
+
 ## Lot R9f, partie 1 (13/11/2026) : identification sur une photo d'album et « Tes photos », API (migration `album-tags`)
 
 Défauts appliqués (T37 à T42 de la fiche, Damien n'avait pas encore répondu). La partie 2 (écrans de l'appli et du site) attend R9e-2. Migration `0091_album-tags` (numéro réel de la branche ; le coordinateur renumérote).
