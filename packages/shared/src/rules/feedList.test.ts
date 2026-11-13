@@ -8,6 +8,7 @@ import {
   applyFeedPage,
   emptyFeedList,
   eventsWithPlace,
+  FEED_JUST_PUBLISHED_MS,
   FEED_KINDS_DRAWN,
   feedAgo,
   feedCropPlan,
@@ -18,9 +19,8 @@ import {
   isFeedKindReserved,
   isNearViewport,
   isUntouchedFrame,
-  MY_PUBLISHED_PIN_MS,
+  justPublished,
   mergeDetectedFrames,
-  pinnedPublished,
   publishedCard,
   publishIssue,
   slidesToLoad,
@@ -195,10 +195,10 @@ describe("ligne de temps d'une carte", () => {
   const now = new Date("2026-11-09T12:00:00Z");
   it("de l'instant à la semaine", () => {
     expect(feedAgo("2026-11-09T11:59:40Z", now)).toBe("à l'instant");
-    expect(feedAgo("2026-11-09T11:35:00Z", now)).toBe("il y a 25 min");
-    expect(feedAgo("2026-11-09T09:00:00Z", now)).toBe("il y a 3 h");
+    expect(feedAgo("2026-11-09T11:35:00Z", now)).toBe("il y a 25 min");
+    expect(feedAgo("2026-11-09T09:00:00Z", now)).toBe("il y a 3 h");
     expect(feedAgo("2026-11-08T10:00:00Z", now)).toBe("hier");
-    expect(feedAgo("2026-11-05T10:00:00Z", now)).toBe("il y a 4 j");
+    expect(feedAgo("2026-11-05T10:00:00Z", now)).toBe("il y a 4 j");
     expect(feedAgo("2026-10-02T10:00:00Z", now)).toBe("2 oct.");
   });
 });
@@ -270,8 +270,10 @@ describe("ma publication après l'envoi", () => {
     expect(mine.reason.label).toBe(L.publishedReason);
     const fromApi = { ...mine, reason: { code: "following_author", label: "Tu suis Moi" } } as FeedCard;
     const list = withMyPublished([card("a"), fromApi], [mine]);
-    expect(list.map((c) => c.id)).toEqual(["a", "feed_post:p1"]);
-    expect(list[1]?.reason.label).toBe("Tu suis Moi");
+    // Elle monte en tête (le bandeau « Publié » parle d'elle), avec les données de l'API mais la raison « Ta publication ».
+    expect(list.map((c) => c.id)).toEqual(["feed_post:p1", "a"]);
+    expect(list[0]?.reason.label).toBe(L.publishedReason);
+    expect(list.filter((c) => c.id === "feed_post:p1")).toHaveLength(1);
   });
   it("sans doublon dans la liste, en tête, et la liste de l'API n'est pas modifiée", () => {
     const items = [card("a"), card("b")];
@@ -282,18 +284,18 @@ describe("ma publication après l'envoi", () => {
   });
 });
 
-describe("ma publication épinglée 24 h", () => {
+describe("ma publication à l'envoi", () => {
   const at = (iso: string) => ({ ...card("x"), at: iso }) as FeedCard;
   const now = Date.parse("2026-11-10T10:00:00.000Z");
-  it("reste en tête moins de 24 h, tombe à 24 h pile", () => {
-    const fresh = at("2026-11-09T10:00:01.000Z");
-    const old = at("2026-11-09T10:00:00.000Z");
-    expect(pinnedPublished([fresh, old], now)).toEqual([fresh]);
-    expect(MY_PUBLISHED_PIN_MS).toBe(86_400_000);
+  it("n'est « juste publiée » que moins d'une heure : plus de 24 h d'épingle", () => {
+    const fresh = at("2026-11-10T09:00:01.000Z");
+    const old = at("2026-11-10T09:00:00.000Z");
+    expect(justPublished([fresh, old], now)).toEqual([fresh]);
+    expect(FEED_JUST_PUBLISHED_MS).toBe(3_600_000);
   });
   it("une date illisible reste (on ne perd pas une publication sur un doute)", () => {
     const odd = at("pas une date");
-    expect(pinnedPublished([odd], now)).toEqual([odd]);
+    expect(justPublished([odd], now)).toEqual([odd]);
   });
 });
 

@@ -1,20 +1,126 @@
 // Lot 14 : professionnels (annuaire, remises par grade) et billetterie.
 // Code déplacé tel quel depuis `scripts/seed.ts` (lot 15) ; appelé par `seed.ts`.
-import type { Grade } from "@orasso/shared";
-import { eq, sql } from "drizzle-orm";
+import { randomBytes, randomUUID } from "node:crypto";
+import { type Grade, parisDayOf } from "@orasso/shared";
+import { and, eq, sql } from "drizzle-orm";
+import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { storage } from "../../src/lib/storage";
+import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { staffAccount } from "./day-j";
-import { createEvent, fakePhoto, now, parisAt } from "./helpers";
-import { putRealPhoto } from "./photos";
+import { createEvent, DAY, fakePhoto, HOUR, now, parisAt } from "./helpers";
+import { putRealPhoto, reviewedNoPlateCar } from "./photos";
 
 let proPhotoNo = 0;
+
+// --- Offres du pro (lot R9c) ---------------------------------------------------------------------------------------
+
+/** Un jour de Paris décalé de `days` jours (AAAA-MM-JJ) par rapport à aujourd'hui. */
+const parisDayFrom = (days: number): string => parisDayOf(new Date(Date.now() + days * DAY));
+
+async function offerPhoto(postId: string, index: number): Promise<boolean> {
+  const photo = await reviewedNoPlateCar(index);
+  if (!photo) return false;
+  const out = await sharp(photo.data)
+    .resize(1080, 1350, { fit: "cover", position: "attention" })
+    .webp({ quality: 80 })
+    .toBuffer({ resolveWithObject: true });
+  const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
+  await storage.put(key, out.data);
+  await db.insert(t.feedPostPhotos).values({
+    postId,
+    storageKey: key,
+    width: out.info.width,
+    height: out.info.height,
+    position: 0,
+    plateBlurred: false,
+    // Photo du seed regardée : aucune plaque lisible (décision vraie, pas un contournement).
+    noPlateConfirmed: true,
+  });
+  return true;
+}
+
+/**
+ * Les publications d'Atelier Covering 66 : deux offres avec photo (une en cours « Du … au … », une « Jusqu'au … »), une offre
+ * terminée et une publication simple. Une offre a toujours une photo (T1) ; l'ancienne publication du Garage du Port
+ * (`pro_posts`, « Révision d'automne ») reste une ancienne offre. Rejouable : une publication déjà là (même titre ou même
+ * légende) n'est pas refaite. Les dates suivent le jour de Paris du moment (rien de figé dans le temps).
+ */
+export async function seedProOffers() {
+  const pro = await db.query.proProfiles.findFirst({ where: eq(t.proProfiles.slug, "atelier-covering-66") });
+  if (!pro) {
+    console.log("Offres : Atelier Covering 66 absent, rien ajouté.");
+    return;
+  }
+  const items = [
+    {
+      title: "Polish complet avant l'hiver",
+      caption: "−15 % pour les Grades Sport, jusqu'à fin novembre.",
+      startsOn: parisDayFrom(-3),
+      endsOn: parisDayFrom(19),
+      hoursAgo: 30,
+      photo: 21,
+    },
+    {
+      title: "Traitement céramique : bilan offert",
+      caption: "Sur rendez-vous, à l'atelier de Perpignan.",
+      startsOn: null,
+      endsOn: parisDayFrom(35),
+      hoursAgo: 20,
+      photo: 22,
+    },
+    {
+      title: "Covering de saison",
+      caption: "Offre terminée : merci à tous ceux qui sont passés à l'atelier.",
+      startsOn: parisDayFrom(-50),
+      endsOn: parisDayFrom(-10),
+      hoursAgo: 24 * 40,
+      photo: 23,
+    },
+    {
+      title: null,
+      caption: "Nouvelle réalisation : un film mat sur une Mégane RS, fini ce matin.",
+      startsOn: null,
+      endsOn: null,
+      hoursAgo: 5,
+      photo: 24,
+    },
+  ] as const;
+  let added = 0;
+  for (const o of items) {
+    const already = await db.query.feedPosts.findFirst({
+      where: and(
+        eq(t.feedPosts.proId, pro.id),
+        o.title ? eq(t.feedPosts.title, o.title) : eq(t.feedPosts.caption, o.caption),
+      ),
+    });
+    if (already) continue;
+    const id = randomUUID();
+    const createdAt = new Date(Date.now() - o.hoursAgo * HOUR);
+    await db.insert(t.feedPosts).values({
+      id,
+      authorId: pro.ownerUserId,
+      persona: "pro",
+      proId: pro.id,
+      caption: o.caption,
+      department: pro.department ?? "66",
+      createdAt,
+      updatedAt: createdAt,
+      ...(o.title ? { tag: "offer" as const, title: o.title, offerStartsOn: o.startsOn, offerEndsOn: o.endsOn } : {}),
+    });
+    if (!(await offerPhoto(id, o.photo))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+    else added++;
+  }
+  console.log(`Offres : ${added} publication(s) ajoutée(s) à Atelier Covering 66.`);
+}
 
 // --- Professionnels et billetterie (lot 14) ------------------------------------------------------------------------
 
 export async function seedPros(hash: string) {
   if (await db.query.proProfiles.findFirst({ where: eq(t.proProfiles.slug, "garage-du-port") })) {
     console.log("Professionnels déjà présents.");
+    await seedProOffers();
     return;
   }
   const structure = await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") });
@@ -173,4 +279,5 @@ export async function seedPros(hash: string) {
   console.log(
     "Pros : 3 fiches (dont 2 vérifiées), billets gratuits (Cars & Coffee de la Plage), billets payants « bientôt » (Nuit des Moteurs).",
   );
+  await seedProOffers();
 }

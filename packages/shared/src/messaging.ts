@@ -110,6 +110,8 @@ export type InboxCountsInput = {
   unreadMessages: number;
   unseenActivity: number;
   pendingRequests: number;
+  /** Lot R8o : invitations à publier en attente (absent d'un résumé plus ancien). */
+  pendingCoauthors?: number;
   requests: { contact: number };
 };
 
@@ -118,7 +120,8 @@ export function inboxRowCounts(summary: InboxCountsInput | null): {
   messageRequests: number;
 } {
   const contact = summary?.requests.contact ?? 0;
-  return { activityRequests: Math.max(0, (summary?.pendingRequests ?? 0) - contact), messageRequests: contact };
+  const pending = (summary?.pendingRequests ?? 0) + (summary?.pendingCoauthors ?? 0);
+  return { activityRequests: Math.max(0, pending - contact), messageRequests: contact };
 }
 
 /**

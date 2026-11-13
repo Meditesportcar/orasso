@@ -19,14 +19,18 @@ import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
 import { seedBase, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
-import { seedCommunication } from "./seed/communication";
+import { seedAnnouncementsReprise, seedCommunication } from "./seed/communication";
 import { seedCrewPage } from "./seed/crew-page";
 import { seedCrews } from "./seed/crews";
 import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
 import { seedEventInvites } from "./seed/event-invites";
+import { seedEventNotifications } from "./seed/event-notifications";
 import { seedExplorer } from "./seed/explorer";
 import { seedFeed } from "./seed/feed";
+import { seedFeedComments } from "./seed/feed-comments";
+import { seedFeedMentions } from "./seed/feed-mentions";
+import { seedFeedSeen } from "./seed/feed-seen";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -39,16 +43,18 @@ import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
 import { seedOrgaV2 } from "./seed/orga-v2";
+import { seedPageFollows } from "./seed/page-follows";
 import { seedPartnerships } from "./seed/partnerships";
 import { seedPassport } from "./seed/passport";
 import { seedPosters } from "./seed/posters";
+import { seedPractical } from "./seed/practical";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedStaff } from "./seed/staff";
 import { seedStories } from "./seed/stories";
-import { seedWeather } from "./seed/weather";
+import { seedMyWeather, seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -117,6 +123,8 @@ async function main() {
   await seedSecurity(hash);
   // Lot 28 : prévisions météo factices (Nocturne de Canet mauvaise, Expo Rivesaltes bonne).
   await seedWeather();
+  // Lot R8m : « Ma météo » (lieu choisi de Damien, compte sans département).
+  await seedMyWeather();
   // Lot 17 : amis, demande en attente, profil privé.
   await seedSocial();
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
@@ -146,6 +154,7 @@ async function main() {
   await seedInvitations();
   // Lot 30 : garage favori de Kenji, deux emplacements sponsorisés (dont un ciblé 66 + JDM), cache factice lavage et carburant.
   await seedHome();
+  await seedPractical();
   // Lot 27 : bilan de la Nocturne de rentrée, notes internes, badge qui expire dans 5 jours, structure suspendue.
   await seedAfterEvent(hash);
   // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.
@@ -163,6 +172,8 @@ async function main() {
   await seedDaV2Events();
   // Lot 47 : créneaux d'arrivée de la Nocturne, notes d'arrivée, affiches générées de tous les événements.
   await seedPosters();
+  // Lot R8d : annonces des quatre sortes, puis leur reprise en publications du journal (après les affiches).
+  await seedAnnouncementsReprise();
   // Lot 43 : billet de Paul (visiteur), remises, vues et abonnés du garage du port pour l'Accueil par profil.
   await seedHomeProfiles();
   // Lot 52 : brouillon incomplet, engagement de l'équipe (bulles), structure en cours de vérification.
@@ -175,6 +186,10 @@ async function main() {
   await seedWeather();
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
+  // Lot R8k1 : cinq commentaires sous une publication de Kenji_66, une réponse avec @Kenji_66, des flammes ; une publication aux commentaires coupés.
+  await seedFeedComments();
+  // Vague R8 (lot R8a2) : mentions matérialisées, mention masquée, publication épinglée dans le journal du Lydia.
+  await seedFeedMentions();
 
   // Lot R7f1 : sept stories de démonstration (photos relues sans plaque), 20 h de vie restantes (21 h pour celle du Lydia, R7h).
   await seedStories();
@@ -186,6 +201,12 @@ async function main() {
   await seedMemories();
   // Lot R7m1 : « Ses partenaires » d'un pro, « Partenaires » d'un profil, une proposition dans les Demandes de Damien_66.
   await seedPartnerships();
+  // Lot R8c1 : cartes vues de Damien_66, rail « Ça plaît en ce moment », publication du journal de sa sortie.
+  await seedFeedSeen();
+  // Lot R8n1 : Nouveautés coupées pour un événement de Damien_66, un résumé et un exemple d'Essentiel dans son Activité.
+  await seedEventNotifications();
+  // Lot R9a : La Brasa et Roues Libres 66 suivent, Damien_66 suit La Brasa et Sud Cars, une story de page chacune.
+  await seedPageFollows();
 }
 
 try {

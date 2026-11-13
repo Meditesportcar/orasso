@@ -15,11 +15,14 @@ import {
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { isPageActor, noStore, readActor, writeActor } from "../../lib/actor";
 import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { authorCountsFor } from "../feed/lists";
 import { partnershipsService } from "../partnerships/service";
+import { followPageAsPage } from "../social/pageFollows";
 import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
 import { prosService } from "./service";
@@ -53,7 +56,10 @@ export const prosRoutes = new Hono<AppEnv>()
   })
   .get("/pros/by-slug/:slug", async (c) => {
     const viewer = await optionalUser(c);
-    const view = await prosService.getPublic(c.req.param("slug"), viewer);
+    // Vague R9 (lot R9a) : `isFollowing` se lit pour l'acteur (en-tête d'une page), sans session il n'y en a pas.
+    const actor = viewer ? await readActor(c, viewer) : undefined;
+    if (viewer) noStore(c); // `isFollowing` est personnel (ou celui de la page)
+    const view = await prosService.getPublic(c.req.param("slug"), viewer, actor);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
     // Lot R7m1 : « Ses partenaires » (passionnés), vus selon le regard ; `partners` reste les organisateurs partenaires.
     const partners = await partnershipsService.partnersOfPro(view.id, viewer, { limit: PARTNERS_ON_FICHE });
@@ -62,6 +68,8 @@ export const prosRoutes = new Hono<AppEnv>()
       stories: await storiesSummaryFor(viewer, "pro", view.id),
       memberPartners: partners.items,
       memberPartnersTotal: partners.total,
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (rien sans session : T4).
+      ...(await authorCountsFor("pro", view.id, viewer)),
     });
   })
   // Lot R7m1, tour 2 : « Voir tout » de « Ses partenaires », page par page (connecté seulement, mêmes regards que la fiche).
@@ -119,11 +127,26 @@ export const prosRoutes = new Hono<AppEnv>()
     return c.json(await prosService.checkSiret(v, uuidParam(c, "id"), number));
   })
   .post("/pros/:id/follow", async (c) => {
-    await prosService.follow(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    // Vague R9 (lot R9a) : avec l'en-tête d'une page, la ligne va dans `page_follows`, jamais dans `pro_follows`.
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      await followPageAsPage(v, actor, { kind: "pro", id: uuidParam(c, "id") }, true);
+    } else {
+      await prosService.follow(v, uuidParam(c, "id"));
+    }
     return c.body(null, 204);
   })
   .delete("/pros/:id/follow", async (c) => {
-    await prosService.unfollow(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      await followPageAsPage(v, actor, { kind: "pro", id: uuidParam(c, "id") }, false);
+    } else {
+      await prosService.unfollow(v, uuidParam(c, "id"));
+    }
     return c.body(null, 204);
   })
   .post("/pros/:id/posts", async (c) => {

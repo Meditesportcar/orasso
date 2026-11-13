@@ -1,9 +1,12 @@
 // Le Fil (lot R7e1, ARCHITECTURE-R7 § 2.4) : une source = un fichier `sources/<source>.ts` qui exporte `source`. Elle rend
 // des candidats (jamais le score) : le classement, la diversité et la pagination sont à `service.ts`. Les fichiers
 // `spotMeetup.ts` (R7i), `memory.ts` (R7j) et `sponsored.ts` (R7k1) sont réservés : `export const source = null`.
+
 import type { FeedCandidate, FeedCardKind, FeedFilter, FeedPayloads, FeedViewerContext } from "@orasso/shared";
+import { FEED_SEEN_TTL_MS } from "@orasso/shared";
 import { type SQL, sql } from "drizzle-orm";
 
+import type { Actor } from "../../../lib/actor";
 import type { Viewer } from "../../../lib/session";
 
 export type SourceInput = {
@@ -31,7 +34,26 @@ export type SourceInput = {
   ctx: FeedViewerContext;
   /** Départements de la personne et leurs voisins (filtre « Autour de moi »). */
   nearby: string[];
+  /**
+   * Zone du parcours (R8c1) : `A` = les cartes pas encore vues (ou vues puis ouvertes, partagées, aimées), `B` = les cartes
+   * vues sans interaction, à l'instant `ref`. La zone se joue **dans le SQL**, avant le LIMIT (`atBounds` / `seenSql`).
+   */
+  zone: Zone;
+  /** `GET /fil/fresh` : ne lit pas mes publications (exclues **avant** le LIMIT). */
+  excludeMine?: boolean;
+  /** Genres que la lecture ne lit pas du tout (`GET /fil/fresh` : « Moins de ce genre »). */
+  skipKinds?: ReadonlySet<string>;
+  /**
+   * La page au nom de laquelle on lit le Fil (lot R9a, `X-Orasso-Actor`), ou `null` : la personne. Une page ne lit que du
+   * contenu public (aucun compte privé, même suivi par la personne derrière elle), ses abonnements sont ceux de `ctx`
+   * (`page_follows`), et les sources qui lisent des liens personnels (rendez-vous, souvenir, crews) ne rendent rien.
+   */
+  page?: Actor | null;
+  /** Borne de rognage du compte (`feed_seen_floor`) : toute carte datée au plus de cette date est « déjà vue » (zone B). */
+  seenFloor?: Date | null;
 };
+
+export type Zone = "A" | "B";
 
 export type LoadedCard<K extends FeedCardKind = FeedCardKind> = FeedCandidate<K> & {
   payload: FeedPayloads[K];
@@ -41,6 +63,8 @@ export type LoadedCard<K extends FeedCardKind = FeedCardKind> = FeedCandidate<K>
   official?: boolean;
   /** Tous les départements que la carte couvre (pro mobile : adresse et zone d'intervention) ; sinon son `department`. */
   areaDepartments?: readonly string[];
+  /** Publiée par la personne qui lit (y compris au nom d'une page) : `GET /fil/fresh` ne la compte jamais. */
+  mine?: boolean;
 };
 
 /** Clé d'une carte dans le parcours par date : sa date (à la milliseconde) et son identifiant de carte (`genre:uuid`). */
@@ -104,13 +128,36 @@ export function atBounds(
   atExpr: SQL,
   idExpr: SQL,
   kind: FeedCardKind,
-  input: Pick<SourceInput, "since" | "until" | "before" | "floor">,
+  input: Pick<SourceInput, "since" | "until" | "before" | "floor" | "zone" | "userId" | "ref" | "seenFloor">,
 ): SQL[] {
-  const out = [sql`${atExpr} <= ${ts(input.until)}`, ...beforeKeys(atExpr, idExpr, kind, input.before)];
+  const seen = seenSql(kind, idExpr, input);
+  // Plus ancienne que ref − 30 jours (durée de vie du « vu ») : toujours zone B, la purge ne la fait pas revenir en haut.
+  const cutoff = Math.max(input.ref.getTime() - FEED_SEEN_TTL_MS, input.seenFloor?.getTime() ?? 0);
+  const old = sql`${atExpr} <= ${ts(new Date(cutoff))}`;
+  const out = [
+    sql`${atExpr} <= ${ts(input.until)}`,
+    input.zone === "B" ? sql`(${seen} or ${old})` : sql`(not ${seen} and not ${old})`,
+    ...beforeKeys(atExpr, idExpr, kind, input.before),
+  ];
   // La borne figée est incluse : tout sauf « strictement après elle ».
   for (const c of input.floor ? beforeKeys(atExpr, idExpr, kind, [input.floor]) : []) out.push(sql`not (${c})`);
   if (input.since) out.push(sql`${atExpr} >= ${ts(input.since)}`);
   return out;
+}
+
+/**
+ * « Vue sans interaction à l'instant `ref` » (R8c1), en SQL : une ligne `feed_seen` de la personne vue avant `ref`, sans
+ * ouverture ni partage avant `ref`, et — pour une publication — sans flamme de sa part avant `ref`. Ce qui arrive après
+ * `ref` (une carte vue, aimée pendant qu'on fait défiler) ne change pas la zone d'une carte : le parcours reste stable.
+ */
+export function seenSql(kind: FeedCardKind, idExpr: SQL, input: Pick<SourceInput, "userId" | "ref">): SQL {
+  const at = ts(input.ref);
+  const seen = sql`exists (select 1 from feed_seen fs where fs.user_id = ${input.userId}
+    and fs.card_id = (${`${kind}:`}::text || ${idExpr}::text) and fs.seen_at <= ${at}
+    and (fs.interacted_at is null or fs.interacted_at > ${at}))`;
+  if (kind !== "feed_post") return seen;
+  return sql`(${seen} and not exists (select 1 from feed_post_reactions fr
+    where fr.post_id = ${idExpr} and fr.user_id = ${input.userId} and fr.created_at <= ${at}))`;
 }
 
 export const tsParam = ts;
@@ -129,3 +176,27 @@ export const uuidList = (ids: readonly string[]): SQL =>
     ids.map((i) => sql`${i}::uuid`),
     sql`, `,
   );
+
+/** `col = any(...)` sur un ensemble d'identifiants ; faux s'il est vide. */
+const idsIn = (col: SQL, ids: ReadonlySet<string> | undefined, type: "uuid" | "text"): SQL =>
+  ids?.size ? sql`${col} = any(${sql.param([...ids])}::${sql.raw(type)}[])` : sql`false`;
+
+/** « La personne (ou la page qui lit) suit cette structure », en SQL. Une page : son ensemble `ctx`, lu à la lecture. */
+export function structureFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedStructures, "uuid");
+  return sql`exists (select 1 from structure_follows sf where sf.structure_id = ${col} and sf.user_id = ${input.userId})`;
+}
+
+export function proFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedPros, "uuid");
+  return sql`exists (select 1 from pro_follows pf where pf.pro_id = ${col} and pf.user_id = ${input.userId})`;
+}
+
+/** Un compte suivi (abonnement accepté ; pour une page, un compte public suivi par `page_follows`). */
+export function userFollowedSql(input: Pick<SourceInput, "page" | "userId" | "ctx">, col: SQL): SQL {
+  if (input.page) return idsIn(col, input.ctx.followedUsers, "text");
+  return sql`exists (select 1 from user_follows uf where uf.follower_id = ${input.userId} and uf.followed_id = ${col} and uf.status = 'accepted')`;
+}
+
+/** Le regard « personne » d'une page (aucun lien) : jamais l'identifiant du compte derrière elle. */
+export const PAGE_VIEWER_ID = "__page-sans-lien__";

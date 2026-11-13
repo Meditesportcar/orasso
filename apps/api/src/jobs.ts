@@ -13,10 +13,12 @@ import { applicationsService } from "./modules/applications/service";
 import { groupMessagesService } from "./modules/communication/group-messages";
 import { staffChatsService } from "./modules/communication/staff-chats";
 import { crewRegistrationService } from "./modules/crews/registration";
+import { eventNewsDigest } from "./modules/event-notifications/digest";
 import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { posterService } from "./modules/events/poster/service";
+import { feedSeenService } from "./modules/feed/seen";
 import { fieldService } from "./modules/field/service";
 import { sponsoredService } from "./modules/home/sponsored";
 import { memoriesService } from "./modules/memories/service";
@@ -103,8 +105,12 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "votes.sweep": () => votesLifecycle.sweep(),
   // Lot R7j : une notification « souvenir » par personne concernée (livrée à 10 h), rejouable sans doublon.
   "memories.daily": () => memoriesService.daily(),
+  // Lot R8n1 : un résumé des nouveautés des sorties par personne et par jour (18 h), rejouable sans doublon.
+  "event-news.digest": () => eventNewsDigest.run(),
   // Lot R7i : à la fin d un rendez-vous au spot, lieu et liste effacés (les lignes restent 30 jours, sans lieu).
   "spot.purge": () => spotMeetupsPurge.run(),
+  // Lot R8c1 : cartes vues du Fil de plus de 30 jours effacées (donnée de lecture privée).
+  "feed.seen-purge": () => feedSeenService.purge(),
 };
 
 /**
@@ -164,7 +170,14 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // Lot R7j : souvenirs du jour à 9 h (la notification part à 10 h). Une panne passagère est reprise toutes les 10 min
     // pendant une heure (le défaut de pg-boss reprend tout de suite, deux fois : inutile après une vraie panne).
     await boss.schedule("memories.daily", "0 9 * * *", null, { tz: "Europe/Paris", retryLimit: 6, retryDelay: 600 });
+    // Lot R8n1 : résumé des nouveautés des sorties à 18 h (Paris) ; reprise toutes les 10 min en cas de panne (idempotent).
+    await boss.schedule("event-news.digest", "0 18 * * *", null, {
+      tz: "Europe/Paris",
+      retryLimit: 6,
+      retryDelay: 600,
+    });
     await boss.schedule("spot.purge", "*/5 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("feed.seen-purge", "30 4 * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {

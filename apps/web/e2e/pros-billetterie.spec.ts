@@ -128,18 +128,32 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   await fan.getByTestId("call").click();
   await fan.getByTestId("route").click();
   await fan.getByRole("button", { name: "Suivre" }).click();
-  await expect(fan.getByRole("button", { name: "Tu suis ce pro" })).toBeVisible();
+  await expect(fan.getByRole("button", { name: "Suivi", exact: true })).toBeVisible();
 
   // --- 6. Publication du pro, visible de l'abonné seulement ---------------------------------------------------------
   await pro.goto(`/pro/${slug}/publications`);
   await expect(pro.getByTestId("posts-counter")).toHaveText("0 / 4 ce mois-ci");
-  await pro.getByTestId("post-form").getByLabel("Titre").fill("Offre d'automne");
-  await pro.getByTestId("post-form").getByLabel("Texte").fill("Contrôle des freins offert avant le 15 novembre.");
-  await pro.getByTestId("post-form").getByRole("button", { name: "Publier" }).click();
+  // Lot R9c : « Publier une offre » ouvre « Publier » réglé sur la fiche ; l'offre porte une photo, un titre et une fin.
+  await pro.getByTestId("pro-publish-offer").click();
+  await pro.waitForURL(/app.fil.publier/);
+  await pro
+    .getByTestId("fil-publish-file")
+    .setInputFiles([{ name: "offre.png", mimeType: "image/png", buffer: samplePhoto([40, 90, 140]) }]);
+  await expect(pro.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+  await pro.getByTestId("fil-publish-none").click();
+  await pro.getByTestId("fil-publish-none-yes").click();
+  await pro.getByTestId("fil-publish-offer-title").fill("Offre d'automne");
+  await pro.getByTestId("fil-publish-offer-edit").click();
+  await pro
+    .getByTestId("fil-publish-offer-end")
+    .fill(new Date(Date.now() + 15 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }));
+  await pro.getByTestId("fil-publish-send").click();
+  await expect(pro.getByTestId("fil-publish-done-offer")).toBeVisible({ timeout: 60_000 });
+  await pro.goto(`/pro/${slug}/publications`);
   await expect(pro.getByTestId("posts-counter")).toHaveText("1 / 4 ce mois-ci");
-  await expect(pro.getByTestId("post")).toContainText("Offre d'automne");
-  await fan.goto(`/p/${slug}`);
-  await expect(fan.getByTestId("pro-post")).toContainText("Offre d'automne");
+  await expect(pro.getByTestId("current-offers")).toContainText("Offre d'automne");
+  await fan.goto(`/p/${slug}?onglet=offres`);
+  await expect(fan.getByTestId("offer-row")).toContainText("Offre d'automne", { timeout: 30_000 });
   await anon.goto(`/p/${slug}`);
   await expect(anon.getByTestId("pro-posts")).not.toContainText("Offre d'automne");
 

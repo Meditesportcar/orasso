@@ -16,7 +16,6 @@ import {
   type ActionKind,
   applyResults,
   applyTicketResults,
-  BATCH_KINDS,
   type BatchItemWire,
   backoffMs,
   buildState,
@@ -30,6 +29,8 @@ import {
   mergeSync,
   type PendingAction,
   type StaffState,
+  sendOtherActions,
+  staffSendOutcome,
   type TicketScanWire,
   type VisitorItemWire,
 } from "./model";
@@ -421,19 +422,9 @@ async function doFlush(userId: string) {
       await sendShopBatch(store, userId, kind, eventId, batch);
     }
   }
-  const waitingIncidents = new Set(unsent.filter((a) => a.kind === "incident").map((a) => a.id));
-  for (const action of unsent) {
-    if (BATCH_KINDS.includes(action.kind) || SHOP_KINDS.includes(action.kind)) continue;
-    if (Date.parse(action.nextAttemptAt) > now.getTime()) continue;
-    // La photo suit son incident : tant que l'incident n'est pas parti, elle attend.
-    if (action.kind === "incident_photo" && waitingIncidents.has(String(action.payload.incidentId))) continue;
-    const sent = await sendOther(store, action);
-    if (sent && action.kind === "incident") waitingIncidents.delete(action.id);
-  }
+  await sendOtherActions(unsent, now, (action) => sendOther(store, action));
   emit();
 }
-
-const SHOP_KINDS: readonly ActionKind[] = ["ticket_scan", "visitor"];
 
 /** Lot de billets ou de touchers du compteur : mêmes règles d'erreur que les lots de scans (jamais perdus). */
 async function sendShopBatch(
@@ -593,7 +584,8 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
   try {
     let result: Record<string, unknown> = { ok: true };
     if (action.kind === "presence") await api.setPresence(action.eventId, Boolean(p.present));
-    else if (action.kind === "express") result = await api.expressInvite(action.eventId, String(p.email), 15_000);
+    else if (action.kind === "express")
+      result = await api.expressInvite(action.eventId, String(p.email), action.id, 15_000);
     else if (action.kind === "incident") {
       await api.incident(action.eventId, {
         clientId: action.id,
@@ -620,9 +612,9 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
     return true;
   } catch (error) {
     const e = error instanceof ApiRequestError ? error : null;
-    if (e?.status === 401) return false;
-    const definitive = e && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
-    if (definitive) {
+    const outcome = staffSendOutcome(e ? e.status : null);
+    if (outcome === "wait") return false;
+    if (outcome === "drop" && e) {
       // Refus définitif (e-mail invalide, fenêtre fermée, photo déjà posée…) : l'action sort de la file, l'erreur
       // reste visible.
       if (action.kind === "incident_photo") await deleteLocalPhoto(String(p.fileUri));

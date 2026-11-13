@@ -12,6 +12,10 @@ export default [
     // Lot R7e2 : publier au Fil et « Mes publications ».
     route("app/fil/publier", "routes/app-fil-publier.tsx"),
     route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
+    // Lot R8b2 : la page d'une publication seule (le lien d'une notification et la vignette d'un profil y mènent).
+    route("app/publication/:id", "routes/app-publication.tsx"),
+    // Lot R8d : « Mentions · N » d'un événement (écran à part, session requise).
+    route("app/e/:slug/mentions", "routes/event-mentions.tsx"),
     // Lot R7f3 : publier une story (photo en 9:16).
     route("app/story/publier", "routes/app-story-publier.tsx"),
     // Lot R7f4 : partager un contenu en story (carte sur fond 9:16).
@@ -24,6 +28,10 @@ export default [
     route("app/spot/:id", "routes/app-spot.tsx"),
     // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
     route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
+    // Lot R8m : le détail de « Ma météo » (heure par heure, Changer de lieu).
+    route("app/meteo", "routes/app-meteo.tsx"),
+    // Lot R8q : « Pratique » (station-service et lavage les plus proches), liste et carte.
+    route("app/pratique", "routes/app-pratique.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
     // Lot R7c2 (D38) : la Boîte disparaît. Activité (la cloche) et ses Demandes, Messages (la bulle), ses Demandes de message
     // et la conversation en temps réel ; les anciennes adresses `/app/boite*` et `/app/journal` redirigent (302).

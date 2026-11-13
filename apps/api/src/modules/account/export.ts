@@ -13,6 +13,7 @@ import {
   pointEntries,
   proFollows,
   profiles,
+  profileWeatherPlaces,
   proProfiles,
   seasons,
   structureFollows,
@@ -75,6 +76,8 @@ export type AccountExport = {
    * coupé les invitations.
    */
   eventInvitations: Awaited<ReturnType<typeof eventInvitesExport>>;
+  /** Lot R8m : les villes choisies pour « Ma météo » (libellé et ville à 0,01°) ; la position donnée à l'instant n'est jamais enregistrée. */
+  weatherPlaces: { slot: number; label: string; lat: number; lng: number }[];
 };
 
 const followOut = (r: { pseudo: string; status: string; at: Date; acceptedAt: Date | null }) => ({
@@ -179,7 +182,19 @@ export const accountExportService = {
       )
       .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
 
+    const weatherPlaces = await db
+      .select({
+        slot: profileWeatherPlaces.slot,
+        label: profileWeatherPlaces.label,
+        lat: profileWeatherPlaces.lat,
+        lng: profileWeatherPlaces.lng,
+      })
+      .from(profileWeatherPlaces)
+      .where(eq(profileWeatherPlaces.userId, userId))
+      .orderBy(profileWeatherPlaces.slot);
+
     return {
+      weatherPlaces,
       exportedAt: now().toISOString(),
       account: { id: userId, email: v.user.email, createdAt: v.user.createdAt.toISOString() },
       profile: p

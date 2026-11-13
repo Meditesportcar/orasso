@@ -6,15 +6,19 @@ import { activityApi } from "./activity";
 import { adminApi } from "./admin";
 import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
+import { coauthorsApi } from "./coauthors";
 import { communicationApi } from "./communication";
 import { crewFeedApi } from "./crewFeed";
 import { crewPageApi } from "./crewPage";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
+import { eventJournalApi } from "./eventJournal";
+import { eventNotificationsApi } from "./eventNotifications";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { feedApi } from "./feed";
+import { feedCommentsApi } from "./feedComments";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -26,11 +30,14 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { pagesApi } from "./pages";
 import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
+import { practicalApi } from "./practical";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
+import { publicationsApi } from "./publications";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { shareApi } from "./share";
@@ -73,6 +80,7 @@ export const api = {
   ...applicationsApi,
   ...staffApi,
   ...weatherApi,
+  ...practicalApi,
   ...socialApi,
   ...networkApi,
   ...settingsApi,
@@ -97,13 +105,19 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...eventNotificationsApi,
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...feedCommentsApi,
+  ...coauthorsApi,
   ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,
   ...storiesVideoApi,
+  ...publicationsApi,
+  ...eventJournalApi,
+  ...pagesApi,
 };

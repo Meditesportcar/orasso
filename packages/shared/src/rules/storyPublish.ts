@@ -26,10 +26,9 @@ export type StoryAudienceOption = {
 
 /**
  * Qui peut voir la story, selon la casquette : passionné (ou visiteur) = « Mes abonnés » (le sous-titre dit ce que ça veut
- * dire selon mon compte) et un choix par crew dont je suis membre ; organisateur, pro = « Public » seul, publié au nom de la
- * structure ou de la fiche (publics par nature) ; prestataire, média = « Public » seul si le compte est public, sinon
- * « Mes abonnés » seul (une story « publique » d'un compte privé se lit comme « abonnés » : on ne l'annonce pas « Public »).
- * L'API refuse un crew hors casquette passionné.
+ * dire selon mon compte) et un choix par crew dont je suis membre ; organisateur, pro, prestataire, média = « Public » seul,
+ * publié au nom de la page (publique par nature, lot R9a, D38 : la story d'une page ne dépend jamais de la confidentialité du
+ * compte de son titulaire). L'API refuse un crew hors casquette passionné.
  */
 export function storyAudienceOptions(
   author: StoryAuthor,
@@ -37,18 +36,7 @@ export function storyAudienceOptions(
   crews: readonly StoryCrewChoice[],
 ): StoryAudienceOption[] {
   if (author.persona !== "fan") {
-    const publicByNature = author.persona === "organizer" || author.persona === "pro";
-    if (!publicByNature && visibility === "private") {
-      return [
-        {
-          key: "followers",
-          audience: "followers",
-          crewId: null,
-          label: L.followers,
-          hint: author.name ? `${L.followersPrivate} ${L.publicAs(author.name)}` : L.followersPrivate,
-        },
-      ];
-    }
+    // Lot R9a (D38) : une page (structure, pro, prestataire, média) est publique, quel que soit le compte de son titulaire.
     return [
       {
         key: "public",
@@ -109,7 +97,7 @@ export function taggableQuery(choice: { audience: StoryAudience; crewId: string 
 /** Phrase qui dit à qui est limitée la liste des identifiables. */
 export function taggableHint(audience: StoryAudience, visibility: ProfileVisibility, persona: StoryPersona): string {
   if (audience === "crew") return L.tagHintCrew;
-  const publicAuthor = persona === "organizer" || persona === "pro" || visibility === "public";
+  const publicAuthor = persona !== "fan" || visibility === "public";
   return publicAuthor ? L.tagHintPublic : L.tagHintFollowers;
 }
 

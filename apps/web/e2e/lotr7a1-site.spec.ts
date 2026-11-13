@@ -225,8 +225,9 @@ test("le visiteur : bandeau sans le Garage ; son QR de compte et ses archives so
   await expect(banner(page)).toContainText("Orasso se range autrement");
   await expect(banner(page)).not.toContainText("garage");
   await shot(page, "bandeau-visiteur-390");
-  await page.goto("/app/moi");
-  // R7b1 : le Garage est un onglet du Profil (par défaut) ; le visiteur y garde son QR de compte (et ses archives).
+  // Vérification R8-V2 : depuis R8b2, « Publications » s'ouvre par défaut (journal des choix) : l'onglet Garage est demandé.
+  await page.goto("/app/moi?onglet=garage");
+  // R7b1 : le Garage est un onglet du Profil ; le visiteur y garde son QR de compte (et ses archives).
   await expect(page.getByTestId("garage-archives-link")).toHaveCount(0);
   await expect(page.getByTestId("profil-panel").getByTestId("account-qr")).toBeVisible();
   await shot(page, "profil-visiteur-390");

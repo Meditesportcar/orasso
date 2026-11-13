@@ -16,8 +16,10 @@ export function CardShell({
   tag,
   onMenu,
   onTitle,
+  titleNode,
   faded = false,
   banner,
+  headTag,
   children,
   actions,
   testID,
@@ -33,10 +35,14 @@ export function CardShell({
   onMenu: (card: FeedCard) => void;
   /** Toucher le titre (le pseudo → son profil). */
   onTitle?: () => void;
+  /** Le titre composé par la carte (R8o : la signature à deux noms, chacun ouvre sa page) ; `title` reste le nom accessible. */
+  titleNode?: ReactNode;
   /** « Moins de ce genre » pris : la carte s'estompe. */
   faded?: boolean;
   /** Bandeau en tête de la carte, avant l'en-tête (« Collaboration commerciale », lot R7m2). */
   banner?: ReactNode;
+  /** Une étiquette à droite du nom, dans l'en-tête (R9c : « Offre »). Absente : l'en-tête ne change pas. */
+  headTag?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   testID?: string;
@@ -53,7 +59,9 @@ export function CardShell({
       <View style={styles.head}>
         {head}
         <View style={styles.grow}>
-          {onTitle ? (
+          {titleNode ? (
+            titleNode
+          ) : onTitle ? (
             <Pressable accessibilityRole="link" accessibilityLabel={title} onPress={onTitle} hitSlop={4}>
               <Text variant="bodyStrong" color={c.ink} style={styles.title}>
                 {title}
@@ -76,6 +84,7 @@ export function CardShell({
             </Text>
           )}
         </View>
+        {headTag}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={L.moreFor(title)}

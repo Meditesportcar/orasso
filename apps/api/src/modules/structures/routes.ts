@@ -13,10 +13,13 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { isPageActor, noStore, readActor, writeActor } from "../../lib/actor";
 import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
+import { authorCountsFor } from "../feed/lists";
+import { followPageAsPage } from "../social/pageFollows";
 import { storiesSummaryFor } from "../stories/bar";
 import { storiesShare } from "../stories/share";
 import { structuresService } from "./service";
@@ -73,9 +76,17 @@ export const structuresRoutes = new Hono<AppEnv>()
   )
   .get("/structures/by-slug/:slug", async (c) => {
     const viewer = await optionalUser(c);
-    const view = await structuresService.getPublic(c.req.param("slug"), viewer);
+    // Vague R9 (lot R9a) : `isFollowing` se lit pour l'acteur (en-tête d'une page), sans session il n'y en a pas.
+    const actor = viewer ? await readActor(c, viewer) : undefined;
+    if (viewer) noStore(c); // `isFollowing` est personnel (ou celui de la page)
+    const view = await structuresService.getPublic(c.req.param("slug"), viewer, actor);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
-    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "structure", view.id) });
+    return c.json({
+      ...view,
+      stories: await storiesSummaryFor(viewer, "structure", view.id),
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (sans session : les publications de l'organisateur seulement).
+      ...(await authorCountsFor("structure", view.id, viewer)),
+    });
   })
   // Lot R7h : les stories qui identifient la structure ou un de ses événements (organisation et staff, lecture).
   .get("/structures/:id/story-mentions", async (c) => {
@@ -90,11 +101,26 @@ export const structuresRoutes = new Hono<AppEnv>()
     return c.json(await structuresService.update(v, uuidParam(c, "id"), await body(c, structureUpdateSchema)));
   })
   .post("/structures/:id/follow", async (c) => {
-    await structuresService.follow(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    // Vague R9 (lot R9a) : avec l'en-tête d'une page, la ligne va dans `page_follows`, jamais dans `structure_follows`.
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      await followPageAsPage(v, actor, { kind: "structure", id: uuidParam(c, "id") }, true);
+    } else {
+      await structuresService.follow(v, uuidParam(c, "id"));
+    }
     return c.body(null, 204);
   })
   .delete("/structures/:id/follow", async (c) => {
-    await structuresService.unfollow(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    const actor = await writeActor(c, v);
+    if (isPageActor(actor)) {
+      noStore(c);
+      await followPageAsPage(v, actor, { kind: "structure", id: uuidParam(c, "id") }, false);
+    } else {
+      await structuresService.unfollow(v, uuidParam(c, "id"));
+    }
     return c.body(null, 204);
   })
   .get("/structures/:id/followers", async (c) =>

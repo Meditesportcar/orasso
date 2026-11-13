@@ -27,6 +27,8 @@ import {
   emailOutbox,
   events,
   expressInvites,
+  feedSeen,
+  feedSeenFloor,
   knownLogins,
   malusContests,
   notifications,
@@ -36,6 +38,7 @@ import {
   proFollows,
   profileInterests,
   profiles,
+  profileWeatherPlaces,
   proPhotos,
   proProfiles,
   session,
@@ -64,6 +67,7 @@ import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
 import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
+import { anonymizeFeedCommentsForDeletedAccount, lockPostsOfDeletedAccount } from "../feed/comments/anonymize";
 import { hasFavoriteGarage } from "../home/service";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
@@ -79,6 +83,7 @@ import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { followsService } from "../social/follows";
+import { anonymizePageFollowsForDeletedAccount, dropPageFollowsOfPrivateAccount } from "../social/pageFollows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeStoriesForDeletedAccount } from "../stories/anonymize";
@@ -292,7 +297,11 @@ export const accountService = {
         await followsService.acceptAllPending(tx, v.user.id);
       }
       // Lot R7h : un compte qui passe en privé ne laisse plus reprendre ses stories (les copies faites tombent).
-      if (rest.visibility === "private") await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+      if (rest.visibility === "private") {
+        await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+        // Lot R9a (T6) : les pages qui le suivaient ne le suivent plus, dans la même transaction.
+        await dropPageFollowsOfPrivateAccount(tx, v.user.id);
+      }
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!row) throw notFound();
       return row;
@@ -363,6 +372,50 @@ export const accountService = {
     // Lot 33 : `actor` = anonymisation décidée par l'équipe (même service, trace `user.anonymize` avec le motif).
     opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
   ) {
+    // Petit lot API, tour 4 : deux comptes supprimés au même instant peuvent encore s'interbloquer par une voie que le verrouillage
+    // trié ne couvre pas (cascades, mentions croisées). La transaction (annulée par PostgreSQL) est reprise en entier, 3 essais au plus,
+    // avec une courte attente aléatoire ; au-delà, l'erreur remonte comme avant.
+    // La reprise n'entoure que la transaction (tour 5) : les effets d'après la validation (fichiers, confirmation par e-mail, trace
+    // d'`emailOutbox`) s'exécutent une seule fois, après la boucle, et leurs erreurs remontent comme avant.
+    let done: Awaited<ReturnType<typeof accountService.anonymizeTx>>;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        done = await this.anonymizeTx(userId, ip, opts);
+        break;
+      } catch (error) {
+        const e = error as { code?: string; cause?: { code?: string } };
+        const state = (e.cause ?? e).code;
+        if ((state !== "40P01" && state !== "40001") || attempt >= 3) throw error;
+        await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+      }
+    }
+    if (!done.ran) return { deleted: true };
+    const { photoKeys, oldEmail, oldPseudo, anonEmail, mailIds } = done;
+    for (const key of photoKeys) await removeOrRetry(key);
+    if (oldEmail && opts.confirm) {
+      // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
+      // anonymisée et la copie du transport journal supprimée.
+      const content = opts.actor
+        ? securityMails.accountAnonymizedByTeam(oldPseudo ?? "")
+        : securityMails.accountDeleted(oldPseudo ?? "");
+      await mail.send("account_deleted", oldEmail, content, { userId });
+      const sent = await db
+        .update(emailOutbox)
+        .set({ to: anonEmail })
+        .where(eq(emailOutbox.to, oldEmail))
+        .returning({ id: emailOutbox.id });
+      mailIds.push(...sent.map((m) => m.id));
+    }
+    await removeJournalMails(mailIds);
+    return { deleted: true };
+  },
+
+  /** La transaction d'anonymisation (un essai) ; `anonymize` la reprend sur interblocage. Rend ce qu'il faut faire après la validation. */
+  async anonymizeTx(
+    userId: string,
+    ip: string | null,
+    opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
+  ) {
     const tag = randomBytes(4).toString("hex");
     const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
@@ -374,11 +427,16 @@ export const accountService = {
       where: eq(profiles.userId, userId),
       columns: { deletedAt: true },
     });
-    if (!before || before.deletedAt) return { deleted: true };
+    if (!before || before.deletedAt) return { ran: false as const };
+    let ran = false;
     await withTx(async (tx, after) => {
+      ran = false;
       // Verrou : deux suppressions simultanées n'anonymisent qu'une fois.
       const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).for("update");
       if (!profile || profile.deletedAt) return;
+      ran = true;
+      // Lot R8k1 : les publications concernées d'abord, avant toute mutation du Journal (même ordre qu'un commentaire).
+      await lockPostsOfDeletedAccount(tx, userId);
       const [current] = await tx.select({ email: user.email }).from(user).where(eq(user.id, userId));
       oldEmail = current?.email ?? null;
       oldPseudo = profile.pseudo;
@@ -432,6 +490,8 @@ export const accountService = {
         })
         .where(eq(profiles.userId, userId));
       await tx.delete(profileInterests).where(eq(profileInterests.userId, userId));
+      // Lot R8m : les villes choisies pour « Ma météo ».
+      await tx.delete(profileWeatherPlaces).where(eq(profileWeatherPlaces.userId, userId));
       // Traces de l'adresse et de la plaque ailleurs : file des e-mails, inscriptions express, invitations, transferts.
       if (oldEmail) {
         const sent = await tx
@@ -472,17 +532,24 @@ export const accountService = {
       await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
       await anonymizeSocialForDeletedAccount(tx, userId);
+      await anonymizePageFollowsForDeletedAccount(tx, userId);
       // Lot R6c : invitations à un événement (envoyées, reçues), invitations coupées, notifications qui le citent.
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
       // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.
       await anonymizeStoriesForDeletedAccount(tx, userId, after);
 
+      // Lot R8k1 : ses commentaires du Fil, ses réponses, ses flammes et ses citations (les compteurs suivent). Avant les
+      // notifications regroupées : la publication d'abord, puis les notifications, comme la création d'un commentaire.
+      await anonymizeFeedCommentsForDeletedAccount(tx, userId);
       // Lot R7c1 : les notifications regroupées des autres (flammes sur une story…) perdent son pseudo et son avatar.
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
       // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
       photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
+      // Lot R8c1 : ses cartes vues du Fil (donnée de lecture privée) partent avec le compte.
+      await tx.delete(feedSeen).where(eq(feedSeen.userId, userId));
+      await tx.delete(feedSeenFloor).where(eq(feedSeenFloor.userId, userId));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
@@ -545,22 +612,7 @@ export const accountService = {
         ip,
       });
     });
-    for (const key of photoKeys) await removeOrRetry(key);
-    if (oldEmail && opts.confirm) {
-      // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
-      // anonymisée et la copie du transport journal supprimée.
-      const content = opts.actor
-        ? securityMails.accountAnonymizedByTeam(oldPseudo ?? "")
-        : securityMails.accountDeleted(oldPseudo ?? "");
-      await mail.send("account_deleted", oldEmail, content, { userId });
-      const sent = await db
-        .update(emailOutbox)
-        .set({ to: anonEmail })
-        .where(eq(emailOutbox.to, oldEmail))
-        .returning({ id: emailOutbox.id });
-      mailIds.push(...sent.map((m) => m.id));
-    }
-    await removeJournalMails(mailIds);
-    return { deleted: true };
+    // Sorti de la transaction sans rien faire (déjà supprimé entre-temps) : rien à faire ensuite.
+    return ran ? { ran: true as const, photoKeys, oldEmail, oldPseudo, anonEmail, mailIds } : { ran: false as const };
   },
 };

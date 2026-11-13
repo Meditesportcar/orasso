@@ -26,6 +26,7 @@ import {
   invitationLabels,
   isBadWeather,
   isEventDay,
+  notifySavedMessage,
   orgaPosterLabels,
   orgaPrizeLabels,
   pluralFr,
@@ -550,6 +551,8 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
   const published = event.status === "published";
   const isDraft = event.status === "draft";
   const justPublished = search.get("publie") === "1";
+  // Lot R8n2 : « Enregistré : 148 inscrits prévenus » (code posé par l'assistant à l'enregistrement).
+  const savedNotice = notifySavedMessage(search.get("prevenus"));
   const serie = search.get("serie");
   // Classement en direct (relecture du lot 57) : rechargé sur le canal des votes, au plus toutes les 10 s, et après une reconnexion.
   useLiveRevalidate(prize && !prize.settled ? `event:${event.id}:votes` : null, (m) => m.type === "votes.changed");
@@ -582,6 +585,11 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
       {search.get("erreur") && (
         <p className="s-error" role="alert" data-testid="publish-error">
           {search.get("erreur")}
+        </p>
+      )}
+      {savedNotice && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="notify-saved">
+          {savedNotice}
         </p>
       )}
       {justPublished && (

@@ -1,4 +1,5 @@
 // La coque d'une carte du Fil sur le site (maquette R7.6 `.r7c`) : en-tête (rond, titre, raison, « ⋯ »), contenu, actions.
+import "../../styles/pro-offers.css";
 import { Icon } from "@orasso/design-system/web";
 import { type FeedCard, type FeedCardKind, feedAgo, feedScreenLabels as L } from "@orasso/shared";
 import { Link } from "react-router";
@@ -33,6 +34,8 @@ export function Shell({
   card,
   head,
   title,
+  titleNode,
+  reasonText,
   href,
   onTitle,
   clientNav,
@@ -40,12 +43,17 @@ export function Shell({
   onMenu,
   faded,
   banner,
+  headTag,
   children,
   actions,
 }: {
   card: FeedCard;
   head: React.ReactNode;
   title: string;
+  /** Le titre composé par la carte (R8o : la signature à deux noms, chacun son lien) ; `title` reste le nom accessible. */
+  titleNode?: React.ReactNode;
+  /** La petite ligne sous le titre à la place de la raison du Fil (R8o : « Collaboration · il y a 1 h »). */
+  reasonText?: string;
   href?: string;
   /** Appelé au clic sur le titre (la carte « Sponsorisé » compte le clic vers la fiche du pro). */
   onTitle?: () => void;
@@ -57,16 +65,31 @@ export function Shell({
   faded: boolean;
   /** Bandeau en tête de la carte, avant l'en-tête (« Collaboration commerciale », lot R7m2). */
   banner?: React.ReactNode;
+  /** Une étiquette à droite du nom, dans l'en-tête (R9c : « Offre »). Absente : l'en-tête ne change pas. */
+  headTag?: React.ReactNode;
   children?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
+  const moreButton = (
+    <button
+      type="button"
+      className="fil-card__more"
+      aria-label={L.moreFor(title)}
+      onClick={() => onMenu(card)}
+      data-testid="feed-card-more"
+    >
+      <Icon name="more" size={20} />
+    </button>
+  );
   return (
     <article className={faded ? "fil-card is-faded" : "fil-card"} data-testid={`feed-card-${card.kind}`}>
       {banner}
       <header className="fil-card__head">
         {head}
         <div className="fil-card__titles">
-          {href && clientNav ? (
+          {titleNode ? (
+            titleNode
+          ) : href && clientNav ? (
             <Link className="fil-card__title o-t-strong" to={href} onClick={onTitle}>
               {title}
             </Link>
@@ -85,19 +108,18 @@ export function Shell({
             </span>
           ) : (
             <span className="o-t-caption fil-card__reason" data-testid="feed-card-reason">
-              {reasonLine(card)}
+              {reasonText ?? reasonLine(card)}
             </span>
           )}
         </div>
-        <button
-          type="button"
-          className="fil-card__more"
-          aria-label={L.moreFor(title)}
-          onClick={() => onMenu(card)}
-          data-testid="feed-card-more"
-        >
-          <Icon name="more" size={20} />
-        </button>
+        {headTag ? (
+          <div className="po-end">
+            {headTag}
+            {moreButton}
+          </div>
+        ) : (
+          moreButton
+        )}
       </header>
       {children ? <div className="fil-card__body">{children}</div> : null}
       {actions ? <div className="fil-card__actions">{actions}</div> : null}

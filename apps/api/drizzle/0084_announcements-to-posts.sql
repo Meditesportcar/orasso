@@ -1,0 +1,2 @@
+ALTER TABLE "feed_posts" ADD COLUMN "legacy_announcement_id" uuid;--> statement-breakpoint
+CREATE UNIQUE INDEX "feed_posts_legacy_announcement_key" ON "feed_posts" USING btree ("legacy_announcement_id");

@@ -5,26 +5,32 @@ import { PublishForm } from "../components/fil/PublishForm";
 import { api, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/app-fil-publier";
 
-// « Publier au Fil » (lot R7e2, D38, maquette R7.24) : photos (fichiers), recadrage 4:5 par défaut (1:1, paysage), cadre de
-// plaque à la main ou « Aucune plaque visible » obligatoire, un mot, la voiture et l'événement. Mode B (page de flux).
+// « Publier au Fil » (lot R7e2, D38, maquette R7.24 ; lot R8p, maquette R8.4) : photos (fichiers), recadrage 4:5 par défaut
+// (1:1, paysage), cadre de plaque à la main ou « Aucune plaque visible » obligatoire, un mot, la voiture, au nom de qui
+// (les casquettes du compte), pour quel événement (chargés au changement de casquette), « Info importante ». Mode B.
 export const handle = ficheHandle;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  const [vehicles, applications] = await Promise.all([
-    api<{ id: string; label: string; status?: string }[]>(request, "/me/vehicles"),
-    api<{ status: string; event: { id: string; title: string; startsAt: string; status: string } }[]>(
-      request,
-      "/me/applications?scope=upcoming",
-    ),
-  ]);
+  const vehicles = await api<{ id: string; label: string; status?: string }[]>(request, "/me/vehicles");
+  // Lot R8d : « Publier pour cet événement » ouvre l'écran avec la structure et l'événement déjà choisis.
+  const url = new URL(request.url);
   return {
+    start: {
+      structure: url.searchParams.get("structure"),
+      evenement: url.searchParams.get("evenement"),
+      // Lot R9c : « Publier une offre » pose la fiche pro et l'étiquette « Offre ».
+      fiche: url.searchParams.get("fiche"),
+      etiquette: url.searchParams.get("etiquette"),
+    },
     userId: me.user.id,
+    pseudo: me.profile.pseudo,
+    avatarUrl: me.profile.avatarUrl,
+    personas: (me.personas ?? []).map((p) => ({ kind: p.kind, id: p.id, label: p.label, logoUrl: p.logoUrl })),
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
       : [],
-    applications: applications.ok ? applications.data.map((a) => ({ status: a.status, event: a.event })) : [],
-    optionsFailed: !vehicles.ok || !applications.ok,
+    optionsFailed: !vehicles.ok,
   };
 }
 
@@ -35,10 +41,14 @@ export function meta() {
 export default function AppFilPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      key={loaderData.userId}
       userId={loaderData.userId}
+      pseudo={loaderData.pseudo}
+      avatarUrl={loaderData.avatarUrl}
+      personas={loaderData.personas}
       vehicles={loaderData.vehicles}
-      applications={loaderData.applications}
       optionsFailed={loaderData.optionsFailed}
+      start={loaderData.start}
     />
   );
 }

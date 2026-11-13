@@ -107,6 +107,18 @@ describe("fiche pro", () => {
     expect((await call(fan, "GET", `/pros/by-slug/${pro.slug}`)).status).toBe(200);
   });
 
+  it("« Sa fiche » d'une mention : la fiche s'ouvre aussi par son identifiant, avec les mêmes règles (brouillon invisible du public)", async () => {
+    const pro = await createdPro();
+    // Brouillon : 404 pour un passionné, 200 pour le propriétaire, par l'identifiant comme par le slug.
+    expect((await call(fan, "GET", `/pros/by-slug/${pro.id}`)).status).toBe(404);
+    expect((await call(owner, "GET", `/pros/by-slug/${pro.id}`)).json.slug).toBe(pro.slug);
+    expect((await call(owner, "PUT", `/pros/${pro.id}/published`, { published: true })).status).toBe(200);
+    const byId = await call(fan, "GET", `/pros/by-slug/${pro.id}`);
+    expect(byId.status).toBe(200);
+    expect(byId.json.slug).toBe(pro.slug);
+    expect((await call(fan, "GET", "/pros/by-slug/00000000-0000-4000-8000-000000000000")).status).toBe(404);
+  });
+
   it("seul le propriétaire modifie sa fiche", async () => {
     const pro = await createdPro();
     expect((await call(fan, "PATCH", `/pros/${pro.id}`, { name: "Piraté" })).status).toBe(403);

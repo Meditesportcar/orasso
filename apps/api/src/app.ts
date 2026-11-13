@@ -1,4 +1,5 @@
 import {
+  ACTOR_HEADER,
   CLOCK_OFFSET_HEADER,
   feedLabels,
   isReservedPseudo,
@@ -42,11 +43,16 @@ import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
 import { devMailRoutes } from "./modules/dev-mail/routes";
 import { eventInvitesRoutes } from "./modules/event-invites/routes";
+import { eventNotificationsRoutes } from "./modules/event-notifications/routes";
 import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
+import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
+import { coauthorRoutes } from "./modules/feed/routes-coauthors";
+import { feedFilRoutes } from "./modules/feed/routes-fil";
+import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -58,6 +64,7 @@ import { notificationsRoutes } from "./modules/notifications/routes";
 import { partnershipsRoutes } from "./modules/partnerships/routes";
 import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
+import { practicalRoutes } from "./modules/practical/routes";
 import { presenceRoutes } from "./modules/presence/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
@@ -69,6 +76,7 @@ import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
+import { pageFollowsRoutes } from "./modules/social/routes-page-follows";
 import { spotMeetupsRoutes } from "./modules/spot-meetups/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { storiesRoutes } from "./modules/stories/routes";
@@ -107,7 +115,7 @@ if (corsOrigins.length) {
     "*",
     cors({
       origin: corsOrigins,
-      allowHeaders: ["authorization", "content-type", "x-device-id"],
+      allowHeaders: ["authorization", "content-type", "x-device-id", ACTOR_HEADER],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       // `date` : le navigateur (recette web de l'appli) mesure le décalage avec l'heure du serveur (lot 48, code tournant).
       exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER, "date"],
@@ -230,6 +238,8 @@ const videoLengthGuard: MiddlewareHandler = async (c, next) => {
 app.use("*", (c, next) =>
   c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoLengthGuard(c, next) : generalLimit(c, next),
 );
+// Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, avant la session (aucun cookie dans une réponse en cache public).
+app.route("/", feedPublicPhotoRoutes);
 // Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
 // Une route qui lit la session (`loadSession`) peut renouveler le cookie (`Set-Cookie`) : elle ne prend jamais un cache public.
 app.route("/", accessPublicRoutes);
@@ -264,6 +274,7 @@ app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
 app.route("/", accountRoutes);
 app.route("/", weatherRoutes);
+app.route("/", practicalRoutes);
 app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
@@ -271,6 +282,7 @@ app.route("/", crewsRoutes);
 // Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
 app.route("/", crewFeedRoutes);
 app.route("/", storiesRoutes);
+app.route("/", pageFollowsRoutes);
 // Lot R7f4 : partager un contenu (feuille, carte, fichiers qui sortent d'Orasso).
 app.route("/", shareRoutes);
 app.route("/", invitationsRoutes);
@@ -279,7 +291,13 @@ app.route("/", communicationRoutes);
 app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
+// Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
+app.route("/", feedListRoutes);
+// Vague R8 (lot R8o) : collaboration (co-auteur) ; avant `feedRoutes`.
+app.route("/", coauthorRoutes);
 app.route("/", feedRoutes);
+app.route("/", feedFilRoutes);
+app.route("/", feedCommentRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
 app.route("/", devMailRoutes);
@@ -295,6 +313,8 @@ app.route("/", presenceRoutes);
 app.route("/", partnershipsRoutes);
 app.route("/", recapRoutes);
 app.route("/", memoriesRoutes);
+// Lot R8n1 : notifications d'un événement (mes Nouveautés, aperçu des destinataires).
+app.route("/", eventNotificationsRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);
 

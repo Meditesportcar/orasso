@@ -1,5 +1,6 @@
 // Routes du Fil (lot R7e1). Toutes exigent une session : le Fil et ses publications ne sont jamais servis à un visiteur.
 import {
+  attachableEventsQuery,
   feedCardKinds,
   feedLessSchema,
   feedMineQuery,
@@ -10,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { readActor } from "../../lib/actor";
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
@@ -22,7 +24,9 @@ export const feedRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     // Lot R7i, tour 3 : le fil porte des cartes de rendez-vous au spot (lieu) : jamais gardé.
     c.header("cache-control", "private, no-store");
-    return c.json(await feedService.feed(v, query(c, feedQuery)));
+    // Vague R9 (lot R9a) : lu au nom d'une page (`X-Orasso-Actor`) ; sans en-tête, le Fil de la personne.
+    const actor = await readActor(c, v);
+    return c.json(await feedService.feed(v, query(c, feedQuery), actor));
   })
   .get("/me/fil/less", async (c) => c.json(feedService.lessKinds(await requireUser(c))))
   .post("/me/feed/less", async (c) => {
@@ -40,6 +44,17 @@ export const feedRoutes = new Hono<AppEnv>()
   .post("/me/feed-posts", async (c) => {
     const v = await requireUser(c);
     return c.json(await feedPostsService.create(v, await body(c, feedPostCreateSchema)), 201);
+  })
+  // Vague R8 : les événements où cette casquette peut se rattacher, avec le rôle déduit (jamais choisi).
+  .get("/me/feed-posts/attachable-events", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await feedPostsService.attachable(v, query(c, attachableEventsQuery)));
+  })
+  // Vérifier un envoi dont la réponse s'est perdue : la publication de cet auteur (toutes casquettes) ou 404.
+  .get("/me/feed-posts/by-client/:clientId", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "private, no-store");
+    return c.json(await feedPostsService.byClient(v, uuidParam(c, "clientId")));
   })
   .patch("/me/feed-posts/:id", async (c) => {
     const v = await requireUser(c);

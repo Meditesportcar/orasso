@@ -2,19 +2,25 @@
 // publication viennent d'une route privée (`/api/feed-posts/:id/photos/:name`) : le navigateur envoie le cookie de session.
 import { Icon } from "@orasso/design-system/web";
 import {
+  coauthorLabels as CO,
   FEED_ASPECT_RATIOS,
   type FeedCard,
   type FeedCardKind,
   type FeedPostView,
+  feedAgo,
   feedScreenLabels as L,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { apiFetch } from "../../lib/api.client";
+import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
-import { ShareDialog } from "../ShareSheet";
+import { FoldedCaption } from "../publications/FoldedCaption";
+import { OfferLine, OfferTag } from "../publications/OfferLine";
+import { AttachLine, AttachSeeButton } from "./AttachLine";
+import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
+import { PostActions } from "./PostActions";
 import { type CardProps, OrgLogo, Shell } from "./Shell";
 import { SponsoredCard } from "./SponsoredCard";
 import { SpotMeetupCard } from "./SpotMeetupCard";
@@ -239,75 +245,74 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
   );
 }
 
+/** Le nom d'un auteur dans la signature : un lien vers son profil pour une personne (les pages ouvrent avec le lot R8g). */
+function SignName({ a }: { a: FeedPostView["author"] }) {
+  return a.kind === "user" ? <a href={`/u/${encodeURIComponent(a.pseudo)}`}>{a.name}</a> : <>{a.name}</>;
+}
+
 function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const post = card.payload.post;
-  const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
-  const [busy, setBusy] = useState(false);
-  useEffect(
-    () => setFire({ count: post.reactionsCount, on: post.reactedByMe }),
-    [post.reactionsCount, post.reactedByMe],
-  );
-
-  async function toggle() {
-    if (busy) return;
-    const before = fire;
-    const on = !before.on;
-    setBusy(true);
-    setFire({ count: Math.max(0, before.count + (on ? 1 : -1)), on });
-    const res = await apiFetch<{ reactionsCount: number; reactedByMe: boolean }>(`/feed-posts/${post.id}/reaction`, {
-      method: on ? "PUT" : "DELETE",
-    });
-    setFire(res.ok ? { count: res.data.reactionsCount, on: res.data.reactedByMe } : before);
-    setBusy(false);
-  }
-
+  // Collaboration (R8o) : acceptée, la carte est signée des deux (« Kenji_66 et Wrap 66 »), sous la ligne « Collaboration ».
+  const co = post.coAuthor;
   return (
     <Shell
       card={card}
-      head={<PersonAvatar url={post.author.avatarUrl} pseudo={post.author.pseudo} size={38} />}
-      title={post.author.pseudo}
+      head={
+        co ? (
+          <span className="co-two" aria-hidden="true">
+            <PersonAvatar url={post.author.avatarUrl} pseudo={post.author.name} size={30} />
+            <PersonAvatar url={co.avatarUrl} pseudo={co.name} size={30} />
+          </span>
+        ) : (
+          <PersonAvatar url={post.author.avatarUrl} pseudo={post.author.pseudo} size={38} />
+        )
+      }
+      title={co ? CO.signature(post.author.name, co.name) : post.author.pseudo}
+      titleNode={
+        co ? (
+          <span className="fil-card__title o-t-strong co-sign" data-testid="feed-card-signature">
+            <SignName a={post.author} /> et <SignName a={co} />
+          </span>
+        ) : undefined
+      }
+      reasonText={co ? `${CO.collaboration} · ${feedAgo(card.at, new Date())}` : undefined}
       href={post.mine ? undefined : `/u/${encodeURIComponent(post.author.pseudo)}`}
       onMenu={onMenu}
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
+      headTag={post.offer ? <OfferTag offer={post.offer} /> : undefined}
       actions={
         <>
-          <button
-            type="button"
-            className={fire.on ? "fil-fire is-on" : "fil-fire"}
-            aria-pressed={fire.on}
-            aria-label={L.fireLabel(fire.count, fire.on)}
-            disabled={busy}
-            onClick={() => void toggle()}
-            data-testid="feed-post-fire"
-          >
-            <Icon name="fire" size={17} />
-            <span data-testid="feed-post-fire-count">{fire.count}</span>
-          </button>
-          <ShareDialog target={{ type: "feed_post", id: post.id }} testId="feed-post-share" />
+          <PostActions post={post} />
+          {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
         </>
       }
     >
-      <FeedPhotos post={post} />
-      {post.caption ? (
-        <p className="o-t-body" data-testid="feed-post-caption">
-          {post.caption}
+      {/* Lot R8c2 : l'événement rattaché est la deuxième ligne de la carte, sous l'auteur ; toute la ligne ouvre la fiche. */}
+      {post.attach ? <AttachLine attach={post.attach} /> : null}
+      {post.coAuthorInvite && post.coAuthorInvite.status !== "accepted" ? (
+        <p className="o-t-caption co-invite" data-testid="feed-card-invite">
+          {CO.inviteStatus(post.coAuthorInvite.name, post.coAuthorInvite.status)}
         </p>
       ) : null}
-      {post.vehicle || post.event ? (
+      <FeedPhotos post={post} />
+      {post.offer ? <OfferLine offer={post.offer} /> : null}
+      {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
+      {post.vehicle || (post.event && !post.attach) ? (
         <div className="fil-pills">
           {post.vehicle ? (
             <span className="fil-pill" data-testid="feed-post-vehicle">
               <Icon name="vehicle" size={14} /> {post.vehicle.label}
             </span>
           ) : null}
-          {post.event ? (
+          {post.event && !post.attach ? (
             <a className="fil-pill" href={`/e/${post.event.slug}`} data-testid="feed-post-event">
               <Icon name="calendar" size={14} /> {post.event.title}
             </a>
           ) : null}
         </div>
       ) : null}
+      <CommentsPreview post={post} />
     </Shell>
   );
 }

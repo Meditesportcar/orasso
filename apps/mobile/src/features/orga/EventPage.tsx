@@ -24,8 +24,11 @@ import {
   eventOutlookLabels,
   eventStatusLabels,
   invitationLabels,
+  eventJournalLabels as JL,
+  notifySavedMessage,
   orgaLabels,
   orgaV2Labels,
+  remainingFil,
   ticketingAppLabels,
   triageAppLabels,
   voteOrgaLabels,
@@ -47,13 +50,13 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ConfirmSheet } from "./ConfirmSheet";
-import { NewAnnouncementSheet } from "./NewAnnouncementSheet";
+import { GroupMessageSheet } from "./GroupMessageSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 import { RecurrenceSheet } from "./RecurrenceSheet";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-type Sheet = "outlook" | "cancel" | "announcement" | "removeEntry" | "publish" | "duplicate" | "recurrence" | null;
+type Sheet = "outlook" | "cancel" | "writeToRegistered" | "removeEntry" | "publish" | "duplicate" | "recurrence" | null;
 
 export function EventPage({
   eventId,
@@ -61,7 +64,7 @@ export function EventPage({
   warning = null,
 }: {
   eventId: string;
-  /** Retour de l'assistant (lot 35b) : `cree`, `modifie` ou `publie` (lot 36). */
+  /** Retour de l'assistant (lot 35b) : `cree`, `modifie` ou `publie` (lot 36) ; `prevenus:<code>` (lot R8n2) : modifié, inscrits prévenus. */
   done?: string | null;
   /** Avertissement de l'assistant (affiche ou zone non enregistrée). */
   warning?: string | null;
@@ -84,9 +87,11 @@ export function EventPage({
       ? EL.created
       : done === "modifie"
         ? EL.saved
-        : done === "publie"
-          ? wizardEndLabels.publishedDone
-          : null,
+        : done?.startsWith("prevenus:")
+          ? (notifySavedMessage(done.slice("prevenus:".length)) ?? EL.saved)
+          : done === "publie"
+            ? wizardEndLabels.publishedDone
+            : null,
   );
   const [failure, setFailure] = useState<unknown>(null);
   const [typed, setTyped] = useState("");
@@ -280,16 +285,20 @@ export function EventPage({
               onClose={closeSheet}
             />
           ) : null}
-          <NewAnnouncementSheet
-            eventId={eventId}
-            visible={sheet === "announcement"}
-            onClose={closeSheet}
-            onPublished={() => {
-              closeSheet();
-              setNotice(communicationLabels.announcementPublished);
-              void feed.reload();
-            }}
-          />
+          {/* Lot R8d (T3) : plus de « Nouvelle annonce ». Une information privée passe par un message groupé aux inscrits. */}
+          {e ? (
+            <GroupMessageSheet
+              structureId={structureId}
+              events={[e]}
+              initialEventId={e.id}
+              visible={sheet === "writeToRegistered"}
+              onClose={closeSheet}
+              onSent={(n) => {
+                closeSheet();
+                setNotice(communicationLabels.groupSent(n));
+              }}
+            />
+          ) : null}
         </>
       }
     >
@@ -392,14 +401,26 @@ export function EventPage({
 
           {upcoming ? (
             <View style={styles.buttons}>
+              {/* Lot R8d (T3) : une information publique est une publication de l'organisateur, rattachée à cet événement. */}
               <Button
                 variant="primary"
-                icon="add"
-                onPress={() => setSheet("announcement")}
+                icon="camera"
+                onPress={() =>
+                  router.push({ pathname: "/fil/publier", params: { structure: structureId, evenement: eventId } })
+                }
                 fullWidth
-                testID="orga-announcement-new"
+                testID="orga-publish-for-event"
               >
-                {orgaLabels.announcementNew}
+                {JL.publishFor}
+              </Button>
+              <Button
+                variant="plate"
+                icon="chat"
+                onPress={() => setSheet("writeToRegistered")}
+                fullWidth
+                testID="orga-write-registered"
+              >
+                {JL.writeToRegistered}
               </Button>
               <Button
                 variant="plate"
@@ -466,11 +487,11 @@ export function EventPage({
           {e.status !== "draft" ? (
             <>
               <SectionTitle>{orgaLabels.announcementsTitle}</SectionTitle>
-              {(feed.data?.items ?? []).length === 0 ? (
+              {remainingFil(feed.data?.items ?? []).length === 0 ? (
                 <Muted variant="body">{feed.loading ? "Chargement…" : orgaLabels.feedEmpty}</Muted>
               ) : (
                 <Plate style={styles.block} testID="orga-feed">
-                  {(feed.data?.items ?? []).map((item) => (
+                  {remainingFil(feed.data?.items ?? []).map((item) => (
                     <View key={item.id}>
                       <FeedEntry item={item} />
                       {item.kind === "announcement" ? (

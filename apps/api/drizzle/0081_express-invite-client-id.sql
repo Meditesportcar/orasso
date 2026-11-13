@@ -1,0 +1,2 @@
+ALTER TABLE "express_invites" ADD COLUMN "client_id" uuid;--> statement-breakpoint
+CREATE UNIQUE INDEX "express_invites_client_key" ON "express_invites" USING btree ("created_by","client_id") WHERE "express_invites"."client_id" is not null;

@@ -126,6 +126,8 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   await p.getByLabel("J'ai lu le règlement de l'événement et je l'accepte.").check({ force: true });
   await p.getByRole("button", { name: "Continuer" }).click();
   await p.getByRole("button", { name: "Envoyer ma candidature" }).click();
+  // Lot R8n2 : l'écran de fin (« Ce que tu recevras pour cet événement ») précède les Sorties.
+  await p.getByTestId("notify-noted").click();
   await p.waitForURL(/\/app\/(acces|sorties)/);
   await expect(p.getByTestId("application-day").first()).toContainText(dayName(parisDay(11)));
   const mine = await apiCall<{ id: string; day: { id: string } | null }[]>(passion, "GET", "/me/applications");

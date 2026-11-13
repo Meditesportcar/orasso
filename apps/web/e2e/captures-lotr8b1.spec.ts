@@ -167,11 +167,11 @@ test.describe("appli", () => {
       await expect(page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
       await shot(page, `autre-suivi-${tag}`);
       await go(page, "/u/Marc_66");
-      await expect(page.getByTestId("profile-private-note")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("publications-private")).toBeVisible({ timeout: 30_000 });
       await shot(page, `autre-prive-inconnu-${tag}`);
       await apiCall(cookie, "POST", "/users/Marc_66/follow");
       await go(page, "/u/Marc_66");
-      await expect(page.getByTestId("profile-private-note")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("publications-private")).toBeVisible({ timeout: 30_000 });
       await shot(page, `autre-prive-attente-${tag}`);
       await ctx.close();
     }

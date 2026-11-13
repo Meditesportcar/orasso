@@ -41,6 +41,8 @@ const TABLES = [
   "notifications",
   "events",
   "seasons",
+  // Lot R9a : `page_follows` n'a aucune clé étrangère, la cascade des comptes ne la vide pas.
+  "page_follows",
 ];
 
 const QUIET_HOURS_AT_START = env.NOTIFY_QUIET_HOURS;

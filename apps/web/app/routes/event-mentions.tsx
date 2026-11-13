@@ -1,0 +1,326 @@
+import { Button, Chip, Icon } from "@orasso/design-system/web";
+import {
+  authorFichePath,
+  type EventMentionsSection,
+  type EventPublic,
+  type FeedPostView,
+  eventJournalLabels as L,
+  type MentionItem,
+  type MentionsPage,
+  mentionsPhase,
+  type PageCounts,
+  publicationPath,
+} from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
+import { useRevalidator } from "react-router";
+
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+import { PostMenu } from "../components/publications/PostMenu";
+import { apiFetch } from "../lib/api.client";
+import { apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
+import { listenSession } from "../lib/sessionChannel";
+import { createSessionGeneration } from "../lib/sessionGeneration";
+import "../styles/event-journal.css";
+import type { Route } from "./+types/event-mentions";
+
+// L'écran « Mentions · N » d'un événement (lot R8d, maquette R8.5 `mentionsH`), mêmes mots et mêmes règles que l'appli. Mode B
+// (fiche). Session requise (les mentions ne sont jamais servies à un visiteur). « Sur place » : une carte par pro ou prestataire,
+// « Sa fiche » ; « Passionnés » : comptes publics, et après la fin seulement ceux dont la présence est validée (tampon « Présent »).
+// Un responsable de la fiche a un « … » par mention (« Masquer de la fiche » / « Remettre sur la fiche ») et le filtre « Masquées ».
+export const handle = ficheHandle;
+
+/** La première page d'une rubrique ; la suite se lit dans le navigateur (« Voir plus »), rien n'est abandonné sans le dire. */
+async function readPage(request: Request, eventId: string, section: EventMentionsSection, hidden: boolean) {
+  const q = new URLSearchParams({ section, ...(hidden ? { hidden: "1" } : {}) }).toString();
+  return apiOrThrow<MentionsPage>(request, `/events/${eventId}/mentions?${q}`);
+}
+
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const me = await requireMe(request);
+  const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
+  const manager = Boolean(me.personas?.some((p) => p.kind === "organizer" && p.id === event.structure.id));
+  const get = async (section: EventMentionsSection) => {
+    try {
+      return { page: await readPage(request, event.id, section, manager), hidden: manager };
+    } catch (error) {
+      // Un responsable refusé (second facteur) lit comme tout le monde.
+      if (manager) return { page: await readPage(request, event.id, section, false), hidden: false };
+      throw error;
+    }
+  };
+  const [onSite, fans] = await Promise.all([get("on_site"), get("fans")]);
+  return {
+    event: { id: event.id, slug: event.slug, title: event.title, endsAt: event.endsAt },
+    manager,
+    userId: me.user.id,
+    onSite: onSite.page.items,
+    fans: fans.page.items,
+    cursors: { on_site: onSite.page.nextCursor, fans: fans.page.nextCursor },
+    withHidden: onSite.hidden,
+    count: (event as EventPublic & PageCounts).mentions?.count ?? null,
+    after: mentionsPhase(event, new Date(nowMs())) === "after",
+  };
+}
+
+export function meta({ loaderData }: Route.MetaArgs) {
+  return [
+    { title: `Mentions · ${loaderData?.event.title ?? "Événement"} · Orasso` },
+    { name: "robots", content: "noindex" },
+  ];
+}
+
+export default function EventMentions({ loaderData }: Route.ComponentProps) {
+  const { event, manager, after, cursors: firstCursors, withHidden, count } = loaderData;
+  // Les pages suivantes se lisent ici ; une nouvelle donnée du chargeur (retour de masquage) repart de sa première page.
+  const [more, setMore] = useState<{ on_site: MentionItem[]; fans: MentionItem[] }>({ on_site: [], fans: [] });
+  const [cursors, setCursors] = useState(firstCursors);
+  const [busy, setBusy] = useState<EventMentionsSection | null>(null);
+  // Session changée dans une autre fenêtre : jusqu'au prochain chargeur, rien de ce qui a été lu avec les droits de l'ancien compte
+  // (listes, masquées, menus, « Voir plus ») n'est affiché.
+  const [stale, setStale] = useState(false);
+  // Génération du chargement : une page qui arrive après un nouveau chargement (autre fiche, autre compte, masquage) est jetée.
+  const loaderUser = useRef(loaderData.userId);
+  loaderUser.current = loaderData.userId;
+  const generation = useRef(createSessionGeneration(() => loaderUser.current));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repart du chargeur à chaque nouvelle donnée
+  useEffect(() => {
+    generation.current.bump();
+    setBusy(null);
+    setStale(false);
+    setMore({ on_site: [], fans: [] });
+    setCursors(firstCursors);
+  }, [loaderData]);
+  // Changement de session dans une autre fenêtre (déconnexion de A, connexion de B) : la génération change, les pages lues par A sont
+  // vidées, la page se relit. Une pagination en vol est jetée à son arrivée (jamais les mentions masquées de A chez B).
+  const revalidator = useRevalidator();
+  // Le compte du chargeur **courant** (`loaderUser`, mis à jour à chaque nouvelle donnée) : A → B → A dans une page restée montée
+  // compare toujours à la dernière donnée, jamais à celle du premier rendu.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'abonnement ne dépend que du chargeur
+  useEffect(
+    () =>
+      listenSession((announced) => {
+        // Le même compte qui s'annonce (hydratation, autre onglet du même compte) ne change rien.
+        if (!generation.current.announce(announced)) return;
+        setBusy(null);
+        setStale(true);
+        setMore({ on_site: [], fans: [] });
+        revalidator.revalidate();
+      }),
+    [],
+  );
+  // La revalidation terminée lève l'état « session changée » même si le chargeur rend les mêmes données (référence inchangée).
+  const sawLoading = useRef(false);
+  useEffect(() => {
+    if (revalidator.state === "loading") sawLoading.current = true;
+    else if (sawLoading.current) {
+      sawLoading.current = false;
+      setStale(false);
+    }
+  }, [revalidator.state]);
+  const onSite = [...loaderData.onSite, ...more.on_site];
+  const fans = [...loaderData.fans, ...more.fans];
+  async function readMore(section: EventMentionsSection) {
+    const cursor = cursors[section];
+    if (!cursor || busy) return;
+    const mine = generation.current.current();
+    setBusy(section);
+    const q = new URLSearchParams({ section, cursor, ...(withHidden ? { hidden: "1" } : {}) }).toString();
+    const res = await apiFetch<MentionsPage>(`/events/${event.id}/mentions?${q}`);
+    if (!generation.current.isCurrent(mine)) return;
+    setBusy(null);
+    if (!res.ok) return;
+    setMore((m) => ({ ...m, [section]: [...m[section], ...res.data.items] }));
+    setCursors((c) => ({ ...c, [section]: res.data.nextCursor }));
+  }
+  const moreButton = (section: EventMentionsSection) =>
+    cursors[section] ? (
+      <Button
+        variant="secondary"
+        icon="down"
+        loading={busy === section}
+        onClick={() => void readMore(section)}
+        data-testid={`mentions-more-${section}`}
+      >
+        {L.more}
+      </Button>
+    ) : null;
+  const [filter, setFilter] = useState<"visible" | "hidden">("visible");
+  const [menu, setMenu] = useState<MentionItem | null>(null);
+  if (stale) {
+    return (
+      <>
+        <FicheBar title={L.mentionsTitle(0)} facts={event.title} back={`/e/${event.slug}`} closeLabel={L.backToEvent} />
+        <p className="s-muted" data-testid="mentions-reloading">
+          {L.mentionsLoading}
+        </p>
+      </>
+    );
+  }
+  const total = count ?? onSite.filter((i) => !i.hidden).length + fans.filter((i) => !i.hidden).length;
+  const shown = (items: MentionItem[]) =>
+    items.filter((i) => (manager ? (filter === "hidden" ? i.hidden : !i.hidden) : true));
+  const places = shown(onSite);
+  const people = shown(fans);
+
+  async function toggleHidden(item: MentionItem): Promise<string | null> {
+    const res = await apiFetch(
+      `/mentions/${encodeURIComponent(`e:${event.id}`)}/${encodeURIComponent(item.post.id)}/hidden`,
+      {
+        method: item.hidden ? "DELETE" : "PUT",
+      },
+    );
+    if (!res.ok) return res.error.message || L.actionError;
+    revalidator.revalidate();
+    return null;
+  }
+
+  const dots = (item: MentionItem) =>
+    manager ? (
+      <button
+        type="button"
+        className="evm__dots"
+        aria-label={L.menuOpen}
+        onClick={() => setMenu(item)}
+        data-testid="mention-menu"
+      >
+        <Icon name="more" size={18} />
+      </button>
+    ) : null;
+
+  const subtitle = (post: FeedPostView) => {
+    const kind =
+      post.author.kind === "provider" ? L.kindProvider : post.author.kind === "pro" ? L.kindPro : L.kindMedia;
+    return `${kind} · ${after ? L.stateAfter : L.stateBefore}`;
+  };
+
+  return (
+    <>
+      <FicheBar
+        title={L.mentionsTitle(total)}
+        facts={event.title}
+        back={`/e/${event.slug}`}
+        closeLabel={L.backToEvent}
+      />
+      <div className="evm" data-testid="event-mentions">
+        {manager ? (
+          <div className="evm__filters" role="tablist">
+            {(["visible", "hidden"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={filter === f}
+                className="evm__filter"
+                onClick={() => setFilter(f)}
+                data-testid={`mentions-filter-${f}`}
+              >
+                <Chip selected={filter === f}>{f === "visible" ? L.filterVisible : L.filterHidden}</Chip>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {places.length > 0 || cursors.on_site ? (
+          <section className="evm__section" data-testid="mentions-on-site">
+            <div className="evm__head">
+              <Icon name="truck" size={16} />
+              <strong>{L.onSite}</strong>
+              <span>{places.length}</span>
+            </div>
+            {places.map((item) => {
+              const href = authorFichePath(item.post.author);
+              const photo = item.post.photos[0];
+              return (
+                <article key={item.post.id} className="evm__place" data-testid="mention-on-site">
+                  <div className="evm__who">
+                    <div>
+                      <strong>{item.post.author.name}</strong>
+                      <small>{subtitle(item.post)}</small>
+                      {item.hidden ? <small>{L.hiddenTag}</small> : null}
+                    </div>
+                    {dots(item)}
+                  </div>
+                  <a
+                    className="evm__shot"
+                    href={publicationPath(item.post.id, { web: true })}
+                    aria-label={item.post.caption ?? item.post.author.name}
+                  >
+                    {photo ? <img src={photo.url} alt="" loading="lazy" decoding="async" /> : null}
+                  </a>
+                  {item.post.caption ? <p className="s-prewrap">{item.post.caption}</p> : null}
+                  {href ? (
+                    <a className="o-button o-button--secondary" href={href} data-testid="mention-her-page">
+                      <Icon name="next" size={16} />
+                      {L.herPage}
+                    </a>
+                  ) : null}
+                </article>
+              );
+            })}
+            {moreButton("on_site")}
+          </section>
+        ) : null}
+
+        {people.length > 0 || cursors.fans ? (
+          <section className="evm__section" data-testid="mentions-fans">
+            <div className="evm__head">
+              <Icon name="profile" size={16} />
+              <strong>{after ? L.fansAfter : L.fansBefore}</strong>
+              <span>{people.length}</span>
+            </div>
+            <div className="evm__rail">
+              {people.map((item) => {
+                const photo = item.post.photos[0];
+                return (
+                  <div key={item.post.id} className="evm__fan" data-testid="mention-fan">
+                    <a
+                      className="evm__fanshot"
+                      href={publicationPath(item.post.id, { web: true })}
+                      aria-label={item.post.author.pseudo}
+                    >
+                      {photo ? <img src={photo.url} alt="" loading="lazy" decoding="async" /> : null}
+                      <span className="evm__name">{item.post.author.pseudo}</span>
+                      {item.post.attach?.presenceValidated ? (
+                        <span className="evm__stamp" data-testid="mention-present">
+                          <Icon name="stamp" size={12} />
+                          {L.present}
+                        </span>
+                      ) : null}
+                    </a>
+                    {manager ? (
+                      <button
+                        type="button"
+                        className="evj-dots"
+                        aria-label={L.menuOpen}
+                        onClick={() => setMenu(item)}
+                        data-testid="mention-menu"
+                      >
+                        <Icon name="more" size={18} />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="s-muted o-t-caption" data-testid="mentions-fans-note">
+              {after ? L.fansNoteAfter : L.fansNoteBefore}
+            </p>
+            {moreButton("fans")}
+          </section>
+        ) : null}
+
+        {places.length === 0 && people.length === 0 && !cursors.on_site && !cursors.fans ? (
+          <p className="s-muted">{L.mentionsEmpty}</p>
+        ) : null}
+      </div>
+
+      <PostMenu
+        post={menu?.post ?? null}
+        canDelete={false}
+        hide={menu ? { hidden: menu.hidden, onToggle: () => toggleHidden(menu) } : undefined}
+        onClose={() => setMenu(null)}
+      />
+    </>
+  );
+}

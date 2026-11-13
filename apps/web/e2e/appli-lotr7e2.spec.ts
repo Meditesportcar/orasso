@@ -74,10 +74,13 @@ test("trois filtres, mémorisés ; chaque carte dit sa raison ; la liste ne ress
   await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("fil-filters")).toBeVisible();
   await loaded(page);
-  // Chaque carte a sa raison en petite ligne et son « ⋯ ».
+  // Chaque carte a sa raison en petite ligne et son « ⋯ ». Vérification R8-V2 : la signature à deux noms et la ligne
+  // « Avec … » d'une collaboration (R8o) portent aussi un identifiant `feed-card-…` sans être des cartes.
   const cards = page
     .getByTestId("fil-list")
-    .locator('[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"])');
+    .locator(
+      '[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"]):not([data-testid="feed-card-signature"]):not([data-testid="feed-card-invite"])',
+    );
   expect(await cards.count()).toBeGreaterThan(2);
   expect(await page.getByTestId("feed-card-reason").count()).toBeGreaterThanOrEqual(await cards.count());
   expect(await page.getByTestId("feed-card-more").count()).toBeGreaterThanOrEqual(await cards.count());
@@ -138,7 +141,8 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await loaded(page);
   await page.getByTestId("fil-filters-following").click();
   await loaded(page);
-  const post = page.getByTestId("feed-card-feed_post").first();
+  // R8c2 : « Abonnements » contient mes propres publications (R8c1) : le menu « Moins de ce genre » est celui d'une carte d'un autre.
+  const post = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
   await expect(post).toBeVisible({ timeout: 30_000 });
   // Pourquoi je vois ça.
   await post.getByTestId("feed-card-more").click();
@@ -148,7 +152,7 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await page.waitForTimeout(900);
   await shot(page, "menu-trois-lignes");
   await page.getByTestId("feed-menu-why").click();
-  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
+  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso|sortie/);
   await shot(page, "pourquoi-je-vois-ca");
   await page.getByTestId("feed-why-ok").click();
   await expect(page.getByTestId("feed-why-text")).toHaveCount(0);
@@ -279,12 +283,17 @@ test("publier au Fil en 4:5 : bouton grisé expliqué sans décision de plaque, 
     window.history.pushState(null, "", "/fil/mes-publications");
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
-  await expect(page.getByTestId("fil-mine-post").first()).toBeVisible({ timeout: 30_000 });
+  // Lot R8b2 : « Mes publications » redirige vers l'onglet « Publications » de mon profil ; supprimer se fait par le menu de la
+  // publication ouverte seule.
+  await expect(page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
   await shot(page, "mes-publications");
+  const total = await page.getByTestId("publication-tile").count();
+  await page.getByTestId("publication-tile-open").first().click();
+  await expect(page.getByTestId("feed-card-feed_post")).toContainText("Prêtes pour dimanche", { timeout: 30_000 });
+  await page.getByTestId("feed-card-more").click();
   page.once("dialog", (d) => void d.accept());
-  const total = await page.getByTestId("fil-mine-post").count();
-  await page.getByTestId("fil-mine-remove").first().click();
-  await expect(page.getByTestId("fil-mine-post")).toHaveCount(total - 1, { timeout: 15_000 });
+  await page.getByTestId("publication-menu-remove").click();
+  await expect(page.getByTestId("publication-tile")).toHaveCount(total - 1, { timeout: 15_000 });
   // Tour 4 : la publication supprimée ne revient pas en tête du Fil.
   await page.goBack();
   await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });

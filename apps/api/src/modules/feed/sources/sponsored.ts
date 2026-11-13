@@ -38,6 +38,7 @@ export async function sponsoredPicker(v: Viewer): Promise<SponsoredPicker | null
       reason: { code: "sponsored", label: feedSponsoredReason(picked.targeted) },
       at,
       payload: picked.payload,
+      seen: false,
     };
   };
 }

@@ -23,6 +23,7 @@ import {
   type ProStats,
   type ProTrackKind,
   type ProUpdate,
+  parisDayOf,
   parseRegistryNumber,
   postsRemaining,
   proSubscription,
@@ -35,6 +36,7 @@ import sharp from "sharp";
 
 import { db } from "../../db/client";
 import {
+  feedPosts,
   proDailyStats,
   proDiscounts,
   proDiscountUses,
@@ -46,6 +48,7 @@ import {
   structures,
 } from "../../db/schema";
 import { requireOrganizer } from "../../lib/access";
+import { type Actor, isPageActor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -53,7 +56,9 @@ import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
+import { postOkSql } from "../feed/lists";
 import { profilesRepo } from "../profiles/repo";
+import { isFollowingAs } from "../social/pageFollows";
 import { locate } from "../structures/service";
 import { followersCounts, toCard } from "./card";
 
@@ -129,9 +134,9 @@ async function publishBlock(p: ProRow): Promise<string | null> {
   return null;
 }
 
-async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
+async function toPublic(p: ProRow, viewer: Viewer | null, actor?: Actor): Promise<ProPublic> {
   const isOwner = viewer?.user.id === p.ownerUserId;
-  const [followers, photos, discounts, partnerRows, postCount, following] = await Promise.all([
+  const [followers, photos, discounts, partnerRows, postCount, following, offerCount] = await Promise.all([
     followersCounts([p.id]),
     db.query.proPhotos.findMany({ where: eq(proPhotos.proId, p.id), orderBy: [asc(proPhotos.position)] }),
     discountsOf(p.id),
@@ -156,6 +161,16 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
       ? db.query.proFollows.findFirst({
           where: and(eq(proFollows.proId, p.id), eq(proFollows.userId, viewer.user.id)),
         })
+      : Promise.resolve(undefined),
+    // Lot R9c : les offres non terminées (jour de fin compris, jour civil de Paris), pour une session seulement (T4).
+    // Avec les mêmes conditions de lecture que la liste (`postOkSql`) : un compteur ne dit jamais plus que la liste.
+    viewer
+      ? db
+          .execute<{ n: number }>(
+            sql`select count(*)::int as n from feed_posts p join profiles a on a.user_id = p.author_id
+              where p.pro_id = ${p.id} and p.tag = 'offer' and p.offer_ends_on >= ${parisDayOf(now())}::date and ${postOkSql(now())}`,
+          )
+          .then((r) => r.rows)
       : Promise.resolve(undefined),
   ]);
   const partners: ProPartner[] = partnerRows.map(({ s }) => ({
@@ -193,8 +208,23 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
     discounts: shownDiscounts,
     partners,
     postsCount: vis.hidden.posts && !isOwner ? 0 : (postCount[0]?.n ?? 0),
+    // Lot R9c : absent sans session ; nul si la fiche de base masque ses publications à qui n'est pas le propriétaire.
+    ...(offerCount
+      ? {
+          offers: {
+            current: vis.hidden.posts && !isOwner ? 0 : (offerCount[0]?.n ?? 0),
+            // Au propriétaire seul : ce qu'il reste de la limite du mois (le bouton « Publier une offre » dit pourquoi il est inerte).
+            ...(isOwner ? { remaining: postsRemaining(await postsUsedThisMonth(p.id)) } : {}),
+          },
+        }
+      : {}),
     posts,
-    isFollowing: viewer ? Boolean(following) : null,
+    // Lot R9a : `isFollowing` se lit pour l'acteur ; `canSeePosts` (plus haut) reste l'abonnement de la personne.
+    isFollowing: !viewer
+      ? null
+      : actor && isPageActor(actor)
+        ? await isFollowingAs(actor, { kind: "pro", id: p.id })
+        : Boolean(following),
     isOwner,
   };
 }
@@ -202,14 +232,52 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
 async function postsUsedThisMonth(
   proId: string,
   ex: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+  /** Instant du comptage (facultatif) : l'appelant sous verrou le réutilise pour dater son insertion. */
+  at: Date = now(),
 ): Promise<number> {
   // Les publications supprimées comptent (suppression douce, lot 34) : supprimer ne rend pas la place du mois.
-  const { start, end } = monthBounds(now());
+  const { start, end } = monthBounds(at);
   const [row] = await ex
     .select({ n: count() })
     .from(proPosts)
     .where(and(eq(proPosts.proId, proId), gte(proPosts.createdAt, start), lt(proPosts.createdAt, end)));
-  return row?.n ?? 0;
+  // Vague R8 : les publications du Fil faites au nom de la fiche comptent dans la même limite (supprimées comprises).
+  const [feed] = await ex
+    .select({ n: count() })
+    .from(feedPosts)
+    .where(and(eq(feedPosts.proId, proId), gte(feedPosts.createdAt, start), lt(feedPosts.createdAt, end)));
+  return (row?.n ?? 0) + (feed?.n ?? 0);
+}
+
+/**
+ * Une fiche peut-elle publier (offre ou publication du Fil) ? Publiée, et abonnement en règle (`proVisibility`). Mêmes
+ * contrôles pour `POST /pros/:id/posts` et `POST /me/feed-posts` au nom de la fiche.
+ */
+export function assertProMayPost(p: ProRow): void {
+  if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
+  if (proVisibility(p, null, now()).hidden.posts) throw forbidden("Publications réservées aux pros abonnés");
+}
+
+/**
+ * Verrou par fiche (jusqu'à la fin de la transaction) puis limite du mois : deux publications simultanées, par l'une ou
+ * l'autre route, ne dépassent pas la limite. À appeler au début de la transaction qui écrit.
+ */
+export async function lockProPostQuota(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  proId: string,
+  /** Exécuté sous le verrou, avant le comptage (rejeu d'un même envoi). */
+  afterLock?: () => Promise<void>,
+) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${proId}`}, 0))`);
+  await afterLock?.();
+  // Un seul instant, pris sous le verrou : il sert au comptage du mois et (rendu) à la date de l'insertion.
+  const at = now();
+  if (postsRemaining(await postsUsedThisMonth(proId, tx, at)) === 0) {
+    throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
+      limit: PRO_POSTS_PER_MONTH,
+    });
+  }
+  return at;
 }
 
 async function toOwner(p: ProRow, v: Viewer): Promise<ProOwner> {
@@ -427,9 +495,12 @@ export const prosService = {
   // --- Annuaire et fiche publique -------------------------------------------------------------------------------
 
   /** `GET /pros/by-slug/:slug` : une fiche publiée (ou la fiche du propriétaire, même en brouillon). */
-  async getPublic(slug: string, viewer: Viewer | null): Promise<ProPublic> {
+  async getPublic(slug: string, viewer: Viewer | null, actor?: Actor): Promise<ProPublic> {
+    // Vague R8 (lot R8d) : « Sa fiche » d'une mention ne connaît que l'identifiant de la fiche (clé d'auteur `p:<id>`) :
+    // un identifiant se lit comme le slug (un slug n'a jamais la forme d'un UUID).
+    const byId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
     const p = await db.query.proProfiles.findFirst({
-      where: and(eq(proProfiles.slug, slug), isNull(proProfiles.deletedAt)),
+      where: and(byId ? eq(proProfiles.id, slug) : eq(proProfiles.slug, slug), isNull(proProfiles.deletedAt)),
     });
     if (!p || (!p.publishedAt && viewer?.user.id !== p.ownerUserId)) throw notFound("Fiche pro introuvable");
     // Titulaire supprimé ou suspendu : la fiche disparaît pour tous sauf lui (comme dans les listes, `proOwnerActive`).
@@ -439,7 +510,7 @@ export const prosService = {
         throw notFound("Fiche pro introuvable");
       }
     }
-    return toPublic(p, viewer);
+    return toPublic(p, viewer, actor);
   },
 
   /** `POST /pros/by-slug/:slug/track` : vue de la fiche, clic « appeler » ou « itinéraire » (jamais ceux du pro). */
@@ -485,20 +556,14 @@ export const prosService = {
   async createPost(v: Viewer, id: string, input: ProPostCreate): Promise<ProPostView> {
     rateLimit("proWrite", v.user.id);
     const p = await ownedPro(v, id);
-    if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
-    if (proVisibility(p, null, now()).hidden.posts) throw forbidden("Publications réservées aux pros abonnés");
+    assertProMayPost(p);
     // Verrou par fiche : deux publications simultanées ne dépassent pas la limite du mois.
     const row = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${id}`}, 0))`);
-      if (postsRemaining(await postsUsedThisMonth(id, tx)) === 0) {
-        throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
-          limit: PRO_POSTS_PER_MONTH,
-        });
-      }
+      const at = await lockProPostQuota(tx, id);
       const [created] = await tx
         .insert(proPosts)
         // Date de l'horloge de l'appli (et non celle de la base) : le mois compté suit l'horloge simulée en dev.
-        .values({ proId: id, ...input, createdAt: now(), updatedAt: now() })
+        .values({ proId: id, ...input, createdAt: at, updatedAt: at })
         .returning();
       return created;
     });

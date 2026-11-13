@@ -96,6 +96,8 @@ export const profiles = pgTable(
      */
     official: boolean("official").notNull().default(false),
 
+    /** Lot R8n1 : dernier résumé quotidien des nouveautés des sorties (réservé avant l'envoi, même s'il n'y a rien à dire). */
+    eventNewsDigestAt: tstz("event_news_digest_at"),
     /** Lot R7c1 : dernière ouverture de la cloche (Activité) ; les « non vus » sont les notifications livrées après. */
     activitySeenAt: tstz("activity_seen_at"),
     /** Lot 17 : nombre d'amis acceptés. ARCHIVE depuis le lot R6b (plus lu ni écrit) ; retiré avec la table `friendships`. */

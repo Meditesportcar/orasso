@@ -326,8 +326,8 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
 
     // Compte privé : la tête, les nombres, « Demander à suivre », la ligne (R7b1, tour 2 : plus de liste de véhicules).
     await goto(page, `/u/${cPseudo}`);
-    await expect(page.getByTestId("profile-private-note")).toContainText(
-      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
+    await expect(page.getByTestId("publications-private")).toContainText(
+      "ne sont visibles que de ses abonnés acceptés.",
       { timeout: 30_000 },
     );
     await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);

@@ -10,9 +10,11 @@ import {
   canTag,
   directKey,
   type Frame,
+  pageFollowErrors,
   STORY_LIVE_MAX,
   STORY_TAGS_MAX,
   STORY_VIEWERS_MAX,
+  type StoryAuthorKind,
   type StoryCreate,
   type StoryCreated,
   type StoryDenial,
@@ -24,6 +26,7 @@ import {
   storyDenial,
   storyExpiresAt,
   storyLabels,
+  storyReplyable,
   type UploadPurpose,
 } from "@orasso/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -39,6 +42,7 @@ import {
   mediaProfiles,
   messages,
   notifications,
+  pageFollows,
   proFollows,
   profiles,
   proProfiles,
@@ -55,6 +59,7 @@ import {
   userFollows,
 } from "../../db/schema";
 import { requireOrganizer } from "../../lib/access";
+import { type Authorship, requireAuthorship } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -122,7 +127,7 @@ export async function requireVisibleStory(v: Viewer, id: string, ex: Tx | typeof
 async function seesStory(
   userId: string,
   story: AudienceStory,
-  ctx: { structureId: string | null; proId: string | null },
+  ctx: { structureId: string | null; proId: string | null; providerId?: string | null; mediaId?: string | null },
 ) {
   const [p] = await db.select().from(profiles).where(eq(profiles.userId, userId));
   if (!p || !accountActive(p, now())) return false;
@@ -143,6 +148,23 @@ async function seesStory(
           .select()
           .from(proFollows)
           .where(and(eq(proFollows.userId, userId), eq(proFollows.proId, ctx.proId)))
+      )[0],
+    );
+  } else if (ctx.providerId || ctx.mediaId) {
+    // Lot R9a : une page de prestataire ou de média se suit par `page_follows` (jamais par le compte de son titulaire).
+    followAccepted = Boolean(
+      (
+        await db
+          .select()
+          .from(pageFollows)
+          .where(
+            and(
+              eq(pageFollows.followerKind, "user"),
+              eq(pageFollows.followerId, userId),
+              eq(pageFollows.targetKind, ctx.providerId ? "provider" : "media"),
+              eq(pageFollows.targetId, (ctx.providerId ?? ctx.mediaId) as string),
+            ),
+          )
       )[0],
     );
   } else {
@@ -185,8 +207,15 @@ async function seesStory(
   });
 }
 
-async function checkPersona(v: Viewer, input: StoryCreate) {
+/** Rend l'`Authorship` de la casquette (la page au nom de laquelle on publie), `null` pour un passionné. */
+async function checkPersona(v: Viewer, input: StoryCreate): Promise<Authorship | null> {
   const { persona, audience } = input;
+  // D38 (lot R9a) : la story d'une casquette est publique. L'ancien client propose « Mes abonnés » seul à un prestataire ou à
+  // un média au compte privé : l'accepter la rendrait publique contre ce que l'écran a dit. Refus avant toute écriture, le
+  // fichier envoyé reste réutilisable.
+  if (persona !== "fan" && audience !== "public" && audience !== "crew") {
+    throw validation(pageFollowErrors.pageStoryPublic, { field: "audience" });
+  }
   if (audience === "crew") {
     if (persona !== "fan") throw validation(storyLabels.crewAudiencePersona);
     if (!input.crewId) throw validation("Choisis le crew", { field: "crewId" });
@@ -209,54 +238,15 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
   if (persona === "fan") {
     if (input.structureId || input.proId) throw validation("Casquette inattendue");
     if (v.profile.visibility === "private" && audience === "public") throw validation(storyLabels.privateAccountPublic);
-    return;
+    return null;
   }
-  if (persona === "organizer") {
-    if (!input.structureId) throw validation("Choisis la structure", { field: "structureId" });
-    const [m] = await db
-      .select({ role: structureMembers.role })
-      .from(structureMembers)
-      .innerJoin(structures, eq(structures.id, structureMembers.structureId))
-      .where(
-        and(
-          eq(structureMembers.structureId, input.structureId),
-          eq(structureMembers.userId, v.user.id),
-          eq(structureMembers.status, "active"),
-          inArray(structureMembers.role, ["owner", "co_organizer"]),
-          isNull(structures.deletedAt),
-          sql`${structures.verification} <> 'suspended'`,
-        ),
-      );
-    if (!m) throw forbidden(storyLabels.notOrganizer);
-    // Lot R7h, tour 3 : publier au nom d'une structure exige le second facteur, comme le repartage et le retrait.
-    await requireOrganizer(v, input.structureId);
-    return;
-  }
-  if (persona === "pro") {
-    if (!input.proId) throw validation("Choisis la fiche pro", { field: "proId" });
-    const [p] = await db
-      .select({ id: proProfiles.id })
-      .from(proProfiles)
-      .where(
-        and(eq(proProfiles.id, input.proId), eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)),
-      );
-    if (!p) throw forbidden(storyLabels.notPro);
-    return;
-  }
-  if (persona === "provider") {
-    const [p] = await db
-      .select({ id: providerProfiles.id })
-      .from(providerProfiles)
-      .where(eq(providerProfiles.userId, v.user.id))
-      .limit(1);
-    if (!p) throw forbidden(storyLabels.personaUnavailable);
-    return;
-  }
-  const [m] = await db
-    .select({ id: mediaProfiles.id })
-    .from(mediaProfiles)
-    .where(and(eq(mediaProfiles.userId, v.user.id), isNull(mediaProfiles.deletedAt)));
-  if (!m) throw forbidden(storyLabels.personaUnavailable);
+  // Casquettes : un seul endroit décide qu'un compte peut agir au nom d'une page (R8a1, `lib/authorship.ts`) :
+  // structure (propriétaire ou co-organisateur actif, second facteur), fiche pro, prestataire, média.
+  return requireAuthorship(v, {
+    persona,
+    structureId: persona === "organizer" ? input.structureId : null,
+    proId: persona === "pro" ? input.proId : null,
+  });
 }
 
 async function notifyPublished(
@@ -269,7 +259,7 @@ async function notifyPublished(
     proId: string | null;
     audience: string;
   },
-  authorKey: { kind: StoryTagKind; id: string; key: string },
+  authorKey: { kind: StoryAuthorKind; id: string; key: string },
   name: string,
   /** Les personnes à prévenir d'une identification (elles-mêmes ou, pour une structure ou un pro, ses responsables). */
   mentions: { userId: string; body: string; target: Record<string, string> }[],
@@ -299,10 +289,22 @@ async function notifyPublished(
           .where(eq(structureFollows.structureId, authorKey.id))
       : authorKey.kind === "pro"
         ? await tx.select({ id: proFollows.userId }).from(proFollows).where(eq(proFollows.proId, authorKey.id))
-        : await tx
-            .select({ id: userFollows.followerId })
-            .from(userFollows)
-            .where(and(eq(userFollows.followedId, authorKey.id), eq(userFollows.status, "accepted")));
+        : authorKey.kind === "provider" || authorKey.kind === "media"
+          ? // Lot R9a : les personnes qui suivent la page (les pages qui la suivent n'ont personne à prévenir).
+            await tx
+              .select({ id: pageFollows.followerId })
+              .from(pageFollows)
+              .where(
+                and(
+                  eq(pageFollows.targetKind, authorKey.kind),
+                  eq(pageFollows.targetId, authorKey.id),
+                  eq(pageFollows.followerKind, "user"),
+                ),
+              )
+          : await tx
+              .select({ id: userFollows.followerId })
+              .from(userFollows)
+              .where(and(eq(userFollows.followedId, authorKey.id), eq(userFollows.status, "accepted")));
   const audience = rows.map((r) => r.id).filter((id) => id !== story.authorId && !tagged.includes(id));
   if (!audience.length) return;
   const muted = await tx
@@ -380,20 +382,27 @@ export const storiesService = {
     if (!video && input.uploadKey && !rects.length && !input.noPlateConfirmed) {
       throw new AppError(400, "plate_decision_required", storyLabels.plateDecisionRequired);
     }
-    await checkPersona(v, input);
+    const authorship = await checkPersona(v, input);
 
     const skipped: Skipped = [];
     const storyShape: AudienceStory = {
       authorId: v.user.id,
       audience: input.audience,
       crewId: input.audience === "crew" ? (input.crewId ?? null) : null,
-      authorVisibility: input.persona === "organizer" || input.persona === "pro" ? "public" : v.profile.visibility,
+      // Lot R9a (D38) : la story d'une page de prestataire ou de média est publique, comme celle d'une structure ou d'un pro.
+      authorVisibility: input.persona === "fan" ? v.profile.visibility : "public",
       authorActive: true,
     };
-    const author = { visibility: v.profile.visibility };
+    const author = {
+      visibility:
+        input.persona === "provider" || input.persona === "media" ? ("public" as const) : v.profile.visibility,
+    };
     const ctx = {
       structureId: input.persona === "organizer" ? (input.structureId ?? null) : null,
       proId: input.persona === "pro" ? (input.proId ?? null) : null,
+      // Lot R9a : la page du prestataire ou du média, résolue par le serveur (`requireAuthorship`), jamais reçue.
+      providerId: authorship?.kind === "provider" ? authorship.id : null,
+      mediaId: authorship?.kind === "media" ? authorship.id : null,
     };
 
     // Voiture : la mienne et active.
@@ -583,7 +592,7 @@ export const storiesService = {
     try {
       await withTx(async (tx, after) => {
         // Plafond : 50 stories vivantes au plus par auteur (personne, structure ou pro), compté sous verrou.
-        const capKey = ctx.structureId ? `s:${ctx.structureId}` : ctx.proId ? `p:${ctx.proId}` : `u:${v.user.id}`;
+        const capKey = authorship ? authorship.key : `u:${v.user.id}`;
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`story-cap:${capKey}`}))`);
         const [live] = await tx
           .select({ n: sql<number>`count(*)::int` })
@@ -597,7 +606,11 @@ export const storiesService = {
                 ? and(eq(stories.persona, "organizer"), eq(stories.structureId, ctx.structureId))
                 : ctx.proId
                   ? and(eq(stories.persona, "pro"), eq(stories.proId, ctx.proId))
-                  : and(sql`${stories.persona} not in ('organizer','pro')`, eq(stories.authorId, v.user.id)),
+                  : ctx.providerId
+                    ? and(eq(stories.persona, "provider"), eq(stories.providerId, ctx.providerId))
+                    : ctx.mediaId
+                      ? and(eq(stories.persona, "media"), eq(stories.mediaId, ctx.mediaId))
+                      : and(eq(stories.persona, "fan"), eq(stories.authorId, v.user.id)),
             ),
           );
         if ((live?.n ?? 0) >= STORY_LIVE_MAX) {
@@ -615,6 +628,8 @@ export const storiesService = {
             persona: input.persona,
             structureId: ctx.structureId,
             proId: ctx.proId,
+            providerId: ctx.providerId,
+            mediaId: ctx.mediaId,
             audience: input.audience,
             crewId: storyShape.crewId,
             mediaKind: prepared.mediaKind,
@@ -641,14 +656,15 @@ export const storiesService = {
         if (tags.length) {
           await tx.insert(storyTags).values(tags.map((t) => ({ storyId: id, targetKind: t.kind, targetId: t.id })));
         }
-        const authorKey =
-          input.persona === "organizer" && ctx.structureId
-            ? { kind: "structure" as const, id: ctx.structureId, key: storyAuthorKeyOf("structure", ctx.structureId) }
-            : input.persona === "pro" && ctx.proId
-              ? { kind: "pro" as const, id: ctx.proId, key: storyAuthorKeyOf("pro", ctx.proId) }
-              : { kind: "user" as const, id: v.user.id, key: storyAuthorKeyOf("user", v.user.id) };
-        // Auteur affiché : la structure ou le pro (nom + logo), sans `userId` ; la personne (pseudo + avatar) sinon.
-        // Le compte personnel d'un co-organisateur n'apparaît jamais dans ce que reçoivent les abonnés.
+        // La clé de l'auteur : celle de la page (`s: p: v: m:`, résolue par `requireAuthorship`) ou, pour un passionné, la sienne.
+        const authorKey: { kind: StoryAuthorKind; id: string; key: string } = authorship ?? {
+          kind: "user",
+          id: v.user.id,
+          key: storyAuthorKeyOf("user", v.user.id),
+        };
+        // Auteur affiché : la page (nom + logo), sans `userId` ; la personne (pseudo + avatar) sinon.
+        // Le compte personnel d'un co-organisateur, d'un prestataire ou d'un média n'apparaît jamais dans ce que reçoivent
+        // les abonnés.
         const shown =
           authorKey.kind === "structure"
             ? (
@@ -664,7 +680,26 @@ export const storiesService = {
                     .from(proProfiles)
                     .where(eq(proProfiles.id, authorKey.id))
                 )[0]
-              : undefined;
+              : authorKey.kind === "provider"
+                ? (
+                    await tx
+                      .select({
+                        n: providerProfiles.name,
+                        l: sql<
+                          string | null
+                        >`(select pp.storage_key from provider_photos pp where pp.provider_id = ${providerProfiles.id} order by pp.position, pp.created_at limit 1)`,
+                      })
+                      .from(providerProfiles)
+                      .where(eq(providerProfiles.id, authorKey.id))
+                  )[0]
+                : authorKey.kind === "media"
+                  ? (
+                      await tx
+                        .select({ n: mediaProfiles.name, l: mediaProfiles.logoKey })
+                        .from(mediaProfiles)
+                        .where(eq(mediaProfiles.id, authorKey.id))
+                    )[0]
+                  : undefined;
         if (authorKey.kind !== "user" && !shown) throw notFound("Auteur introuvable");
         const name = shown ? shown.n : v.profile.pseudo;
         const actor =
@@ -927,7 +962,8 @@ export const storiesService = {
     const clientId = input.clientId ?? randomUUID();
     const context = { storyId: id };
 
-    if (story.persona === "pro") throw unavailable();
+    // Une fiche pro, un prestataire, un média : aucune messagerie de page, et jamais le compte de son titulaire (lot R9a).
+    if (!storyReplyable(story.persona)) throw unavailable();
     // Reprise réseau : un message ou une demande portant déjà ce `clientId` (pour cette story) est rendu tel quel, avant
     // tout choix entre message direct et demande de contact (la relation a pu changer entre deux envois).
     const [sent] = await db
@@ -1013,7 +1049,7 @@ export const storiesService = {
     return { id: created.id };
   },
 
-  async mute(v: Viewer, key: { kind: StoryTagKind; id: string }, on: boolean) {
+  async mute(v: Viewer, key: { kind: StoryAuthorKind; id: string }, on: boolean) {
     rateLimit("storyWrite", v.user.id);
     if (key.kind === "user" && key.id === v.user.id) throw validation("Tu ne peux pas masquer tes propres stories.");
     if (on) {

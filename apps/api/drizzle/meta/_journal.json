@@ -540,6 +540,90 @@
       "when": 1794251303168,
       "tag": "0076_story-video",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794355612340,
+      "tag": "0077_publications",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794359227082,
+      "tag": "0078_event-notification-prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794377349509,
+      "tag": "0079_feed-comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1794384378110,
+      "tag": "0080_feed-seen",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1794393268367,
+      "tag": "0081_express-invite-client-id",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1794449938244,
+      "tag": "0082_event-updated-notify-idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1794491782801,
+      "tag": "0083_persona-follows",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1794494993763,
+      "tag": "0084_announcements-to-posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1794498433383,
+      "tag": "0085_feed-coauthors",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794503233371,
+      "tag": "0086_weather-places",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794510321156,
+      "tag": "0087_email-outbox-express-invite-idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794514999075,
+      "tag": "0088_pro-offers",
+      "breakpoints": true
     }
   ]
 }

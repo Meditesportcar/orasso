@@ -37,6 +37,17 @@ export const rateRules = {
   registryCheck: { max: 10, windowMs: 3_600_000, message: "Trop de contrôles : réessaie dans une heure." },
   /** Recherche d'adresse de l'assistant d'événement (service de géocodage public). */
   geocode: { max: 60, windowMs: 60_000, message: "Trop de recherches d'adresse : réessaie dans une minute." },
+  /** Lot R8m : « Ma météo » (lieux, position, recherche d'une commune à la frappe). */
+  myWeather: { max: 120, windowMs: 60_000, message: "Trop de demandes de météo : réessaie dans une minute." },
+  /** Lot R8m : « Utiliser ma position » (chaque case nouvelle est un appel au fournisseur) : par compte, à la minute et à l'heure. */
+  weatherAt: { max: 10, windowMs: 60_000, message: "Trop de demandes de position : réessaie dans une minute." },
+  weatherAtHour: { max: 30, windowMs: 3_600_000, message: "Trop de demandes de position : réessaie plus tard." },
+  /** Lot R8m : enregistrer ses villes (chaque lieu nouveau peut demander une case au fournisseur). */
+  weatherPut: { max: 10, windowMs: 60_000, message: "Trop de changements de lieu : réessaie dans une minute." },
+  weatherPutHour: { max: 30, windowMs: 3_600_000, message: "Trop de changements de lieu : réessaie plus tard." },
+  /** Lot R8q : « Pratique » (le bloc de l'Accueil lit deux fois, l'écran relit à chaque changement de lieu ou de filtre de sortie). */
+  practical: { max: 40, windowMs: 60_000, message: "Trop de demandes de lieux : réessaie dans une minute." },
+  practicalHour: { max: 400, windowMs: 3_600_000, message: "Trop de demandes de lieux : réessaie plus tard." },
   /** Envoi de justificatifs, logos et affiches. */
   fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
   /** Galerie de 30 photos, avec de la marge pour remplacer les photos retirées du formulaire. */
@@ -78,6 +89,8 @@ export const rateRules = {
   /** Demandes d'ami (lot 17) : 20 par personne et par jour. */
   /** Suivre ou ne plus suivre une personne (lot R4c) : 60 par heure. */
   userFollow: { max: 60, windowMs: 3_600_000, message: "Trop d'abonnements en peu de temps : réessaie plus tard." },
+  /** Suivre ou ne plus suivre au nom d'une casquette, ou suivre un prestataire ou un média (lot R9a) : 60 par heure et par compte. */
+  pageFollow: { max: 60, windowMs: 3_600_000, message: "Trop d'abonnements en peu de temps : réessaie plus tard." },
   /** Recherche de personnes (lot 17). */
   peopleSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   /** Recherche de premier niveau (lot 29) : par personne connectée, et par adresse pour un visiteur sans compte. */
@@ -93,6 +106,9 @@ export const rateRules = {
   referenceSearchPublic: { max: 120, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   /** Lot R4b : le plateau d'un événement (route publique, pages de 30). */
   lineup: { max: 120, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
+  // Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, revalidées à chaque affichage (304 compris) :
+  // une limite à part, dimensionnée pour des galeries, pour ne pas épuiser celle des listes.
+  feedPublicPhoto: { max: 600, windowMs: 60_000, message: "Trop de photos demandées : réessaie dans une minute." },
   lineupPublic: { max: 60, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
   /** QR ami : lectures par minute, et codes refusés (le code à 8 chiffres ne se devine pas par essais). */
   friendQr: { max: 30, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
@@ -185,7 +201,12 @@ export const rateRules = {
   feedPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
+  // Lot R8c1 : cartes vues du Fil, 50 par envoi. Un défilement rapide envoie un lot toutes les quelques secondes (jusqu'à ~1 200
+  // par heure en rafale) : 600 par heure laisse de la marge, et le plafond de 5 000 lignes par compte borne la table.
+  feedSeen: { max: 600, windowMs: 3_600_000, message: "Trop d'envois de cartes vues : réessaie plus tard." },
   feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  // Lot R8k1 : commentaires d'une publication du Fil (60 par heure et par compte).
+  feedComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

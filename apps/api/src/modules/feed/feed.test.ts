@@ -211,7 +211,8 @@ describe("sources du Fil", () => {
       winner: true,
       createdAt: hoursAgo(24),
     });
-    // annonce publique d'une structure suivie
+    // annonce publique d'une structure suivie : depuis la vague R8 (lot R8d) le Fil ne la sert plus en carte `announcement`
+    // (elle devient une publication du journal de l'événement, reprise par scripts/announcements-to-posts.ts)
     await db.insert(eventAnnouncements).values({
       eventId: upcoming.id,
       kind: "announcement",
@@ -234,25 +235,18 @@ describe("sources du Fil", () => {
     const res = await fil(viewer);
     expect(res.status).toBe(200);
     expect(kinds(res.items)).toEqual(
-      new Set<FeedCardKind>([
-        "event_recommended",
-        "vehicle_public",
-        "lineup",
-        "vote_result",
-        "announcement",
-        "pro",
-        "feed_post",
-      ]),
+      new Set<FeedCardKind>(["event_recommended", "vehicle_public", "lineup", "vote_result", "pro", "feed_post"]),
     );
     expect(new Set(ids(res.items)).size).toBe(res.items.length);
     expect(postIdsOf(res.items)).toContain(postId);
     const text = JSON.stringify(res.json);
     // Ni la plaque, ni un identifiant de compte, ni l'annonce réservée aux participants.
     expect(text).not.toContain(car.plate as string);
-    expect(text).not.toContain(kenji.id);
-    expect(text).not.toContain(viewer.id);
+    // Vague R8 : l'identifiant d'une personne n'apparaît que dans la clé d'auteur `u:<compte>` (comme les stories).
+    expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(kenji.id);
+    expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(viewer.id);
     expect(text).not.toContain("Réservée aux participants");
-    expect(text).toContain("Ouverture des portes à 18 h");
+    expect(text).not.toContain("Ouverture des portes à 18 h");
     // chaque carte a une raison lisible
     for (const c of res.items) {
       expect(c.reason.label.length).toBeGreaterThan(0);
@@ -260,7 +254,7 @@ describe("sources du Fil", () => {
     }
   });
 
-  it("l'annonce d'une structure non suivie n'entre pas dans le Fil", async () => {
+  it("l'annonce d'une structure non suivie n'entre pas dans le Fil (et une annonce suivie non plus : plus de carte `announcement`)", async () => {
     const viewer = await person("Viewer_Annonce");
     const orga = await person("Orga_Annonce");
     const structure = await createStructure(orga.id);
@@ -405,7 +399,7 @@ describe("vie privée : comptes privés, suspendus, photos", () => {
 });
 
 describe("filtres, diversité, « moins de ce genre »", () => {
-  it("« Mes abonnements » : seulement ce que la personne suit, jamais ses propres publications", async () => {
+  it("« Mes abonnements » : ce que la personne suit et ses propres publications (R8c1), pas les autres", async () => {
     const viewer = await person("Viewer_Suivis");
     const followed = await person("Suivi_A");
     const stranger = await person("Etranger_B");
@@ -417,14 +411,13 @@ describe("filtres, diversité, « moins de ce genre »", () => {
     const b = await dbPost(stranger);
     await createEvent(structure.id, { department: "66" });
     const res = await fil(viewer, "?filter=following");
-    expect(postIdsOf(res.items)).toEqual([a]);
+    expect([...postIdsOf(res.items)].sort()).toEqual([a, mine].sort());
     expect(postIdsOf(res.items)).not.toContain(b);
-    expect(postIdsOf(res.items)).not.toContain(mine);
     // l'événement d'une structure non suivie n'y est pas
     expect(kinds(res.items).has("event_recommended")).toBe(false);
     await db.insert(structureFollows).values({ structureId: structure.id, userId: viewer.id, source: "manual" });
     expect(kinds((await fil(viewer, "?filter=following")).items).has("event_recommended")).toBe(true);
-    // « Pour toi » garde les siennes
+    // « Pour toi » les garde aussi
     expect(postIdsOf((await fil(viewer)).items)).toContain(mine);
   });
 
@@ -594,20 +587,35 @@ describe("publier", () => {
     expect(Object.keys(post).sort()).toEqual(
       [
         "aspect",
+        "attach",
         "author",
         "caption",
+        "coAuthor",
+        "coAuthorInvite",
+        "coAuthoredByMe",
+        "commentsCount",
+        "commentsOff",
         "commercialPartner",
         "createdAt",
         "event",
         "id",
+        "important",
+        "lastComments",
         "mine",
+        "offer",
         "photos",
+        "pinned",
+        "placeLabel",
         "reactedByMe",
         "reactionsCount",
         "vehicle",
+        "visual",
       ].sort(),
     );
-    expect(Object.keys(post.author).sort()).toEqual(["avatarUrl", "grade", "official", "pseudo"]);
+    // Vague R8 : `FeedAuthorView` ⊇ `FeedPerson` ; la clé d'une personne est `u:<compte>`, comme dans les stories.
+    expect(Object.keys(post.author).sort()).toEqual(
+      ["avatarUrl", "grade", "key", "kind", "name", "official", "pseudo", "verified"].sort(),
+    );
     expect(post.caption).toBe("Ma E36 au lever du soleil");
     expect(post.aspect).toBe("portrait_4_5");
     expect(post.mine).toBe(true);
@@ -762,7 +770,7 @@ describe("lire, retirer, flamme", () => {
     expect(Object.keys(mine.json).sort()).toEqual(Object.keys(other.json).sort());
     expect(mine.json.mine).toBe(true);
     expect(other.json.mine).toBe(false);
-    expect(JSON.stringify(other.json)).not.toContain(author.id);
+    expect(JSON.stringify(other.json).replaceAll(`u:${author.id}`, "")).not.toContain(author.id);
     expect((await call(fan, "GET", `/feed-posts/${randomUUID()}`)).status).toBe(404);
     expect((await call(fan, "GET", "/feed-posts/pas-un-uuid")).status).toBe(400);
   });
@@ -982,7 +990,7 @@ describe("compte supprimé, forme des cartes", () => {
     expect(Object.keys(payload("vehicle_public").owner ?? {}).sort()).toEqual(
       ["avatarUrl", "grade", "official", "pseudo"].sort(),
     );
-    for (const c of res.items) expect(Object.keys(c).sort()).toEqual(["at", "id", "kind", "payload", "reason"]);
+    for (const c of res.items) expect(Object.keys(c).sort()).toEqual(["at", "id", "kind", "payload", "reason", "seen"]);
   });
 });
 
@@ -1411,14 +1419,16 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       less: new Set(feedCardKinds),
       offset: 100_000,
       x: Array.from({ length: 16 }, (_, n) => key(n)),
+      zone: "A" as const,
       phase: 1 as const,
+      floorAt: clock.now.getTime(),
       score: Number.MAX_VALUE,
       frontier: id("event_recommended", 999),
       kinds: ["event_recommended", "sponsored"] as FeedCardKind[],
       deferred: Array.from({ length: 20 }, (_, n) => id("event_recommended", 100 + n)),
     };
     const raw = encodeCursor(biggest);
-    expect(raw.length).toBe(1011);
+    expect(raw.length).toBe(1020);
     expect(raw.length).toBeLessThanOrEqual(FEED_CURSOR_MAX);
     expect(decodeCursor(raw)).toEqual(biggest);
     // l'API l'accepte (empreinte inconnue : un nouveau parcours, pas un refus)

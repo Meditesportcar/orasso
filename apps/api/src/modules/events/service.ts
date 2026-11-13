@@ -41,7 +41,7 @@ import {
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
@@ -51,6 +51,7 @@ import {
   eventDays,
   events,
   eventZones,
+  notifications,
   orders,
   structureBans,
   structureFollows,
@@ -85,6 +86,7 @@ import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
 import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
+import { eventPlaceHolderIds } from "./place";
 import { posterColumns, posterService, posterSettingsOf, posterYearStale, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
@@ -181,6 +183,8 @@ async function isMember(structureId: string, userId: string) {
   });
   return Boolean(m);
 }
+
+const earliest = (a: Date, b: Date) => (a.getTime() <= b.getTime() ? a : b);
 
 /** Organisateur de l'événement ; renvoie l'événement. */
 async function organizerEvent(v: Viewer, id: string) {
@@ -406,7 +410,25 @@ export const eventsService = {
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
     });
     const settings = posterSettingsOf(e);
+    // Lot R8n2, tour 3 : le dernier changement annoncé aux inscrits et son échéance décidée par l'API (différé = pas encore
+    // parti, prévu plus tard) : l'assistant dit « à 8 h » d'après elle, jamais d'après un calcul local.
+    const [lastNotify] = await db
+      .select({
+        createdAt: notifications.createdAt,
+        deliverAfter: notifications.deliverAfter,
+        deliveredAt: notifications.deliveredAt,
+      })
+      .from(notifications)
+      .where(and(eq(notifications.eventId, id), eq(notifications.type, "event_updated")))
+      .orderBy(sql`${notifications.createdAt} desc nulls last`, desc(notifications.id))
+      .limit(1);
     return {
+      lastNotify: lastNotify
+        ? {
+            createdAt: lastNotify.createdAt.toISOString(),
+            deferred: lastNotify.deliveredAt === null && lastNotify.deliverAfter.getTime() > now().getTime(),
+          }
+        : null,
       ...(await publicView(e, s, {
         instructions: true,
         exhibitorSlot: true,
@@ -536,12 +558,17 @@ export const eventsService = {
       const addressChanged = ADDRESS_FIELDS.some((f) => row[f] !== current[f]);
       if (datesChanged || addressChanged) {
         const what = datesChanged ? `nouvelle date : ${formatDateTime(row.startsAt)}` : "nouvelle adresse";
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
+        // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
+        for (const userId of await eventPlaceHolderIds(tx, id)) {
+          // Celui qui modifie ne se prévient pas lui-même (l'aperçu « N inscrits seront prévenus » l'exclut de même).
+          if (userId === v.user.id) continue;
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
+            eventEndsAt: row.endsAt,
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -642,12 +669,17 @@ export const eventsService = {
         const what = next.length
           ? `jours : ${next.map((d) => formatDayDate(d.dayDate, { weekday: false })).join(", ")}`
           : `nouvelle date : ${formatDateTime(row.startsAt)}`;
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
+        // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
+        for (const userId of await eventPlaceHolderIds(tx, id)) {
+          // Celui qui modifie ne se prévient pas lui-même (l'aperçu « N inscrits seront prévenus » l'exclut de même).
+          if (userId === v.user.id) continue;
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
+            eventEndsAt: row.endsAt,
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -756,6 +788,7 @@ export const eventsService = {
         .where(and(eq(orders.eventId, id), eq(orders.status, "pending")));
       for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
+          eventEndsAt: row.endsAt,
           title: "Événement annulé",
           body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'équipe organisatrice"}.`,
           eventId: id,

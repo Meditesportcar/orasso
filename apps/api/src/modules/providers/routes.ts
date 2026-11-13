@@ -15,12 +15,15 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { noStore, readActor } from "../../lib/actor";
 import { AppError, validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
+import { authorCountsFor } from "../feed/lists";
 import { registerPersonaSource } from "../profiles/personas";
+import { pageFollowState } from "../social/pageFollows";
 import { missionsService } from "./missions";
 import { loadProvider } from "./serializers";
 import { providerOfUser, providersService } from "./service";
@@ -78,8 +81,17 @@ export const providersRoutes = new Hono<AppEnv>()
     c.json(await providersService.removePhoto(await requireUser(c), uuidParam(c, "photoId"))),
   )
   .get("/providers/:id", async (c) => {
-    await requireUser(c);
-    return c.json(await providersService.getPublic(uuidParam(c, "id")));
+    const v = await requireUser(c);
+    const id = uuidParam(c, "id").toLowerCase();
+    // Vague R9 (lot R9a) : `followersCount` (personnes et pages) et `isFollowing` pour l'acteur (en-tête d'une page).
+    const actor = await readActor(c, v);
+    noStore(c); // la réponse porte `isFollowing`, lu pour la personne ou pour sa page
+    // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un prestataire n'a pas de slug à citer).
+    return c.json({
+      ...(await providersService.getPublic(id)),
+      ...(await authorCountsFor("provider", id, v)),
+      ...(await pageFollowState(actor, { kind: "provider", id })),
+    });
   })
   .get("/me/provider-applications", async (c) => {
     const v = await requireUser(c);

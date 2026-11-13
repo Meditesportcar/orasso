@@ -2,14 +2,15 @@
 // le lien du formulaire de 2 minutes. Le lien est aussi rendu ici en QR, à scanner avec son téléphone si l'e-mail
 // tarde. Sans réponse en 4,5 s (réseau absent ou saturé) : la demande est mise en file et part au retour du réseau.
 import { Button, Text, TextField, useTheme } from "@orasso/design-system/native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { record } from "@/lib/staff/runtime";
+import { newId, record } from "@/lib/staff/runtime";
 import { AppSheet } from "@/ui/AppSheet";
 import { QrCode } from "@/ui/QrCode";
+import { expressIdFor, isUncertainSend, type PendingExpress } from "./expressModel";
 
 type Sent = { email: string; url: string | null };
 
@@ -29,21 +30,35 @@ export function ExpressSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
+  // L'envoi incertain (réseau, 5xx) : le même identifiant au nouvel essai et dans la file de reprise.
+  const pending = useRef<PendingExpress | null>(null);
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   async function send() {
     if (!userId) return;
     const target = email.trim().toLowerCase();
+    // Un identifiant par envoi : le même est gardé tant que le résultat est incertain (aucun doublon au rejeu).
+    const attempt = expressIdFor(pending.current, target, newId);
+    pending.current = attempt;
+    const id = attempt.id;
     setBusy(true);
     setError(null);
     try {
-      const r = await api.expressInvite(eventId, target);
+      const r = await api.expressInvite(eventId, target, id);
+      pending.current = null;
       setSent({ email: r.email, url: r.url });
     } catch (e) {
-      if (e instanceof ApiRequestError && e.isNetwork) {
-        await record(eventId, userId, "express", { email: target });
+      if (e instanceof ApiRequestError && isUncertainSend(e)) {
+        // Réseau ou 5xx : l'invitation a peut-être été créée. Elle part (ou se confirme) au retour du réseau, avec le même identifiant.
+        if (!attempt.queued) {
+          await record(eventId, userId, "express", { email: target, id });
+          attempt.queued = true;
+        }
         setSent({ email: target, url: null });
-      } else setError(errorMessage(e));
+      } else {
+        pending.current = null;
+        setError(errorMessage(e));
+      }
     } finally {
       setBusy(false);
     }

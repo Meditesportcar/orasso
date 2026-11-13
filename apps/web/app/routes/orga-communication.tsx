@@ -2,14 +2,14 @@
 // fil public) » ; « staff (discussions) ») : onglets Consignes et annonces · Messages groupés · Modèles · Messages des
 // participants · Discussions du staff. Le staff de la structure n'y voit que ses discussions. Sable imposé (layout).
 
-import { Button, CheckboxField, Chip, SelectField, TextField } from "@orasso/design-system/web";
+import { Button, Chip, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type AnnouncementView,
-  announcementAudienceLabels,
   type ConversationPage,
   communicationLabels,
   type EventCard,
   type EventOrganizer,
+  eventJournalLabels,
   GROUP_MESSAGE_BODY_MAX,
   type GroupMessagePreview,
   type GroupMessageView,
@@ -18,15 +18,15 @@ import {
   type MyStaffEvent,
   messageSegmentLabels,
   messageSegments,
+  remainingFil,
   type StaffConversationState,
   type StructurePublic,
   segmentNeedsEvent,
   type TemplateView,
   templateKindLabels,
   templateKinds,
-  type UploadResult,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, redirect, useActionData, useNavigation } from "react-router";
 import { FeedItem } from "../components/EventFeed";
 import { TextAreaField } from "../components/Fields";
@@ -113,6 +113,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       history: history.items,
       quota,
       templateId: url.searchParams.get("modele"),
+      // Lot R8d : « Écrire aux inscrits » depuis une fiche d'événement (`?e=<id>`).
+      eventParam: url.searchParams.get("e"),
       // Identifiant d'envoi (idempotence : un double clic n'envoie qu'une fois), renouvelé après chaque envoi.
       clientId: crypto.randomUUID(),
     };
@@ -147,19 +149,6 @@ export async function action({ request, params }: Route.ActionArgs) {
         json: { instructions: text("instructions") },
       });
       return res.ok ? data({ ok: communicationLabels.instructionsSent } satisfies Result) : fail(res);
-    }
-    case "announce": {
-      const res = await api(request, `/events/${eventId}/announcements`, {
-        method: "POST",
-        json: {
-          body: text("body"),
-          imageKey: text("imageKey") || null,
-          notify: form.get("notify") === "on",
-          pinned: form.get("pinned") === "on",
-          audience: text("audience") === "participants" ? "participants" : "public",
-        },
-      });
-      return res.ok ? data({ ok: communicationLabels.announcementPublished } satisfies Result) : fail(res);
     }
     case "pin":
     case "unpin": {
@@ -266,6 +255,7 @@ export default function OrgaCommunication({ loaderData, params }: Route.Componen
           history={d.history}
           quota={d.quota}
           templateId={d.templateId}
+          eventParam={d.eventParam}
           initialClientId={d.clientId}
         />
       )}
@@ -331,18 +321,41 @@ function InstructionsTab({
           </div>
         </Form>
       </section>
-      <AnnouncementForm eventId={event.id} />
+      {/* Lot R8d (T3) : plus de « Nouvelle annonce ». Une information publique est une publication de l'organisateur rattachée à
+          l'événement ; une information privée est un message groupé aux inscrits. */}
+      <section className="orga__panel s-stack" data-testid="publish-panel">
+        <h2 className="s-h2">{eventJournalLabels.title}</h2>
+        <p className="s-muted">{eventJournalLabels.intro(event.structure.name, true)}</p>
+        <div className="s-row">
+          <Button
+            variant="primary"
+            icon="camera"
+            href={`/app/fil/publier?structure=${encodeURIComponent(event.structure.id)}&evenement=${encodeURIComponent(event.id)}`}
+            data-testid="orga-publish-for-event"
+          >
+            {eventJournalLabels.publishFor}
+          </Button>
+          <Button
+            variant="secondary"
+            icon="chat"
+            href={`${base}?onglet=messages&e=${encodeURIComponent(event.id)}`}
+            data-testid="orga-write-registered"
+          >
+            {eventJournalLabels.writeToRegistered}
+          </Button>
+        </div>
+      </section>
       <section className="orga__panel s-stack" data-testid="orga-feed">
         <h2 className="s-h2">{communicationLabels.feed}</h2>
         <p className="s-muted">
           Public sur <a href={`/e/${event.slug}#fil`}>la page de l'événement</a> ; les entrées « Inscrits retenus » ne
           s'affichent qu'à eux.
         </p>
-        {feed.length === 0 ? (
+        {remainingFil(feed).length === 0 ? (
           <p className="s-muted">{communicationLabels.feedEmpty}</p>
         ) : (
           <ul className="comm__feed">
-            {feed.map((item) => (
+            {remainingFil(feed).map((item) => (
               <FeedItem
                 key={item.id}
                 item={item}
@@ -382,102 +395,6 @@ function InstructionsTab({
   );
 }
 
-/** Nouvelle annonce : texte, photo (envoyée d'abord à `/api/me/uploads`), visibilité, « prévenir les inscrits ». */
-function AnnouncementForm({ eventId }: { eventId: string }) {
-  const navigation = useNavigation();
-  const result = useActionData() as Result | undefined;
-  const busy = navigation.state !== "idle";
-  const [photo, setPhoto] = useState<{ key: string; preview: string } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // Annonce publiée : le formulaire se vide.
-  useEffect(() => {
-    if (result?.ok === communicationLabels.announcementPublished) {
-      formRef.current?.reset();
-      setPhoto(null);
-    }
-  }, [result]);
-
-  const sendPhoto = async (file: File) => {
-    setError(null);
-    setUploading(true);
-    try {
-      const body = new FormData();
-      body.append("purpose", "announcement");
-      body.append("file", file);
-      const res = await fetch("/api/me/uploads", { method: "POST", body, credentials: "same-origin" });
-      const json = (await res.json().catch(() => null)) as UploadResult | { error?: { message?: string } } | null;
-      if (!res.ok || !json || !("key" in json)) {
-        setError((json as { error?: { message?: string } } | null)?.error?.message ?? "Envoi de la photo impossible.");
-        return;
-      }
-      setPhoto({ key: json.key, preview: URL.createObjectURL(file) });
-    } catch {
-      setError("Connexion impossible. Réessaie.");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  return (
-    <section className="orga__panel s-stack" data-testid="announcement-panel">
-      <h2 className="s-h2">{communicationLabels.announcementNew}</h2>
-      <Form method="post" className="s-stack" ref={formRef}>
-        <input type="hidden" name="intent" value="announce" />
-        <input type="hidden" name="eventId" value={eventId} />
-        <input type="hidden" name="imageKey" value={photo?.key ?? ""} />
-        <TextAreaField label={communicationLabels.announcementBody} name="body" maxLength={1000} rows={4} required />
-        <SelectField
-          label={communicationLabels.announcementAudience}
-          name="audience"
-          defaultValue="public"
-          options={(["public", "participants"] as const).map((a) => ({
-            value: a,
-            label: announcementAudienceLabels[a],
-          }))}
-        />
-        <CheckboxField name="notify" label={communicationLabels.announcementNotify} />
-        <CheckboxField name="pinned" label={communicationLabels.pin} />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic"
-          hidden
-          data-testid="announcement-file"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void sendPhoto(file);
-          }}
-        />
-        {photo && <img className="comm__preview" src={photo.preview} alt="" />}
-        {error && (
-          <p className="s-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="s-row">
-          {photo ? (
-            <Button variant="secondary" icon="close" onClick={() => setPhoto(null)}>
-              {communicationLabels.photoRemove}
-            </Button>
-          ) : (
-            <Button variant="secondary" icon="add" loading={uploading} onClick={() => fileRef.current?.click()}>
-              {communicationLabels.photo}
-            </Button>
-          )}
-          <Button type="submit" variant="primary" icon="share" loading={busy} data-testid="publish-announcement">
-            {communicationLabels.announcementPublish}
-          </Button>
-        </div>
-      </Form>
-    </section>
-  );
-}
-
 function GroupTab({
   structureId,
   events,
@@ -485,9 +402,11 @@ function GroupTab({
   history,
   quota,
   templateId,
+  eventParam,
   initialClientId,
 }: {
   initialClientId: string;
+  eventParam: string | null;
   structureId: string;
   events: EventCard[];
   templates: TemplateView[];
@@ -500,7 +419,9 @@ function GroupTab({
   const initial = templates.find((t) => t.id === templateId) ?? null;
   const upcoming = events.find((e) => new Date(e.endsAt).getTime() > nowMs()) ?? null;
   const [segment, setSegment] = useState<MessageSegment>("accepted");
-  const [eventId, setEventId] = useState<string>(upcoming?.id ?? "");
+  const [eventId, setEventId] = useState<string>(
+    events.some((e) => e.id === eventParam) ? (eventParam ?? "") : (upcoming?.id ?? ""),
+  );
   const [tpl, setTpl] = useState<string>(initial?.id ?? "");
   const [subject, setSubject] = useState(initial?.subject ?? "");
   const [body, setBody] = useState(initial?.body ?? "");

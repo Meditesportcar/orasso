@@ -1,40 +1,93 @@
-// Page d'une structure (organisateur) dans l'appli (lot 29, docs/02 « Pages atteintes ») : fiche, note moyenne, événements
-// à venir et passés, suivre, devenir staff. « Contacter » arrive avec la messagerie (lot 18) : visible, désactivé.
-// Ouverte sans compte (lien partagé) ; suivre ou devenir staff demandent de se connecter.
-import { Button, Chip, ChipRow, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { explorerLabels, structureKindLabels } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+// Page d'une structure (organisateur) dans l'appli (lot 29, docs/02 « Pages atteintes »), vue d'un visiteur.
+// Lot R8g (D40, maquettes R8.6 `pu-publi` et R9.3 `n-page`) : le haut compact du Profil (logo dans l'anneau de ses stories, nom,
+// type et vérification, « Suivre », bio sur une ligne, icônes « Message » et « Plus », trois compteurs) puis des onglets
+// soulignés et collants : « Événements » (ce que la page montrait), « Publications » (les siennes, filtre « Tout · Événements ·
+// Hors événement », ouvert par défaut), « Mentions · N » (ceux qui la citent). Sans session : « Événements » et « Publications »
+// seulement. Ouverte sans compte (lien partagé) ; suivre, écrire ou devenir staff demandent de se connecter. `?onglet=` ouvre un
+// onglet précis (un lien partagé).
 
+import { tokens, useTheme } from "@orasso/design-system/native";
+import {
+  type AuthorPostsFilter,
+  authorKeyOf,
+  type EventCard,
+  explicitPageTab,
+  explorerLabels,
+  isPageManager,
+  pagesLabels as L,
+  type PageTab,
+  type ProCard,
+  pageCounters,
+  pageMentionsCount,
+  pageOpenTab,
+  pagePublicationsCount,
+  pageTabs,
+  profileRingState,
+  type StructurePublic,
+  type WithPageExtras,
+} from "@orasso/shared";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { Linking, Share, StyleSheet } from "react-native";
 import { siteUrl } from "@/api";
-import { EventRow } from "@/features/explorer/rows";
+import { FollowLine, PageHead } from "@/features/pages/PageHead";
+import { PageMentions } from "@/features/pages/PageMentions";
+import { PagePublications } from "@/features/pages/PagePublications";
+import { PageTabs } from "@/features/pages/PageTabs";
+import { StructureEvents } from "@/features/pages/StructureEvents";
+import { useReloadToken } from "@/features/pages/useReloadToken";
+import { SideIcon } from "@/features/profil/ProfileHead";
+import { SetList, SetRow } from "@/features/profil/parts";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { Overlay } from "@/ui/Overlay";
+import { FlowScreen, StickyHeader } from "@/ui/Screens";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space4 } = tokens.spacing;
 
 export default function StructurePage() {
   const { t } = useTheme();
   const router = useRouter();
-  const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { status } = useSession();
+  const { slug, onglet } = useLocalSearchParams<{ slug: string; onglet?: string }>();
+  const { status, me } = useSession();
+  const session = status === "in";
   const structure = useApi(() => api.structureBySlug(slug), [slug, status], { enabled: status !== "loading" });
-  const s = structure.data;
-  const upcoming = useApi(() => api.exploreEvents({ structureId: s?.id, sort: "date", limit: 20 }), [s?.id], {
+  const s = structure.data as WithPageExtras<StructurePublic> | null;
+  // Les listes de l'onglet « Événements » ; `null` tant qu'elles ne sont pas lues (une panne n'est jamais « aucun »).
+  const upcoming = useApi(() => api.exploreEvents({ structureId: s?.id, sort: "date", limit: 50 }), [s?.id], {
     enabled: Boolean(s),
   });
-  const past = useApi(() => api.exploreEvents({ structureId: s?.id, scope: "past", limit: 5 }), [s?.id], {
+  const past = useApi(() => api.exploreEvents({ structureId: s?.id, scope: "past", limit: 12 }), [s?.id], {
     enabled: Boolean(s),
   });
+  const partners = useApi(() => api.structurePros(slug), [slug], { enabled: Boolean(s) });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [more, setMore] = useState(false);
+  // Un double toucher sur « Message » n'ouvre qu'une conversation.
+  const contacting = useRef(false);
+  const [picked, setPicked] = useState<PageTab | null>(null);
+  const [filter, setFilter] = useState<AuthorPostsFilter>("all");
+  const [mentionsDelta, setMentionsDelta] = useState(0);
+  // Tirer pour recharger et revenir sur l'écran relisent aussi les publications et les mentions.
+  const mentionsBase = s ? pageMentionsCount(s) : undefined;
+  // Le nombre servi fait foi : la correction locale (masqué ou remis) repart de zéro à chaque réponse servie neuve (même valeur comprise).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet le delta à zéro
+  useEffect(() => setMentionsDelta(0), [s, slug]);
+  const [reloadToken, bumpReload] = useReloadToken();
+
+  // `?onglet=` s'applique à chaque navigation ; une fois lu, on le retire.
+  useEffect(() => {
+    if (onglet === undefined) return;
+    const asked = explicitPageTab("structure", onglet, session);
+    if (asked) setPicked(asked);
+    router.setParams({ onglet: undefined });
+  }, [onglet, router, session]);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
   const needAccount = () => router.push({ pathname: "/auth", params: { mode: "signup", next: `/o/${slug}` } });
@@ -55,7 +108,7 @@ export default function StructurePage() {
 
   async function toggleFollow() {
     if (!s) return;
-    if (status !== "in") return needAccount();
+    if (!session) return needAccount();
     setBusy(true);
     setNote(null);
     try {
@@ -71,7 +124,8 @@ export default function StructurePage() {
 
   async function becomeStaff() {
     if (!s) return;
-    if (status !== "in") return needAccount();
+    setMore(false);
+    if (!session) return needAccount();
     setBusy(true);
     setNote(null);
     try {
@@ -96,116 +150,144 @@ export default function StructurePage() {
     }
   }
 
-  const where = [s.postalCode, s.city].filter(Boolean).join(" ");
-  const average = s.rating.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
-  return (
-    <FlowScreen title={s.name} onClose={close} onRefresh={structure.reload}>
-      <Plate style={styles.head} testID="structure-head" accessibilityLabel={`Organisateur ${s.name}`}>
-        <View style={styles.headRow}>
-          <Photo
-            source={mediaSource(s.logoUrl)}
-            placeholder={`linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`}
-            cut="thumb"
-            style={styles.logo}
-          />
-          <View style={styles.headText}>
-            <Text variant="label" color={t.color.plateMuted}>
-              {structureKindLabels[s.kind]}
-            </Text>
-            <Text variant="posterL" color={t.color.plateInk}>
-              {s.name}
-            </Text>
-            {where ? (
-              <Text variant="meta" color={t.color.plateMuted}>
-                {where}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <ChipRow>
-          {s.verified ? (
-            <Chip variant="verified" surface="plate">
-              Structure vérifiée
-            </Chip>
-          ) : null}
-          <Chip surface="plate">{explorerLabels.structureFollowers(s.followersCount)}</Chip>
-          {average ? <Chip surface="plate">{`${average} / 3 · ${s.rating.count} avis`}</Chip> : null}
-        </ChipRow>
-        {s.description ? (
-          <Text variant="body" color={t.color.plateInk}>
-            {s.description}
-          </Text>
-        ) : null}
-      </Plate>
+  // « Message » : la conversation avec l'équipe organisatrice (la même que « Contacter l'organisateur » du site).
+  async function contact() {
+    if (!s) return;
+    if (!session) return needAccount();
+    if (contacting.current) return;
+    contacting.current = true;
+    setNote(null);
+    try {
+      const { id } = await api.contactStructure(s.id);
+      router.push(`/messages/${id}`);
+    } catch (e) {
+      setNote({ tone: "error", text: errorMessage(e) });
+    } finally {
+      contacting.current = false;
+    }
+  }
 
+  const isOrganizer = isPageManager("structure", { structureId: s.id, memberships: me?.memberships });
+  const mentionsCount = mentionsBase === undefined ? undefined : Math.max(0, mentionsBase + mentionsDelta);
+  const tabs = pageTabs("structure", { session, mentionsCount });
+  const wanted = picked ?? pageOpenTab("structure", { publications: pagePublicationsCount(s) }, session);
+  const tab = tabs.some((x) => x.id === wanted) ? wanted : (tabs[0]?.id ?? "events");
+  // Le nombre n'est dit que quand les deux listes sont lues en entier (pas de page suivante) : jamais un plancher présenté comme un total.
+  const eventsRead =
+    upcoming.data && past.data && !upcoming.data.nextCursor && !past.data.nextCursor
+      ? upcoming.data.items.length + past.data.items.length
+      : null;
+  const counters = pageCounters("structure", {
+    followers: s.followersCount,
+    events: eventsRead,
+    partners: partners.data ? partners.data.length : null,
+  });
+  const key = authorKeyOf("structure", s.id);
+  const ring = session ? profileRingState(s.stories) : null;
+  const upcomingItems: EventCard[] | null = upcoming.data ? upcoming.data.items : null;
+  const pastItems: EventCard[] | null = past.data ? past.data.items : null;
+  const partnerItems: ProCard[] | null = partners.data ?? null;
+
+  return (
+    <FlowScreen
+      title={s.name}
+      onClose={close}
+      onRefresh={async () => {
+        bumpReload();
+        await Promise.all([structure.reload(), upcoming.reload(), past.reload(), partners.reload()]);
+      }}
+      overlays={
+        <Overlay>
+          <AppSheet visible={more} onClose={() => setMore(false)} accessibilityLabel={L.moreTitle}>
+            <SetList>
+              <SetRow
+                first
+                icon="share"
+                title={L.share}
+                onPress={() => {
+                  setMore(false);
+                  void Share.share({ message: siteUrl(`/o/${s.slug}`) }).catch(() => undefined);
+                }}
+                testID="page-share"
+              />
+              {s.verified && !isOrganizer ? (
+                <SetRow
+                  icon="staff"
+                  title={explorerLabels.structureBecomeStaff}
+                  onPress={() => void becomeStaff()}
+                  testID="become-staff"
+                />
+              ) : null}
+            </SetList>
+          </AppSheet>
+        </Overlay>
+      }
+    >
+      <PageHead
+        testID="structure-head"
+        name={s.name}
+        logoUrl={s.logoUrl}
+        ring={ring}
+        onOpenStories={
+          session && (s.stories?.count ?? 0) > 0
+            ? () => router.push({ pathname: "/story/[authorKey]", params: { authorKey: key } })
+            : undefined
+        }
+        typeLabel={L.typeStructure}
+        verifiedLabel={s.verified ? L.verifiedStructure : null}
+        follow={
+          <FollowLine
+            following={Boolean(s.isFollowing)}
+            busy={busy}
+            onPress={() => void toggleFollow()}
+            testID="follow"
+          />
+        }
+        bio={s.description}
+        side={
+          <>
+            {s.verified && !isOrganizer ? (
+              <SideIcon icon="chat" label={L.message} onPress={() => void contact()} testID="contact-organizer" />
+            ) : null}
+            <SideIcon icon="more" label={L.more} onPress={() => setMore(true)} testID="page-more" />
+          </>
+        }
+        counters={counters}
+        onCounter={() => setPicked("events")}
+      />
       {note ? <Notice tone={note.tone}>{note.text}</Notice> : null}
 
-      <View style={styles.actions}>
-        {s.isFollowing ? (
-          <Button
-            variant="secondary"
-            icon="check"
-            loading={busy}
-            onPress={() => void toggleFollow()}
-            fullWidth
-            testID="follow"
-          >
-            {explorerLabels.structureFollowing}
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            icon="add"
-            loading={busy}
-            onPress={() => void toggleFollow()}
-            fullWidth
-            testID="follow"
-          >
-            {explorerLabels.structureFollow}
-          </Button>
-        )}
-        <View style={styles.row}>
-          <Button
-            variant="secondary"
-            icon="staff"
-            disabled={busy}
-            onPress={() => void becomeStaff()}
-            testID="become-staff"
-          >
-            {explorerLabels.structureBecomeStaff}
-          </Button>
-          {/* Messagerie (lot 18) : visible, désactivée jusque-là. */}
-          <Button variant="secondary" icon="chat" disabled>
-            {explorerLabels.structureContactSoon}
-          </Button>
-        </View>
-      </View>
+      {/* Onglets soulignés, collants sous l'en-tête (`StickyHeader`, repéré par l'écran). */}
+      <StickyHeader style={[styles.tabsBar, { backgroundColor: t.color.ground }]}>
+        <PageTabs value={tab} onChange={setPicked} items={tabs} />
+      </StickyHeader>
 
-      <SectionTitle>{explorerLabels.structureEvents}</SectionTitle>
-      {upcoming.data && upcoming.data.items.length === 0 ? (
-        <Muted variant="body">{explorerLabels.structureNoEvents}</Muted>
-      ) : null}
-      {upcoming.data?.items.map((e) => (
-        <EventRow key={e.id} event={e} hints={false} />
-      ))}
-
-      {past.data && past.data.items.length > 0 ? (
-        <>
-          <SectionTitle>{explorerLabels.structurePast}</SectionTitle>
-          {past.data.items.map((e) => (
-            <EventRow key={e.id} event={e} hints={false} />
-          ))}
-        </>
-      ) : null}
+      {tab === "events" ? (
+        <StructureEvents structure={s} upcoming={upcomingItems} past={pastItems} partners={partnerItems} />
+      ) : tab === "publications" ? (
+        <PagePublications
+          reloadToken={reloadToken}
+          authorKey={key}
+          name={s.name}
+          withFilter
+          filter={filter}
+          onFilter={setFilter}
+          total={pagePublicationsCount(s) ?? null}
+          session={session}
+        />
+      ) : (
+        <PageMentions
+          reloadToken={reloadToken}
+          pageKey={key}
+          pageName={s.name}
+          manage={isOrganizer}
+          onHiddenChange={(d) => setMentionsDelta((v) => v + d)}
+        />
+      )}
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { gap: space3, padding: space3 },
-  headRow: { flexDirection: "row", alignItems: "center", gap: space3 },
-  headText: { flex: 1, gap: space1 },
-  logo: { width: 64, height: 64, borderRadius: tokens.radius.radiusSm },
-  actions: { gap: space2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  tabsBar: { marginHorizontal: -space4, paddingHorizontal: space4, paddingBottom: space1 },
 });

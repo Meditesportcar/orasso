@@ -22,6 +22,7 @@ import {
   type SourceInput,
   type SourceResult,
   sliceRows,
+  structureFollowedSql,
   tsParam,
 } from "./types";
 
@@ -50,9 +51,7 @@ export const source: FeedSource<"vote_result"> = {
       ...atBounds(winnerAt, sql`${events.id}`, "vote_result", input),
     ];
     if (input.filter === "following") {
-      filters.push(
-        sql`exists (select 1 from structure_follows sf where sf.structure_id = ${events.structureId} and sf.user_id = ${input.userId})`,
-      );
+      filters.push(structureFollowedSql(input, sql`${events.structureId}`));
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${events.department}`, input.nearby));
     const raw = await db
@@ -96,7 +95,8 @@ export const source: FeedSource<"vote_result"> = {
     // Compte privé : son pseudo ne sort que pour lui-même ou ses abonnés acceptés.
     const privateIds = [...new Set(podiumRows.filter((p) => p.visibility !== "public").map((p) => p.userId))];
     const followed = new Set(
-      privateIds.length
+      // Une page ne connaît jamais le pseudo d'un compte privé, même suivi par la personne derrière elle (lot R9a).
+      privateIds.length && !input.page
         ? (
             await db
               .select({ id: userFollows.followedId })
@@ -125,7 +125,9 @@ export const source: FeedSource<"vote_result"> = {
               rank: p.rank,
               vehicleLabel: vehicleLabel(v),
               pseudo:
-                p.visibility === "public" || p.userId === input.userId || followed.has(p.userId) ? p.pseudo : null,
+                p.visibility === "public" || (!input.page && (p.userId === input.userId || followed.has(p.userId)))
+                  ? p.pseudo
+                  : null,
               photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
               votes: p.votes,
             },
@@ -143,6 +145,7 @@ export const source: FeedSource<"vote_result"> = {
           structureId: r.e.structureId,
           proId: null,
           categoryIds: [],
+          eventId: r.e.id,
           payload: { event: summaryOf(r.e, r.s), podium },
         },
       ];

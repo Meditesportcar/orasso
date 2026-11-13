@@ -504,15 +504,185 @@ describe("terrain : alertes et main courante", () => {
 });
 
 describe("inscription express", () => {
+  it("panne entre l'invitation et l'e-mail (R8p, tour 6) : le rejeu répare, un seul e-mail part, jamais deux", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e02";
+    const body = { email: "Panne@Exemple.fr", clientId };
+    const path = `/events/${eventId}/express-invites`;
+    const mailsTo = async () =>
+      (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+        (m) => m.to === "panne@exemple.fr",
+      );
+    const send = vi.spyOn(mail, "enqueue").mockRejectedValueOnce(new Error("panne avant la boîte d'envoi"));
+    const lost = await call(julie, "POST", path, body);
+    expect(lost.status).toBe(500);
+    send.mockRestore();
+    // L'invitation existe, sans aucune trace d'e-mail.
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "panne@exemple.fr"))).toHaveLength(1);
+    expect(await mailsTo()).toHaveLength(0);
+    // Rejeux, dont trois en même temps : le message part une seule fois.
+    const again = await Promise.all([1, 2, 3].map(() => call(julie, "POST", path, body)));
+    // Celui qui prend le verrou envoie et répond 201 ; les autres, pendant la livraison, répondent « pas encore » (503) tout de suite.
+    expect(again.every((r) => r.status === 201 || r.status === 503)).toBe(true);
+    expect(again.some((r) => r.status === 201)).toBe(true);
+    expect(await mailsTo()).toHaveLength(1);
+    const settled = await call(julie, "POST", path, body);
+    expect(settled.status).toBe(201);
+    expect(new Set([...again.filter((r) => r.status === 201), settled].map((r) => r.json.id)).size).toBe(1);
+    // Un rejeu de plus ne renvoie rien.
+    await call(julie, "POST", path, body);
+    expect(await mailsTo()).toHaveLength(1);
+  });
+  it("tour 7 : plusieurs invitations dont la livraison est lente ne bloquent aucune autre route (aucune connexion gardée pendant le transport)", async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const real = mail.deliver.bind(mail);
+    const deliver = vi.spyOn(mail, "deliver").mockImplementation(async (row, to, content) => {
+      await gate;
+      return real(row, to, content);
+    });
+    const path = `/events/${eventId}/express-invites`;
+    // Plus de requêtes que la réserve du pool (10) : si chacune gardait une connexion pendant la livraison, tout s'arrêterait.
+    const pending = [...Array(12).keys()].map((n) => call(julie, "POST", path, { email: `lent${n}@exemple.fr` }));
+    await new Promise((r) => setTimeout(r, 1_500));
+    const other = await Promise.race([
+      call(julie, "GET", "/me").then((r) => r.status),
+      new Promise<string>((r) => setTimeout(() => r("bloquée"), 8_000)),
+    ]);
+    expect(other).toBe(200);
+    open();
+    const done = await Promise.all(pending);
+    deliver.mockRestore();
+    expect(done.map((r) => r.status)).toEqual(Array(12).fill(201));
+    const sent = (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+      (m) => m.to.startsWith("lent"),
+    );
+    expect(sent).toHaveLength(12);
+    expect(sent.every((m) => m.status === "sent")).toBe(true);
+  }, 60_000);
+
+  it("tour 9 : plusieurs invitations « en route » répondent 503 tout de suite : rien n'est retardé derrière elles", async () => {
+    const path = `/events/${eventId}/express-invites`;
+    const bodies = [0, 1, 2, 3, 4, 5].map((n) => ({
+      email: `route${n}@exemple.fr`,
+      clientId: `0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0f0${n}`,
+    }));
+    for (const body of bodies) expect((await call(julie, "POST", path, body)).status).toBe(201);
+    // Les six e-mails sont « en attente » depuis peu (livraison en route).
+    await db.update(emailOutbox).set({ status: "queued", createdAt: new Date(clock.now.getTime() - 5_000) });
+    const started = Date.now();
+    const answers = [];
+    for (const body of bodies) answers.push(await call(julie, "POST", path, body));
+    expect(answers.map((r) => r.status)).toEqual(Array(6).fill(503));
+    expect(answers.every((r) => r.json.error.code === "mail_pending")).toBe(true);
+    // Une alerte staff derrière elles partirait sans attendre : six réponses en moins de 3 s (avant : 5 s chacune).
+    expect(Date.now() - started).toBeLessThan(3_000);
+  }, 30_000);
+
+  it("tour 8 : arrêt après la validation de l'écriture, avant la livraison : le rejeu immédiat n'annonce pas « envoyée », puis l'e-mail repart", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e04";
+    const body = { email: "Arret@Exemple.fr", clientId };
+    const path = `/events/${eventId}/express-invites`;
+    const rows = async () =>
+      (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+        (m) => m.to === "arret@exemple.fr",
+      );
+    // Le processus s'arrête entre `enqueue` (validé) et `deliver`.
+    const deliver = vi.spyOn(mail, "deliver").mockRejectedValueOnce(new Error("processus arrêté"));
+    expect((await call(julie, "POST", path, body)).status).toBe(500);
+    deliver.mockRestore();
+    expect((await rows()).map((m) => m.status)).toEqual(["queued"]);
+    // Rejeu immédiat (file du téléphone) : réponse non définitive, aucun faux succès, aucun second message.
+    const replay = await call(julie, "POST", path, body);
+    expect(replay.status).toBe(503);
+    expect(replay.json.error.code).toBe("mail_pending");
+    expect(await rows()).toHaveLength(1);
+    // La ligne vieillit au-delà du seuil : le rejeu suivant renvoie l'e-mail, une seule fois, et répond 201.
+    await db.update(emailOutbox).set({ createdAt: new Date(clock.now.getTime() - 3 * 60_000) });
+    const later = await call(julie, "POST", path, body);
+    expect(later.status).toBe(201);
+    expect((await rows()).filter((m) => m.status === "sent")).toHaveLength(1);
+  }, 30_000);
+
+  it("tour 7 : un e-mail en échec est renvoyé au rejeu ; une attente de plus de 2 minutes aussi ; une attente récente ou un envoi réussi, jamais", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e03";
+    const body = { email: "Relance@Exemple.fr", clientId };
+    const path = `/events/${eventId}/express-invites`;
+    const rows = async () =>
+      (await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") })).filter(
+        (m) => m.to === "relance@exemple.fr",
+      );
+    const first = await call(julie, "POST", path, body);
+    expect(first.status).toBe(201);
+    expect(await rows()).toHaveLength(1);
+    // Envoyé : un rejeu ne renvoie rien.
+    await call(julie, "POST", path, body);
+    expect(await rows()).toHaveLength(1);
+    // Échec signalé : le rejeu renvoie.
+    await db
+      .update(emailOutbox)
+      .set({ status: "failed" })
+      .where(eq(emailOutbox.id, (await rows())[0]!.id));
+    await call(julie, "POST", path, body);
+    const afterFailed = await rows();
+    expect(afterFailed).toHaveLength(2);
+    expect(afterFailed.filter((m) => m.status === "sent")).toHaveLength(1);
+    // En attente depuis peu : le rejeu ne répond pas « envoyée » (503 `mail_pending`), il ne renvoie rien.
+    await db.update(emailOutbox).set({ status: "queued", createdAt: new Date(clock.now.getTime() - 20_000) });
+    const waiting = await call(julie, "POST", path, body);
+    expect(waiting.status).toBe(503);
+    expect(waiting.json.error.code).toBe("mail_pending");
+    expect(await rows()).toHaveLength(2);
+    // En attente depuis plus de 2 minutes (processus arrêté en route) : considéré non envoyé, il repart.
+    await db
+      .update(emailOutbox)
+      .set({ status: "queued", createdAt: new Date(clock.now.getTime() - 3 * 60_000) })
+      .where(eq(emailOutbox.template, "express_invite"));
+    await call(julie, "POST", path, body);
+    const afterStale = await rows();
+    expect(afterStale).toHaveLength(3);
+    expect(afterStale.filter((m) => m.status === "sent")).toHaveLength(1);
+  });
+  it("idempotence (R8p, tour 5) : réponse perdue après création, même clientId → une seule invitation et un seul e-mail", async () => {
+    const clientId = "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0e01";
+    const first = await call(julie, "POST", `/events/${eventId}/express-invites`, {
+      email: "Rejeu@Exemple.fr",
+      clientId,
+    });
+    expect(first.status).toBe(201);
+    // Deux rejeux, dont un simultané : la même invitation, le même lien, aucun e-mail de plus.
+    const again = await Promise.all(
+      [1, 2].map(() =>
+        call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Rejeu@Exemple.fr", clientId }),
+      ),
+    );
+    expect(again.map((r) => r.status)).toEqual([201, 201]);
+    expect(again.map((r) => r.json.id)).toEqual([first.json.id, first.json.id]);
+    expect(again.map((r) => r.json.url)).toEqual([first.json.url, first.json.url]);
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "rejeu@exemple.fr"))).toHaveLength(1);
+    const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
+    expect(mails.filter((m) => m.to === "rejeu@exemple.fr")).toHaveLength(1);
+    // Sans clientId (APK en ligne) : le comportement ne change pas, chaque envoi crée son invitation.
+    await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Libre@Exemple.fr" });
+    await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Libre@Exemple.fr" });
+    expect(await db.select().from(expressInvites).where(eq(expressInvites.email, "libre@exemple.fr"))).toHaveLength(2);
+    // Un autre auteur avec le même identifiant n'obtient jamais l'invitation du premier.
+    const other = await call(theo, "POST", `/events/${eventId}/express-invites`, {
+      email: "Autre@Exemple.fr",
+      clientId,
+    });
+    expect(other.status === 201 ? other.json.id : null).not.toBe(first.json.id);
+  });
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
-    const send = vi.spyOn(mail, "send");
+    const send = vi.spyOn(mail, "deliver");
     const invite = await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Nouveau@Exemple.fr" });
     expect(invite.status).toBe(201);
     const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
     expect(mails.map((m) => m.to)).toEqual(["nouveau@exemple.fr"]);
     // La personne n'a pas de compte : le pied ne dit pas le contraire (relecture du lot 56).
-    const sentMail = send.mock.calls.find(([template]) => template === "express_invite")?.[2];
+    const sentMail = send.mock.calls[0]?.[2];
     send.mockRestore();
     expect(sentMail?.html).toContain("Tu reçois cet e-mail parce qu'on t'a invité sur Orasso.");
     expect(sentMail?.html).not.toContain("parce que tu as un compte");

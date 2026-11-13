@@ -1,5 +1,6 @@
 import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
+  coauthorLabels,
   crewInviteLabels,
   crewLabels,
   eventInviteLabels,
@@ -33,6 +34,7 @@ import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { type InviteNoticeData, muteInviterAction } from "../lib/eventInvite.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import { formatDateTime } from "../lib/format";
+import "../styles/coauthors.css";
 import "../styles/event-invite.css";
 import "../styles/partnerships.css";
 import type { Route } from "./+types/app-activite-demandes";
@@ -100,6 +102,19 @@ export async function action({ request }: Route.ActionArgs) {
     const res = await api(request, `/me/partnerships/${id}/${intent.slice(12)}`, { method: "POST" });
     if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
     return data({ formError: null as string | null });
+  }
+  // Lot R8o : invitation à publier avec quelqu'un (pour moi ou pour une page que je gère) : accepter ou refuser. La confirmation
+  // est celle de la maquette (R8.13 `p-collab`).
+  if (intent === "coauthor-accept" || intent === "coauthor-decline") {
+    const id = encodeURIComponent(String(form.get("postId") ?? ""));
+    const answer = intent === "coauthor-accept" ? "accept" : "decline";
+    const res = await api(request, `/me/feed-coauthor-requests/${id}/${answer}`, { method: "POST" });
+    if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
+    const author = String(form.get("author") ?? "");
+    return data({
+      formError: null as string | null,
+      coauthorNotice: answer === "accept" ? coauthorLabels.accepted : coauthorLabels.declined(author),
+    });
   }
   return data({ formError: "Action inconnue." }, { status: 400 });
 }
@@ -518,6 +533,43 @@ function PartnershipCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
+/** Lot R8o (maquette R8.13 `p-collab`, vue « dem ») : « Kenji_66 te propose de publier avec lui », la légende, la vignette, Accepter / Refuser. */
+function CoAuthorCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const { name, imageUrl } = fromOf(r);
+  const author = str(obj(r.payload, "author"), "name") ?? name;
+  const forName = str(r.payload, "forName");
+  const caption = str(r.payload, "caption");
+  const photo = str(r.payload, "photoUrl");
+  return (
+    <li className="co-request" data-testid="request-coauthor">
+      <div className="co-request__head">
+        <PersonAvatar url={imageUrl} pseudo={name} size={44} />
+        <div className="co-request__text">
+          <b className="o-t-title">{coauthorLabels.requestTitle(author, forName)}</b>
+          {caption && (
+            <span className="o-t-caption s-muted" data-testid="request-coauthor-caption">
+              {caption}
+            </span>
+          )}
+        </div>
+        {photo && (
+          <span className="co-request__thumb">
+            <img src={photo} alt="" loading="lazy" />
+          </span>
+        )}
+      </div>
+      <Decide
+        fields={{ postId: r.id, author }}
+        accept="coauthor-accept"
+        decline="coauthor-decline"
+        acceptLabel={coauthorLabels.accept}
+        declineLabel={coauthorLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
 function Card({ r, busy, notice }: { r: RequestItem; busy: boolean; notice: string | null }) {
   switch (r.kind) {
     case "follow":
@@ -534,6 +586,8 @@ function Card({ r, busy, notice }: { r: RequestItem; busy: boolean; notice: stri
       return <PlateTransferCard r={r} busy={busy} />;
     case "partnership":
       return <PartnershipCard r={r} busy={busy} />;
+    case "coauthor":
+      return <CoAuthorCard r={r} busy={busy} />;
     default:
       // Une sorte sans carte sur le site (jamais d'écran cassé pour une sorte que cette version ne connaît pas).
       return null;
@@ -544,11 +598,13 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
   const { items, nextCursor, after, activityRequests, messageRequests, atLeast } = loaderData;
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
-  const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
+  const done = actionData as
+    | (Partial<FollowActionData> & { formError?: string | null; coauthorNotice?: string })
+    | undefined;
   const invite = actionData as InviteNoticeData | undefined;
   const message = {
     error: done?.formError ?? done?.followError ?? null,
-    notice: done?.followNotice ?? null,
+    notice: done?.followNotice ?? done?.coauthorNotice ?? null,
   };
   return (
     <div className="s-narrow s-stack" data-testid="demandes">

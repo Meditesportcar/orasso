@@ -119,21 +119,40 @@ export type StoryShareInput = z.infer<typeof storyShareSchema>;
 
 export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuidLower }).optional();
 
-/** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>` (UUID strict pour les deux dernières). */
+/** Un auteur de story : une personne, une structure, un pro, un prestataire ou un média (lot R9a : `v:` et `m:`). */
+export type StoryAuthorKind = StoryTagKind | "provider" | "media";
+
+/**
+ * Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>`, `p:<pro>`, `v:<prestataire>` ou `m:<média>` (UUID strict
+ * pour les quatre dernières). Identique à `authorKeyOf` de `rules/authors.ts` (prouvé par un test).
+ */
 export const storyAuthorKeyRe =
-  /^(?:(u):([A-Za-z0-9_-]{1,64})|([sp]):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))$/;
-export type StoryAuthorKey = { kind: StoryTagKind; id: string; key: string };
+  /^(?:(u):([A-Za-z0-9_-]{1,64})|([spvm]):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))$/;
+export type StoryAuthorKey = { kind: StoryAuthorKind; id: string; key: string };
+const STORY_KIND_OF: Record<string, StoryAuthorKind> = {
+  u: "user",
+  s: "structure",
+  p: "pro",
+  v: "provider",
+  m: "media",
+};
+const STORY_LETTER_OF: Record<StoryAuthorKind, string> = {
+  user: "u",
+  structure: "s",
+  pro: "p",
+  provider: "v",
+  media: "m",
+};
 export function parseStoryAuthorKey(raw: string): StoryAuthorKey | null {
   const m = storyAuthorKeyRe.exec(raw);
   if (!m) return null;
-  const letter = m[1] ?? m[3];
-  const kind: StoryTagKind = letter === "u" ? "user" : letter === "s" ? "structure" : "pro";
+  const kind = STORY_KIND_OF[m[1] ?? m[3] ?? ""];
+  if (!kind) return null;
   // Les UUID sont ramenés en minuscules : la clé, les verrous et les comparaisons ne dépendent jamais de la casse reçue.
   const id = m[2] ?? (m[4] ?? "").toLowerCase();
   return { kind, id, key: kind === "user" ? raw : storyAuthorKeyOf(kind, id) };
 }
-export const storyAuthorKeyOf = (kind: StoryTagKind, id: string): string =>
-  `${kind === "user" ? "u" : kind === "structure" ? "s" : "p"}:${id}`;
+export const storyAuthorKeyOf = (kind: StoryAuthorKind, id: string): string => `${STORY_LETTER_OF[kind]}:${id}`;
 
 // --- Réponses ------------------------------------------------------------------------------------------------------
 
@@ -148,7 +167,8 @@ export type StoryCreated = {
 };
 
 export type StoryTagView = {
-  kind: StoryTagKind;
+  /** Une identification est `user | structure | pro` ; le crédit d'une copie peut aussi être un prestataire ou un média. */
+  kind: StoryAuthorKind;
   id: string;
   name: string;
   slug: string | null;

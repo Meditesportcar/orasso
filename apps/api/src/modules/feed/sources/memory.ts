@@ -25,7 +25,9 @@ function strictlyAfter(card: Key, k: Key): boolean {
 export const source: FeedSource<"memory"> = {
   kind: "memory",
   async load(input: SourceInput): Promise<SourceResult<"memory">> {
-    if (input.filter !== "for_you") return { cards: [], more: false, tail: null };
+    // Le souvenir du jour reste toujours dans la zone A (jamais « déjà vu ») : il n'a pas de zone B.
+    // Le souvenir est celui de la personne : rien en casquette (lot R9a).
+    if (input.page || input.filter !== "for_you" || input.zone === "B") return { cards: [], more: false, tail: null };
     const items = await memoriesService.todayFor(input.userId, input.ref);
     const at = memoryDayStart(input.ref);
     const all = items.map(

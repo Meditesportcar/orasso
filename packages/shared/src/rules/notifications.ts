@@ -1,5 +1,6 @@
 import { type NotificationFamily, type NotificationType, notificationTypes } from "../enums";
 import { retiredNotificationTypes } from "../notifications/social";
+import { essentialNotificationTypes } from "./essentialTypes";
 
 /** Familles jamais coupées (relances du staff, sécurité du compte). */
 export const UNMUTABLE_FAMILIES: readonly NotificationFamily[] = ["staff", "account"];
@@ -21,12 +22,14 @@ export function shouldDeliver(
 
 /**
  * Types qu'on peut couper un par un, groupés par famille (écrans Moi du site et de l'appli). Lot R6b, tour 2 : sans les
- * types retirés (anciennes demandes d'ami), qui ne partent plus.
+ * types retirés (anciennes demandes d'ami), qui ne partent plus. Lot R8n1 : sans les types de l'Essentiel.
  */
 export function mutableTypesByFamily(): Partial<Record<NotificationFamily, NotificationType[]>> {
   const out: Partial<Record<NotificationFamily, NotificationType[]>> = {};
   for (const [type, family] of Object.entries(notificationTypes) as [NotificationType, NotificationFamily][]) {
     if (UNMUTABLE_FAMILIES.includes(family) || retiredNotificationTypes.includes(type)) continue;
+    // Lot R8n1 : l'Essentiel ne se coupe pas (tant qu'on a une place) : il n'est plus proposé type par type.
+    if ((essentialNotificationTypes as readonly string[]).includes(type)) continue;
     const list = out[family] ?? [];
     list.push(type);
     out[family] = list;
