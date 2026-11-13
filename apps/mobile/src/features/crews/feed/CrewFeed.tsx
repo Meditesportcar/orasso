@@ -1,12 +1,11 @@
-// Onglet Fil du crew (lot R5c1, maquette R5.7 `t-c-page`, données `POSTS`) : le composeur (« Publier », bouton
-// principal de l'onglet), puis les publications et les événements automatiques, 20 par page. Réservé aux membres
+// Onglet Fil du crew (lot R5c1, maquette R5.7 `t-c-page`, données `POSTS`) : les publications et les événements automatiques, 20 par page. Réservé aux membres
 // actifs : l'API répond 404 à tout autre compte. Composant autonome, monté par la page du crew (onglet Fil, lot R5c2).
 // Lot R6a : en direct. Au signal du canal `crew:<id>`, le haut du fil se relit (nouvelles entrées, arrivées, retraits) ;
 // une publication ou une sortie se relit seule (flamme, commentaires, voix, réponses), où qu'elle soit. En haut du fil,
 // une nouvelle entrée s'insère ; plus bas, une pastille « 1 nouvelle publication » attend, et remonte au toucher (la
 // liste ne saute pas sous le doigt). Tour 2 : le fil affiché, son curseur et les nouveautés tiennent dans un seul état
 // (`useCrewFeedList`) ; une relecture en échec se retente, et une ligne discrète le dit.
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { tokens, useTheme } from "@orasso/design-system/native";
 import {
   acceptCrewFeedPending,
   type CrewFeedOuting,
@@ -16,7 +15,7 @@ import {
   crewLivePillLabel,
   crewPageLabels,
 } from "@orasso/shared";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,8 +23,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { useSession } from "@/lib/session";
-import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -50,10 +47,7 @@ const notFound = (e: unknown) => e instanceof ApiRequestError && e.status === 40
 
 export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: CrewFeedScroller }) {
   const { t, reducedMotion } = useTheme();
-  const c = t.color;
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { me } = useSession();
   const feed = useCrewFeedList(crew.id);
   const { putPost, putOuting } = feed;
   const [busy, setBusy] = useState<string | null>(null);
@@ -195,22 +189,6 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
 
   return (
     <View style={styles.feed} testID="crew-feed">
-      {!crew.archived ? (
-        <View style={[styles.composer, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
-          <Avatar url={me?.profile.avatarUrl} pseudo={me?.profile.pseudo} size={38} />
-          <Text variant="caption" color={c.inkMuted} style={styles.grow}>
-            {crewFeedLabels.composerHint}
-          </Text>
-          <SmButton
-            kind="p"
-            icon="camera"
-            onPress={() => router.push({ pathname: "/crew/publier", params: { crew: crew.slug } })}
-            testID="crew-feed-publish"
-          >
-            {crewFeedLabels.publish}
-          </SmButton>
-        </View>
-      ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ok ? <Notice>{ok}</Notice> : null}
       {stale ? (
@@ -307,14 +285,6 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
 const styles = StyleSheet.create({
   feed: { gap: tokens.spacing.space3 },
   list: { gap: tokens.spacing.space3 },
-  composer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing.space2 + 2,
-    padding: tokens.spacing.space2 + 2,
-    borderRadius: tokens.radius.radiusLg - 2,
-  },
-  grow: { flex: 1, minWidth: 0 },
   // La pastille des nouveautés, posée en haut de l'écran (zone des feuilles), centrée. Tour 2 : le petit bouton se
   // cale à gauche (`alignSelf: flex-start` du kit) ; la pastille se recentre elle-même.
   pillZone: { position: "absolute", left: 0, right: 0, alignItems: "center", zIndex: 30 },

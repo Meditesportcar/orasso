@@ -131,7 +131,6 @@
   pointer-events: none;
 }
 /* Onglets `.seg.r5tabs` : bloc sur `--surface-raised`, l'onglet actif à l'encre. */
-.crw-tabs,
 .crw-seg {
   display: flex;
   gap: 2px;
@@ -139,7 +138,6 @@
   border-radius: 14px;
   background: var(--surface-raised);
 }
-.crw-tabs a,
 .crw-seg__btn {
   flex: 1;
   min-width: 0;
@@ -156,10 +154,6 @@
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-}
-.crw-tabs a[aria-current="page"] {
-  background: var(--ink);
-  color: var(--ground);
 }
 .crw-seg--acc .crw-seg__btn[aria-pressed="true"] {
   background: var(--accent);
@@ -186,7 +180,8 @@
   .crw-side:not([data-active]) {
     display: grid;
   }
-  .crw-tabs .crw-tab-outings {
+  /* Petit lot de fin, partie E : l'onglet « Sorties » n'a plus lieu d'être (les sorties sont à droite). */
+  .crw-tabsbar [data-testid="crew-tab-sorties"] {
     display: none;
   }
 }
@@ -433,7 +428,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crw-tabs a,
   .crw-seg__btn {
     transition: opacity 120ms linear;
   }
@@ -455,11 +449,6 @@ fieldset.crw-seg {
   margin: 0;
   border: 0;
   min-inline-size: 0;
-}
-/* Quatre onglets à 390 px : « Membres · 1 » tient sur une ligne. */
-.crw-tabs a {
-  padding: 4px 3px;
-  font-size: 12.5px;
 }
 .crw-acts__main > * {
   min-width: 0;
@@ -495,40 +484,180 @@ fieldset.crw-seg {
   font-size: min(var(--type-poster-l-size), calc(100cqi / var(--em, 10)));
 }
 
-/* Lot R7b2 : l'onglet Crew (maquette R7.11). Le sélecteur de crew : « Roussillon Drift ▾ » (un `<details>`, sans JavaScript). */
-.crw-sel {
-  position: relative;
+/* Petit lot de fin, partie E (option B « Comme le Profil », choisie par Damien le 13/11) : le haut compact de l'onglet Crew, même
+   grille que le haut du Profil (`.pt-id`). Vignette de la couverture, nom (jamais tronqué), membres et rôle, description sur
+   une ligne (`.pt-bio`), Inviter et Réglages empilés (`.pt-side`). Jetons seulement. */
+.crw-head {
+  position: relative; /* la liste « Mes crews » (un `<details>`, sans JavaScript) s'y ancre */
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
 }
-.crw-sel__head {
+.crw-cov {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  cursor: pointer;
+}
+.crw-cov:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.crw-cov__img,
+.crw-cov-big__img {
+  display: block;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--surface-raised) 0%, var(--night) 100%);
+}
+.crw-cov__img {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-md);
+}
+.crw-cov__img img,
+.crw-cov-big__img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Le logo dans le coin, entouré d'un anneau au fond de l'écran. */
+.crw-cov__logo {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--ground);
+}
+.crw-head__mid {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  align-content: start;
+  padding-top: 2px;
+}
+.crw-head__nm {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 10px 12px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  gap: 4px;
+  min-width: 0;
   color: var(--ink);
   list-style: none;
   cursor: pointer;
 }
-.crw-sel__head::-webkit-details-marker {
+.crw-head__nm::-webkit-details-marker {
   display: none;
 }
-div.crw-sel__head {
+div.crw-head__nm {
   cursor: default;
 }
-.crw-sel__name {
+.crw-head__name {
   display: block;
+  min-width: 0;
   font-family: var(--font-display);
   font-weight: 900;
   font-style: italic;
   text-transform: uppercase;
-  font-size: 18px;
+  font-size: 19px;
   line-height: 1.1;
   overflow-wrap: anywhere;
 }
-.crw-sel__menu[open] > .crw-sel__head svg:last-child {
+.crw-sel__menu[open] > .crw-head__nm svg:last-child {
   transform: rotate(180deg);
+}
+.crw-head .crw-sel__list {
+  top: 88px;
+}
+.crw-head .pt-bio--open p {
+  white-space: pre-line;
+}
+.crw-head__side {
+  grid-column: 3;
+  grid-row: 1;
+  gap: 6px;
+}
+/* Discussion : pleine largeur sous la ligne ; sur grand écran elle monte sur la ligne. */
+.crw-head__disc {
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  min-width: 0;
+}
+@media (min-width: 1000px) {
+  .crw-head {
+    grid-template-columns: 76px minmax(0, 1fr) auto auto;
+  }
+  .crw-head__disc {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .crw-head__side {
+    grid-column: 4;
+  }
+}
+/* La couverture en grand (la feuille de la vignette). */
+.crw-cov-big {
+  position: relative;
+}
+.crw-cov-big__img {
+  height: 150px;
+  border-radius: var(--radius-lg);
+}
+.crw-cov-big__logo {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: block;
+}
+.crw-cov-big__sub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+}
+.crw-cov-big__bio {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* La rangée d'onglets soulignés, collante sous la barre du haut, « Publier » (icône moutarde) au bout. */
+.crw-tabsbar {
+  position: sticky;
+  top: var(--bar-top);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--ground);
+}
+.crw-tabsbar .utabs {
+  position: static;
+  flex: 1;
+  min-width: 0;
+}
+.crw-tabsbar > a,
+.crw-tabsbar > button {
+  flex: none;
+  width: var(--touch);
+  min-width: var(--touch);
+  padding: 0;
+}
+/* Police agrandie : la rangée défile de côté, son bord droit s'efface tant qu'il reste des onglets. */
+.crw-tabsbar[data-more="true"] .utabs {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.crw-page .cf-new {
+  top: calc(var(--bar-top) + var(--touch) + var(--space-2));
 }
 .crw-sel__list {
   position: absolute;

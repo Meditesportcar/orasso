@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import "../../styles/crew-feed.css";
 import { apiFetch } from "../../lib/api.client";
-import { PersonAvatar } from "../People";
 import { CommentsDialog } from "./CommentsDialog";
 import { useCrewLiveNeeds, useCrewLiveStale } from "./CrewLive";
 import { AutoCard, PostCard } from "./PostCard";
@@ -53,7 +52,20 @@ const mapAll = (s: CrewFeedState<CrewFeedItem>, fn: Mapper): CrewFeedState<CrewF
 /** Une lecture en direct en échec : rejetée, pour que le besoin reste et reparte. */
 class LiveReadError extends Error {}
 
-export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
+export function CrewFeed({
+  crew,
+  publishTick = 0,
+  autoPublish = false,
+  onPublishClosed,
+}: {
+  crew: CrewFeedCrew;
+  /** Petit lot de fin, partie E : « Publier » est au bout des onglets du crew ; chaque appui (le numéro monte) ouvre la fenêtre. */
+  publishTick?: number;
+  /** Arrivé par « Publier » depuis un autre onglet (`?publier=1`) : la fenêtre s'ouvre à l'arrivée. */
+  autoPublish?: boolean;
+  /** La fenêtre de publication est refermée (publiée ou fermée) : l'adresse perd `?publier=1`. */
+  onPublishClosed?: () => void;
+}) {
   const [feed, setFeed] = useState<CrewFeedState<CrewFeedItem> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -63,7 +75,10 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [comments, setComments] = useState<CrewPostView | null>(null);
-  const [publishing, setPublishing] = useState(false);
+  const [publishing, setPublishing] = useState(autoPublish);
+  useEffect(() => {
+    if (publishTick > 0) setPublishing(true);
+  }, [publishTick]);
   // Seule la dernière lecture complète compte (une relecture en direct partie avant elle est jetée).
   const seq = useRef(0);
   const feedRef = useRef(feed);
@@ -270,15 +285,6 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
 
   return (
     <section className="cf" aria-label={crewFeedLabels.feed} data-testid="crew-feed">
-      {!crew.archived && (
-        <div className="cf-comp">
-          <PersonAvatar url={options?.me.avatarUrl ?? null} pseudo={options?.me.pseudo ?? "?"} size={38} />
-          <span className="o-t-caption s-muted">{crewFeedLabels.composerHint}</span>
-          <Button icon="camera" onClick={() => setPublishing(true)} data-testid="crew-feed-publish">
-            {crewFeedLabels.publish}
-          </Button>
-        </div>
-      )}
       {error && (
         <p className="s-error" role="alert">
           {error}
@@ -375,9 +381,13 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         options={options}
         optionsError={optionsError}
         onRetryOptions={() => void loadOptions()}
-        onClose={() => setPublishing(false)}
+        onClose={() => {
+          setPublishing(false);
+          onPublishClosed?.();
+        }}
         onPublished={() => {
           setPublishing(false);
+          onPublishClosed?.();
           setOk(crewFeedLabels.published);
           void load();
         }}
