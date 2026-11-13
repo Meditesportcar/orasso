@@ -6497,8 +6497,15 @@ Pile de recette seule (base seedée à neuf, API, appli compilée), chaque fichi
 
 - **Recettes de Pratique** : l'API de la pile doit être lancée avec `OVERPASS_URL=http://127.0.0.1:4748/overpass` et `FUEL_API_URL=http://127.0.0.1:4748/fuel` (faux services), sinon elle interroge les vraies sources pour un département non encore en cache et « rien à moins de 30 km » (Lille) échoue. Une première passe de ce lot a tourné sans ces variables (quelques lectures réelles de lecture seule sur l'API ouverte des prix des carburants) ; la base de cette pile a été purgée de ces trois départements, puis les recettes sont revenues vertes.
 
+### Petit lot de fin, partie A, tour 1 (13/11/2026) : corrections des relectures Opus et Codex
+- **Reprise de Pratique** (`readCycle.ts`, `dispose`) : une reprise déjà programmée (retour à +5 s) n'est plus perdue par deux démontages avant l'échéance : si une minuterie était en attente, la lecture redevient due et le remontage la reprogramme à son heure (jamais sous 15 s). Test à l'horloge simulée (rouge sur l'ancien code).
+- **`appli-administration`** : relevés propres à chaque test (remis à zéro avant chacun) et `checkAudit()` dans chacun des quatre tests : mes premiers correctifs avaient retiré le contrôle de 26 écrans. Verte deux fois dans la suite du fichier.
+- **Puce de casquette « ORGA… »** (`capChipFit.ts`, `AppBar.tsx`, hors liste, autorisé) : la place comptait deux boutons à droite alors que la barre de la casquette organisateur en pose trois (Recherche, Activité, Messages). `capChipCompact` reçoit le nombre réel de boutons ; à 390 px la puce passe au logo rond, jamais « … ». Test dans `capChipFit.test.ts` ; la recette du survol le vérifie (texte tronqué contrôlé dans ce test).
+- **Boutons bordés** (`Button.tsx`) : marge verticale `space3` moins l'épaisseur du contour (1,5) pour `secondary` et `plate` : 48 px sur une ligne à ×1,3 aussi, plus haut seulement sur deux lignes. Recette `appli-fin-a.spec.ts` (mesures à 384, ×1 et ×1,3).
+- **Titre du rail** : plancher = la plus petite taille de texte des jetons (`credit`, 9 px), au lieu de 8 ; au-delà, retour à la ligne entre les mots. Même recette.
+
 ### À revoir avec Damien (petit lot de fin, partie A)
-- **Puce de casquette tronquée en mode assistance** : dans la barre du haut, la puce de la casquette Organisateur affiche « ORGA… » (visible sur `22-survol-bandeau-lecture-seule-beton`). C'est le code des casquettes (lot R9h) : non touché ici. La règle « rien de tronqué » du design le refuserait, mais la recette du survol ne l'asserte pas.
+- (Réglé au tour 1) puce de casquette « ORGA… » en mode assistance : voir plus haut.
 
 ## Réponses de Damien du 13/11/2026 (points « À revoir » des lots R9e et R9f)
 
