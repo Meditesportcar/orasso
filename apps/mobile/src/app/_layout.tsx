@@ -191,7 +191,12 @@ function Shell() {
       const link = publicationLinkOf(data) ?? appLinkOf(data?.link);
       // Lot R9g : « album publié » (`data.screen = "event-photos"`) ouvre la fiche de l'événement, à la section « Photos ».
       if (link && screen === "event-photos" && /^\/e\/[^/?#\s]+$/.test(link)) {
-        router.navigate(`${link}?section=photos` as never);
+        // La notification est celle de l'Activité de la structure : la casquette de cette structure s'ouvre d'abord (l'organisateur y a le
+        // « … » de l'album), comme les autres notifications de la structure ; sans casquette correspondante, la fiche s'ouvre telle quelle.
+        const structureId = typeof data?.structureId === "string" ? data.structureId : null;
+        const own = structureId ? entries.find((e) => e.kind === "organizer" && e.id === structureId) : null;
+        if (structureId && own) choose({ kind: "organizer", structureId }, `${link}?section=photos`);
+        else router.navigate(`${link}?section=photos` as never);
       } else if (link) router.navigate(link as never);
       else router.navigate("/acces");
     },

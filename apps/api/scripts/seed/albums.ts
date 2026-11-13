@@ -211,7 +211,9 @@ export async function seedAlbumOfficialAndRepost() {
         isNull(t.eventAlbumPhotos.deletedAt),
       ),
     );
-  if (!photo || photo.plateState === "unknown") return;
+  // Jamais une plaque lisible : seule une photo déjà floutée ou « aucune plaque » est copiée telle quelle (« gardée » exigerait de flouter les cadres,
+  // « inconnue » est refusée comme par l'API).
+  if (!photo || (photo.plateState !== "blurred" && photo.plateState !== "none")) return;
   const [done] = await db
     .select({ id: t.feedPostPhotos.id })
     .from(t.feedPostPhotos)

@@ -27,6 +27,7 @@ import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
 import { assertWritable, isAccredited, isUniqueViolation, mediaOfUser, requireMedia } from "./guards";
 import { setAlbumOfficial } from "./official";
+import { notifyAlbumPublished } from "./publish";
 import { albumsService, removeFiles } from "./service";
 import {
   type AlbumJoin,
@@ -220,7 +221,7 @@ export const albumsLegacy = {
     const sources: string[] = [];
     let committed = false;
     try {
-      const id = await withTx(async (tx) => {
+      const id = await withTx(async (tx, after) => {
         const media = await requireMedia(tx, v);
         const [event] = await tx.select().from(events).where(eq(events.id, input.eventId));
         if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
@@ -270,6 +271,12 @@ export const albumsLegacy = {
             plateState: "unknown" as const,
           })),
         );
+        // Lot R9g (T47) : une galerie publiée par l'APK en ligne prévient les responsables comme un album publié.
+        await notifyAlbumPublished(tx, after, {
+          album: { id: album.id, title: input.title ?? null, photosCount: uploaded.length, eventId: input.eventId },
+          mediaName: media.name,
+          authorId: v.user.id,
+        });
         return album.id;
       });
       committed = true;

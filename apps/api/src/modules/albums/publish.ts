@@ -18,7 +18,7 @@ import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
-import { withTx } from "../../lib/tx";
+import { type Executor, withTx } from "../../lib/tx";
 import { notifyStructure } from "../notifications/structure";
 import { assertAccredited, assertWritable, lockOwnAlbum, requireMedia } from "./guards";
 import { albumsService, removeFiles } from "./service";
@@ -43,36 +43,57 @@ export async function publishAlbum(v: Viewer, id: string): Promise<AlbumView> {
     if (!done.length) throw notFound(albumLabels.notFound);
     // Lot R9f (T40) : les identifications posées en brouillon sont annoncées maintenant, une notification par personne.
     await sendTaggedNotifications(tx, album.id, { after });
-    // Lot R9g (T47) : les responsables de la structure de l'événement sont prévenus, une ligne chacun, dans l'Activité de la structure
-    // (sans push : 150 voitures en 30 minutes, le journal suffit). Jamais l'auteur, même s'il est aussi responsable. Regroupées par événement.
-    const [event] = await tx.select().from(events).where(eq(events.id, album.eventId));
-    if (event) {
-      await notifyStructure(
-        tx,
-        event.structureId,
-        "album_published",
-        {
-          title: eventPhotosLabels.publishedTitle(profile.name, album.photosCount, event.title),
-          body: "", // le titre dit tout : un corps identique s'afficherait deux fois
-          data: {
-            albumId: album.id,
-            eventId: event.id,
-            eventSlug: event.slug,
-            albumTitle: albumTitle(album.title, event.title),
-            screen: "event-photos",
-            link: `/e/${event.slug}`,
-          },
-          eventId: event.id,
-          eventStartsAt: event.startsAt,
-          eventEndsAt: event.endsAt,
-          groupKey: `album_published:${event.id}`,
-          after,
-        },
-        { exclude: [v.user.id] },
-      );
-    }
+    // Lot R9g (T47) : les responsables de la structure de l'événement sont prévenus (voir `notifyAlbumPublished`).
+    await notifyAlbumPublished(tx, after, {
+      album: { id: album.id, title: album.title, photosCount: album.photosCount, eventId: album.eventId },
+      mediaName: profile.name,
+      authorId: v.user.id,
+    });
   });
   return albumsService.getOwn(v, id);
+}
+
+/**
+ * Lot R9g (T47) : `album_published` aux responsables de la structure de l'événement, une ligne chacun, dans l'Activité de la structure
+ * (sans push : 150 voitures en 30 minutes, le journal suffit). Jamais l'auteur, même s'il est aussi responsable. Regroupées par événement.
+ * Appelée à chaque publication : par `publishAlbum` et par la galerie publiée d'un coup de l'APK en ligne (`legacy.createGallery`).
+ */
+export async function notifyAlbumPublished(
+  tx: Executor,
+  after: Parameters<Parameters<typeof withTx>[0]>[1],
+  input: {
+    album: { id: string; title: string | null; photosCount: number; eventId: string };
+    mediaName: string;
+    authorId: string;
+  },
+): Promise<void> {
+  const { album, mediaName, authorId } = input;
+  const [event] = await tx.select().from(events).where(eq(events.id, album.eventId));
+  if (!event) return;
+  await notifyStructure(
+    tx,
+    event.structureId,
+    "album_published",
+    {
+      title: eventPhotosLabels.publishedTitle(mediaName, album.photosCount, event.title),
+      body: "", // le titre dit tout : un corps identique s'afficherait deux fois
+      data: {
+        albumId: album.id,
+        eventId: event.id,
+        eventSlug: event.slug,
+        structureId: event.structureId,
+        albumTitle: albumTitle(album.title, event.title),
+        screen: "event-photos",
+        link: `/e/${event.slug}`,
+      },
+      eventId: event.id,
+      eventStartsAt: event.startsAt,
+      eventEndsAt: event.endsAt,
+      groupKey: `album_published:${event.id}`,
+      after,
+    },
+    { exclude: [authorId] },
+  );
 }
 
 const PURGE_BATCH = 100;

@@ -4,12 +4,22 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { addMember, call, createStructure, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import {
+  addMember,
+  call,
+  createStructure,
+  resetDb,
+  signUp,
+  type TestUser,
+  useClock,
+  viewerOf,
+} from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { eventAlbumPhotos, feedPostPhotos, feedPosts, notifications, session, user } from "../../db/schema";
 import { rateRecord } from "../../lib/rateLimit";
 import { storage } from "../../lib/storage";
+import { loadLinked } from "../stories/linked";
 import {
   accredit,
   addPhoto,
@@ -94,14 +104,36 @@ describe("POST /events/:id/albums/:albumId/photos/:photoId/repost", () => {
     expect(res.json.caption).toBe("Merci à Sud Cars !");
   });
 
-  it("un événement fini depuis plus de 30 jours : la reprise reste possible (la fenêtre de rattachement ne s'applique pas)", async () => {
+  it("la reprise est permise 30 jours après la publication de l'album (29 j : 201, 31 j : 422), quelle que soit la date de l'événement", async () => {
     const a = await threeDecisions();
     albumId = a.id;
-    useClock(new Date("2027-03-01T10:00:00Z"));
-    const res = await repost(orga, a.photos[1]?.id as string);
-    expect(res.status).toBe(201);
-    const [post] = await db.select().from(feedPosts).where(eq(feedPosts.id, res.json.id));
+    // L'événement est vieux d'un an : seule la date de publication de l'album compte.
+    await db.execute(
+      sql`update events set starts_at = starts_at - interval '365 days', ends_at = ends_at - interval '365 days' where id = ${eventId}`,
+    );
+    const publishedAt = new Date(
+      (
+        (await db.execute(sql`select published_at from event_albums where id = ${a.id}`)).rows[0] as {
+          published_at: Date;
+        }
+      ).published_at,
+    );
+    useClock(new Date(publishedAt.getTime() + 29 * 86_400_000));
+    const ok = await repost(orga, a.photos[1]?.id as string);
+    expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+    const [post] = await db.select().from(feedPosts).where(eq(feedPosts.id, ok.json.id));
     expect(post).toMatchObject({ persona: "organizer", structureId, eventId, eventRole: "organizer" });
+    useClock(new Date(publishedAt.getTime() + 31 * 86_400_000));
+    const late = await repost(orga, a.photos[0]?.id as string);
+    expect(late.status).toBe(422);
+    expect(late.json.error.code).toBe("repost_expired");
+    expect(late.json.error.message).toBe("Cet album a plus de 30 jours : la reprise n'est plus possible.");
+    // Rien n'a été écrit pour la photo refusée.
+    const rows = await db
+      .select()
+      .from(feedPostPhotos)
+      .where(eq(feedPostPhotos.sourceAlbumPhotoId, a.photos[0]?.id as string));
+    expect(rows).toHaveLength(0);
   });
 
   it("plaque : blurred copiée telle quelle, none → no_plate_confirmed, kept → copie FLOUTÉE (pixels changés)", async () => {
@@ -215,6 +247,48 @@ describe("POST /events/:id/albums/:albumId/photos/:photoId/repost", () => {
     for (let i = 0; i < 20; i++) rateRecord("feedPost", orga.id);
     const limited = await repost(orga, a.photos[0]?.id as string);
     expect(limited.status).toBe(429);
+  });
+
+  it("sans session : le journal public et la page publique de la structure servent le crédit (liste blanche, sans album ni compte)", async () => {
+    const a = await threeDecisions();
+    albumId = a.id;
+    const res = await repost(orga, a.photos[1]?.id as string);
+    const postId = res.json.id as string;
+    for (const path of [`/events/${eventId}/feed-posts`, `/authors/s:${structureId}/feed-posts`]) {
+      const list = await call(null, "GET", path);
+      expect(list.status, path).toBe(200);
+      const post = list.json.items.find((p: { id: string }) => p.id === postId);
+      expect(post, path).toBeTruthy();
+      expect(post.photos[0].credit).toEqual({ mediaKey: `m:${leoMedia}`, mediaName: "Sud Cars", albumId: null });
+      expect([...keysOf(post.photos[0].credit)].sort()).toEqual(["albumId", "mediaKey", "mediaName"]);
+    }
+  });
+
+  it("partagée en story : la carte liée porte le crédit et le fichier de la story l'incruste", async () => {
+    const a = await threeDecisions();
+    albumId = a.id;
+    const res = await repost(orga, a.photos[1]?.id as string);
+    const postId = res.json.id as string;
+    const linked = await loadLinked(await viewerOf(orga), "feed_post", postId);
+    expect(linked.credit).toBe("Photo : Sud Cars");
+    expect(linked.kicker).toContain("Photo : Sud Cars");
+    const story = await call(orga, "POST", "/me/stories", {
+      linked: { type: "feed_post", id: postId },
+      clientId: crypto.randomUUID(),
+      audience: "public",
+    });
+    expect(story.status, JSON.stringify(story.json)).toBe(201);
+    const exportStory = async () => {
+      const r = await app.request(`/api/stories/${story.json.id}/export`, { headers: { cookie: orga.cookie } });
+      expect(r.status).toBe(200);
+      return Buffer.from(await r.arrayBuffer());
+    };
+    const withCredit = await exportStory();
+    // Sans le crédit (colonne nulle : une photo ordinaire), le même fichier est signé sans la ligne du média : les pixels changent.
+    await db.update(feedPostPhotos).set({ creditMediaId: null }).where(eq(feedPostPhotos.postId, postId));
+    expect((await loadLinked(await viewerOf(orga), "feed_post", postId)).credit).toBeNull();
+    const without = await exportStory();
+    expect(withCredit.equals(without)).toBe(false);
   });
 
   it("le crédit ne se retire pas : PATCH ne le touche pas ; l'album supprimé garde la reprise, albumId devient null", async () => {
