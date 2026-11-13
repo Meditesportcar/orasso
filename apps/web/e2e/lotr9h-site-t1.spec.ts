@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE } from "./helpers";
-import { sql } from "./lotr7f2-setup";
+import { sql, userIdOf } from "./lotr7f2-setup";
 import { landscape } from "./lotr7f3-setup";
 
 // Lot R9h, partie 1, tour 1 : le composeur de story d'une page se bloque au changement de compte ; la lecture enchaînée d'une story reste
@@ -54,7 +54,22 @@ test("Story d'une page : la lecture enchaînée reste dans la barre de la casque
   expect(keys.length, "la barre de la structure a des auteurs (seed R9a)").toBeGreaterThan(0);
   const structure = (await sql("select id from structures where slug = 'roues-libres-66'")) as { id: string }[];
   const own = `s:${structure[0]?.id}`;
-  // Deux réseaux distincts : la barre personnelle de Sarah (sans acteur) a au moins un auteur absent de la barre de la structure.
+  // Deux réseaux distincts : Sarah suit Kenji_66 à titre personnel (une story publique vivante), la structure ne le suit pas ; la barre
+  // personnelle de Sarah (sans acteur) a donc au moins un auteur absent de la barre de la structure.
+  const kenji = await userIdOf("Kenji_66");
+  const sarah = await userIdOf("Sarah_66");
+  const [src] = await sql<{ storage_key: string }>(
+    "select storage_key from stories where deleted_at is null and media_kind = 'photo' order by created_at limit 1",
+  );
+  await sql(
+    `insert into stories (author_id, persona, audience, storage_key, status, plate_state, caption, expires_at, created_at, updated_at)
+     values ($1, 'fan', 'public', $2, 'ready', 'none_confirmed', 'Recette R9h réseau personnel', now() + interval '20 hours', now(), now())`,
+    [kenji, src?.storage_key],
+  );
+  await sql(
+    "insert into user_follows (follower_id, followed_id, status, accepted_at) values ($1, $2, 'accepted', now()) on conflict do nothing",
+    [sarah, kenji],
+  );
   const personalBar = (
     await apiCall<{ authors: { key: string }[] }>(await login("sarah@orasso.local"), "GET", "/stories/bar")
   ).data;
@@ -62,6 +77,8 @@ test("Story d'une page : la lecture enchaînée reste dans la barre de la casque
     personalBar.authors.some((a) => !keys.includes(a.key)),
     "la barre personnelle a un auteur absent de celle de la structure",
   ).toBe(true);
+  await sql("delete from stories where caption = 'Recette R9h réseau personnel'");
+  await sql("delete from user_follows where follower_id = $1 and followed_id = $2", [sarah, kenji]);
   await bar.locator('[data-testid^="stories-author-"] a').first().click();
   await page.waitForURL(/\/app\/story\//);
   // Le contexte de la barre d'origine est dans l'adresse (la page, pas la personne).

@@ -299,6 +299,10 @@ test("Casquette périmée : retour à « Moi » avec l'avis, et une page suspend
   try {
     await open(page, "sarah@orasso.local", "/orga/roues-libres-66/fil");
     await expect(page.getByTestId("fil-actor")).toBeVisible();
+    // Les lectures de l'ouverture (liste, barre des stories) sont finies : la suspension ne tombe pas au milieu d'elles.
+    await expect(page.getByTestId("fil-list")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("stories-mine")).toBeVisible();
+    await page.waitForTimeout(1500);
     // La structure est suspendue pendant que la page est ouverte : la lecture suivante est refusée (403 `persona_forbidden`).
     await sql(
       "update structures set verification = 'suspended', suspended_reason = 'moderation' where slug = 'roues-libres-66'",
