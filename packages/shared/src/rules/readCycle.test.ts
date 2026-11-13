@@ -525,6 +525,27 @@ describe("une panne transitoire après la fin du calendrier reste due (petit lot
     expect(calendar.failed()).toBe(false);
   });
 
+  it("deux démontages/remontages avant les 15 s : la lecture part à son heure, une seule fois", async () => {
+    const { calendar, refresh, release } = await stalledCalendar();
+    release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    let again = calendar.retain();
+    // La reprise a programmé la lecture à +15 s ; deux allers-retours avant l'échéance ne la perdent pas.
+    await vi.advanceTimersByTimeAsync(2_000);
+    again();
+    await vi.advanceTimersByTimeAsync(1_000);
+    again = calendar.retain();
+    await vi.advanceTimersByTimeAsync(1_000);
+    again();
+    again = calendar.retain();
+    await vi.advanceTimersByTimeAsync(5_999);
+    expect(refresh).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refresh).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(refresh).toHaveBeenCalledTimes(5);
+  });
+
   it("« Réessayer » reste visible puis désactivé pendant la relecture, puis disparaît avec le résultat", async () => {
     const { calendar, refresh, pending } = await stalledCalendar();
     expect(calendar.failed()).toBe(true);

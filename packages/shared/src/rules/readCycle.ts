@@ -157,9 +157,12 @@ export function createReadCycle(deps: ReadCycleDeps) {
       lastStart = 0;
     },
     dispose() {
+      const scheduled = timer.pending();
       timer.cancel();
-      // Une panne qui a épuisé le calendrier reste due : un remontage ou le retour sur l'écran la relit.
+      // Une panne qui a épuisé le calendrier reste due : un remontage ou le retour sur l'écran la relit. Si une reprise l'avait déjà
+      // programmée (retour à +5 s), la minuterie annulée ne l'efface pas : elle redevient due (le remontage la reprogramme à son heure).
       if (!stalled) pending = false;
+      else if (scheduled) pending = true;
     },
     /** Pour les tests. */
     state: () => ({ calendarStep, networkAttempt, refusedAt, halted, pending, scheduled: timer.pending() }),
