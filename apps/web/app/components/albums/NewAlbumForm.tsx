@@ -24,6 +24,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../../styles/albums.css";
+import "../../styles/garage.css";
 import { AlbumCardBody } from "../fil/AlbumCard";
 import { PlateFrame } from "../PlateFrame";
 
@@ -382,39 +383,41 @@ export function NewAlbumForm({
           <ul className="alb-tiles" data-testid="album-grid">
             {items.map((i) => (
               <li key={i.clientId} className="s-stack s-stack--tight">
-                <div className="alb-tile" data-testid="album-tile">
-                  <img src={i.preview} alt="" />
-                </div>
-                {!i.photoId && (
-                  <div className="s-row">
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      icon="plate"
-                      disabled={busy}
-                      onClick={() =>
-                        i.marking
-                          ? patch(i.clientId, { marking: false })
-                          : patch(i.clientId, {
-                              marking: true,
-                              rects: i.rects.length ? i.rects : [DEFAULT_PLATE_FRAME],
-                            })
-                      }
-                      data-testid="album-mark"
-                    >
-                      {i.rects.length > 0 ? "Cadre posé" : "Poser un cadre de plaque"}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      icon="trash"
-                      disabled={busy}
-                      onClick={() => removeItem(i.clientId)}
-                      aria-label={L.photoRemove}
-                      data-testid="album-remove"
-                    />
+                <div className="alb-item">
+                  <div className="alb-tile" data-testid="album-tile">
+                    <img src={i.preview} alt="" />
                   </div>
-                )}
+                  {!i.photoId && (
+                    <div className="alb-item__actions">
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        icon="plate"
+                        disabled={busy}
+                        onClick={() =>
+                          i.marking
+                            ? patch(i.clientId, { marking: false })
+                            : patch(i.clientId, {
+                                marking: true,
+                                rects: i.rects.length ? i.rects : [DEFAULT_PLATE_FRAME],
+                              })
+                        }
+                        data-testid="album-mark"
+                      >
+                        {i.rects.length > 0 ? "Cadre posé" : "Poser un cadre de plaque"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        icon="trash"
+                        disabled={busy}
+                        onClick={() => removeItem(i.clientId)}
+                        aria-label={L.photoRemove}
+                        data-testid="album-remove"
+                      />
+                    </div>
+                  )}
+                </div>
                 {i.marking && !i.photoId && (
                   <div className="s-stack s-stack--tight">
                     <PlateFrame

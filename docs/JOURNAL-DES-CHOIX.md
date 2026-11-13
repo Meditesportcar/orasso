@@ -6416,6 +6416,46 @@ Défauts appliqués (T31 à T36 de la fiche, Damien n'avait pas encore répondu)
 - **Pour R9e-2 (limite connue)** : si l'événement est supprimé **physiquement** avant le compte, plus aucune ligne de photo ne porte `legacy_source_key` : seul le job `storage.remove` programmé par `createGallery` efface l'original. S'il épuise ses essais, le fichier reste sur le disque, mais en 404 (la ligne de `legacy_file_blocks` est gardée).
 - **Test d'annulation** : une première clé valide et une seconde invalide donnent 400, ni album, ni photo, ni ligne de blocage (la transaction est annulée), la copie écrite avant l'échec est effacée, l'original reste servi comme avant et son envoi n'est pas consommé ; la publication peut être retentée.
 
+## Lot R9e, partie 2 (13/11/2026) : albums des médias, écrans de l'appli et du site
+
+Les écrans de la partie 1 (API, migration `0089_event-albums`, aucune migration nouvelle ici). Maquettes `m-album-as_e1` à `e3`, `pg`, `albCard`, `ALBS` de l'artefact DA v2 ; les libellés sont ceux de `labels/albums.fr.ts`.
+
+- **Onglet `albums` de la Page du média (T22 remplacé).** `PageTab` gagne `albums` (adresse `?onglet=albums`) et perd `contents` ; l'onglet d'accueil du média est « Albums ». Les trois compteurs deviennent « abonnés · albums · photos » (`albumsCount`, `photosCount` de `GET /media/:id`) : le compteur d'accréditations de R9b n'est plus affiché (l'API le sert toujours, comme avant). `PageContents` est remplacé par `PageAlbums` (appli) : « Nouvel album » en tête, seul bouton principal de l'onglet ; les brouillons du titulaire y sont listés avec « Brouillon » et se reprennent ; vide : « Pas encore d'album. » ; « Réessayer » rejoue `read(true)` (une actualisation, jamais une suite fusionnée). Visiteur : les albums publiés de `GET /media/:id/albums`.
+- **T8, « Liens ».** Sous les albums, les liens d'avant : `ContentsScreen` en `embedded` et `linksOnly` pour le titulaire (ajouter, modifier, supprimer un lien, « Mis en avant sur la page », vues), liste publique pour le visiteur. Les deux tuiles de chiffres (« Vues depuis Orasso », « Contenus ») comptent **tous** les contenus, albums compris : « voir les vues » ne disparaît pas. L'écran isolé `/(media)/contenus` garde tout (liens et albums, ligne « Nouvel album »).
+- **Création en trois étapes** (`NewAlbumFlow` dans l'appli, `NewAlbumForm` à `/app/media/albums/nouveau` sur le site, `?album=<id>` reprend un brouillon). Étape 1 : seulement les événements où le média est accrédité, l'accréditation en attente est grisée, une ligne dit pourquoi ; un événement qui a déjà un brouillon propose « Reprendre l'album ». Étape 2 : « N photos prêtes », 30 photos par ouverture du sélecteur (200 par album), le bloc des plaques repérées avec **une décision pour le lot**, envoi une photo à la fois (« 37 / 48 »), « Reprendre l'envoi » après une coupure. Étape 3 : titre (vide : « Les photos du … » est proposé), trois lignes (crédit, événement, photos), « Enregistrer » (autorisé ou non), « Ce que verront les autres » (la carte du Fil), « Publier l'album ». Quitter en cours laisse le brouillon.
+- **La logique d'envoi est partagée** : `packages/shared/src/rules/albumUploads.ts` (`sendAlbumPhotos`, `decisionOf`, `signatureOf`, `pickLimit`, `platedCount`, `remaining`, `blurredOf`, `AlbumSendStopped`), avec son test (9 cas) ; `apps/mobile/src/features/albums/albumUploads.ts` ne fait que le réexporter. L'appli et le site disent la même chose et rejouent le même ajout sans doublon (`clientId`).
+- **Plaque.** Le floutage est proposé, jamais imposé (D28). Appli : l'appareil propose les cadres (ML Kit) ; **ajout de ma part, hors maquette** : un appui sur une vignette ouvre « La plaque de cette photo » (`AlbumPhotoSheet` : régler le cadre, en poser un, « Terminé », « Retirer la photo ») : c'était un geste des galeries d'avant (`media-blur-editor`) et un détecteur qui rate une plaque ne doit pas la laisser lisible. Site : pas de détection, le média pose lui-même un cadre (`PlateFrame`) sur chaque photo concernée ; le bloc de décision est le même.
+- **L'album ouvert** (appli `/album/<id>`, site `/albums/:id`) : couverture en mosaïque, titre jamais tronqué, tags (« N photos », « Photos : <média> », « Album officiel » si posé), « présent au <événement> » (ouvre la fiche), **un emplacement vide pour R9f** (`album-identify-slot`, « Identifier les voitures »), grille (24 d'abord, « Voir plus »), visionneuse avec le crédit en surimpression, `AlbumPhotoViewer.actions` vide et `actions/registry.ts` vide (R9f et R9g y posent leurs actions). Le titulaire : modifier le titre, autoriser ou interdire l'enregistrement, supprimer (avec confirmation) ; un autre membre : signaler (`album_photo`). Aucun nom de véhicule, aucun pseudo.
+- **Carte du Fil.** `AlbumCard` (appli et site) : en-tête = la page du média, « Média · il y a 1 h », « présent au … », « Les photos du … · 48 photos », mosaïque, « Voir l'album » ; ni flamme ni commentaire. `album` entre dans `FEED_KINDS_DRAWN` (le test des genres réservés attend `[]`) ; l'appli et le site demandent `?cards=album` aux lectures du Fil.
+- **Photos protégées.** Appli : le mécanisme authentifié de `CrewPhotoImage` (`AlbumPhoto`). Site : le cookie de session suffit. Sans session : la fiche de l'événement montre l'album par la route publique de photos, sans rien d'identifié ; la page du média et l'album ouvert demandent la connexion (comme avant).
+- **Site, fiche d'un média (`/m/:id`).** Section « Albums » (compteurs « N albums · M photos », une ligne par album, « Voir plus » au curseur avec « Réessayer ») puis « Liens » (les galeries ne s'y affichent plus). Les pages de la façade mêlent liens et albums : « Voir la suite » de « Liens » peut donc n'ajouter aucun lien (la page lue ne contenait que des albums), jamais de doublon.
+- **Site, casquette Média (« Contenus »).** Le formulaire n'ajoute plus que des liens (le choix « Galerie » et le sélecteur de photos sont retirés), un bouton « Nouvel album » mène à la création ; un contenu album a son titre en lien vers l'album et se supprime comme avant (la façade). `MediaGalleryPicker` (site) n'est plus utilisé, de même `galleryUploads.ts` et son test dans l'appli : laissés en place, sans appel.
+- **API (une ligne).** `contentById` (réponses de `POST`/`PATCH /me/media-contents`) rend `photos: []` pour un album invisible du titulaire (`albums/legacy.ts`), test dans `media/legacy.test.ts`.
+- **Fiche de l'événement (appli et site) : inchangée** (elle lit la façade, qui sert les albums comme les galeries d'avant).
+
+### Inventaire : chaque geste des galeries d'avant et où il vit maintenant
+
+- Créer une galerie : « Nouvel album » (Page › Albums, ligne de l'écran Contenus, casquette Média du site).
+- Jusqu'à 30 photos : 200 par album, 30 par ouverture du sélecteur.
+- Flouter une plaque : l'appareil propose, le cadre se règle à la main (feuille de la vignette dans l'appli, `PlateFrame` sur le site), décision pour le lot.
+- Envoyer sans flouter : « Envoyer telle quelle ».
+- Retirer une photo avant l'envoi : « Retirer la photo » (feuille de la vignette dans l'appli, bouton de la ligne sur le site).
+- Mettre en avant : l'album officiel est posé par l'organisateur (R9g) ; la façade garde la route d'avant.
+- Modifier le titre : « Modifier le titre » de l'album ouvert (et `PATCH` de la façade).
+- Supprimer : « Supprimer l'album » de l'album ouvert (et la ligne de l'écran Contenus).
+- Voir les vues : les deux tuiles de l'onglet et de l'écran Contenus.
+- Parcourir les photos : l'album ouvert et sa visionneuse (fiche de l'événement inchangée).
+- Compter une consultation : `POST /media-contents/:id/view` sur l'album.
+
+### À revoir avec Damien (lot R9e, partie 2)
+
+- **Le site ne détecte pas les plaques** : sur un album de 48 photos, il faut poser un cadre sur chaque photo concernée (une à la fois). L'appli détecte à l'appareil. À garder tel quel tant que Damien ne demande pas de détection côté site.
+- **Compteur d'accréditations de la Page du média** : remplacé par « albums · photos » comme la fiche de R9e le demande ; à confirmer que R9b ne le voulait pas en plus.
+
+### Recettes périmées, adaptées sans retirer d'attente
+
+- `appli-lot55` : la création d'une galerie passe par « Nouvel album » (mêmes attentes sur le floutage proposé : un cadre sur la première photo, aucun sur la seconde, deux envois), onglet « Albums » à la place de « Contenus », « Couvert · N contenus » compte les albums, « Vérifié » et pas de `page-pending` inchangés. `appli-lotr9b` : onglet « Albums », compteurs albums et photos. `lot57` (site) : mêmes trois gestes (galerie, envoi retardé, galerie de 8 photos), par le nouvel album et l'album ouvert. `lot56-corrections` : la galerie posée en base est reprise en album par les mêmes instructions que la migration.
+
 ## Petit lot recettes (13/11/2026)
 
 Trois recettes de l'appli périmées par des changements voulus (R8d, R9n), remises à jour sans retirer aucune attente de fond : chaque vérification d'avant passe par le nouveau chemin. Aucun code du produit touché, aucun défaut du produit trouvé. Fichiers : `apps/web/e2e/appli-orga.spec.ts`, `apps/web/e2e/appli-structure-staff.spec.ts`, `apps/web/e2e/appli-lot52.spec.ts`.

@@ -154,13 +154,24 @@ async function noFanScreen(page: Page) {
  * Night au lot C6), le nombre attendu se calcule au lieu de s'écrire en dur. `email` restreint aux contenus d'un média.
  */
 async function published(where: { slug?: string; email?: string }): Promise<{ n: number; views: number }> {
+  // Lot R9e : les galeries sont des albums ; liens (`media_contents`) et albums publiés comptent ensemble.
   const [row] = await sql<{ n: number; views: number }>(
-    `select count(*)::int as n, coalesce(sum(c.views), 0)::int as views
-       from media_contents c
-       join media_profiles m on m.id = c.media_profile_id and m.deleted_at is null
-       join events e on e.id = c.event_id
-       join "user" u on u.id = m.user_id
-      where c.deleted_at is null and ($1::text is null or e.slug = $1) and ($2::text is null or u.email = $2)`,
+    `select count(*)::int as n, coalesce(sum(x.views), 0)::int as views from (
+       select c.views, e.slug, u.email
+         from media_contents c
+         join media_profiles m on m.id = c.media_profile_id and m.deleted_at is null
+         join events e on e.id = c.event_id
+         join "user" u on u.id = m.user_id
+        where c.deleted_at is null
+       union all
+       select a.views, e.slug, u.email
+         from event_albums a
+         join media_profiles m on m.id = a.media_profile_id and m.deleted_at is null
+         join events e on e.id = a.event_id
+         join "user" u on u.id = m.user_id
+        where a.deleted_at is null and a.status = 'published'
+     ) x
+     where ($1::text is null or x.slug = $1) and ($2::text is null or x.email = $2)`,
     [where.slug ?? null, where.email ?? null],
   );
   return row ?? { n: 0, views: 0 };
@@ -187,6 +198,8 @@ for (const theme of THEMES) {
       `delete from media_contents where title like 'Reportage de la nuit %' or title like 'Nocturne, le reportage %'
          or title like 'Galerie de la nuit %'`,
     );
+    // Lot R9e : l'album publié par la passe précédente (la galerie d'hier) est effacé aussi (ses photos suivent).
+    await sql("delete from event_albums where title like 'Galerie de la nuit %'");
     // Les demandes de Léo à Toulouse (envoyée, puis retirée par la passe précédente, quel que soit le thème) sont effacées :
     // chaque thème repart de l'état du seed, dans n'importe quel ordre.
     await sql(
@@ -341,8 +354,8 @@ for (const theme of THEMES) {
 
     // --- Contenus -----------------------------------------------------------------------------------------------------------
     await tab(page, "Page"); // R9n : les Contenus sont l'écran de l'onglet Page ; R9b : l'onglet « Contenus » de la Page
-    await page.getByTestId("page-tab-contents").click();
-    await expect(page.getByTestId("page-tab-contents")).toContainText("Contenus", { timeout: 30_000 });
+    await page.getByTestId("page-tab-albums").click();
+    await expect(page.getByTestId("page-tab-albums")).toContainText("Albums", { timeout: 30_000 });
     await expect(page.getByTestId("media-stats")).toBeVisible();
     await expect(page.getByText("Vues depuis Orasso", { exact: true })).toBeVisible();
     const leoViews = (await published({ email: "leo@orasso.local" })).views;
@@ -394,34 +407,42 @@ for (const theme of THEMES) {
         return original(input, init);
       };
     });
-    await page.getByTestId("media-add").click();
-    const sheet = page.getByLabel("Ajouter un contenu");
-    await sheet.getByText("Nocturne de Canet", { exact: true }).click();
-    await page.getByLabel("Titre").fill(`Galerie de la nuit ${theme}`);
-    await sheet.getByText("Galerie", { exact: true }).click();
-    for (const [i, name] of ["nocturne-1.png", "nocturne-2.png"].entries()) {
-      const chooser = page.waitForEvent("filechooser");
-      await page.getByTestId("media-pick").click();
-      await (await chooser).setFiles({ name, mimeType: "image/png", buffer: checkerPhoto() });
-      await expect(page.getByTestId("media-blur-editor")).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByText("Flouter les plaques ?", { exact: true })).toBeVisible();
-      if (i === 0) {
-        await expect(page.getByTestId("media-blur-confirm")).toBeDisabled();
-        await page.getByTestId("media-blur-add").click();
-        await shot(page, "contenus-floutage", theme);
-        await page.getByTestId("media-blur-confirm").click();
-      } else {
-        await page.getByTestId("media-blur-plain").click();
-      }
-    }
-    await expect(page.getByTestId("media-blur-editor")).toHaveCount(0);
-    await expect(page.getByText(/2 sur 30/)).toBeVisible();
-    await page.getByTestId("media-publish").click();
-    await expect(page.getByText(new RegExp(`Galerie · Galerie de la nuit ${theme}`))).toBeVisible({ timeout: 60_000 });
+    // Lot R9e : la galerie devient un album (« Nouvel album » de l'onglet « Albums »). Le floutage des plaques reste proposé, jamais
+    // imposé (D28) : le navigateur n'a pas de détecteur, le cadre se pose à la main sur la photo (l'appareil le propose sur le
+    // téléphone) ; la décision est une pour le lot.
+    await page.getByTestId("page-album-new").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 1 sur 3", { timeout: 30_000 });
+    await page.getByTestId("album-event").filter({ hasText: "Béziers Night" }).click();
+    await page.getByTestId("album-step1-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3", { timeout: 30_000 });
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("album-pick").click();
+    await (await chooser).setFiles(
+      ["nocturne-1.png", "nocturne-2.png"].map((name) => ({ name, mimeType: "image/png", buffer: checkerPhoto() })),
+    );
+    await expect(page.getByTestId("album-tile")).toHaveCount(2, { timeout: 20_000 });
+    await expect(page.getByTestId("album-plates")).toHaveCount(0);
+    await page.getByTestId("album-tile").first().click();
+    await expect(page.getByTestId("album-frame-editor")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("album-frame-add").click();
+    await shot(page, "contenus-floutage", theme);
+    await page.getByTestId("album-frame-done").click();
+    await expect(page.getByTestId("album-plates")).toContainText("1 photo avec une plaque repérée");
+    await expect(page.getByTestId("album-step2-continue")).toBeDisabled();
+    await expect(page.getByTestId("album-needs-decision")).toBeVisible();
+    await page.getByTestId("album-blur").click();
+    await expect(page.getByTestId("album-plates")).toContainText("1 photo floutée");
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
+    await page.getByTestId("album-title").fill(`Galerie de la nuit ${theme}`);
+    await page.getByTestId("album-publish").click();
+    await expect(page.getByTestId("album-open-title")).toHaveText(`Galerie de la nuit ${theme}`, { timeout: 60_000 });
+    await expect(page.getByTestId("album-tag-count")).toHaveText("2 photos");
     const uploads = await page.evaluate(() => (window as unknown as { __uploads: string[][] }).__uploads);
     expect(uploads).toHaveLength(2);
     expect(uploads[0]).toContain("plateRects");
     expect(uploads[1]).not.toContain("plateRects");
+    await toMedia(page);
 
     // --- Page : « Modifier ma page » et la vérification (R9n : l'ancien Profil n'est plus un onglet ; R9b : chip et en-tête) ---
     await tab(page, "Page");
@@ -539,7 +560,7 @@ for (const theme of THEMES) {
     await expect(page.getByText("Aucune accréditation à venir", { exact: true })).toBeVisible({ timeout: 30_000 });
     await shot(page, "presse-vide", theme);
     await tab(page, "Page"); // R9n : les Contenus sont l'écran de l'onglet Page ; R9b : l'onglet « Contenus » (sans publication, c'est lui qui s'ouvre)
-    await page.getByTestId("page-tab-contents").click();
+    await page.getByTestId("page-tab-albums").click();
     await expect(page.getByTestId("media-stats")).toBeVisible({ timeout: 30_000 });
     await shot(page, "contenus-vide", theme);
     // Le profil est en base, sans numéro de carte de presse.

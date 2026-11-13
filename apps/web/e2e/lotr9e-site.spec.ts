@@ -15,7 +15,14 @@ const photo = (name: string) => ({ name, mimeType: "image/jpeg", buffer: readFil
 const LEO = "leo@orasso.local";
 const DAMIEN = "damien@orasso.local";
 
-type Summary = { id: string; title: string; status: string; photosCount: number; allowSave: boolean; media: { key: string } };
+type Summary = {
+  id: string;
+  title: string;
+  status: string;
+  photosCount: number;
+  allowSave: boolean;
+  media: { key: string };
+};
 
 async function leoAlbums(status: "published" | "draft") {
   const cookie = await login(LEO);
@@ -27,7 +34,10 @@ async function chooseEvent(page: Page, title: string) {
   await page.locator("label.alb-option", { hasText: title }).locator("input").check();
 }
 
-test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son Fil et sur la fiche", async ({ page, browser }) => {
+test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son Fil et sur la fiche", async ({
+  page,
+  browser,
+}) => {
   test.setTimeout(240_000);
   const title = `Béziers Night R9e ${unique()}`;
   let albumId: string | null = null;
@@ -42,7 +52,10 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("album-event")).toHaveCount(3);
     await expect(page.getByTestId("album-event-pending")).toHaveCount(1);
     await expect(page.getByTestId("album-event-pending")).toBeDisabled();
-    await expect(page.locator("label.alb-option", { hasText: "C&C Perpignan" })).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("label.alb-option", { hasText: "C&C Perpignan" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await expect(page.locator("label.alb-option", { hasText: "Expo Rivesaltes" })).toHaveCount(0);
     await chooseEvent(page, "Béziers Night");
     await expect(page.getByTestId("album-step1-continue")).toHaveText("Continuer");
@@ -50,7 +63,9 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
 
     // Étape 2 : trois photos, un cadre de plaque sur la première, une décision pour le lot.
     await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
-    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg"), photo("car-supra.jpg")]);
+    await page
+      .getByTestId("album-pick")
+      .setInputFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg"), photo("car-supra.jpg")]);
     await expect(page.getByTestId("album-tile")).toHaveCount(3);
     await expect(page.getByTestId("album-count")).toContainText("3");
     await expect(page.getByTestId("album-plates")).toHaveCount(0);
@@ -142,7 +157,9 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
   }
 });
 
-test("le brouillon du seed se reprend ; la galerie reprise de Béziers Night s'ouvre comme un album de 4 photos", async ({ page }) => {
+test("le brouillon du seed se reprend ; la galerie reprise de Béziers Night s'ouvre comme un album de 4 photos", async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await loginInBrowser(page, LEO, undefined, "/app/media/albums/nouveau");
   await expect(page.getByTestId("album-step-label")).toHaveText("Étape 1 sur 3");
@@ -169,7 +186,9 @@ test("le brouillon du seed se reprend ; la galerie reprise de Béziers Night s'o
   await expect(page.getByTestId("album-tag-count")).toHaveText("4 photos");
 });
 
-test("sans session : la fiche de l'événement montre l'album, sans rien d'identifié ; l'album ouvert demande la connexion", async ({ page }) => {
+test("sans session : la fiche de l'événement montre l'album, sans rien d'identifié ; l'album ouvert demande la connexion", async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   const published = await leoAlbums("published");
   const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
