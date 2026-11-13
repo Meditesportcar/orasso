@@ -373,6 +373,27 @@ export const providersService = {
     return { ...publicView(p), reviews: await reviewsOf(p.id) };
   },
 
+  /**
+   * Lot R9b, en-tête de la page d'un prestataire (`GET /providers/:id`, T24) : `missionsCount` = ses candidatures retenues sur des
+   * événements publiés (à venir ou finis, jamais un brouillon ni un annulé) ; `organizersCount` = les structures distinctes de ces
+   * événements. Une seule requête ; ce sont des « Sur place » déjà publics : servis à tout membre connecté.
+   */
+  async pageCounts(providerId: string): Promise<{ missionsCount: number; organizersCount: number }> {
+    const [row] = await db
+      .select({ missions: count(), organizers: sql<number>`count(distinct ${events.structureId})::int` })
+      .from(applications)
+      .innerJoin(events, eq(events.id, applications.eventId))
+      .where(
+        and(
+          eq(applications.kind, "provider"),
+          eq(applications.providerProfileId, providerId),
+          eq(applications.status, "accepted"),
+          eq(events.status, "published"),
+        ),
+      );
+    return { missionsCount: row?.missions ?? 0, organizersCount: row?.organizers ?? 0 };
+  },
+
   // --- Événements ouverts ---------------------------------------------------------------------------------------------
 
   /** `GET /events/open-to-providers?type=` : publiés, à venir, non verrouillés, dont `vendor_types` accepte le type. */

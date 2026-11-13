@@ -47,6 +47,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { DirBig } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { Overlay } from "@/ui/Overlay";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
 import {
@@ -61,7 +62,18 @@ import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews }
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
 
-export function ContentsScreen() {
+/**
+ * Lot R9b : `embedded` pose l'écran **dans l'onglet « Contenus » de la Page du média** (T22) : ni bande, ni grand titre, ni zone qui
+ * défile à lui (celle de la Page), ses feuilles vont dans la zone des feuilles de la Page (`Overlay`) ; `reloadToken` le relit
+ * quand la Page est tirée pour recharger. Sans `embedded`, rien ne change.
+ */
+export function ContentsScreen({
+  embedded = false,
+  reloadToken = 0,
+}: {
+  embedded?: boolean;
+  reloadToken?: number;
+} = {}) {
   const { t } = useTheme();
   const { goTab } = usePersona();
   const profile = useApi(async () => (await api.myMediaProfile()).profile, [], { cacheKey: "media-profile" });
@@ -75,34 +87,38 @@ export function ContentsScreen() {
   // Les événements où l'on peut publier : ceux où l'accréditation est donnée (l'API refuse les autres).
   const accredited = (accreditations.data ?? []).filter((a) => a.status === "accepted");
   const reload = async () => void (await Promise.all([contents.reload(), accreditations.reload()]));
+  const seenToken = useRef(reloadToken);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un jeton neuf relit les listes
+  useEffect(() => {
+    if (seenToken.current === reloadToken) return;
+    seenToken.current = reloadToken;
+    void reload();
+  }, [reloadToken]);
 
-  return (
-    <TabScreen
-      title={L.contentsTitle}
-      facts={profile.data?.name}
-      onRefresh={reload}
-      overlays={
-        <>
-          <AddContentSheet
-            visible={adding}
-            events={accredited.map((a) => ({ id: a.event.id, title: a.event.title, startsAt: a.event.startsAt }))}
-            onClose={() => setAdding(false)}
-            onDone={() => {
-              setAdding(false);
-              void reload();
-            }}
-          />
-          <EditContentSheet
-            item={editing}
-            onClose={() => setEditing(null)}
-            onDone={() => {
-              setEditing(null);
-              void reload();
-            }}
-          />
-        </>
-      }
-    >
+  const sheets = (
+    <>
+      <AddContentSheet
+        visible={adding}
+        events={accredited.map((a) => ({ id: a.event.id, title: a.event.title, startsAt: a.event.startsAt }))}
+        onClose={() => setAdding(false)}
+        onDone={() => {
+          setAdding(false);
+          void reload();
+        }}
+      />
+      <EditContentSheet
+        item={editing}
+        onClose={() => setEditing(null)}
+        onDone={() => {
+          setEditing(null);
+          void reload();
+        }}
+      />
+    </>
+  );
+
+  const body = (
+    <>
       {/* Lot C4b (artefact `s-contenus`) : deux tuiles `.dir-big`, la première crème. */}
       <DirBig
         testID="media-stats"
@@ -140,6 +156,19 @@ export function ContentsScreen() {
           ))}
         </View>
       ))}
+    </>
+  );
+
+  if (embedded)
+    return (
+      <View style={styles.embedded} testID="media-contents-embedded">
+        <Overlay>{sheets}</Overlay>
+        {body}
+      </View>
+    );
+  return (
+    <TabScreen title={L.contentsTitle} facts={profile.data?.name} onRefresh={reload} overlays={sheets}>
+      {body}
     </TabScreen>
   );
 }
@@ -658,6 +687,8 @@ function EditBody({ item, onClose, onDone }: { item: MediaContentView; onClose: 
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // Lot R9b : le même espacement que la zone qui défile de l'onglet (`TabScreen`) quand l'écran est posé dans la Page.
+  embedded: { gap: space3 },
   group: { gap: space2, marginTop: space2 },
   groupHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
   row: { gap: space2, padding: space3 },

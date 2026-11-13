@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login } from "./helpers";
 import { sql } from "./helpers/lot48";
 import { closeSheet, open, rules, shot, signIn, THEMES, tab, toOrganizer } from "./helpers/lot52";
@@ -6,7 +6,7 @@ import { closeSheet, open, rules, shot, signIn, THEMES, tab, toOrganizer } from 
 // Lot 52, côté appli (version web de recette) : la casquette Organisateur en DA v2. Cinq onglets : Événements (créer,
 // brouillon qui dit ce qui manque, anciens derrière « … », duplication et invitation expliquée), Tri (grande photo, note
 // d'arrivée, segments dont Prestataires par mission avec emplacement, et Presse), Direct (jour J, puis hors événement),
-// Équipe (bulles de tailles différentes, historique et actions, rôles par événement), Structure (sceau tournant et
+// Équipe (ouverte par la « Page », lot R9n : bulles de tailles différentes, historique et actions, rôles par événement), Structure (corps de la « Page » : sceau tournant et
 // pastille au O quand elle est validée, message clair quand elle est en vérification). Deux thèmes, captures à 390 px,
 // audit des règles du système de design sur chaque écran.
 // Lancer avec APP_URL=http://localhost:8371 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée. Le Direct
@@ -14,6 +14,20 @@ import { closeSheet, open, rules, shot, signIn, THEMES, tab, toOrganizer } from 
 const APP = process.env.APP_URL;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
+
+/** Lot R9n : l'Équipe n'a plus d'onglet, elle s'ouvre par la ligne « Équipe » de la « Page » de la casquette organisateur. */
+async function openTeam(page: Page) {
+  await tab(page, "Page");
+  await page.getByTestId("page-gest-team").click();
+  await expect(page).toHaveURL(/\/equipe/, { timeout: 20_000 });
+}
+
+/** Lot R9n : l'ancien onglet « Structure » est le corps de l'onglet « Page » (sceau, pastille au O, tuiles). */
+async function openStructure(page: Page) {
+  await tab(page, "Page");
+  // Lot R9b : la Structure s'ouvre par le chip « Réglages de la structure » de la Page.
+  await page.getByTestId("page-gest-structure").click();
+}
 
 for (const theme of THEMES) {
   test(`Événements : créer, brouillon avec ce qui manque, anciens derrière « … », duplication (${theme})`, async ({
@@ -198,7 +212,7 @@ for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "damien@orasso.local");
     await toOrganizer(page, "MéditeSportCar");
-    await tab(page, "Équipe");
+    await openTeam(page);
     await expect(page.getByRole("heading", { name: "L'équipe", exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });
@@ -286,7 +300,7 @@ for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "damien@orasso.local");
     await toOrganizer(page, "MéditeSportCar");
-    await tab(page, "Structure");
+    await openStructure(page);
     await expect(page.getByRole("heading", { name: "Ma structure", exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });
@@ -319,7 +333,7 @@ for (const theme of THEMES) {
     const second = await open(browser, theme);
     await signIn(second.page, "pres_vallespir@orasso.local");
     await toOrganizer(second.page);
-    await tab(second.page, "Structure");
+    await openStructure(second.page);
     await expect(second.page.getByTestId("structure-pending")).toContainText("Vérification en cours", {
       timeout: 30_000,
     });
@@ -377,7 +391,7 @@ test("Structure : le sceau reste immobile quand les animations sont réduites", 
   const { ctx, page } = await open(browser, "beton", "reduce");
   await signIn(page, "damien@orasso.local");
   await toOrganizer(page, "MéditeSportCar");
-  await tab(page, "Structure");
+  await openStructure(page);
   await expect(page.getByTestId("structure-seal")).toBeVisible({ timeout: 30_000 });
   const angle = () => page.getByTestId("structure-seal").evaluate((el) => getComputedStyle(el).transform);
   const first = await angle();

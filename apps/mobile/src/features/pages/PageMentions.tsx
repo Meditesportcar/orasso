@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
+import { pageHrefOf } from "@/features/pages/pageLinks";
 import { SetList, SetRow } from "@/features/profil/parts";
 import { type FailedCall, retryCall } from "@/features/publications/retryCall";
 import { api } from "@/lib/api";
@@ -124,7 +125,8 @@ function Row({
   const { post } = item;
   const line = mentionLine(item, pageName);
   const photo = post.photos[0];
-  const person = post.author.kind === "user";
+  // Lot R9b : un prestataire ou un média cité ouvre sa page, comme la carte du Fil (`pageHrefOf`).
+  const href = pageHrefOf(post.author.key, { pseudo: post.author.pseudo });
   return (
     <View style={[styles.row, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]} testID="mention-row">
       <Pressable
@@ -140,10 +142,10 @@ function Row({
       </Pressable>
       <View style={styles.text}>
         <Pressable
-          accessibilityRole={person ? "link" : undefined}
-          accessibilityLabel={person ? L.mentionAuthor(post.author.name) : undefined}
-          disabled={!person}
-          onPress={() => router.push(`/u/${encodeURIComponent(post.author.pseudo)}` as never)}
+          accessibilityRole={href ? "link" : undefined}
+          accessibilityLabel={href ? L.mentionAuthor(post.author.name) : undefined}
+          disabled={!href}
+          onPress={() => href && router.push(href as never)}
           style={styles.author}
           testID="mention-author"
         >

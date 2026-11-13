@@ -8,13 +8,14 @@ import type { AuthorPostsFilter, MentionItem, PageCounts } from "../schemas/feed
 import type { StoriesSummary } from "../schemas/stories";
 import { FEED_ASPECT_RATIOS, type FeedAspect, feedAspects } from "./feed";
 
-export type PageKind = "structure" | "pro";
+/** Lot R9b : le prestataire et le média ont leur page, comme la structure et le pro. */
+export type PageKind = "structure" | "pro" | "provider" | "media";
 
 /**
- * Les onglets d'une page : « Événements » (structure) ou « Présentation » (pro), puis « Publications », « Offres » (fiche pro, R9c)
- * et « Mentions ».
+ * Les onglets d'une page : « Événements » (structure), « Présentation » (pro), « Prestations » (prestataire) ou « Contenus »
+ * (média, R9b), puis « Publications », « Offres » (fiche pro, R9c) et « Mentions ».
  */
-export type PageTab = "events" | "presentation" | "publications" | "offers" | "mentions";
+export type PageTab = "events" | "presentation" | "publications" | "offers" | "services" | "contents" | "mentions";
 
 /** Le paramètre d'adresse qui porte l'onglet ouvert (`?onglet=`) : un lien partagé ouvre le bon. */
 export const PAGE_TAB_PARAM = "onglet";
@@ -24,6 +25,8 @@ const SLUG: Record<PageTab, string> = {
   presentation: "presentation",
   publications: "publications",
   offers: "offres",
+  services: "prestations",
+  contents: "contenus",
   mentions: "mentions",
 };
 
@@ -37,26 +40,49 @@ const LABEL: Record<PageTab, string> = {
   presentation: L.tabPresentation,
   publications: L.tabPublications,
   offers: proOffersLabels.tab,
+  services: L.tabServices,
+  contents: L.tabContents,
   mentions: L.tabMentions,
+};
+
+/** L'onglet de la page d'hier : celui qui ne dépend ni de la session ni du nombre de publications. */
+const FIRST: Record<PageKind, PageTab> = {
+  structure: "events",
+  pro: "presentation",
+  provider: "services",
+  media: "contents",
 };
 
 /**
  * Les onglets proposés, dans l'ordre. Structure : « Événements », « Publications », « Mentions · N ». Pro : « Présentation »,
- * « Publications », « Offres » (R9c, avec une session), « Mentions · N ». **Sans session** : pas de « Mentions » (l'API ne les sert qu'à un membre connecté) et, pour
- * un pro, pas de « Publications » non plus (T4 : un visiteur ne voit que les publications d'un organisateur). `count` : le nombre
- * de la rangée (« Mentions · N ») ; `null` quand il n'est pas connu (jamais « · 0 » à la place d'une panne).
+ * « Publications », « Offres » (R9c, avec une session), « Mentions · N ». Prestataire (R9b) : « Publications », « Prestations »,
+ * « Mentions · N ». Média : « Publications », « Contenus », « Mentions · N ». **Sans session** : pas de « Mentions » (l'API ne les
+ * sert qu'à un membre connecté) et, hors structure, pas de « Publications » non plus (T4 : un visiteur ne voit que les publications
+ * d'un organisateur) : un pro n'a que « Présentation », un prestataire que « Prestations », un média que « Contenus ».
+ * **`owner`** : le propriétaire d'une fiche pro n'a pas « Présentation » (sa fiche s'ouvre par « Modifier ma fiche ») :
+ * « Publications · Offres · Mentions · N ». `count` : le nombre de la rangée (« Mentions · N ») ; `null` quand il n'est pas connu
+ * (jamais « · 0 » à la place d'une panne).
  */
-export function pageTabs(kind: PageKind, input: { session: boolean; mentionsCount?: number | null }): PageTabItem[] {
-  const first: PageTab = kind === "structure" ? "events" : "presentation";
-  const out: PageTabItem[] = [{ id: first, label: LABEL[first], count: null }];
-  if (kind === "pro" && !input.session) return out;
-  out.push({ id: "publications", label: LABEL.publications, count: null });
-  if (kind === "pro" && input.session) out.push({ id: "offers", label: LABEL.offers, count: null });
-  if (input.session) {
-    const n = input.mentionsCount;
-    out.push({ id: "mentions", label: LABEL.mentions, count: typeof n === "number" ? n : null });
+export function pageTabs(
+  kind: PageKind,
+  input: { session: boolean; mentionsCount?: number | null; owner?: boolean },
+): PageTabItem[] {
+  const item = (id: PageTab, count: number | null = null): PageTabItem => ({ id, label: LABEL[id], count });
+  if (!input.session) return kind === "structure" ? [item("events"), item("publications")] : [item(FIRST[kind])];
+  const n = input.mentionsCount;
+  const mentions = item("mentions", typeof n === "number" ? n : null);
+  switch (kind) {
+    case "structure":
+      return [item("events"), item("publications"), mentions];
+    case "pro":
+      return input.owner
+        ? [item("publications"), item("offers"), mentions]
+        : [item("presentation"), item("publications"), item("offers"), mentions];
+    case "provider":
+      return [item("publications"), item("services"), mentions];
+    case "media":
+      return [item("publications"), item("contents"), mentions];
   }
-  return out;
 }
 
 /** Les compteurs servis avec la page (décoration de R8a2) : absents d'une réponse plus ancienne, `mentions` absent sans session. */
@@ -67,31 +93,35 @@ export type PageCountsInput = {
 
 /**
  * L'onglet qui s'ouvre sur une page sans adresse explicite : **« Publications » par défaut** (R9.3), sauf sans aucune publication
- * (ou sans onglet « Publications » : un pro vu sans session) : « Événements » (structure) ou « Présentation » (pro). Compteur
- * inconnu (réponse sans le champ) : comme avant la vague, l'onglet de la fiche d'hier.
+ * (ou sans onglet « Publications » : un pro, un prestataire ou un média vu sans session) : « Événements » (structure), « Présentation »
+ * (pro), « Prestations » (prestataire) ou « Contenus » (média). Compteur inconnu (réponse sans le champ) : comme avant la vague, l'onglet de la fiche d'hier.
  */
-export function pageOpenTab(kind: PageKind, counts: PageCountsInput, session: boolean): PageTab {
-  const first: PageTab = kind === "structure" ? "events" : "presentation";
-  const shown = pageTabs(kind, { session }).some((t) => t.id === "publications");
-  if (!shown) return first;
+export function pageOpenTab(kind: PageKind, counts: PageCountsInput, session: boolean, owner = false): PageTab {
+  const tabs = pageTabs(kind, { session, owner });
+  // Le propriétaire d'un pro n'a pas « Présentation » : sans publication, son premier onglet est « Offres ».
+  const first = tabs.find((t) => t.id !== "publications")?.id ?? FIRST[kind];
+  if (!tabs.some((t) => t.id === "publications")) return first;
   const n = counts.publications;
   return typeof n === "number" && n > 0 ? "publications" : first;
 }
 
 /** Lit `?onglet=` : un onglet que la page propose, sinon `null` (un paramètre invalide est ignoré). */
-export function explicitPageTab(kind: PageKind, raw: unknown, session: boolean): PageTab | null {
+export function explicitPageTab(kind: PageKind, raw: unknown, session: boolean, owner = false): PageTab | null {
   if (typeof raw !== "string") return null;
   const found = (Object.keys(SLUG) as PageTab[]).find((t) => SLUG[t] === raw);
   if (!found) return null;
-  return pageTabs(kind, { session }).some((t) => t.id === found) ? found : null;
+  return pageTabs(kind, { session, owner }).some((t) => t.id === found) ? found : null;
 }
 
 /** L'onglet réellement affiché : celui de l'adresse, sinon celui d'ouverture. */
 export function pageShownTab(
   kind: PageKind,
-  input: { raw?: unknown; counts: PageCountsInput; session: boolean },
+  input: { raw?: unknown; counts: PageCountsInput; session: boolean; owner?: boolean },
 ): PageTab {
-  return explicitPageTab(kind, input.raw, input.session) ?? pageOpenTab(kind, input.counts, input.session);
+  return (
+    explicitPageTab(kind, input.raw, input.session, input.owner) ??
+    pageOpenTab(kind, input.counts, input.session, input.owner)
+  );
 }
 
 /** Le filtre « Tout · Événements · Hors événement » : la structure seulement. */
@@ -127,13 +157,14 @@ export function pageEmptyText(filter: AuthorPostsFilter, name: string): string {
 // --- L'en-tête ----------------------------------------------------------------------------------------------------------
 
 export type PageCounter = {
-  key: "followers" | "events" | "offers" | "partners" | "organizers";
+  key: "followers" | "events" | "offers" | "partners" | "organizers" | "missions" | "accreditations" | "publications";
   value: number | null;
   label: string;
 };
 
 /**
- * La bande de compteurs. Structure : « abonnés », « événements », « partenaires » (les pros partenaires). Pro : « abonnés », puis
+ * La bande de compteurs (R9b : prestataire « abonnés · missions · organisateurs », média « abonnés · accréditations · publications »).
+ * Structure : « abonnés », « événements », « partenaires » (les pros partenaires). Pro : « abonnés », puis
  * « offres en cours » (R9c), « partenaires » (les passionnés à partenariat actif : servis aux connectés seulement) et « organisateurs » (les organisateurs
  * partenaires) **seulement quand ils existent** : une case à zéro n'est pas montrée, un nombre non servi non plus. Un nombre
  * dont la lecture a échoué (`null`) garde sa case : « – ».
@@ -147,9 +178,28 @@ export function pageCounters(
     organizers?: number | null;
     /** Les offres en cours d'une fiche pro (R9c) : servies aux connectés seulement. */
     offers?: number | null;
+    /** Lot R9b : les missions et les organisateurs d'un prestataire (T24), les accréditations et les publications d'un média (T22). */
+    missions?: number | null;
+    accreditations?: number | null;
+    publications?: number | null;
   },
 ): PageCounter[] {
   const cells: PageCounter[] = [{ key: "followers", value: input.followers, label: L.followers(input.followers) }];
+  // Prestataire et média : trois cases toujours là ; un nombre non lu (`null`) garde sa case : « – ».
+  if (kind === "provider") {
+    const missions = input.missions ?? null;
+    const organizers = input.organizers ?? null;
+    cells.push({ key: "missions", value: missions, label: L.missions(missions ?? 2) });
+    cells.push({ key: "organizers", value: organizers, label: L.organizers(organizers ?? 2) });
+    return cells;
+  }
+  if (kind === "media") {
+    const accreditations = input.accreditations ?? null;
+    const publications = input.publications ?? null;
+    cells.push({ key: "accreditations", value: accreditations, label: L.accreditations(accreditations ?? 2) });
+    cells.push({ key: "publications", value: publications, label: L.publicationsCount(publications ?? 2) });
+    return cells;
+  }
   if (kind === "structure") {
     const events = input.events === undefined ? null : input.events;
     cells.push({ key: "events", value: events, label: L.events(events ?? 2) });
@@ -176,7 +226,7 @@ export const pageMentionsCount = (p: PageCounts): number | undefined => p.mentio
 
 /**
  * Un responsable de la page (celui qui peut « Masquer de la page ») : un membre actif non staff de la structure (propriétaire,
- * co-organisateur), le propriétaire de la fiche d'un pro. L'API revérifie chaque écriture (second facteur compris).
+ * co-organisateur), le propriétaire de la fiche d'un pro, d'un prestataire ou d'un média. L'API revérifie chaque écriture (second facteur compris).
  */
 export function isPageManager(
   kind: PageKind,
@@ -186,7 +236,7 @@ export function isPageManager(
     memberships?: readonly { structureId: string; role: string; status: string }[];
   },
 ): boolean {
-  if (kind === "pro") return input.isOwner === true;
+  if (kind !== "structure") return input.isOwner === true;
   return Boolean(
     input.memberships?.some((m) => m.structureId === input.structureId && m.status === "active" && m.role !== "staff"),
   );

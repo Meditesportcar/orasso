@@ -143,8 +143,18 @@ export async function auditApp(page: Page, theme: "beton" | "sable" = "beton"): 
         primaryLabels: primaries.map(label),
         neon: neon.length,
         neonLabels: neon.map(label),
+        // Lot R9b : l'anneau de stories d'une page (`page-story-ring`) est un avatar, pas un bouton à libellé : sans logo il porte l'initiale
+        // du nom (« S » pour Sud Cars), comme celui du Profil.
         buttonsWithoutIcon: buttons
-          .filter((el) => el.tagName === "BUTTON" && upper(el) && !inBars(el) && !el.querySelector("svg") && label(el))
+          .filter(
+            (el) =>
+              el.tagName === "BUTTON" &&
+              upper(el) &&
+              !inBars(el) &&
+              !el.querySelector("svg") &&
+              !el.closest('[data-testid="page-story-ring"]') &&
+              label(el),
+          )
           .map(label),
         greens: [...greens].slice(0, 10),
         horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,

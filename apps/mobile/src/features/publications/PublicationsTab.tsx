@@ -68,6 +68,12 @@ type TabProps = {
   filter?: AuthorPostsFilter;
   /** Lot R8g : une phrase d'état vide propre à une page (le titre reste « Pas encore de publication »). */
   emptyText?: string;
+  /**
+   * Lot R9b : la page du propriétaire (sa Page) : la clé d'auteur de sa casquette. Le bouton « Publier » compact et l'état vide qui
+   * invite apparaissent comme chez moi, mais ouvrent `/fil/publier?auteur=<clé>` (« Publier en tant que <page> »). Sans effet sur la
+   * copie hors ligne (réservée à `mine`).
+   */
+  publishAs?: string;
   /** Lot R8g : change quand la page est relue (geste, retour) : la liste se relit **sans être démontée** (en cas d échec elle garde ses éléments). */
   reloadToken?: number;
 };
@@ -96,10 +102,16 @@ function PublicationsBody({
   follow,
   filter,
   emptyText,
+  publishAs,
   reloadToken,
 }: TabProps) {
   const { t } = useTheme();
   const router = useRouter();
+  const canPublish = mine || publishAs !== undefined;
+  const publish = () =>
+    publishAs === undefined
+      ? router.push("/fil/publier")
+      : router.push({ pathname: "/fil/publier", params: { auteur: publishAs } });
   const list = usePublications(authorKey, filter, !restrictedHint, mine);
   const seenToken = useRef(reloadToken);
   // biome-ignore lint/correctness/useExhaustiveDependencies: seul un jeton neuf relit la liste
@@ -112,7 +124,7 @@ function PublicationsBody({
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(false);
   const empty = publicationsEmptyKind({
-    mine,
+    mine: canPublish,
     restricted: restrictedHint || list.restricted,
     itemsCount: list.items.length,
   });
@@ -172,13 +184,13 @@ function PublicationsBody({
           {isMine ? L.emptyMineTitle : L.emptyOtherTitle}
         </Text>
         <Muted variant="caption" style={styles.panelText}>
-          {isMine ? L.emptyMineText : (emptyText ?? L.emptyOtherText(pseudo))}
+          {isMine && !publishAs ? L.emptyMineText : (emptyText ?? L.emptyOtherText(pseudo))}
         </Muted>
         {isMine ? (
           <Button
             variant="primary"
             icon="camera"
-            onPress={() => router.push("/fil/publier")}
+            onPress={publish}
             style={styles.panelButton}
             testID="publications-publish"
           >
@@ -196,14 +208,8 @@ function PublicationsBody({
         <Text variant="bodyStrong" color={t.color.ink} style={styles.count} testID="publications-count">
           {count === null ? "" : L.count(count)}
         </Text>
-        {mine ? (
-          <SmButton
-            kind="p"
-            icon="camera"
-            onPress={() => router.push("/fil/publier")}
-            style={styles.publish}
-            testID="publications-publish"
-          >
+        {canPublish ? (
+          <SmButton kind="p" icon="camera" onPress={publish} style={styles.publish} testID="publications-publish">
             {L.publish}
           </SmButton>
         ) : null}

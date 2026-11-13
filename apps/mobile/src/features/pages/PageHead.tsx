@@ -56,6 +56,7 @@ export function PageHead({
   onOpenStories,
   typeLabel,
   verifiedLabel,
+  pendingLabel,
   follow,
   bio,
   side,
@@ -71,6 +72,8 @@ export function PageHead({
   onOpenStories?: () => void;
   typeLabel: string;
   verifiedLabel: string | null;
+  /** Lot R9b : la vérification est en attente (média du propriétaire) : un libellé distinct, jamais sous l'icône « vérifié ». */
+  pendingLabel?: string | null;
   /** « Suivre » / « Suivi » (`FollowLine`). */
   follow: ReactNode;
   bio: string | null;
@@ -133,6 +136,13 @@ export function PageHead({
                 <Icon name="check" size={14} color={c.inkMuted} />
                 <Text variant="bodyStrong" color={c.inkMuted} style={styles.verifiedText}>
                   {verifiedLabel}
+                </Text>
+              </View>
+            ) : pendingLabel ? (
+              <View style={styles.verified} testID="page-pending">
+                <Icon name="wait" size={14} color={c.inkMuted} />
+                <Text variant="bodyStrong" color={c.inkMuted} style={styles.verifiedText}>
+                  {pendingLabel}
                 </Text>
               </View>
             ) : null}

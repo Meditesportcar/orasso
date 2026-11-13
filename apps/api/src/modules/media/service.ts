@@ -323,6 +323,26 @@ export const mediaService = {
     return publicView(p);
   },
 
+  /**
+   * Lot R9b, en-tête de la page d'un média (`GET /media/:id`, T22) : `accreditationsCount` = ses accréditations acceptées sur des
+   * événements publiés (une demande en attente, refusée ou retirée, un événement annulé ou brouillon ne comptent pas).
+   */
+  async accreditationsCount(mediaId: string): Promise<number> {
+    const [row] = await db
+      .select({ n: count() })
+      .from(applications)
+      .innerJoin(events, eq(events.id, applications.eventId))
+      .where(
+        and(
+          eq(applications.kind, "media"),
+          eq(applications.mediaProfileId, mediaId),
+          eq(applications.status, "accepted"),
+          eq(events.status, "published"),
+        ),
+      );
+    return row?.n ?? 0;
+  },
+
   /** Mêmes champs et règles de publication que les contenus publics d'un événement. */
   async publicForMedia(id: string, q: MediaContentsQuery): Promise<Page<MediaContentView>> {
     await this.getPublic(id);

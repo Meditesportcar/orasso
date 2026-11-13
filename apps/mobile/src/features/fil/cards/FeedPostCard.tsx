@@ -4,6 +4,7 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { FeedPostView } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
+import { pageHrefOf } from "@/features/pages/pageLinks";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { OfferLine, OfferTag } from "@/features/publications/OfferLine";
 import { Avatar } from "@/ui/Avatar";
@@ -42,7 +43,16 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       titleNode={co ? <CoAuthorSignature author={post.author} coAuthor={co} /> : undefined}
       reason={co ? collaborationLine(card) : reasonLine(card)}
       onMenu={onMenu}
-      onTitle={post.mine ? undefined : () => router.push(`/u/${encodeURIComponent(post.author.pseudo)}`)}
+      // Lot R9b : la carte d'un prestataire ou d'un média ouvre sa page (`pageHrefOf`) ; les autres, comme avant.
+      onTitle={
+        post.mine
+          ? undefined
+          : () =>
+              router.push(
+                (pageHrefOf(post.author.key, { pseudo: post.author.pseudo }) ??
+                  `/u/${encodeURIComponent(post.author.pseudo)}`) as never,
+              )
+      }
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
       headTag={post.offer ? <OfferTag offer={post.offer} /> : undefined}

@@ -76,7 +76,7 @@ export function MediaContents({ slug }: { slug: string }) {
 }
 
 /** Galerie plein écran : les photos en pages, glissées de côté. */
-function Gallery({ item, onClose }: { item: MediaContentView | null; onClose: () => void }) {
+export function Gallery({ item, onClose }: { item: MediaContentView | null; onClose: () => void }) {
   const { t } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();

@@ -405,7 +405,10 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Activité, Mon QR 
  * Lot M7, tour 2 (relecture Codex) : un écran B ouvert depuis un onglet se ferme sur cet onglet, une fois par casquette
  * (les groupes Pro et Organisateur gardent le retour par défaut des onglets, qui menait au premier onglet).
  */
-const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Promise<void>; page: RegExp }> = {
+const CLOSINGS: Record<
+  Kind,
+  { tab: [string, string]; open: (page: Page) => Promise<void>; page: RegExp; back?: RegExp }
+> = {
   fan: {
     // Lot R7a1 : le Garage n'est plus un onglet ; l'écran B de l'exposant s'ouvre depuis le Profil, comme pour le visiteur.
     tab: ["Profil", "profil"],
@@ -420,19 +423,27 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
   },
   organizer: {
     tab: ["Page", "page"],
-    open: (page) => page.getByTestId("tile-bans").first().click(),
+    // Lot R9b : Bannis s'ouvre depuis la tuile de la Structure, elle-même ouverte par le chip « Réglages de la structure » de la Page ;
+    // le ✕ ramène à l'écran d'où l'on vient (la Structure, sous l'onglet « Page »).
+    open: async (page) => {
+      await page.getByTestId("page-gest-structure").first().click();
+      await page.getByTestId("tile-bans").first().click();
+    },
     page: /\/bannis/,
+    back: /\/structure(\?|$)/,
   },
   pro: {
     tab: ["Page", "page"],
     open: async (page) => {
-      await page.getByText("Publications", { exact: true }).first().click();
+      // Lot R9b : Ma fiche s'ouvre par le chip « Modifier ma fiche » de la Page ; « Publications » est un de ses segments.
+      await page.getByTestId("page-gest-fiche").first().click();
+      await page.getByTestId("pro-segments").getByText("Publications", { exact: true }).click();
       await page.getByTestId("pro-new-post").first().click();
     },
     page: /\/publier/,
   },
   // Lot R9n : l'ancien Profil du prestataire et du média n'est plus un onglet. Prestataire : l'écran B est la recherche, ouverte
-  // par la loupe depuis l'onglet Missions. Média : la ligne « Mon profil média » de la Page ouvre un écran B.
+  // par la loupe depuis l'onglet Missions. Média : le chip « Modifier ma page » de la Page ouvre un écran B.
   provider: {
     tab: ["Missions", "missions"],
     // Le compte du prestataire de la recette n'a aucune mission et « Voir » d'une mission mène à l'onglet Candidatures : l'écran B est la
@@ -442,7 +453,7 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
   },
   media: {
     tab: ["Page", "page"],
-    open: (page) => page.getByTestId("page-row-media-profile").first().click(),
+    open: (page) => page.getByTestId("page-gest-media").first().click(),
     page: /\/media\/modifier/,
   },
   admin: {
@@ -468,9 +479,10 @@ test("fermeture : le ✕ d'un écran B ouvert depuis un onglet ramène à cet on
     await expect(page, `${kind} : page ouverte`).toHaveURL(c.page, { timeout: 30_000 });
     await modeB(page, `${kind} › fermeture`);
     await page.locator('[data-testid="appbar-close"], [data-testid="flow-close"]').first().click();
-    await expect(page, `${kind} : retour à l'onglet ${c.tab[0]}`).toHaveURL(new RegExp(`/${c.tab[1]}(\\?|$)`), {
-      timeout: 30_000,
-    });
+    await expect(page, `${kind} : retour à l'onglet ${c.tab[0]}`).toHaveURL(
+      c.back ?? new RegExp(`/${c.tab[1]}(\\?|$)`),
+      { timeout: 30_000 },
+    );
     await modeA(page, `${kind} › retour`);
     await ctx.close();
   }
