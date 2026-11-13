@@ -546,6 +546,10 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
 
 test("les mêmes écrans dans le thème Sable (contrôle du système de design)", async ({ browser }) => {
   test.setTimeout(600_000);
+  // Les relevés sont partagés par le fichier : ceux des parcours précédents (Béton, survol, modérateur) ne sont pas ceux de ce test.
+  // Sans cette remise à zéro, un écran de Béton relevé plus tôt faisait échouer ce test en suite (il passait seul). Le contrôle de
+  // ce test reste entier (mêmes quatre règles, sur chacun de ses écrans en Sable).
+  for (const key of Object.keys(results)) delete results[key];
   await pendingStructure(unique());
   await pendingReport(unique());
   const b = await openApp(browser, "damien@orasso.local", "sable");

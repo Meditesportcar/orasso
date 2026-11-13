@@ -393,6 +393,34 @@ test("tour 2 : premier échec réseau, puis reprise sans quitter l'Accueil", asy
   await ctx.close();
 });
 
+// Petit lot de fin, partie A : « Réessayer » à l'écran. Il est visible quand la lecture échoue, désactivé tant que la relecture est en
+// vol (tenue ici par une route), puis il disparaît avec le résultat.
+test("« Réessayer » : visible quand la lecture échoue, désactivé pendant la relecture, absent après le résultat", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, { offline: true });
+  await page.goto("/pratique");
+  await afterOpening(page);
+  const retry = page.getByTestId("practical-retry");
+  await expect(retry).toBeVisible({ timeout: 40_000 });
+  await expect(retry).toBeEnabled();
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await ctx.unroute(//api/practical/);
+  await ctx.route(//api/practical/, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await retry.click();
+  await expect(retry).toBeDisabled();
+  release();
+  await expect(page.getByTestId("practical-list")).toBeVisible({ timeout: 30_000 });
+  await expect(retry).toHaveCount(0);
+  await ctx.close();
+});
+
 // Matrice de captures (CAPTURES_MATRIX=1) : le bloc et l'écran, Béton et Sable, 384 et 390 px, police ×1 et ×1,3.
 test.describe("matrice de captures", () => {
   test.skip(!process.env.CAPTURES_MATRIX, "CAPTURES_MATRIX=1 pour la matrice de captures");
