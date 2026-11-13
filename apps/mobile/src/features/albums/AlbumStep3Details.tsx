@@ -95,7 +95,13 @@ export function AlbumStep3Details({
           </Text>
           <Muted variant="caption">{L.fixed}</Muted>
         </View>
-        <Pressable accessibilityRole="button" onPress={onEditPhotos} style={styles.line} testID="album-line-photos">
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onEditPhotos}
+          style={styles.line}
+          testID="album-line-photos"
+        >
           <Icon name="gallery" size={16} color={t.color.inkMuted} />
           <Text variant="body" color={t.color.ink} style={styles.fill}>
             {L.photosAndPlates(album.photosCount, blurred)}

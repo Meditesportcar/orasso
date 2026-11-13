@@ -9,9 +9,11 @@ import {
   type AlbumItem,
   type AlbumPhotoView,
   AlbumSendStopped,
+  type AlbumTurn,
   type AlbumView,
   albumTitle,
   canReopen,
+  createAlbumTurn,
   DEFAULT_PLATE_FRAME,
   decideAll,
   decidedCounts,
@@ -25,11 +27,14 @@ import {
   platedCount,
   type RemovalTarget,
   remaining,
+  removalRoute,
   removeAlbumPhoto,
   reopenDecisions,
   sendAlbumPhotos,
+  type TurnToken,
 } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "react-router";
 
 import "../../styles/albums.css";
 import "../../styles/garage.css";
@@ -135,6 +140,7 @@ export function NewAlbumForm({
   );
   const [allowSave, setAllowSave] = useState(resume?.allowSave ?? false);
   const [busyState, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopped = useRef(false);
@@ -143,33 +149,69 @@ export function NewAlbumForm({
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<{ key: string; message: string } | null>(null);
 
-  // **Formulaire mort au changement de compte** (un autre onglet connecte un autre compte) : jusqu'au rechargement, toutes les actions sont
-  // désactivées, aucune requête ne part, aucune réponse en vol n'est appliquée. Une garde unique (`alive()`), avant chaque requête et avant
-  // chaque application de réponse.
-  const deadRef = useRef(false);
+  // **Formulaire mort au changement de compte** (un autre onglet connecte un autre compte) : jusqu'au rechargement, **pour toujours** (même si le
+  // compte d'origine revient : A, puis B, puis A ne le ressuscite pas), toutes les actions sont désactivées, aucune requête ne part, aucune
+  // réponse en vol n'est appliquée. Une garde unique (`alive()`), avant chaque requête et avant chaque application de réponse.
+  // Une seule opération à la fois (envoi, retrait, création, transition) : **le tour a un propriétaire** (`createAlbumTurn`, un jeton que seule
+  // l'opération qui l'a pris peut rendre) ; tant qu'elle dure, tout est désactivé et un second appui ne lance rien.
+  const turnRef = useRef<AlbumTurn | null>(null);
+  if (!turnRef.current) turnRef.current = createAlbumTurn();
+  const turn = turnRef.current;
   const [dead, setDead] = useState(false);
   useEffect(
     () =>
       listenSession((announced) => {
         if (announced !== accountId) {
-          deadRef.current = true;
+          turn.kill();
           setDead(true);
         }
       }),
-    [accountId],
+    [accountId, turn],
   );
-  const alive = () => !deadRef.current;
-  // Une seule opération à la fois (envoi, retrait, création, transition) : tant qu'elle dure, tout est désactivé ; un second appui ne lance rien.
-  const turn = useRef(false);
-  const takeTurn = () => {
-    if (turn.current || !alive()) return false;
-    turn.current = true;
-    return true;
+  const alive = () => turn.alive();
+  const takeTurn = (): TurnToken | null => {
+    const token = turn.take();
+    if (token) setBusy(true);
+    return token;
   };
-  const endTurn = () => {
-    turn.current = false;
+  const endTurn = (token: TurnToken | null) => {
+    if (turn.end(token)) setBusy(false);
   };
   const busy = busyState || dead;
+  // Quitter pendant une opération est bloqué (lien, retour du navigateur : `useBlocker` ; fermeture de l'onglet : `beforeunload`) ; la
+  // publication réussie, elle, quitte la page de son propre chef (`leaving`).
+  const leaving = useRef(false);
+  const [leaveNote, setLeaveNote] = useState(false);
+  const blocker = useBlocker(() => turn.busy() && !leaving.current);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    blocker.reset();
+    setLeaveNote(true);
+  }, [blocker]);
+  useEffect(() => {
+    if (!busyState) setLeaveNote(false);
+  }, [busyState]);
+  useEffect(() => {
+    const guard = (e: BeforeUnloadEvent) => {
+      if (turn.busy() && !leaving.current) e.preventDefault();
+    };
+    // Un lien de la page (« Fermer », la barre) pendant une opération : le clic est retenu, le message s'affiche (les liens du site sont des
+    // adresses ordinaires, que `useBlocker` ne voit pas).
+    const onClick = (e: MouseEvent) => {
+      if (!turn.busy() || leaving.current) return;
+      const link = (e.target as Element | null)?.closest?.("a[href]");
+      if (!link || link.getAttribute("target") === "_blank") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaveNote(true);
+    };
+    window.addEventListener("beforeunload", guard);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", guard);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [turn]);
 
   // Les envois non utilisés (photo retirée avant l'ajout, cadres changés) : suppression au mieux, un essai, sans persistance (le serveur purge à 24 h).
   const cleanups = useRef<Promise<unknown>[]>([]);
@@ -210,8 +252,8 @@ export function NewAlbumForm({
     mutate((list) => list.map((i) => (i.clientId === clientId ? { ...i, ...p } : i)));
 
   async function createDraft() {
-    if (!chosen || !takeTurn()) return;
-    setBusy(true);
+    const token = chosen ? takeTurn() : null;
+    if (!chosen || !token) return;
     setError(null);
     try {
       const a = await json<AlbumView>(
@@ -226,13 +268,13 @@ export function NewAlbumForm({
     } catch (e) {
       if (alive()) setError((e as Error).message);
     } finally {
-      endTurn();
-      setBusy(false);
+      endTurn(token);
     }
   }
 
   function pick(files: FileList | null) {
-    if (!files || !alive()) return;
+    // Une opération en cours (retrait, « Continuer ») : « Ajouter » ne fait rien (les photos choisies pendant la lecture de l'album seraient perdues).
+    if (!files || turn.busy() || !alive()) return;
     const room = Math.min(pickLimit(base + latest.current.length, 0), PICK_PER_OPEN);
     // Le plafond coupe la sélection : on le dit (30 photos par ouverture, 200 par album).
     setNotice(pickNotice(room, files.length));
@@ -253,51 +295,67 @@ export function NewAlbumForm({
   }
 
   /**
-   * **Le seul chemin de retrait d'une photo ajoutée** (séance, photo en vol, brouillon repris) : une opération serveur synchrone, qui demande du
-   * réseau. La photo reste visible (« Retrait… ») jusqu'au 204 ; un échec la laisse en place avec son message et « Réessayer ». Vrai au 204.
+   * **La seule garde de retrait**, devant tous les chemins (photo de la séance, ajout en vol, brouillon repris) : le tour (un seul retrait, jamais
+   * pendant un envoi ni « Continuer »), le compte, puis l'état de la photo (`removalRoute`) :
+   * - **local** (aucun envoi commencé) : la photo part de l'écran tout de suite, sans réseau ; son envoi inutilisé est supprimé au mieux ;
+   * - **serveur** (ajout parti ou ajoutée) : opération synchrone qui demande du réseau. La photo reste visible (« Retrait… ») jusqu'au 204 ; un
+   *   échec la laisse en place avec son message et « Réessayer » ;
+   * - **bloqué** : un envoi est en vol, rien ne se retire.
+   * Vrai : la photo est retirée (l'appelant retire la tuile du brouillon repris).
    */
-  async function removeServer(target: RemovalTarget): Promise<boolean> {
+  async function removePhoto(target: RemovalTarget): Promise<boolean> {
     const key = target.clientId ?? target.photoId ?? "";
-    if (!album || !online || frozen.current || !takeTurn()) return false;
-    setBusy(true);
-    setRemoving(key);
-    setRemoveError(null);
+    const token = takeTurn();
+    if (!token) return false;
     try {
-      await removeAlbumPhoto(target, {
-        cancelByClient: async (id) => {
-          await json(await call(`/me/albums/${album.id}/photos/by-client/${id}`, { method: "DELETE" }).then(noBody));
-        },
-        deleteByPhoto: async (id) => {
-          await json(await call(`/me/albums/${album.id}/photos/${id}`, { method: "DELETE" }).then(noBody));
-        },
-      });
-      return alive();
-    } catch (e) {
-      if (alive()) setRemoveError({ key, message: (e as Error).message });
-      return false;
+      const item = target.clientId ? latest.current.find((i) => i.clientId === target.clientId) : undefined;
+      const route = item ? removalRoute(item, frozen.current) : "server";
+      if (route === "blocked") return false;
+      if (route === "server") {
+        if (!album || !online) return false;
+        setRemoving(key);
+        setRemoveError(null);
+        try {
+          await removeAlbumPhoto(target, {
+            cancelByClient: async (id) => {
+              await json(
+                await call(`/me/albums/${album.id}/photos/by-client/${id}`, { method: "DELETE" }).then(noBody),
+              );
+            },
+            deleteByPhoto: async (id) => {
+              await json(await call(`/me/albums/${album.id}/photos/${id}`, { method: "DELETE" }).then(noBody));
+            },
+          });
+        } catch (e) {
+          if (alive()) setRemoveError({ key, message: (e as Error).message });
+          return false;
+        } finally {
+          setRemoving(null);
+        }
+      }
+      // Une réponse qui arrive après un changement de compte n'est pas appliquée.
+      if (!alive()) return false;
+      if (item) {
+        // L'envoi resté sans ajout (réponse perdue avant validation) n'est plus utile : suppression au mieux, un essai (le serveur purge à 24 h).
+        if (item.upload) retireUpload(item.upload);
+        URL.revokeObjectURL(item.preview);
+        update((list) => list.filter((i) => i.clientId !== item.clientId));
+      }
+      return true;
     } finally {
-      setRemoving(null);
-      endTurn();
-      setBusy(false);
+      endTurn(token);
     }
   }
 
-  /** Retire une photo de la séance : pas encore ajoutée, elle part de l'écran tout de suite ; sinon retrait serveur, puis elle part. */
+  /** Retire une photo de la séance. */
   async function removeItem(clientId: string) {
-    const gone = latest.current.find((i) => i.clientId === clientId);
-    if (!gone || frozen.current || !alive()) return;
-    if (gone.attempted || gone.photoId) {
-      if (!(await removeServer({ clientId: gone.clientId, photoId: gone.photoId }))) return;
-    }
-    // L'envoi resté sans ajout (réponse perdue avant validation) n'est plus utile : suppression au mieux, un essai (le serveur purge à 24 h).
-    if (gone.upload) retireUpload(gone.upload);
-    URL.revokeObjectURL(gone.preview);
-    update((list) => list.filter((i) => i.clientId !== clientId));
+    if (!latest.current.some((i) => i.clientId === clientId)) return;
+    await removePhoto({ clientId });
   }
 
-  /** Retire une photo du brouillon repris (d'avant cette séance) : le même chemin. */
+  /** Retire une photo du brouillon repris (d'avant cette séance) : le même chemin, toujours par le serveur. */
   async function removeBase(photo: AlbumPhotoView) {
-    if (!(await removeServer({ clientId: photo.clientId, photoId: photo.id }))) return;
+    if (!(await removePhoto({ clientId: photo.clientId, photoId: photo.id }))) return;
     setBasePhotos((list) => list.filter((p) => p.id !== photo.id));
   }
 
@@ -309,9 +367,12 @@ export function NewAlbumForm({
     if (photo) void removeBase(photo);
   }
 
-  async function send(): Promise<boolean> {
+  /** Envoie les photos qui restent. `held` : le tour tenu par l'appelant (« Continuer »), qu'il rendra lui-même ; sinon le tour est pris et rendu ici. */
+  async function send(held: TurnToken | null = null): Promise<boolean> {
     if (!album) return false;
-    setBusy(true);
+    const token = held ?? takeTurn();
+    if (!token) return false;
+    setSending(true);
     frozen.current = true;
     setError(null);
     try {
@@ -352,14 +413,17 @@ export function NewAlbumForm({
       return false;
     } finally {
       frozen.current = false;
-      setBusy(false);
+      setSending(false);
+      if (!held) endTurn(token);
     }
   }
 
   async function toDetails() {
-    if (!album || !takeTurn()) return;
+    const token = album ? takeTurn() : null;
+    if (!album || !token) return;
     try {
-      if (remaining(latest.current).length > 0 && !(await send())) return;
+      // L'envoi s'achève sous le tour de « Continuer » (il ne le rend pas) : la lecture de l'album qui suit reste sous ce même tour.
+      if (remaining(latest.current).length > 0 && !(await send(token))) return;
       const fresh = await json<AlbumView>(await call(`/albums/${album.id}`));
       if (!alive()) return;
       setAlbum(fresh);
@@ -367,14 +431,13 @@ export function NewAlbumForm({
     } catch (e) {
       if (alive()) setError((e as Error).message);
     } finally {
-      endTurn();
-      setBusy(false);
+      endTurn(token);
     }
   }
 
   async function publish() {
-    if (!album || !takeTurn()) return;
-    setBusy(true);
+    const token = album ? takeTurn() : null;
+    if (!album || !token) return;
     setError(null);
     try {
       await json(
@@ -386,11 +449,12 @@ export function NewAlbumForm({
       if (!alive()) return;
       const done = await json<AlbumView>(await call(`/me/albums/${album.id}/publish`, { method: "POST" }));
       if (!alive()) return;
+      // Publié : la page quitte d'elle-même (le tour reste tenu jusqu'au rechargement), sans que la garde de sortie la retienne.
+      leaving.current = true;
       window.location.assign(`/albums/${done.id}`);
     } catch (e) {
       if (alive()) setError((e as Error).message);
-      endTurn();
-      setBusy(false);
+      endTurn(token);
     }
   }
 
@@ -436,6 +500,11 @@ export function NewAlbumForm({
           <span key={n} data-on={n <= step} />
         ))}
       </div>
+      {leaveNote && (
+        <p role="alert" className="s-error" data-testid="album-leave-blocked">
+          {L.leaveBlocked}
+        </p>
+      )}
       {dead && (
         <p role="alert" className="s-error" data-testid="album-session-stale">
           {L.sessionChanged}
@@ -612,6 +681,11 @@ export function NewAlbumForm({
                     <div className="alb-tile" data-testid="album-tile">
                       {/* Ajoutée : la version du serveur (floutée si « Flouter »), jamais l'original local. */}
                       <img src={i.photoId && i.serverUrl ? i.serverUrl : i.preview} alt="" />
+                      {sending && !i.photoId && (
+                        <span className="o-t-caption" data-testid="album-tile-sending">
+                          {L.sendingTile}
+                        </span>
+                      )}
                       {removing === i.clientId && (
                         <span className="o-t-caption" data-testid="album-tile-removing">
                           {L.removing}
@@ -752,7 +826,13 @@ export function NewAlbumForm({
               </span>
               <span className="o-t-caption s-muted">{L.fixed}</span>
             </div>
-            <button type="button" className="alb-line" onClick={() => setStep(2)} data-testid="album-line-photos">
+            <button
+              type="button"
+              className="alb-line"
+              disabled={busy}
+              onClick={() => setStep(2)}
+              data-testid="album-line-photos"
+            >
               <span>{L.photosAndPlates(album.photosCount, blurred)}</span>
               <span className="o-t-caption">{L.modify}</span>
             </button>

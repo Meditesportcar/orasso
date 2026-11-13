@@ -3,11 +3,13 @@
 // repart de la première restante (même `clientId`, l'API rejoue sans doublon).
 //
 // **Retirer une photo ajoutée est une opération serveur synchrone** (tour 4) : elle demande du réseau, la photo reste affichée (« Retrait… »)
-// jusqu'au 204 de l'API, un échec la laisse visible avec son message et « Réessayer ». Un seul chemin (`removeAlbumPhoto`) pour tous les retraits.
-// Une seule opération à la fois (envoi, retrait) : les transitions sont désactivées tant qu'elle dure. Au changement de compte, le formulaire est
-// **mort** : plus aucune requête ne part, aucune réponse en vol n'est appliquée (`alive()`). Les envois non utilisés sont supprimés « au mieux »,
-// sans persistance : un essai, puis rien (le serveur purge les envois après 24 h et ne les compte plus).
-import type { PlateRect } from "@orasso/shared";
+// jusqu'au 204 de l'API, un échec la laisse visible avec son message et « Réessayer ». Une seule garde (`removePhoto`) devant tous les chemins.
+// Une seule opération à la fois (envoi, retrait, « Continuer ») : les transitions sont désactivées tant qu'elle dure, et **le tour a un
+// propriétaire** (tour 5 : `createAlbumTurn`, un jeton que seule l'opération qui l'a pris peut rendre). Au changement de compte, le formulaire est
+// **mort pour toujours** (billet de compte avec génération : A, puis B, puis A ne le ressuscite pas) : plus aucune requête ne part, aucune réponse
+// en vol n'est appliquée (`alive()`). Les envois non utilisés sont supprimés « au mieux », sans persistance : un essai, puis rien (le serveur
+// purge les envois après 24 h et ne les compte plus).
+import { type AlbumTurn, createAlbumTurn, type PlateRect, removalRoute, type TurnToken } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
 import { useNetworkState } from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,7 +17,7 @@ import { Platform } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { accountGuard } from "@/lib/kv";
+import { accountTicket } from "@/lib/kv";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlates } from "@/lib/plates/detect";
 import type { UploadState } from "@/ui/PhotoGrid";
@@ -29,7 +31,6 @@ import {
   detectionPatch,
   pickLimit,
   platedCount,
-  type RemovalTarget,
   remaining,
   removeAlbumPhoto,
   reopenDecisions,
@@ -57,8 +58,11 @@ export function useAlbumUploads(albumId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const stopped = useRef(false);
-  // Une seule opération à la fois : un second appui pendant un envoi ou un retrait ne lance rien.
-  const busyRef = useRef(false);
+  // Une seule opération à la fois, **tour à propriétaire** : un second appui ne lance rien, et nul ne rend le tour d'un autre. Le billet de
+  // compte (avec sa génération) est pris au départ ; une fois faux, le formulaire reste mort.
+  const turnRef = useRef<AlbumTurn | null>(null);
+  if (!turnRef.current) turnRef.current = createAlbumTurn(accountTicket().current);
+  const turn = turnRef.current;
   const [busy, setBusy] = useState(false);
   // L'envoi fige tout : pendant qu'il tourne, ni les cadres ni la décision ne changent (l'état aussi, pas seulement les boutons).
   const frozen = useRef(false);
@@ -66,15 +70,18 @@ export function useAlbumUploads(albumId: string | null) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<{ key: string; message: string } | null>(null);
 
-  // Le compte du départ : s'il change (déconnexion, autre compte), le formulaire est mort.
-  const guard = useRef(accountGuard());
   const [dead, setDead] = useState(false);
-  /** Vrai tant que c'est le compte du départ ; sinon le formulaire meurt (plus de requête, plus de réponse appliquée). */
+  /** Vrai tant que c'est le compte du départ ; sinon le formulaire meurt **pour toujours** (plus de requête, plus de réponse appliquée). */
   const alive = useCallback((): boolean => {
-    if (guard.current.current()) return true;
+    if (turn.alive()) return true;
     setDead(true);
     return false;
-  }, []);
+  }, [turn]);
+  // La mort se voit aussi sans action : le compte est relu toutes les secondes tant que l'écran existe (les boutons se désactivent d'eux-mêmes).
+  useEffect(() => {
+    const id = setInterval(() => void alive(), 1000);
+    return () => clearInterval(id);
+  }, [alive]);
 
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -97,17 +104,22 @@ export function useAlbumUploads(albumId: string | null) {
     };
   }, []);
 
-  /** Prend le tour (une opération à la fois) ; faux : un autre appui est déjà en cours, ou le formulaire est mort. */
-  const takeTurn = useCallback((): boolean => {
-    if (busyRef.current || !alive()) return false;
-    busyRef.current = true;
-    setBusy(true);
-    return true;
-  }, [alive]);
-  const endTurn = useCallback(() => {
-    busyRef.current = false;
-    setBusy(false);
-  }, []);
+  /** Prend le tour (une opération à la fois) ; `null` : un autre appui est déjà en cours, ou le formulaire est mort. */
+  const takeTurn = useCallback((): TurnToken | null => {
+    if (!alive()) return null;
+    const token = turn.take();
+    if (token) setBusy(true);
+    return token;
+  }, [alive, turn]);
+  /** Rend le tour **à son propriétaire seulement** (un autre jeton ne rend rien). */
+  const endTurn = useCallback(
+    (token: TurnToken | null) => {
+      if (turn.end(token)) setBusy(false);
+    },
+    [turn],
+  );
+  /** Une opération tient le tour (lu de façon synchrone, pour la garde de sortie de l'écran). */
+  const isBusy = useCallback(() => turn.busy(), [turn]);
 
   // Les envois non utilisés (photo retirée avant l'ajout, cadres changés) : suppression au mieux, un essai, sans persistance.
   const cleanups = useRef<Promise<unknown>[]>([]);
@@ -121,6 +133,8 @@ export function useAlbumUploads(albumId: string | null) {
   /** Ouvre la photothèque (30 photos au plus par ouverture, jamais au-delà des 200 de l'album) et lance la détection des plaques. */
   const pick = useCallback(
     async (inAlbum: number) => {
+      // Une opération en cours (retrait, « Continuer ») : « Ajouter » ne fait rien (des photos choisies pendant la lecture de l'album seraient perdues).
+      if (turn.busy() || !alive()) return;
       const room = pickLimit(inAlbum + latest.current.length, 0);
       if (room === 0) return;
       const picked: PickedPhoto[] = await pickPhotos(room);
@@ -148,78 +162,97 @@ export function useAlbumUploads(albumId: string | null) {
         if (now) patch(item.clientId, detectionPatch(now, found));
       }
     },
-    [alive, update, patch],
+    [alive, turn, update, patch],
   );
 
   /** Règle à la main les cadres de plaque d'une photo (le détecteur peut en rater une) ; sa décision, déjà prise, est gardée. */
   const setRects = useCallback(
     (clientId: string, rects: PlateRect[]) => {
-      if (!frozen.current && alive()) patch(clientId, { rects, edited: true });
+      if (!frozen.current && !turn.busy() && alive()) patch(clientId, { rects, edited: true });
     },
-    [alive, patch],
+    [alive, turn, patch],
   );
 
   /** La décision du bloc : pour les photos à plaque qui n'en ont pas encore (les autres gardent la leur). */
   const decide = useCallback(
     (choice: BatchChoice) => {
-      if (!frozen.current && alive()) update((list) => decideAll(list, choice));
+      if (!frozen.current && !turn.busy() && alive()) update((list) => decideAll(list, choice));
     },
-    [alive, update],
+    [alive, turn, update],
   );
   /** « Changer » : rouvre les décisions des photos dont l'ajout n'est pas parti. */
   const reopen = useCallback(() => {
-    if (!frozen.current && alive()) update((list) => reopenDecisions(list));
-  }, [alive, update]);
+    if (!frozen.current && !turn.busy() && alive()) update((list) => reopenDecisions(list));
+  }, [alive, turn, update]);
 
   /**
-   * **Le retrait d'une photo ajoutée** (séance, brouillon repris, photo en vol) : une opération serveur synchrone, qui demande du réseau. Vrai
-   * seulement sur le 204 ; sinon la photo reste visible, avec le message (`removeError`) et « Réessayer ». Aucune photo ne quitte l'écran avant.
+   * **La seule garde de retrait**, devant tous les chemins (photo de la séance, ajout en vol, brouillon repris, photo réapparue) : le tour (un
+   * seul retrait, jamais pendant un envoi ni « Continuer »), le compte, puis l'état de la photo (`removalRoute`) :
+   * - **local** (aucun envoi commencé) : la photo part de l'écran tout de suite, sans réseau, son envoi inutilisé est supprimé au mieux ;
+   * - **serveur** (ajout parti ou ajoutée) : opération synchrone qui demande du réseau (`removeAlbumPhoto` : par `clientId` si connu, sinon par
+   *   identifiant). Vrai seulement au 204 ; sinon la photo reste visible avec le message (`removeError`) et « Réessayer » ;
+   * - **bloqué** : un envoi est en vol, rien ne se retire.
+   * Vrai : la photo est retirée (l'appelant retire la tuile du brouillon repris).
    */
-  const removeServer = useCallback(
-    async (target: RemovalTarget): Promise<boolean> => {
+  const removePhoto = useCallback(
+    async (target: { clientId?: string | null; photoId?: string | null }): Promise<boolean> => {
       const key = target.clientId ?? target.photoId ?? "";
-      if (!albumId || !online || !takeTurn()) return false;
-      setRemoving(key);
-      setRemoveError(null);
+      const token = takeTurn();
+      if (!token) return false;
       try {
-        await removeAlbumPhoto(target, {
-          cancelByClient: (id) => api.cancelAlbumPhoto(albumId, id),
-          deleteByPhoto: (id) => api.deleteAlbumPhoto(albumId, id),
-        });
+        const item = target.clientId ? latest.current.find((i) => i.clientId === target.clientId) : undefined;
+        const route = item ? removalRoute(item, frozen.current) : "server";
+        if (route === "blocked") return false;
+        if (route === "server") {
+          if (!albumId || !online) return false;
+          setRemoving(key);
+          setRemoveError(null);
+          try {
+            await removeAlbumPhoto(target, {
+              cancelByClient: (id) => api.cancelAlbumPhoto(albumId, id),
+              deleteByPhoto: (id) => api.deleteAlbumPhoto(albumId, id),
+            });
+          } catch (e) {
+            if (alive()) setRemoveError({ key, message: errorMessage(e) });
+            return false;
+          } finally {
+            setRemoving(null);
+          }
+        }
         // Une réponse qui arrive après un changement de compte n'est pas appliquée.
-        return alive();
-      } catch (e) {
-        if (alive()) setRemoveError({ key, message: errorMessage(e) });
-        return false;
+        if (!alive()) return false;
+        if (item) {
+          // L'envoi resté sans ajout n'est plus utile : suppression au mieux, un essai (le serveur purge à 24 h).
+          if (item.upload) retireUpload(item.upload);
+          update((list) => list.filter((i) => i.clientId !== item.clientId));
+        }
+        return true;
       } finally {
-        setRemoving(null);
-        endTurn();
+        endTurn(token);
       }
     },
-    [albumId, alive, endTurn, online, takeTurn],
+    [albumId, alive, endTurn, online, retireUpload, takeTurn, update],
   );
-
-  /** Retire une photo de la séance : pas encore ajoutée, elle part de l'écran tout de suite (rien côté serveur) ; sinon retrait serveur, puis elle part. */
+  /** Retire une photo de la séance (par sa tentative). */
   const remove = useCallback(
     async (clientId: string): Promise<boolean> => {
-      const gone = latest.current.find((i) => i.clientId === clientId);
-      if (!gone) return true;
-      if (gone.attempted || gone.photoId) {
-        if (!(await removeServer({ clientId: gone.clientId, photoId: gone.photoId }))) return false;
-      }
-      // L'envoi resté sans ajout (réponse perdue avant validation) n'est plus utile : suppression au mieux, un essai (le serveur purge à 24 h).
-      if (gone.upload) retireUpload(gone.upload);
-      update((list) => list.filter((i) => i.clientId !== clientId));
-      return true;
+      if (!latest.current.some((i) => i.clientId === clientId)) return true;
+      return removePhoto({ clientId });
     },
-    [removeServer, retireUpload, update],
+    [removePhoto],
+  );
+  /** Retire une photo du brouillon repris (d'avant la séance) : le même chemin, toujours par le serveur. */
+  const removeBase = useCallback(
+    (photo: { id: string; clientId?: string | null }) => removePhoto({ clientId: photo.clientId, photoId: photo.id }),
+    [removePhoto],
   );
 
-  /** Envoie les photos qui restent ; vrai quand tout est ajouté à l'album. */
+  /** Envoie les photos qui restent ; vrai quand tout est ajouté à l'album. `held` : le tour tenu par l'appelant (« Continuer »), qu'il rendra lui-même. */
   const send = useCallback(
-    async (turnHeld = false): Promise<boolean> => {
+    async (held: TurnToken | null = null): Promise<boolean> => {
       if (!albumId) return false;
-      if (!turnHeld && !takeTurn()) return false;
+      const token = held ?? takeTurn();
+      if (!token) return false;
       setSending(true);
       frozen.current = true;
       setError(null);
@@ -243,7 +276,7 @@ export function useAlbumUploads(albumId: string | null) {
           onItem: (id, p) => {
             if (alive()) patch(id, p);
           },
-          stopped: () => stopped.current || !guard.current.current(),
+          stopped: () => stopped.current || !turn.alive(),
         });
         setProgress(null);
         return true;
@@ -254,10 +287,11 @@ export function useAlbumUploads(albumId: string | null) {
       } finally {
         frozen.current = false;
         setSending(false);
-        endTurn();
+        // Le tour est rendu par son propriétaire : ici seulement s'il a été pris ici.
+        if (!held) endTurn(token);
       }
     },
-    [albumId, alive, endTurn, patch, retireUpload, settleCleanups, takeTurn],
+    [albumId, alive, endTurn, patch, retireUpload, settleCleanups, takeTurn, turn],
   );
 
   const counts = decidedCounts(items);
@@ -265,7 +299,7 @@ export function useAlbumUploads(albumId: string | null) {
     items,
     pick,
     remove,
-    removeServer,
+    removeBase,
     removing,
     removeError,
     clearRemoveError: () => setRemoveError(null),
@@ -273,6 +307,7 @@ export function useAlbumUploads(albumId: string | null) {
     dead,
     alive,
     busy,
+    isBusy,
     takeTurn,
     endTurn,
     setRects,

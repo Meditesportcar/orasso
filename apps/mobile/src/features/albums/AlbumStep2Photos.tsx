@@ -124,7 +124,7 @@ export function AlbumStep2Photos({
             <View style={[styles.check, { backgroundColor: t.color.accent }]}>
               <Icon name="check" size={12} color={t.color.nightInk} />
             </View>
-            {removing === (p.clientId ?? p.id) ? <RemovingBadge /> : null}
+            {removing === (p.clientId ?? p.id) ? <TileBadge label={L.removing} testID="album-tile-removing" /> : null}
           </Pressable>
         ))}
         {items.map((i) => (
@@ -147,7 +147,8 @@ export function AlbumStep2Photos({
             <View style={[styles.check, { backgroundColor: i.photoId ? t.color.accent : t.color.night }]}>
               <Icon name="check" size={12} color={t.color.nightInk} />
             </View>
-            {removing === i.clientId ? <RemovingBadge /> : null}
+            {removing === i.clientId ? <TileBadge label={L.removing} testID="album-tile-removing" /> : null}
+            {sending && !i.photoId ? <TileBadge label={L.sendingTile} testID="album-tile-sending" /> : null}
           </Pressable>
         ))}
       </View>
@@ -179,13 +180,13 @@ export function AlbumStep2Photos({
   );
 }
 
-/** « Retrait… » sur la tuile dont le retrait est en cours : elle reste visible jusqu'au 204 de l'API. */
-function RemovingBadge() {
+/** « Retrait… » sur la tuile dont le retrait est en cours (elle reste visible jusqu'au 204 de l'API) ; « Envoi… » sur une photo en vol (elle ne se retire pas). */
+function TileBadge({ label, testID }: { label: string; testID: string }) {
   const { t } = useTheme();
   return (
-    <View style={[styles.removing, { backgroundColor: t.color.night }]} testID="album-tile-removing">
+    <View style={[styles.removing, { backgroundColor: t.color.night }]} testID={testID}>
       <Text variant="caption" color={t.color.nightInk}>
-        {L.removing}
+        {label}
       </Text>
     </View>
   );

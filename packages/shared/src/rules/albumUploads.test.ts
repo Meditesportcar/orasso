@@ -14,7 +14,6 @@ import {
   pickNotice,
   platedCount,
   type RemovalDeps,
-  reconcile,
   remaining,
   removeAlbumPhoto,
   reopenDecisions,
@@ -139,19 +138,6 @@ describe("détection et cadres posés à la main", () => {
     expect(detectionPatch(item(2, [], { edited: true, detected: false }), [RECT])).toEqual({ detected: true });
     // Rien posé : la détection propose ses cadres.
     expect(detectionPatch(item(3, [], { detected: false }), [RECT])).toEqual({ detected: true, rects: [RECT] });
-  });
-});
-
-describe("rapprochement par clientId", () => {
-  it("une photo ajoutée dont la réponse s'est perdue est retrouvée dans l'album (sans fantôme)", () => {
-    const list = [item(1, [], { attempted: true, upload: { id: "u1", key: "k", signature: "s" } }), item(2)];
-    const back = reconcile(list, [
-      { id: "ph1", url: "/api/albums/a/photos/ph1.webp", clientId: list[0]?.clientId },
-      { id: "ph9", url: "/x", clientId: "00000000-0000-4000-8000-000000000099" },
-    ]);
-    expect(back[0]).toMatchObject({ photoId: "ph1", serverUrl: "/api/albums/a/photos/ph1.webp", attempted: true });
-    expect(back[0]?.upload).toBeUndefined();
-    expect(back[1]?.photoId).toBeUndefined();
   });
 });
 

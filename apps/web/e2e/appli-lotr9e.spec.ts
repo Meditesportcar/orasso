@@ -746,3 +746,140 @@ test("brouillon repris : la photo du brouillon se retire par le même chemin (é
     await sql(DROP_BEZIERS_DRAFTS);
   }
 });
+
+// --- Tour 5 (le tour a un propriétaire ; garde de retrait commune ; sortie bloquée ; retrait local hors ligne) ----------------------
+
+const ALBUM_READ = /\/api\/albums\/[0-9a-f-]{36}$/;
+
+test("« Continuer » tient le tour jusqu'à l'étape 3 : lecture de l'album retardée après l'envoi, la tuile et « Continuer » restent désactivés", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await page.route(ALBUM_READ, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+      return route.continue();
+    });
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    // L'envoi est fini (la photo est dans l'album), la lecture de l'album est en route : toujours sous le tour de « Continuer ».
+    await expect.poll(async () => (await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n, { timeout: 60_000 }).toBe(1);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    await expect(page.getByTestId("album-tile")).toBeDisabled();
+    await expect(page.getByTestId("album-step2-continue")).toBeDisabled();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("une photo dont l'envoi est en vol ne se retire pas : « Envoi… » sur la tuile, elle ne s'ouvre pas ; l'envoi aboutit", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await page.route("**/api/me/uploads", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await route.continue();
+    });
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(r.url());
+    });
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-tile-sending")).toBeVisible();
+    await expect(page.getByTestId("album-tile")).toBeDisabled();
+    await page.getByTestId("album-tile").click({ force: true });
+    await expect(page.getByTestId("album-photo-remove")).toHaveCount(0);
+    expect(deletes).toEqual([]);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 90_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("hors ligne : une photo jamais envoyée se retire quand même (rien côté serveur), sans requête", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await pickPhotos(page, ["car-golf-gti.jpg"]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(1, { timeout: 30_000 });
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(r.url());
+    });
+    await openFirstTile(page);
+    await leo.ctx.setOffline(true);
+    await expect(page.getByTestId("album-photo-remove")).toBeEnabled({ timeout: 30_000 });
+    await expect(page.getByTestId("album-remove-offline")).toHaveCount(0);
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    expect(deletes).toEqual([]);
+  } finally {
+    await leo.ctx.setOffline(false).catch(() => undefined);
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("quitter pendant un retrait : ✕ est bloqué (message), après le 204 on quitte, et le brouillon repris n'a plus la photo", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const leo = await openBeziersStep2(browser);
+  const page = leo.page;
+  try {
+    await oneAddedPhoto(page);
+    const draftId = (
+      await apiCall<{ items: { id: string; event: { slug: string } }[] }>(
+        await login(LEO),
+        "GET",
+        "/me/albums?status=draft&limit=100",
+      )
+    ).data.items.find((d) => d.event.slug === "beziers-night-2026")?.id;
+    expect(draftId).toBeTruthy();
+    await page.route(CANCEL_ROUTE, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await route.continue();
+    });
+    const done = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await openFirstTile(page);
+    await page.getByTestId("album-photo-remove").click();
+    await expect(page.getByTestId("album-photo-remove")).toHaveText("Retrait…");
+    // La feuille se ferme (le retrait continue en dessous), puis ✕ : refusé tant que l'opération dure, l'écran et son message restent.
+    await page.mouse.click(4, 300);
+    await expect(page.getByTestId("album-photo-remove")).toHaveCount(0);
+    await page.getByRole("button", { name: "Fermer", exact: true }).filter({ visible: true }).first().click();
+    await expect(page.getByTestId("album-leave-blocked")).toBeVisible();
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    expect((await done).status()).toBe(204);
+    await expect(page.getByTestId("album-tile")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("album-leave-blocked")).toHaveCount(0);
+    // L'opération est finie : on quitte, puis on reprend le brouillon.
+    await page.getByRole("button", { name: "Fermer", exact: true }).filter({ visible: true }).first().click();
+    await expect(page.getByTestId("album-step-label")).toHaveCount(0, { timeout: 30_000 });
+    await go(page, `/album/nouveau?album=${draftId}`);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3", { timeout: 30_000 });
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(0);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await leo.ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});

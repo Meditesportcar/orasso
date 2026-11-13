@@ -3,8 +3,8 @@
 // brouillon reste (« Reprendre l'album » à la prochaine ouverture pour le même événement). Un refus de l'API s'affiche, le flux reste.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type AlbumPhotoView, type AlbumView, albumTitle, albumLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -40,6 +40,7 @@ function StepBar({ step }: { step: 1 | 2 | 3 }) {
 
 export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   const router = useRouter();
+  const navigation = useNavigation();
   const profile = useApi(async () => (await api.myMediaProfile()).profile, [], { cacheKey: "media-profile" });
   const accreditations = useApi(() => api.myAccreditations("all"), [], { cacheKey: "media-accreditations" });
   const drafts = useApi(() => api.myAlbums(null, "draft"), [], { cacheKey: "my-album-drafts" });
@@ -54,6 +55,22 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const uploads = useAlbumUploads(album?.id ?? null);
+  // Quitter pendant une opération (✕, retour du système) est bloqué : l'écran dit pourquoi, la sortie se refait après la fin.
+  const [leaveNote, setLeaveNote] = useState(false);
+  const isBusy = useRef(uploads.isBusy);
+  isBusy.current = uploads.isBusy;
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (e) => {
+        if (!isBusy.current()) return;
+        e.preventDefault();
+        setLeaveNote(true);
+      }),
+    [navigation],
+  );
+  useEffect(() => {
+    if (!uploads.busy) setLeaveNote(false);
+  }, [uploads.busy]);
 
   const choices = useMemo(() => eventChoices(accreditations.data ?? []), [accreditations.data]);
   const draftEvents = useMemo(() => new Set((drafts.data?.items ?? []).map((a) => a.event.id)), [drafts.data]);
@@ -98,7 +115,8 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
 
   async function createDraft() {
     // Une seule opération à la fois ; formulaire mort (autre compte) : aucune requête ne part.
-    if (!eventId || !uploads.takeTurn()) return;
+    const token = eventId ? uploads.takeTurn() : null;
+    if (!eventId || !token) return;
     setBusy(true);
     setError(null);
     try {
@@ -110,15 +128,17 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       if (uploads.alive()) setError(errorMessage(e));
     } finally {
       setBusy(false);
-      uploads.endTurn();
+      uploads.endTurn(token);
     }
   }
 
   async function toDetails() {
-    if (!album || !uploads.takeTurn()) return;
+    const token = album ? uploads.takeTurn() : null;
+    if (!album || !token) return;
     try {
       setError(null);
-      if (uploads.pending > 0 && !(await uploads.send(true))) return;
+      // L'envoi s'achève sous le tour de « Continuer » (il ne le rend pas) : la lecture de l'album qui suit reste sous ce même tour.
+      if (uploads.pending > 0 && !(await uploads.send(token))) return;
       const fresh = await api.album(album.id);
       if (!uploads.alive()) return;
       refresh(fresh);
@@ -126,12 +146,13 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     } catch (e) {
       if (uploads.alive()) setError(errorMessage(e));
     } finally {
-      uploads.endTurn();
+      uploads.endTurn(token);
     }
   }
 
   async function publish() {
-    if (!album || !uploads.takeTurn()) return;
+    const token = album ? uploads.takeTurn() : null;
+    if (!album || !token) return;
     setBusy(true);
     setError(null);
     try {
@@ -145,11 +166,18 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       if (uploads.alive()) setError(errorMessage(e));
     } finally {
       setBusy(false);
-      uploads.endTurn();
+      uploads.endTurn(token);
     }
   }
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const close = () => {
+    if (uploads.isBusy()) {
+      setLeaveNote(true);
+      return;
+    }
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  };
   const mediaName = profile.data?.name ?? album?.media.name ?? "";
   // Les plaques floutées de l'album, comptées par le serveur (brouillon repris compris), relues avant l'étape des détails.
   const blurred = album?.blurredCount ?? 0;
@@ -167,7 +195,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
     if (!editing || !album) return false;
     if (editing.kind === "item") return uploads.remove(editing.id);
     const photo = basePhotos.find((p) => p.id === editing.id);
-    if (!photo || !(await uploads.removeServer({ clientId: photo.clientId, photoId: photo.id }))) return false;
+    if (!photo || !(await uploads.removeBase(photo))) return false;
     setBasePhotos((list) => list.filter((p) => p.id !== editing.id));
     return true;
   }
@@ -187,7 +215,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
           removing={uploads.removing}
           removeError={uploads.removeError}
           online={uploads.online}
-          busy={uploads.busy}
+          busy={uploads.busy || uploads.dead}
           error={uploads.error ?? error}
         />
       }
@@ -195,6 +223,11 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
       {uploads.dead ? (
         <Notice tone="error" testID="album-session-stale">
           {L.sessionChanged}
+        </Notice>
+      ) : null}
+      {leaveNote ? (
+        <Notice tone="error" testID="album-leave-blocked">
+          {L.leaveBlocked}
         </Notice>
       ) : null}
       <View pointerEvents={uploads.dead ? "none" : "auto"} style={uploads.dead ? styles.dead : undefined}>
@@ -234,7 +267,7 @@ export function NewAlbumFlow({ resumeId }: { resumeId?: string }) {
             allowSave={allowSave}
             onAllowSave={setAllowSave}
             blurred={blurred}
-            busy={busy || uploads.busy}
+            busy={busy || uploads.busy || uploads.dead}
             error={error}
             onEditPhotos={() => setStep(2)}
             onPublish={() => void publish()}

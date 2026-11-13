@@ -122,18 +122,6 @@ export function detectionPatch(item: Pick<AlbumItem, "rects" | "edited">, found:
   return { detected: true, rects: found };
 }
 
-/** Rapprochement : une photo dont l'ajout a réussi sans réponse est retrouvée dans l'album par son `clientId`. */
-export function reconcile<T extends AlbumItem>(
-  items: readonly T[],
-  photos: readonly Pick<AlbumPhotoView, "id" | "url" | "clientId">[],
-): T[] {
-  const byClient = new Map(photos.filter((p) => p.clientId).map((p) => [p.clientId as string, p]));
-  return items.map((i) => {
-    const found = i.photoId ? undefined : byClient.get(i.clientId);
-    return found ? { ...i, photoId: found.id, serverUrl: found.url, upload: undefined, attempted: true } : i;
-  });
-}
-
 export type SendDeps = {
   /** Envoie le fichier ; les cadres ne partent que pour « floutée ». */
   upload: (item: AlbumItem, rects: PlateRect[] | null) => Promise<{ id: string; key: string }>;

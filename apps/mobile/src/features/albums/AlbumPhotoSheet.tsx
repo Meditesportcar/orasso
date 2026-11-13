@@ -49,7 +49,7 @@ export function AlbumPhotoSheet({
   /** La clé de la photo dont le retrait est en cours (« Retrait… »), et le dernier échec de retrait (la photo reste visible, « Réessayer »). */
   removing: string | null;
   removeError: { key: string; message: string } | null;
-  /** Retirer demande du réseau : hors ligne, le bouton est désactivé avec son message. */
+  /** Retirer une photo ajoutée demande du réseau : hors ligne, le bouton est désactivé avec son message (pas pour une photo jamais envoyée). */
   online: boolean;
   /** Une opération est en cours (envoi, retrait) : rien d'autre ne part. */
   busy: boolean;
@@ -66,6 +66,9 @@ export function AlbumPhotoSheet({
     : "";
   const failed = removeError?.key === key ? removeError : null;
   const isRemoving = removing === key;
+  // Une photo jamais envoyée se retire sans réseau (rien côté serveur) ; une photo ajoutée, en vol ou reprise demande du réseau.
+  const needsNetwork = target?.kind === "base" || Boolean(item?.attempted || item?.photoId);
+  const offline = needsNetwork && !online;
   return (
     <AppSheet visible={target !== null} onClose={onClose} accessibilityLabel={L.plateSheetTitle} maxHeight={0.92}>
       {target ? (
@@ -115,7 +118,7 @@ export function AlbumPhotoSheet({
               {`${L.removeFailed} ${failed.message}`}
             </Notice>
           ) : null}
-          {!online ? <Notice testID="album-remove-offline">{L.needNetwork}</Notice> : null}
+          {offline ? <Notice testID="album-remove-offline">{L.needNetwork}</Notice> : null}
           {error ? (
             <Notice tone="error" testID="album-sheet-error">
               {error}
@@ -125,7 +128,7 @@ export function AlbumPhotoSheet({
             variant="plate"
             icon="trash"
             fullWidth
-            disabled={!online || busy}
+            disabled={offline || busy}
             onPress={() => void onRemove().then((done) => done && onClose())}
             testID="album-photo-remove"
           >

@@ -450,8 +450,13 @@ test("retirer AVANT la validation tardive de l'ajout : l'annulation par clientId
     const cancelled = page.waitForResponse(
       (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
     );
+    // L'envoi resté sans ajout n'est plus utile : il est supprimé aussi (au mieux, un essai), le quota des envois en attente n'est pas encombré.
+    const upload = page.waitForResponse(
+      (r) => /\/api\/me\/uploads\/[^/]+$/.test(r.url()) && r.request().method() === "DELETE",
+    );
     await page.getByTestId("album-remove").click();
     expect((await cancelled).status()).toBe(204);
+    expect((await upload).status()).toBe(204);
     await expect(page.getByTestId("album-tile")).toHaveCount(0);
     // La validation tardive arrive : refusée (409), l'album reste vide.
     const sent = held as { url: string; body: string } | null;
@@ -820,8 +825,171 @@ test("changement de compte (autre onglet) : formulaire mort, plus aucune requêt
     await a2.getByTestId("album-remove").click({ force: true });
     await a2.waitForTimeout(800);
     await expect(a2.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
-    const after = requests.slice(before).filter((r) => !r.includes("DELETE") || !r.includes("by-client"));
-    expect(after.filter((r) => r.startsWith("POST") || r.startsWith("PATCH"))).toEqual([]);
+    // Après la mort du formulaire : aucune requête d'album ni d'envoi, quelle que soit la méthode (le DELETE by-client déjà en vol est parti avant).
+    const after = requests.slice(before).filter((r) => /\/api\/(me\/albums|me\/uploads|albums)/.test(r));
+    expect(after).toEqual([]);
+  } finally {
+    await ctx.close();
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+// --- Tour 5 (le tour a un propriétaire ; garde de retrait commune ; sortie bloquée ; mort définitive) ----------------------------------
+
+const ALBUM_READ = /\/api\/albums\/[0-9a-f-]{36}$/;
+
+test("« Continuer » tient le tour jusqu'à l'étape 3 : lecture de l'album retardée après l'envoi, « Retirer », « Ajouter » et « Continuer » restent désactivés", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.route(ALBUM_READ, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      return route.continue();
+    });
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-step2-continue").click();
+    // L'envoi est fini (la photo est dans l'album), la lecture de l'album est encore en route : toujours sous le tour de « Continuer ».
+    await expect.poll(async () => (await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n, { timeout: 30_000 }).toBe(1);
+    await expect(page.getByTestId("album-progress")).toHaveCount(0);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    await expect(page.getByTestId("album-remove")).toBeDisabled();
+    await expect(page.getByTestId("album-pick")).toBeDisabled();
+    await expect(page.getByTestId("album-step2-continue")).toBeDisabled();
+    // Un retrait forcé ne part pas : aucune suppression, la photo est toujours dans l'album.
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(r.url());
+    });
+    await page.getByTestId("album-remove").click({ force: true });
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 30_000 });
+    expect(deletes).toEqual([]);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("une photo dont l'envoi est en vol ne se retire pas (« Envoi… ») ; après l'ajout, elle se retire par le serveur", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  try {
+    await openBeziersStep2(page);
+    await page.route("**/api/me/uploads", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+    const deletes: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") deletes.push(r.url());
+    });
+    await page.getByTestId("album-pick").setInputFiles([photo("car-golf-gti.jpg")]);
+    await page.getByTestId("album-step2-continue").click();
+    await expect(page.getByTestId("album-progress")).toBeVisible();
+    await expect(page.getByTestId("album-tile-sending")).toBeVisible();
+    await expect(page.getByTestId("album-remove")).toBeDisabled();
+    await page.getByTestId("album-remove").click({ force: true });
+    await page.waitForTimeout(500);
+    // Aucun retrait local ni serveur pendant l'envoi : la tuile est toujours là, l'envoi aboutit.
+    await expect(page.getByTestId("album-tile")).toHaveCount(1);
+    expect(deletes).toEqual([]);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(1);
+    // Ajoutée : le retrait passe par le serveur (annulation par clientId, 204).
+    await page.getByTestId("album-line-photos").click();
+    await page.unroute("**/api/me/uploads");
+    const cancelled = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await page.getByTestId("album-remove").click();
+    expect((await cancelled).status()).toBe(204);
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("quitter pendant une opération : le lien « Fermer » est bloqué (message), après le 204 on quitte, et le brouillon repris n'a plus la photo", async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  try {
+    await openBeziersStep2(page);
+    await oneAddedPhoto(page);
+    const draftId = (
+      await apiCall<{ items: { id: string; event: { slug: string } }[] }>(
+        await login(LEO),
+        "GET",
+        "/me/albums?status=draft&limit=100",
+      )
+    ).data.items.find((d) => d.event.slug === "beziers-night-2026")?.id;
+    expect(draftId).toBeTruthy();
+    await page.route(CANCEL_ROUTE, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+    const done = page.waitForResponse(
+      (r) => r.url().includes("/photos/by-client/") && r.request().method() === "DELETE",
+    );
+    await page.getByTestId("album-remove").click();
+    await expect(page.getByTestId("album-tile-removing")).toBeVisible();
+    // Quitter par le lien « Fermer » : refusé tant que l'opération dure, la page et son message restent.
+    await page.getByRole("link", { name: "Fermer" }).first().click();
+    await expect(page.getByTestId("album-leave-blocked")).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/media\/albums\/nouveau/);
+    expect((await done).status()).toBe(204);
+    await expect(page.getByTestId("album-tile")).toHaveCount(0);
+    await expect(page.getByTestId("album-leave-blocked")).toHaveCount(0);
+    // L'opération est finie : on quitte, puis on reprend le brouillon.
+    await page.getByRole("link", { name: "Fermer" }).first().click();
+    await expect(page).toHaveURL(/\/app\/media/);
+    await expect(page).not.toHaveURL(/albums\/nouveau/);
+    await page.goto(`/app/media/albums/nouveau?album=${draftId}`);
+    await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+    await expect(page.getByTestId("album-tile-base")).toHaveCount(0);
+    expect((await sql<{ n: number }>(LIVE_PHOTOS))[0]?.n).toBe(0);
+  } finally {
+    await sql(DROP_BEZIERS_DRAFTS);
+  }
+});
+
+test("la mort du formulaire est définitive : A, puis B, puis A : toujours mort, aucune requête d'album ne part", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    locale: "fr-FR",
+    timezoneId: "Europe/Paris",
+  });
+  const a = await ctx.newPage();
+  const b = await ctx.newPage();
+  try {
+    await openBeziersStep2(a);
+    await oneAddedPhoto(a);
+    // Un autre compte se connecte (B), puis le compte d'origine revient (A) : le formulaire de A ne revit pas.
+    await ctx.clearCookies();
+    await loginInBrowser(b, DAMIEN, undefined, "/app");
+    await expect(a.getByTestId("album-session-stale")).toBeVisible({ timeout: 30_000 });
+    await ctx.clearCookies();
+    await loginInBrowser(b, LEO, undefined, "/app");
+    await a.waitForTimeout(1500);
+    await expect(a.getByTestId("album-session-stale")).toBeVisible();
+    const requests: string[] = [];
+    a.on("request", (r) => {
+      if (/\/api\/(me\/albums|me\/uploads|albums)/.test(r.url())) requests.push(`${r.method()} ${r.url()}`);
+    });
+    await expect(a.getByTestId("album-remove")).toBeDisabled();
+    await expect(a.getByTestId("album-step2-continue")).toBeDisabled();
+    await a.getByTestId("album-remove").click({ force: true });
+    await a.getByTestId("album-step2-continue").click({ force: true });
+    await a.waitForTimeout(800);
+    expect(requests).toEqual([]);
+    await expect(a.getByTestId("album-tile")).toHaveCount(1);
   } finally {
     await ctx.close();
     await sql(DROP_BEZIERS_DRAFTS);
