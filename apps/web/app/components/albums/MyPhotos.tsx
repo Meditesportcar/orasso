@@ -14,11 +14,14 @@ import {
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
   proV2Labels,
+  readIsQuiet,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { apiFetch } from "../../lib/api.client";
+import { listenSession } from "../../lib/sessionChannel";
+import { latchStale } from "../../lib/sessionGuard";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
@@ -43,7 +46,27 @@ export function MyPhotos({
     reads.current.invalidate();
     setFresh(null);
     setReadError(null);
+    setRereading(false);
+    // Un retrait attend encore sa réconciliation (la page servie date d'avant le DELETE) : on relit.
+    if (removedRef.current.size > 0) void reread();
   }, [loaded]);
+  // Un autre compte annoncé par une autre fenêtre (sans nouveau chargement de cette page) : tout est périmé, rien des données n'est
+  // rendu, puis la page est rechargée en entier. Une annonce de ce compte-ci est sans effet.
+  const [stale, setStale] = useState(false);
+  const staleRef = useRef(false);
+  useEffect(
+    () =>
+      listenSession((announced) => {
+        if (!latchStale(staleRef.current, myUserId, announced)) return;
+        staleRef.current = true;
+        reads.current.invalidate();
+        setStale(true);
+      }),
+    [myUserId],
+  );
+  useEffect(() => {
+    if (stale) window.location.reload();
+  }, [stale]);
   // Page quittée (retour, autre lien) pendant la relecture : ni navigation ni mise à jour.
   const alive = useRef(true);
   useEffect(() => {
@@ -63,7 +86,7 @@ export function MyPhotos({
   // qu'après une lecture réussie.
   const [readError, setReadError] = useState<string | null>(null);
   // L'heure au rendu : « Déjà en story » cesse à l'expiration de la story (rendu programmé, et au retour au premier plan).
-  const [now, setNow] = useState(() => Date.now());
+  const [tick, setTick] = useState(0);
   const [sheet, setSheet] = useState<MyPhoto | null>(null);
   const [story, setStory] = useState<MyPhoto | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -71,36 +94,56 @@ export function MyPhotos({
   const [busy, setBusy] = useState(false);
   // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  // Lu par les relectures de routine : tant qu'un retrait attend sa réconciliation, aucune relecture n'est silencieuse.
+  const removedRef = useRef<ReadonlySet<string>>(removed);
+  removedRef.current = removed;
+  const [rereading, setRereading] = useState(false);
   // Rangées par `tagId` : une photo peut porter deux identifications de moi ; retirer l'une laisse la photo (et son autre identification).
+  // L'heure courante à chaque rendu (l'état `tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration
+  // d'une story ne bloque pas « En story ».
+  const nowMs = Date.now();
   const photos = view.photos.filter((p) => !removed.has(p.tagId));
   const count = photos.length;
   const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `reread` ne dépend que de refs et de l'album ; `now` relance la programmation
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `reread` ne dépend que de refs et de l'album ; `tick` relance la programmation
   useEffect(() => {
-    const next = nextLiveStoryExpiry(view.photos, Date.now());
-    if (next === null) return;
-    const wait = Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1);
-    const id = setTimeout(() => {
-      setNow(Date.now());
-      void reread(true);
-    }, wait);
+    // Le retour au premier plan rafraîchit l'heure, quoi qu'il arrive.
     const onShow = () => {
-      if (document.visibilityState === "visible") setNow(Date.now());
+      if (document.visibilityState === "visible") setTick((n) => n + 1);
     };
     document.addEventListener("visibilitychange", onShow);
+    const next = nextLiveStoryExpiry(view.photos, Date.now());
+    const id =
+      next === null
+        ? null
+        : setTimeout(
+            () => {
+              setTick((n) => n + 1);
+              // Jamais silencieuse tant qu'un retrait attend sa réconciliation (une panne doit se voir, avec « Réessayer »).
+              void reread(removedRef.current.size === 0);
+            },
+            Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1),
+          );
     return () => {
-      clearTimeout(id);
+      if (id !== null) clearTimeout(id);
       document.removeEventListener("visibilitychange", onShow);
     };
-  }, [view, now]);
+  }, [view, tick]);
 
   /** Relit `my-photos` (une seule lecture, ordonnée) ; `silent` : sans message d'erreur (relecture de routine). */
   async function reread(silent = false) {
+    if (staleRef.current) return;
+    // Des retraits en attente : la relecture n'est jamais silencieuse.
+    const quiet = readIsQuiet(silent, removedRef.current.size);
     const latest = reads.current.start();
     const startKey = here.current.key;
-    const next = await apiFetch<MyPhotosView>(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
-    if (!alive.current || !latest()) return;
+    if (!quiet) setRereading(true);
+    const next = await apiFetch<MyPhotosView>(`/me/albums/${encodeURIComponent(albumId)}/my-photos`, {
+      timeoutMs: 15_000,
+    });
+    if (!alive.current || !latest() || staleRef.current) return;
+    setRereading(false);
     if (next.ok) {
       setFresh(next.data);
       setRemoved(new Set());
@@ -108,7 +151,7 @@ export function MyPhotos({
     } else if (next.status === 404) {
       // Plus aucune identification à mon nom : retour à l'album, sauf si l'utilisateur est déjà parti ailleurs (ou une page se charge).
       if (here.current.idle && here.current.key === startKey) navigate(`/albums/${albumId}`);
-    } else if (!silent) {
+    } else if (!quiet) {
       setReadError(next.error.message);
     }
   }
@@ -124,6 +167,14 @@ export function MyPhotos({
     setRemoved((cur) => new Set([...cur, photo.tagId]));
     // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album.
     await reread();
+  }
+
+  if (stale) {
+    return (
+      <div className="s-narrow s-stack" data-testid="my-photos-stale">
+        <p role="status">Mise à jour…</p>
+      </div>
+    );
   }
 
   return (
@@ -163,7 +214,14 @@ export function MyPhotos({
           </Button>
         </div>
       )}
-      {count === 0 && !readError && <p className="s-muted">{L.screens.myPhotosEmpty}</p>}
+      {count === 0 && !readError && rereading && removed.size > 0 && (
+        <p className="s-muted" role="status" data-testid="my-photos-loading">
+          Chargement…
+        </p>
+      )}
+      {count === 0 && !readError && !(rereading && removed.size > 0) && (
+        <p className="s-muted">{L.screens.myPhotosEmpty}</p>
+      )}
       <ul className="myp-list">
         {photos.map((p, i) => (
           <li key={p.id} className="myp-row" data-testid="my-photo">
@@ -176,7 +234,7 @@ export function MyPhotos({
                 {myPhotoTaggedBy(p.taggedBy, view.media.name)}
               </span>
               <span className="myp-row__actions">
-                {liveStoryAt(p.liveStory, now) ? (
+                {liveStoryAt(p.liveStory, nowMs) ? (
                   // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
                   <span className="o-t-caption act-go" data-testid="my-photo-story-live">
                     {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory?.audience ?? "public"))}

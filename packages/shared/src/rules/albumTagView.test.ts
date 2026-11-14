@@ -11,6 +11,7 @@ import {
   mentionsSummary,
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
+  readIsQuiet,
   reviewButtonsOf,
   showPeopleTab,
   taggedByText,
@@ -283,6 +284,14 @@ describe("liveStoryAt / nextLiveStoryExpiry (« Déjà en story » expire)", () 
     ];
     expect(nextLiveStoryExpiry(photos, now)).toBe(Date.parse("2026-11-14T10:00:00Z"));
     expect(nextLiveStoryExpiry([{ liveStory: null }], now)).toBeNull();
+  });
+});
+
+describe("readIsQuiet (relecture de routine concurrente d'un retrait)", () => {
+  it("la minuterie d'expiration ne se tait que sans retrait en attente : sinon l'échec doit se voir", () => {
+    expect(readIsQuiet(true, 0)).toBe(true);
+    expect(readIsQuiet(true, 1)).toBe(false);
+    expect(readIsQuiet(false, 0)).toBe(false);
   });
 });
 

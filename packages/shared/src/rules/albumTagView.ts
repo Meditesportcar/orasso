@@ -240,3 +240,11 @@ export function nextLiveStoryExpiry(
   }
   return next;
 }
+
+/**
+ * Une relecture de « Tes photos » peut se taire en cas d'échec (relecture de routine : minuterie d'expiration) seulement si aucun retrait
+ * n'attend sa réconciliation : sinon l'échec ferait croire à une liste vide (photo à deux identifications masquée), il doit se voir.
+ */
+export function readIsQuiet(routine: boolean, pendingRemovals: number): boolean {
+  return routine && pendingRemovals === 0;
+}

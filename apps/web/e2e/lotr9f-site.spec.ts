@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser } from "./helpers";
+import { apiCall, login, loginInBrowser, SEED_PASSWORD } from "./helpers";
 import { sql } from "./helpers/lot48";
 import { RELAIS } from "./relais";
 
@@ -229,5 +229,103 @@ test("retrait réussi puis relecture en échec : l'erreur et « Réessayer », p
   await page.getByTestId("load-error-retry").click();
   await expect(page.getByTestId("load-error")).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId("my-photo")).toHaveCount(before - 1, { timeout: 30_000 });
+  await ctx.close();
+});
+
+test("une photo, deux identifications : retrait, relecture en panne (erreur, pas de faux vide), relecture réussie : la photo reste avec l'autre identification", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const KENJI = "kenji@orasso.local";
+  const kenji = await login(KENJI);
+  const mine = await apiCall<{ items: { albumId: string; photos: { id: string }[] }[] }>(
+    kenji,
+    "GET",
+    "/me/album-tags",
+  );
+  const albumId = mine.data.items[0]?.albumId as string;
+  const photoId = mine.data.items[0]?.photos[0]?.id as string;
+  const garage = await apiCall<{ id: string }[]>(kenji, "GET", "/me/vehicles");
+  // Léo l'avait identifié par son pseudo (seed) ; il dit « C'est ma voiture » sur la même photo : deux identifications, une seule ligne.
+  const posed = await apiCall(kenji, "POST", `/album-photos/${photoId}/tags`, { vehicleId: garage.data[0]?.id });
+  expect([200, 201]).toContain(posed.status);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, KENJI, undefined, `/app/albums/${albumId}/mes-photos`);
+  await expect(page.getByTestId("my-photo")).toHaveCount(1, { timeout: 30_000 });
+  let fail = true;
+  await page.route(`**/api/me/albums/${albumId}/my-photos`, (route) =>
+    fail
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "boom", message: "Panne de relecture" } }),
+        })
+      : route.continue(),
+  );
+  page.on("dialog", (d) => void d.accept());
+  await page.getByTestId("my-photo-more").first().click();
+  await page.getByTestId("photo-sheet-not-mine").click();
+  await expect(page.getByTestId("load-error")).toContainText("Panne de relecture", { timeout: 30_000 });
+  await expect(page.getByText("Aucune photo", { exact: false })).toHaveCount(0);
+  fail = false;
+  await page.getByTestId("load-error-retry").click();
+  await expect(page.getByTestId("load-error")).toHaveCount(0, { timeout: 30_000 });
+  // La photo reste : sa seconde identification (la sienne) est active.
+  await expect(page.getByTestId("my-photo")).toHaveCount(1);
+  await expect(page.getByTestId("my-photo-by")).toHaveText("Identifiée par toi");
+  await ctx.close();
+});
+
+test("un autre compte se connecte dans un autre onglet pendant une relecture retenue : jamais les photos de A sous B, la page finit sous B", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = await scenario();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  // L'observateur du DOM : dès que « Mise à jour… » s'affiche, aucune photo ne doit réapparaître (le drapeau survit au rechargement).
+  await page.addInitScript(() => {
+    // Par document : le flag de fuite survit au rechargement (sessionStorage), pas l'état « périmé vu » (la page rechargée est neuve).
+    let staleSeen = false;
+    const check = () => {
+      if (document.querySelector('[data-testid="my-photos-stale"]')) staleSeen = true;
+      if (staleSeen && document.querySelector('[data-testid="my-photo"]'))
+        sessionStorage.setItem("leak", `${Date.now()}`);
+    };
+    new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
+  });
+  await loginInBrowser(page, DAMIEN, undefined, `/app/albums/${s.albumId}/mes-photos`);
+  await expect(page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
+  const damienRows = await page.getByTestId("my-photo").count();
+  expect(damienRows).toBeGreaterThan(1);
+  // La relecture qui suit le retrait est lue (compte A) puis retenue.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/me/albums/${s.albumId}/my-photos`, async (route) => {
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  page.on("dialog", (d) => void d.accept());
+  await page.getByTestId("my-photo-more").first().click();
+  await page.getByTestId("photo-sheet-not-mine").click();
+  await page.waitForTimeout(1500);
+  // Un autre onglet du même navigateur : B se connecte (cookie et annonce de session).
+  // La connexion de B passe par l'API (cookie du contexte remplacé, sans annonce de « déconnecté ») ; la page de l'autre onglet annonce B.
+  const other = await ctx.newPage();
+  const signIn = await ctx.request.post("/api/auth/sign-in/email", {
+    data: { email: "kenji@orasso.local", password: SEED_PASSWORD },
+    headers: { origin: new URL(page.url()).origin },
+  });
+  expect(signIn.ok()).toBe(true);
+  await other.goto(`/app/albums/${s.albumId}/mes-photos`);
+  await expect(other.getByTestId("my-photo")).toHaveCount(1, { timeout: 30_000 });
+  release();
+  // La première page se recharge sous B : une seule ligne (celle de Kenji), jamais les lignes de Damien.
+  await expect(page.getByTestId("my-photo")).toHaveCount(1, { timeout: 60_000 });
+  expect(await page.evaluate(() => sessionStorage.getItem("leak"))).toBeNull();
   await ctx.close();
 });

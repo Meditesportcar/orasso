@@ -87,29 +87,46 @@ export function MyPhotosScreen({ id }: { id: string }) {
     }
   }, [view.error, focused]);
   const photos = (v?.photos ?? []).filter((p) => !removed.has(p.tagId));
-  // L'heure au rendu : « Déjà en story » cesse à l'expiration de la story (rendu et relecture programmés, rendu au retour au premier plan).
-  const [now, setNow] = useState(() => Date.now());
+  // L'heure courante à chaque rendu (`tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration d'une story
+  // ne bloque pas « En story ». La relecture programmée passe par `useApi.reload` (garde de compte, ordre des lectures, erreur gardée).
+  const nowMs = Date.now();
+  const [tick, setTick] = useState(0);
   const reloadRef = useRef(view.reload);
   reloadRef.current = view.reload;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `now` relance la programmation après chaque échéance
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` relance la programmation après chaque échéance
   useEffect(() => {
-    const next = nextLiveStoryExpiry(v?.photos ?? [], Date.now());
-    if (next === null) return;
-    const id = setTimeout(
-      () => {
-        setNow(Date.now());
-        void reloadRef.current();
-      },
-      Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1),
-    );
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") setNow(Date.now());
+    // Le retour au premier plan rafraîchit l'heure, quoi qu'il arrive.
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st === "active") setTick((n) => n + 1);
     });
+    const next = nextLiveStoryExpiry(v?.photos ?? [], Date.now());
+    const id =
+      next === null
+        ? null
+        : setTimeout(
+            () => {
+              setTick((n) => n + 1);
+              void reloadRef.current();
+            },
+            Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1),
+          );
     return () => {
-      clearTimeout(id);
+      if (id !== null) clearTimeout(id);
       sub.remove();
     };
-  }, [v, now]);
+  }, [v, tick]);
+  // Un autre compte sur le même écran : les retraits de l'ancien ne masquent rien chez le nouveau.
+  const accountId = me?.user.id ?? null;
+  const previousAccountId = useRef(accountId);
+  useEffect(() => {
+    if (previousAccountId.current !== accountId) {
+      previousAccountId.current = accountId;
+      setRemoved(new Set());
+      setReconciling(false);
+      exitWanted.current = false;
+    }
+  }, [accountId]);
+  const [reconciling, setReconciling] = useState(false);
   // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
   // les retraits ne sont levés qu'après une lecture réussie.
   const reconcileError = removed.size > 0 && view.error && view.error.status !== 404 ? view.error : null;
@@ -134,7 +151,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
   }
   async function reconcile() {
     exitWanted.current = true;
+    setReconciling(true);
     const next = await view.reload();
+    if (alive.current) setReconciling(false);
     if (next && alive.current) {
       exitWanted.current = false;
       setRemoved(new Set());
@@ -224,7 +243,10 @@ export function MyPhotosScreen({ id }: { id: string }) {
               {error}
             </Notice>
           ) : null}
-          {count === 0 && !reconcileError ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
+          {count === 0 && reconciling && removed.size > 0 ? <Waiting blocks={[80]} label="Chargement…" /> : null}
+          {count === 0 && !reconcileError && !(reconciling && removed.size > 0) ? (
+            <Muted variant="body">{L.screens.myPhotosEmpty}</Muted>
+          ) : null}
           {photos.map((p, i) => (
             <View
               key={p.id}
@@ -242,7 +264,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
                   {myPhotoTaggedBy(p.taggedBy, v.media.name)}
                 </Text>
                 <View style={styles.actions}>
-                  {liveStoryAt(p.liveStory, now) ? (
+                  {liveStoryAt(p.liveStory, nowMs) ? (
                     // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
                     <Text variant="caption" color={t.color.accentText} testID="my-photo-story-live">
                       {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory?.audience ?? "public"))}
