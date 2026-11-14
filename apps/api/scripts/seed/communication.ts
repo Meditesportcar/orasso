@@ -2,7 +2,7 @@
 // épinglée et un message groupé aux retenus sur « Nocturne de Canet », les discussions du staff de MéditeSportCar.
 // Idempotent : rien n'est recréé s'il existe déjà.
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -13,6 +13,8 @@ import { staffChatsService } from "../../src/modules/communication/staff-chats";
 import { announcementsToPosts, describeReprise } from "../announcements-to-posts";
 import { createEvent, DAY } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
+import { NO_VISUAL_EVENT_SLUG } from "./posters";
+import { isSeedEvent } from "./seed-scope";
 
 /** Modèles proposés par Orasso (docs/01 : « modèles de messages réutilisables d'un événement à l'autre »). */
 const ORASSO_TEMPLATES = [
@@ -139,7 +141,7 @@ export async function seedCommunication() {
 // Les annonces des quatre sortes : publique avec image (Nocturne de Canet, photo du seed), publique sans image sur un événement
 // à affiche (Lydia, Canet : déjà là), publique sans image sur un événement sans visuel (la sortie du Canigou, qui reste une
 // annonce), réservée aux inscrits (Canet). Puis la reprise, comme au déploiement (rejouable).
-const NO_VISUAL_SLUG = "sortie-du-canigou-2026";
+const NO_VISUAL_SLUG = NO_VISUAL_EVENT_SLUG;
 
 export async function seedAnnouncementsReprise() {
   const nocturne = await db.query.events.findFirst({ where: eq(t.events.slug, "nocturne-de-canet-2026") });
@@ -190,7 +192,8 @@ export async function seedAnnouncementsReprise() {
   }
 
   // Publique sans image sur un événement sans visuel : un événement passé de Hérault Mécaniques, sans affiche ni photo (les
-  // affiches se régénèrent à chaque seed : on les retire ici, après elles, comme pour le brouillon de l'organisateur v2).
+  // affiches de la graine se font à chaque seed, sauf celle-ci (`NO_POSTER_SLUGS`, lot B3b) : on les retire ici, comme pour le
+  // brouillon de l'organisateur v2, seulement s'il en reste une).
   if (herault) {
     const owner = await db.query.structureMembers.findFirst({
       where: and(eq(t.structureMembers.structureId, herault.id), eq(t.structureMembers.role, "owner")),
@@ -220,7 +223,20 @@ export async function seedAnnouncementsReprise() {
           posterTitle: null,
           posterKey: null,
         })
-        .where(eq(t.events.id, bare.id));
+        .where(
+          and(
+            eq(t.events.id, bare.id),
+            isSeedEvent("events"),
+            or(
+              isNotNull(t.events.posterStyle),
+              isNotNull(t.events.posterPostKey),
+              isNotNull(t.events.posterStoryKey),
+              isNotNull(t.events.posterPhotoKey),
+              isNotNull(t.events.posterTitle),
+              isNotNull(t.events.posterKey),
+            ),
+          ),
+        );
       const text = "Merci aux 40 équipages de la sortie du Canigou : les photos arrivent cette semaine.";
       const [has] = await db
         .select({ id: t.eventAnnouncements.id })

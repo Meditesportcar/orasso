@@ -10,11 +10,16 @@ import { and, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db, pool } from "../../src/db/client";
 import * as t from "../../src/db/schema";
-import { resetDb } from "../../test/helpers";
+import { storage } from "../../src/lib/storage";
+import { POSTER_PHOTO_PREFIX } from "../../src/modules/events/poster/service";
+import { createStructure, resetDb } from "../../test/helpers";
 import { BRASA_POST_CAPTION, KENJI_PRESENT_CAPTION, LYDIA_ORGA_POSTS } from "./feed";
 import { JULIE_CAPTION, MARC_CAPTION } from "./feed-mentions";
 import { OUTING_CAPTION } from "./feed-seen";
-import { createAccount } from "./helpers";
+import { createAccount, createEvent, fakePhotoWebp } from "./helpers";
+import { isLegacyFakePhoto } from "./photos";
+import { NO_POSTER_SLUGS } from "./posters";
+import { SEED_EVENT_SLUG_PREFIXES, SEED_EVENT_SLUGS } from "./seed-scope";
 
 const API = fileURLToPath(new URL("../..", import.meta.url));
 const FIRST = "00000000-0000-4000-8000-0000000009a1";
@@ -506,5 +511,110 @@ describe("rejeu de la graine après une activité réelle", () => {
       }),
     ).toBeUndefined();
     expect(await rows("Kenji_66", KENJI_PRESENT_CAPTION)).toHaveLength(1);
+  }, 900_000);
+});
+
+describe("affiches de la graine (lot B3b)", () => {
+  const posterState = async (slug: string) => {
+    const e = await db.query.events.findFirst({ where: eq(t.events.slug, slug) });
+    return {
+      id: e?.id,
+      style: e?.posterStyle ?? null,
+      title: e?.posterTitle ?? null,
+      photo: e?.posterPhotoKey ?? null,
+      post: e?.posterPostKey ?? null,
+      story: e?.posterStoryKey ?? null,
+    };
+  };
+
+  it("chaque événement créé par la graine est dans la liste, a une vraie photo et une affiche ; les deux sans affiche n'en ont pas", async () => {
+    const mine = await db
+      .select()
+      .from(t.events)
+      .where(sql`exists (select 1 from "user" u where u.id = ${t.events.createdBy} and u.email like '%@orasso.local')`);
+    expect(mine.length).toBeGreaterThan(30);
+    const known = (slug: string) =>
+      (SEED_EVENT_SLUGS as readonly string[]).includes(slug) ||
+      SEED_EVENT_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
+    expect(mine.filter((e) => !known(e.slug)).map((e) => e.slug)).toEqual([]);
+    for (const e of mine) {
+      if ((NO_POSTER_SLUGS as readonly string[]).includes(e.slug)) {
+        expect([e.slug, e.posterStyle, e.posterPostKey, e.posterPhotoKey]).toEqual([e.slug, null, null, null]);
+        continue;
+      }
+      expect(e.posterStyle, e.slug).not.toBeNull();
+      expect(e.posterPostKey, e.slug).not.toBeNull();
+      expect(e.posterPhotoKey, e.slug).not.toBeNull();
+      const photo = await storage.get(e.posterPhotoKey ?? "");
+      expect(photo, `photo de ${e.slug}`).not.toBeNull();
+      expect(await isLegacyFakePhoto(photo as Buffer), `photo factice de ${e.slug}`).toBe(false);
+    }
+  }, 900_000);
+
+  it("ancienne base (photo factice, affiche sans photo) : refaites une seule fois ; un second passage ne touche à rien ; rien de réel", async () => {
+    // L'état d'avant : « Rasso du lac » avec le dégradé factice, « Salon de printemps » sans photo.
+    const lac = await posterState("rasso-du-lac-2026");
+    const oldKey = `${POSTER_PHOTO_PREFIX}seed-rasso-du-lac-2026.webp`;
+    await storage.put(oldKey, (await fakePhotoWebp("#b5452a")).data);
+    await db.update(t.events).set({ posterPhotoKey: oldKey }).where(eq(t.events.slug, "rasso-du-lac-2026"));
+    await db.update(t.events).set({ posterPhotoKey: null }).where(eq(t.events.slug, "salon-de-printemps-2027"));
+    const salon = await posterState("salon-de-printemps-2027");
+
+    // Un événement réel (créateur et structure réels, sans affiche) et un autre au slug de la graine mais de créateur réel.
+    const stranger = await createAccount("x", {
+      pseudo: "Orga_Reel",
+      email: "orga-reel@example.com",
+      departments: ["66"],
+    });
+    const realStructure = await createStructure(stranger.id);
+    const startsAt = new Date(Date.now() + 20 * 86_400_000);
+    const real = await createEvent(realStructure.id, stranger.id, {
+      title: "Sortie réelle",
+      slug: "sortie-reelle",
+      format: "gathering",
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + 4 * 3_600_000),
+    });
+    await db
+      .update(t.events)
+      .set({ createdBy: stranger.id, posterStyle: null, posterPostKey: null, posterPhotoKey: null, posterTitle: null })
+      .where(eq(t.events.slug, "hivernale-2027"));
+    const impostor = await posterState("hivernale-2027");
+
+    const first = seed();
+    const afterFirst = {
+      lac: await posterState("rasso-du-lac-2026"),
+      salon: await posterState("salon-de-printemps-2027"),
+    };
+    // « Rasso du lac » : la photo n'est plus l'ancien dégradé, une nouvelle affiche est rendue ; l'ancien objet est retiré.
+    expect(afterFirst.lac.photo).not.toBe(oldKey);
+    expect(afterFirst.lac.style).toBe(lac.style);
+    expect(afterFirst.lac.title).toBe(lac.title);
+    expect(afterFirst.lac.post).not.toBe(lac.post);
+    expect(await isLegacyFakePhoto((await storage.get(afterFirst.lac.photo ?? "")) as Buffer)).toBe(false);
+    expect(await storage.get(oldKey)).toBeNull();
+    expect(await storage.get(lac.post ?? "")).toBeNull();
+    // « Salon de printemps » : une vraie photo, l'affiche refaite.
+    expect(afterFirst.salon.photo).not.toBeNull();
+    expect(afterFirst.salon.post).not.toBe(salon.post);
+    expect(afterFirst.salon.style).toBe(salon.style);
+    expect(first).toContain("refaites avec une vraie photo");
+
+    // Rien de réel : ni l'événement réel, ni celui au slug de la graine de créateur réel.
+    const realAfter = await db.query.events.findFirst({ where: eq(t.events.id, real.id) });
+    expect([realAfter?.posterStyle, realAfter?.posterPostKey, realAfter?.posterPhotoKey]).toEqual([null, null, null]);
+    expect(await posterState("hivernale-2027")).toEqual(impostor);
+
+    // Second passage : plus rien n'est refait.
+    const second = seed();
+    expect(second).toContain("Affiches des événements déjà générées.");
+    expect({
+      lac: await posterState("rasso-du-lac-2026"),
+      salon: await posterState("salon-de-printemps-2027"),
+    }).toEqual(afterFirst);
+    for (const slug of NO_POSTER_SLUGS) {
+      const row = await db.query.events.findFirst({ where: eq(t.events.slug, slug) });
+      expect([slug, row?.posterStyle, row?.posterPostKey]).toEqual([slug, null, null]);
+    }
   }, 900_000);
 });

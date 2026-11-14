@@ -2,18 +2,32 @@
 // affiche »). Nocturne de Canet : exposants 18 h 30 – 19 h 15 (strict, « Entrée côté capitainerie. Après 19 h 15,
 // préviens l'équipe. »), public dès 19 h 30 (conseillé, « Parking visiteurs avenue de la Méditerranée. ») ; deux
 // candidatures avec une note d'arrivée. Tous les événements du seed reçoivent une affiche générée (styles variés,
-// photo de voiture réelle pour chacun (lot C5), un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette. Idempotent : un
-// événement qui a déjà une affiche générée n'est pas refait.
+// photo de voiture réelle pour chacun (lot C5), un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette.
+// Lot B3b : seulement les événements de la graine (jamais un événement réel), photo et style choisis par le slug ; une affiche
+// sans photo, ou avec l'ancien dégradé factice, est refaite une seule fois ; ensuite rien ne bouge (idempotent).
+
+import { createHash } from "node:crypto";
 import { POSTER_TITLE_MAX, type PosterSettings, posterStyles } from "@orasso/shared";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import { arrivalColumns } from "../../src/modules/events/arrivals";
-import { POSTER_PHOTO_PREFIX, posterColumns, posterService } from "../../src/modules/events/poster/service";
-import { demoEventPhotos } from "./photos";
+import {
+  POSTER_PHOTO_PREFIX,
+  posterColumns,
+  posterService,
+  posterSettingsOf,
+} from "../../src/modules/events/poster/service";
+import type { EventRow } from "../../src/modules/events/repo";
+import { demoEventPhotos, isLegacyFakePhoto, slugIndex } from "./photos";
+import { isSeedEvent } from "./seed-scope";
 
 const NOCTURNE_SLUG = "nocturne-de-canet-2026";
+/** Événements de la graine volontairement sans affiche : le brouillon de l'organisateur (lot 52) et la sortie sans visuel (lot R8d). */
+export const DRAFT_EVENT_SLUG = "expo-de-printemps-2027";
+export const NO_VISUAL_EVENT_SLUG = "sortie-du-canigou-2026";
+export const NO_POSTER_SLUGS = [DRAFT_EVENT_SLUG, NO_VISUAL_EVENT_SLUG] as const;
 
 /** Titre d'affiche : le titre de l'événement, coupé au dernier mot entier s'il dépasse 34 caractères. */
 export function posterTitleOf(title: string): string {
@@ -67,36 +81,91 @@ export async function seedPosters(onlyEventIds?: string[]) {
   }
 
   // --- Affiches générées ------------------------------------------------------------------------------------------
-  const todo = await db.query.events.findMany({
-    where: onlyEventIds
-      ? and(isNull(t.events.posterStyle), inArray(t.events.id, onlyEventIds))
-      : isNull(t.events.posterStyle),
-    orderBy: [asc(t.events.startsAt)],
-  });
-  if (!todo.length) {
-    console.log("Affiches des événements déjà générées.");
-    return;
-  }
+  // Lot B3b : seulement les événements de la graine (preuve `isSeedEvent` : slug, propriétaire actif et créateur `@orasso.local`),
+  // jamais un événement réel sans affiche. Les deux événements volontairement sans affiche (`NO_POSTER_SLUGS`) restent tels quels.
+  const seedEvents = await db
+    .select()
+    .from(t.events)
+    .where(
+      and(
+        isSeedEvent("events"),
+        notInArray(t.events.slug, [...NO_POSTER_SLUGS]),
+        onlyEventIds ? inArray(t.events.id, onlyEventIds) : undefined,
+      ),
+    )
+    .orderBy(asc(t.events.startsAt));
   // Lot C5 (D34) : de vraies photos de voitures (celles de Damien, sinon les 7 de l'artefact), jamais le dégradé factice.
   const photos = await demoEventPhotos();
   let made = 0;
-  for (const [i, e] of todo.entries()) {
-    // La Nocturne en Néon (style par défaut du prototype), les autres à tour de rôle.
-    const style = e.slug === NOCTURNE_SLUG ? "neon" : posterStyles[i % posterStyles.length];
-    if (!style) continue;
-    let photoKey: string | null = null;
-    const photo = photos.length ? photos[i % photos.length] : undefined;
-    if (photo) {
-      // Sous le dossier des photos d'affiche (comme un envoi `event_poster_photo`).
-      photoKey = `${POSTER_PHOTO_PREFIX}seed-${e.slug}.webp`;
-      await storage.put(photoKey, photo.data);
-    }
-    const settings: PosterSettings = { photoKey, style, title: posterTitleOf(e.title) };
-    const [row] = await db.update(t.events).set(posterColumns(settings)).where(eq(t.events.id, e.id)).returning();
-    if (row) {
-      await posterService.regenerate(row);
-      made++;
+  let fixed = 0;
+  for (const e of seedEvents) {
+    try {
+      const done = await posterOf(e, photos);
+      if (done === "made") made++;
+      if (done === "fixed") fixed++;
+    } catch (error) {
+      // Une affiche qui échoue ne laisse rien à moitié (la ligne n'est écrite qu'avec un rendu réussi) : le passage suivant la reprend.
+      console.error(`Affiche de ${e.slug} : échec, reprise au prochain passage.`, error);
     }
   }
-  console.log(`Affiches générées : ${made} événements.`);
+  if (!made && !fixed) console.log("Affiches des événements déjà générées.");
+  else console.log(`Affiches générées : ${made} événements, refaites avec une vraie photo : ${fixed}.`);
+}
+
+type DemoPhoto = { name: string; data: Buffer };
+
+/** Pose la photo d'affiche et le rendu d'un événement de la graine ; `null` si rien n'est à faire. */
+async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made" | "fixed" | null> {
+  const photo = photos.length ? photos[slugIndex(e.slug, photos.length)] : undefined;
+  const hasPoster = Boolean(posterSettingsOf(e));
+  let photoOk = false;
+  if (hasPoster && e.posterPhotoKey) {
+    // Une photo qui manque, ou l'ancien dégradé factice : à remplacer. Sans photo réelle à poser, on ne touche à rien.
+    const stored = await storage.get(e.posterPhotoKey);
+    photoOk = Boolean(stored) && !(await isLegacyFakePhoto(stored as Buffer));
+  }
+  if (hasPoster && e.posterPostKey && (photoOk || !photo)) return null;
+  if (hasPoster && photoOk) {
+    // Réglages et photo en place, mais pas de rendu (échec d'un passage précédent) : on le refait.
+    await posterService.regenerate(e);
+    return "fixed";
+  }
+
+  const style = posterStyles.find((s) => s === e.posterStyle) ?? styleOf(e.slug);
+  let photoKey = photoOk ? e.posterPhotoKey : null;
+  if (!photoKey && photo) {
+    // Clé propre à l'octet près : une photo remplacée n'est jamais servie depuis un cache de l'ancienne.
+    photoKey = `${POSTER_PHOTO_PREFIX}seed-${e.slug}-${createHash("sha1").update(photo.data).digest("hex").slice(0, 8)}.webp`;
+    await storage.put(photoKey, photo.data);
+  }
+  const settings: PosterSettings = { photoKey, style, title: e.posterTitle ?? posterTitleOf(e.title) };
+  // Le rendu d'abord : s'il échoue, la ligne reste telle quelle ; sinon réglages et rendus s'écrivent ensemble.
+  const keys = await posterService.renderForEvent(e, settings);
+  const [row] = await db
+    .update(t.events)
+    .set({ ...posterColumns(settings), posterPostKey: keys.postKey, posterStoryKey: keys.storyKey })
+    .where(
+      and(
+        eq(t.events.id, e.id),
+        sql`${t.events.posterPhotoKey} is not distinct from ${e.posterPhotoKey}`,
+        sql`${t.events.posterStyle} is not distinct from ${e.posterStyle}`,
+      ),
+    )
+    .returning();
+  if (!row) {
+    await Promise.all([storage.remove(keys.postKey), storage.remove(keys.storyKey)]).catch(() => undefined);
+    return null;
+  }
+  await posterService.removeRenders(e);
+  // L'ancienne photo de la graine (dégradé factice), plus servie par personne.
+  if (e.posterPhotoKey && e.posterPhotoKey !== photoKey && e.posterPhotoKey.startsWith(`${POSTER_PHOTO_PREFIX}seed-`)) {
+    await storage.remove(e.posterPhotoKey).catch(() => undefined);
+  }
+  return hasPoster ? "fixed" : "made";
+}
+
+/** La Nocturne en Néon (style par défaut du prototype), les autres selon leur slug (stable d'un passage à l'autre). */
+function styleOf(slug: string): PosterSettings["style"] {
+  if (slug === NOCTURNE_SLUG) return "neon";
+  return posterStyles[slugIndex(slug, posterStyles.length)] ?? "neon";
 }

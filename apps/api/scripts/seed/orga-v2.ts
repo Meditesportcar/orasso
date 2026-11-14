@@ -4,11 +4,13 @@
 // propriétaire est Pres_Vallespir (la structure de Damien est validée : sceau tournant). Idempotent, en dernier :
 // les affiches générées de tous les événements sont déjà passées, le brouillon reste sans affiche.
 import { randomBytes } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { TEAM_ENGAGEMENT } from "./da-v2";
 import { createAccount, createEvent, DAY, now } from "./helpers";
+import { DRAFT_EVENT_SLUG } from "./posters";
+import { isSeedEvent } from "./seed-scope";
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
@@ -26,7 +28,7 @@ export async function seedOrgaV2(hash: string) {
     const startsAt = new Date(now.getTime() + 150 * DAY);
     await createEvent(structure.id, damien.userId, {
       title: "Expo de printemps",
-      slug: "expo-de-printemps-2027",
+      slug: DRAFT_EVENT_SLUG,
       format: "exhibition",
       startsAt,
       endsAt: new Date(startsAt.getTime() + 8 * 3_600_000),
@@ -41,12 +43,24 @@ export async function seedOrgaV2(hash: string) {
     });
   }
 
-  // Le seed des affiches (lot 47) tourne avant celui-ci mais repasse sur tout événement sans style : le brouillon doit
-  // rester sans affiche, à chaque exécution.
+  // Le brouillon doit rester sans affiche. Le seed des affiches (lot 47) l'ignore (`NO_POSTER_SLUGS`, lot B3b) : il ne faut
+  // retirer une affiche que s'il en reste une (un ancien état), sans réécrire la ligne à chaque déploiement.
   await db
     .update(t.events)
     .set({ posterStyle: null, posterPostKey: null, posterStoryKey: null, posterPhotoKey: null, posterTitle: null })
-    .where(eq(t.events.slug, "expo-de-printemps-2027"));
+    .where(
+      and(
+        eq(t.events.slug, DRAFT_EVENT_SLUG),
+        isSeedEvent("events"),
+        or(
+          isNotNull(t.events.posterStyle),
+          isNotNull(t.events.posterPostKey),
+          isNotNull(t.events.posterStoryKey),
+          isNotNull(t.events.posterPhotoKey),
+          isNotNull(t.events.posterTitle),
+        ),
+      ),
+    );
 
   // Engagement de l'équipe : les événements passés de la structure (éditions du lot C5 comprises), tenus par chacun
   // un nombre de fois différent.
