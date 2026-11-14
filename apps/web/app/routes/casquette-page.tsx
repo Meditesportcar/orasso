@@ -11,11 +11,13 @@ import type {
   WithPageExtras,
 } from "@orasso/shared";
 import {
+  EVENTS_CURSOR_PARAM,
   explicitPageFilter,
   PAGE_FILTER_PARAM,
   PAGE_TAB_PARAM,
   pagePublicationsCount,
   pageShownTab,
+  structureEventsPath,
 } from "@orasso/shared";
 import { redirect } from "react-router";
 
@@ -44,9 +46,12 @@ export async function loader({ request, params }: Route.LoaderArgs): Promise<Own
       request,
       `/structures/by-slug/${encodeURIComponent(slug)}`,
     );
+    // Sans JavaScript, « Voir plus » est un lien : la liste se lit alors à partir du curseur de l'adresse (lot B2b, tour 1).
+    const upStart = url.searchParams.get(EVENTS_CURSOR_PARAM.upcoming);
+    const pastStart = url.searchParams.get(EVENTS_CURSOR_PARAM.past);
     const [upcoming, past, partners, full] = await Promise.all([
-      api<Page<EventCard>>(request, `/events?structureId=${page.id}&limit=50`),
-      api<Page<EventCard>>(request, `/events?structureId=${page.id}&scope=past&limit=12`),
+      api<Page<EventCard>>(request, structureEventsPath(page.id, "upcoming", 50, upStart)),
+      api<Page<EventCard>>(request, structureEventsPath(page.id, "past", 12, pastStart)),
       api<ProCard[]>(request, `/structures/by-slug/${encodeURIComponent(slug)}/pros`),
       // Le lien d'invitation (staff) : c'est le lien des organisateurs, il est à eux seuls (comme sur la page publique).
       api<StructureOrganizer>(request, `/structures/${page.id}`),
@@ -63,13 +68,17 @@ export async function loader({ request, params }: Route.LoaderArgs): Promise<Own
         owner: true,
       }),
       filter: explicitPageFilter(url.searchParams.get(PAGE_FILTER_PARAM)),
-      eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
+      eventsComplete:
+        !upStart && !pastStart && upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
       // Une lecture qui échoue reste `null` : l'écran dit la panne avec « Réessayer », jamais une liste vide ni un « 0 ».
       upcoming: upcoming.ok ? upcoming.data.items : null,
+      upcomingNext: upcoming.ok ? upcoming.data.nextCursor : null,
       past: past.ok ? past.data.items : null,
+      pastNext: past.ok ? past.data.nextCursor : null,
       partners: partners.ok ? partners.data : null,
       inviteToken: full.ok ? full.data.inviteToken : null,
-      inviteFailed: !full.ok,
+      // Un refus (403 `two_factor_required`, propriétaire sans second facteur) n'est pas une panne : « Réessayer » n'y changerait rien.
+      inviteFailed: !full.ok && full.status >= 500,
     };
   }
   if (path.startsWith("/pro/")) {

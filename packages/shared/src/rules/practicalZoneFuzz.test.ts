@@ -230,6 +230,10 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean; edge
     const prevArr = [...prevCover];
     let unreliable = false;
     let flipped = false;
+    /** La version des données à laquelle la réponse livrée à ce geste a été LUE (la couverture qu'elle crée y est née, même périmée). */
+    let responseEpoch: number | null = null;
+    /** Un lieu est sorti de la mémoire hors de toute emprise touchée par ce geste : une VRAIE éviction (et non un remplacement par l'ouverture). */
+    let realEviction = false;
     const prevPlaces = z.getState().places;
     stepZones = [];
     stepDisks = [];
@@ -316,7 +320,10 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean; edge
         const p = pending.shift()!;
         // Une réponse lue sur une version d'avant : sa propre couverture n'est pas contrôlée (elle ne dit rien des données actuelles). Aucune
         // AUTRE couverture n'est exclue : une réponse périmée ne doit jamais retirer ce qu'une couverture plus récente garantit.
-        if (p.epoch !== epoch) unreliable = true;
+        if (p.epoch !== epoch) {
+          unreliable = true;
+          responseEpoch = p.epoch;
+        }
         if (!p.voided) stepZones.push(p.zone);
         if (p.v instanceof Error && !p.voided && p.cursor && (p.v as Error & { status?: number }).status === 409)
           applied409 = p.zone;
@@ -344,7 +351,8 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean; edge
           return;
         }
         if (idx === now.length - 1) {
-          born.set(c, unreliable ? -1 : epoch); // créée à ce geste
+          // Créée à ce geste : à la version de la réponse livrée (périmée ou non) ; -1 seulement si on ne la connaît pas (geste qui change de version).
+          born.set(c, unreliable ? (responseEpoch ?? -1) : epoch);
           if (!unreliable) appeared.add(c);
           return;
         }
@@ -368,12 +376,23 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean; edge
           }
         }
       }
+      // Un lieu sorti hors de toute emprise touchée (éviction) : seul cas où une ouverture complète peut ne plus couvrir un de ses lieux.
+      if (!applied409 && !flipped)
+        for (const [id, p] of prevPlaces)
+          if (
+            !nowPlaces.has(id) &&
+            !stepZones.some((zz) => p.lat >= zz.south && p.lat <= zz.north && p.lng >= zz.west && p.lng <= zz.east) &&
+            !stepDisks.some((o) => distanceKm(o, p) <= 31)
+          ) {
+            realEviction = true;
+            break;
+          }
     }
-    // 4. Une ouverture complète relue (même disque déjà connu, avec ou sans exceptions) remet couverts tous ses lieux, sauf si la mémoire a évincé.
+    // 4. Une ouverture complète relue (même disque déjà connu, avec ou sans exceptions) remet couverts tous ses lieux, sauf si la mémoire a évincé
+    // des lieux hors de son emprise. Des lieux qui sortent DANS l'emprise (identifiants fusionnés, lieux disparus) sont remplacés par l'ouverture :
+    // ils ne dispensent pas du contrôle.
     if (completeOpening) {
-      const nowPlaces = z.getState().places;
-      const evicted = [...prevPlaces.keys()].some((id) => !nowPlaces.has(id));
-      if (!evicted)
+      if (!realEviction)
         for (const p of completeOpening)
           if (!coverContains(z.getState().cover, p))
             throw new Error(
@@ -382,7 +401,8 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean; edge
               ),
             );
     }
-    // 3. Après un 409 appliqué sur la zone Z : aucune couverture née avant la version courante et touchant Z ne reste.
+    // 3. Après un 409 appliqué sur la zone Z : aucune couverture née avant la version courante et touchant Z ne reste, y compris celle d'une
+    // réponse périmée (née à la version où elle a été lue). `b = -1` : naissance inconnue (geste qui change de version), non contrôlée.
     if (applied409) {
       const zone: PracticalZone = applied409;
       for (const c of z.getState().cover) {
@@ -421,12 +441,15 @@ it("fuzz données fixes, réponses en vol", async () => {
   resetStats();
   for (let s = 1; s <= 4; s++) await run(s, { flips: false, inflight: true });
   // Les réponses en vol aboutissent moins vite : la mémoire monte près du plafond mais les évictions sont prouvées par les variantes « immédiat ».
+  // Seuil « au moins 85 % du plafond » (MAX - 600) : valeur mesurée 3 454 sur 4 000 avec les graines 1 à 4 (déterministes), donc une marge de
+  // 54 ; MAX - 300 (3 700) échoue. Un seuil plus bas ne prouverait plus que les lectures en vol remplissent la mémoire.
   expect(st.maxSize).toBeGreaterThan(PRACTICAL_STORE_MAX - 600);
   expect(st.maxSize).toBeLessThanOrEqual(PRACTICAL_STORE_MAX);
 }, 120_000);
 it("fuzz versions qui changent (409), en vol", async () => {
   resetStats();
   for (let s = 1; s <= 10; s++) await run(s, { flips: true, inflight: true });
+  // Même seuil (85 % du plafond) : valeur mesurée 3 760 sur 4 000 avec les graines 1 à 10.
   expect(st.maxSize).toBeGreaterThan(PRACTICAL_STORE_MAX - 600);
   expect(st.maxSize).toBeLessThanOrEqual(PRACTICAL_STORE_MAX);
   expect(st.c409).toBeGreaterThan(3);

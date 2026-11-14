@@ -158,6 +158,11 @@ export type MyPhoto = {
 export type MyPhotosView = {
   album: { id: string; title: string; event: { id: string; slug: string; title: string; startsAt: string } };
   media: { key: string; name: string; logoUrl: string | null };
+  /**
+   * Lot B2b, tour 2 : je suis l'auteur de l'album (la page du média est la mienne) : « Contacter » n'est pas montré (on ne s'écrit
+   * pas à soi-même). Facultatif : l'APK en ligne ne le lit pas, l'ancienne réponse n'en a pas (absent = faux).
+   */
+  viewerIsAuthor?: boolean;
   /** Ma voiture identifiée (la première, par ordre de photo) ; `null` si je ne suis identifié que par mon pseudo. */
   vehicle: { id: string; label: string } | null;
   photos: MyPhoto[];

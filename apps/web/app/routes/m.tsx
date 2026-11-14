@@ -12,6 +12,7 @@ import {
   authorKeyOf,
   instagramHandle,
   instagramUrl,
+  isOwnPage,
   mediaAppLabels as L,
   type MediaContentView,
   type MediaPage as MediaPageData,
@@ -142,11 +143,12 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   const tabQuery = new URLSearchParams();
   if (actor) tabQuery.set("auteur", actor);
   if (retour) tabQuery.set("retour", retour);
-  const tabPath = tabQuery.size > 0 ? `${path}?${tabQuery}` : path;
+  const tabQueryText = tabQuery.toString();
+  const tabPath = tabQueryText ? `${path}?${tabQueryText}` : path;
   const key = authorKeyOf("media", m.id);
   // Pas de « Suivre » sur sa propre page : avec une casquette, c'est la clé de la casquette qui compte (la structure de Sarah peut suivre le
   // média ou le prestataire de Sarah : deux pages distinctes) ; sans casquette, le propriétaire de la page (on ne se suit pas soi-même).
-  const selfPage = actor ? actor === key : owner;
+  const selfPage = isOwnPage({ actorKey: actor, pageKey: key, owner });
   const tabs = pageTabs("media", {
     session: true,
     mentionsCount: mentionsShown(pageMentionsCount(m), mentionsDelta),

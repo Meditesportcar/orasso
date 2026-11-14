@@ -255,6 +255,15 @@ export function isPageManager(
   );
 }
 
+/**
+ * La page visitée est-elle « moi » pour le bouton « Suivre » (parité site et appli, D20) ? Avec une casquette active, c'est la clé
+ * de la **casquette** qui compte : la structure d'un compte peut suivre le média ou le prestataire du même compte (deux pages
+ * distinctes, l'API l'autorise). Sans casquette, le propriétaire de la page ne se suit pas lui-même.
+ */
+export function isOwnPage(input: { actorKey: string | null | undefined; pageKey: string; owner: boolean }): boolean {
+  return input.actorKey ? input.actorKey === input.pageKey : input.owner;
+}
+
 // --- Les mentions --------------------------------------------------------------------------------------------------------
 
 /**

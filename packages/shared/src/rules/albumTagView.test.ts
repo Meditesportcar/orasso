@@ -9,11 +9,13 @@ import {
   createOperationGate,
   createTaggablePicker,
   emptyPhotosState,
+  exitAfterRemoval,
   liveStoryAt,
   mentionsSummary,
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
   readIsQuiet,
+  reconcileRemovals,
   reviewButtonsOf,
   showPeopleTab,
   taggedByText,
@@ -391,6 +393,49 @@ describe("emptyPhotosState", () => {
     expect(emptyPhotosState(1, 0, false)).toBe("loading");
     expect(emptyPhotosState(1, 0, true)).toBe("error");
     expect(emptyPhotosState(0, 0, false)).toBe("empty");
+  });
+});
+
+describe("reconcileRemovals et exitAfterRemoval (« Tes photos » de l'appli : retraits rangés par identification)", () => {
+  it("une réponse lue AVANT le retrait (avec t1) garde t1 masqué ; la réponse fraîche (sans t1) le réconcilie", () => {
+    const removed = new Set(["t1"]);
+    const old = reconcileRemovals(removed, ["t1", "t2"]);
+    expect([...old.kept]).toEqual(["t1"]);
+    expect(old.cleared).toBe(false);
+    expect(old.same).toBe(true);
+    const fresh = reconcileRemovals(old.kept, ["t2"]);
+    expect([...fresh.kept]).toEqual([]);
+    expect(fresh.cleared).toBe(true);
+    expect(fresh.same).toBe(false);
+  });
+  it("retraits partiels : seul l'identifiant absent des données est levé, l'autre reste masqué", () => {
+    const partial = reconcileRemovals(new Set(["t1", "t2"]), ["t2", "t3"]);
+    expect([...partial.kept]).toEqual(["t2"]);
+    expect(partial.cleared).toBe(false);
+    expect(partial.same).toBe(false);
+    // Une photo à deux identifications de moi : retirer l'une (t1) laisse la photo avec t2, qui n'est pas masquée.
+    const two = reconcileRemovals(new Set(["t1"]), ["t2"]);
+    expect(two.cleared).toBe(true);
+  });
+  it("aucun retrait en attente : rien ne change", () => {
+    const none = reconcileRemovals(new Set(), ["t1"]);
+    expect(none.same).toBe(true);
+    expect(none.cleared).toBe(true);
+  });
+  it("404 après une lecture ancienne : la lecture ancienne ne lève pas l'attente, la 404 qui suit ferme l'écran (focus et attente requis)", () => {
+    // Retrait de t1 → relecture attendue (wanted). Une lecture ancienne (avec t1) arrive : t1 reste masqué, la sortie reste attendue.
+    let wanted = true;
+    const old = reconcileRemovals(new Set(["t1"]), ["t1"]);
+    if (old.cleared) wanted = false;
+    expect(wanted).toBe(true);
+    // La relecture rend 404 : plus aucune identification à mon nom.
+    expect(exitAfterRemoval({ wanted, focused: true, status: 404 })).toBe(true);
+    // Sans le focus (une story ouverte par-dessus) : pas de sortie ; au retour, oui.
+    expect(exitAfterRemoval({ wanted, focused: false, status: 404 })).toBe(false);
+    // Une 404 de chargement ordinaire (aucun retrait attendu), ou une panne : rien ne ferme.
+    expect(exitAfterRemoval({ wanted: false, focused: true, status: 404 })).toBe(false);
+    expect(exitAfterRemoval({ wanted, focused: true, status: 503 })).toBe(false);
+    expect(exitAfterRemoval({ wanted, focused: true, status: undefined })).toBe(false);
   });
 });
 

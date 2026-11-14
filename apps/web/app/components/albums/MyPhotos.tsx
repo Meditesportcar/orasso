@@ -239,7 +239,7 @@ export function MyPhotos({
           </span>
         </span>
         {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
-        {count > 0 && (
+        {count > 0 && !view.viewerIsAuthor && (
           <ContactMedia name={view.media.name} variant="header" busy={contact.busy} onOpen={contact.open} />
         )}
       </div>
@@ -377,15 +377,17 @@ export function MyPhotos({
                 </span>
               </span>
             </button>
-            <ContactMedia
-              name={view.media.name}
-              variant="row"
-              busy={contact.busy}
-              onOpen={() => {
-                setSheet(null);
-                contact.open();
-              }}
-            />
+            {!view.viewerIsAuthor && (
+              <ContactMedia
+                name={view.media.name}
+                variant="row"
+                busy={contact.busy}
+                onOpen={() => {
+                  setSheet(null);
+                  contact.open();
+                }}
+              />
+            )}
             <div className="myp-sheet__row" data-testid="photo-sheet-report">
               <ReportDialog
                 targetType="album_photo"

@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
 import { sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
@@ -14,7 +14,33 @@ const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
 test.use({ actionTimeout: 30_000 });
 
-async function shot(page: Page, name: string) {
+/**
+ * Les images attendues d'une capture : chaque image **visible** doit être chargée pour de bon (`naturalWidth > 0`) ; une image cassée
+ * n'est plus acceptée parce que son chargement est « terminé ». Un repli attendu s'autorise explicitement (`brokenOk` : sélecteurs CSS).
+ */
+async function expectImagesLoaded(page: Page, brokenOk: string[] = []) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (allowed) => {
+          await Promise.all(
+            [...document.images].map((img) => (img.complete ? null : img.decode().catch(() => undefined))),
+          );
+          return [...document.images]
+            .filter((img) => {
+              const r = img.getBoundingClientRect();
+              return r.width > 0 && r.height > 0 && getComputedStyle(img).visibility !== "hidden";
+            })
+            .filter((img) => !allowed.some((q) => img.matches(q)))
+            .filter((img) => !(img.complete && img.naturalWidth > 0))
+            .map((img) => img.currentSrc || img.src);
+        }, brokenOk),
+      { message: "toutes les images visibles sont chargées (naturalWidth > 0)", timeout: 20_000 },
+    )
+    .toEqual([]);
+}
+
+async function shot(page: Page, name: string, brokenOk: string[] = []) {
   mkdirSync(DIR, { recursive: true });
   // Le thème voulu est vraiment celui de la page (le Sable ne repasse jamais en Béton sans que personne le voie, tour 2, point 4).
   const wanted = (await page.context().cookies()).find((c) => c.name === "orasso-theme")?.value;
@@ -22,9 +48,9 @@ async function shot(page: Page, name: string) {
     await expect(page.locator("html")).toHaveAttribute("data-theme", wanted);
   // Un état observable, pas un délai : réseau au repos, polices et images décodées, deux images peintes (la capture voit le contenu final).
   await page.waitForLoadState("networkidle");
+  await expectImagesLoaded(page, brokenOk);
   await page.evaluate(async () => {
     await document.fonts.ready;
-    await Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => undefined))));
     await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
   });
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: false });
@@ -77,6 +103,14 @@ async function setFollowing(email: string, targetKey: string, wanted: boolean, a
     headers: { cookie: await login(email), origin: WEB, ...(actor ? { "x-orasso-actor": actor } : {}) },
   });
   expect(res.status).toBe(200);
+}
+
+/** `GET /media/:id` lu au nom d'une casquette : son état d'abonnement (casquette de la personne : sans en-tête). */
+async function fetchMediaAs(email: string, mediaId: string, actor: string) {
+  const res = await fetch(`${API}/api/media/${mediaId}`, {
+    headers: { cookie: await login(email), origin: WEB, "x-orasso-actor": actor },
+  });
+  return (await res.json()) as { isFollowing: boolean };
 }
 
 /** `GET /media/:id` lu par une personne : son état d'abonnement et son nombre d'abonnés. */
@@ -478,6 +512,123 @@ test("Les liens de T54 : l'album mène à la page du média, la Page du média �
   await ctx.close();
 });
 
+test("T54 : la gestion de l'événement (« Après ») porte la ligne « Photos · N albums » vers la gestion des albums", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  // Un événement de la graine dont un album est publié, et le propriétaire de sa structure.
+  const [row] = await sql<{ event_id: string; slug: string; email: string }>(
+    `select e.id as event_id, st.slug, u.email
+       from event_albums a
+       join events e on e.id = a.event_id
+       join structures st on st.id = e.structure_id
+       join "user" u on u.id = st.created_by
+      where a.status = 'published' and a.deleted_at is null
+      order by e.starts_at desc limit 1`,
+  );
+  expect(row, "la graine a un album publié sur un événement").toBeTruthy();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await open(page, row?.email ?? "", `/orga/${row?.slug}/e/${row?.event_id}/apres`);
+  const link = page.getByTestId("ae-photos-link");
+  await expect(link).toBeVisible();
+  await expect(link).toContainText(/Photos · \d+ albums?/);
+  await expect(link).toHaveAttribute("href", `/orga/${row?.slug}/e/${row?.event_id}/presse#photos`);
+  await link.click();
+  await page.waitForURL(/\/presse/);
+  await expect(page.getByTestId("event-photos")).toBeVisible();
+  await ctx.close();
+});
+
+test("Événements d'une structure au-delà des limites (50 à venir, 12 passés) : « Voir plus » sur la Page du propriétaire et sur la page publique", async ({
+  browser,
+}) => {
+  test.setTimeout(280_000);
+  const email = "sarah@orasso.local";
+  const cookie = await login(email);
+  // La structure de la Page ouverte plus bas (`roues-libres-66`) : Sarah en gère d'autres, la persona « organisateur » n'est pas forcément celle-là.
+  const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(cookie, "GET", "/me");
+  const structure = { id: me.data.memberships.find((m) => m.structureSlug === "roues-libres-66")?.structureId ?? "" };
+  expect(structure.id, "Sarah gère Roues Libres 66").not.toBe("");
+  const stamp = `B2b${Date.now().toString(36)}`;
+  const created: string[] = [];
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  try {
+    // 64 événements publiés par l'API (demain et après) : 13 deviennent passés (dates reculées en base), 51 restent à venir.
+    for (let i = 0; i < 64; i++) {
+      const start = new Date(Date.now() + (2 + (i % 20)) * 24 * 3600 * 1000);
+      const res = await apiCall<{ id: string }>(cookie, "POST", `/structures/${structure.id}/events`, {
+        title: `${stamp} ${String(i).padStart(2, "0")}`,
+        format: "gathering",
+        startsAt: start.toISOString(),
+        endsAt: new Date(start.getTime() + 4 * 3600 * 1000).toISOString(),
+        addressLine: "Parking du port",
+        postalCode: "66140",
+        city: "Canet-en-Roussillon",
+        department: "66",
+        lat: 42.6988,
+        lng: 3.0334,
+        admittedVehicleTypes: ["car"],
+        capacity: 10,
+        maxVehiclesPerUser: 1,
+        admission: "open",
+        publicAccess: "free",
+        registrationsOpenAt: new Date(Date.now() - 3600_000).toISOString(),
+        previewHours: 0,
+        rulesText: "Recette du lot B2b : événement retiré à la fin.",
+        description: "Événement de recette (pagination), retiré à la fin.",
+      });
+      expect(res.status, `création ${i}`).toBe(201);
+      created.push(res.data.id);
+      expect((await apiCall(cookie, "POST", `/events/${res.data.id}/publish`)).status).toBe(200);
+    }
+    // 13 événements passés : terminés il y a 2 à 14 jours.
+    for (const [k, id] of created.slice(0, 13).entries()) {
+      await sql(
+        "update events set starts_at = now() - make_interval(days => $2 + 1), ends_at = now() - make_interval(days => $2) where id = $1",
+        [id, k + 1],
+      );
+    }
+    const countTiles = (testId: string) => page.getByTestId(testId).getByTestId("event-tile").count();
+    for (const where of [
+      { url: "/orga/roues-libres-66/page?onglet=evenements", who: "propriétaire" },
+      { url: "/o/roues-libres-66?onglet=evenements", who: "public" },
+    ]) {
+      await open(page, email, where.url);
+      // Première page : 50 à venir, 12 passés, et « Voir plus » pour chacune.
+      await expect(page.getByTestId("structure-upcoming")).toBeVisible();
+      expect(await countTiles("structure-upcoming"), `${where.who} : 50 à venir`).toBe(50);
+      expect(await countTiles("structure-past"), `${where.who} : 12 passés`).toBe(12);
+      await expect(page.getByTestId("structure-upcoming-more")).toBeVisible();
+      await expect(page.getByTestId("structure-past-more")).toBeVisible();
+      // « Voir plus » : la suite s'ajoute (au moins le 51e à venir et le 13e passé), sans doublon, puis plus de bouton.
+      await page.getByTestId("structure-upcoming-more").click();
+      await expect(page.getByTestId("structure-upcoming-more")).toHaveCount(0);
+      expect(await countTiles("structure-upcoming"), `${where.who} : à venir au-delà de 50`).toBeGreaterThan(50);
+      await page.getByTestId("structure-past-more").click();
+      await expect(page.getByTestId("structure-past-more")).toHaveCount(0);
+      expect(await countTiles("structure-past"), `${where.who} : passés au-delà de 12`).toBeGreaterThan(12);
+      const hrefs = await page
+        .getByTestId("structure-past")
+        .locator("a[href]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+      expect(new Set(hrefs).size, "aucune carte en double").toBe(hrefs.length);
+    }
+  } finally {
+    // Les événements de la recette sont retirés avec les notifications que leur publication a créées (leur `event_id` passerait à
+    // NULL sans les effacer) ; une erreur de nettoyage fait échouer la recette au lieu de laisser des restes.
+    try {
+      if (created.length) {
+        await sql("delete from notifications where event_id = any($1::uuid[])", [created]);
+        await sql("delete from events where id = any($1::uuid[])", [created]);
+      }
+    } finally {
+      await ctx.close();
+    }
+  }
+});
+
 /** Les onglets de la page tiennent sans être coupés (`scrollWidth <= clientWidth`) : « Mentions · 0 » n'est jamais rogné à 390 px. */
 async function tabsFit(page: Page) {
   const fits = await page.getByTestId("page-tabs").evaluate((el) => el.scrollWidth <= el.clientWidth);
@@ -633,6 +784,89 @@ test("Deux casquettes du même compte : la fiche pro suit sa vitrine de prestata
     await ctx.close();
   }
 });
+
+test("/m/<id> à deux casquettes du même compte : la fiche pro suit son propre média (au nom de la fiche) puis s'en désabonne ; le média ne se suit pas lui-même", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const email = "garage@orasso.local";
+  const cookie = await login(email);
+  // Un média créé par l'API pour le compte du garage (la graine ne lui en donne pas) ; retiré à la fin.
+  const created = await apiCall(cookie, "PUT", "/me/media-profile", {
+    name: "Garage Images B2b",
+    formats: ["photo"],
+    website: "https://example.org/garage-images",
+    departments: ["66"],
+  });
+  expect(created.status, "le média du garage est créé").toBe(200);
+  // Entré dans le `try` dès la création : un échec plus bas retire quand même le média de la recette.
+  let mediaId: string | null = null;
+  let ctx: BrowserContext | null = null;
+  try {
+    const media = await personaOf(email, "media");
+    mediaId = media.id;
+    const pro = await personaOf(email, "pro");
+    const proKey = `p:${pro.id}`;
+    const ownKey = `m:${media.id}`;
+    ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    await setFollowing(email, ownKey, false, proKey);
+    await open(page, email, `/m/${media.id}?auteur=${encodeURIComponent(proKey)}&onglet=albums`);
+    // La fiche pro n'est pas la page visitée : « Suivre » est là, au nom de la fiche.
+    const button = page.getByTestId("follow-button");
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    await button.click();
+    await expect(button).toHaveText(`Suivi en tant que ${pro.label}`);
+    expect((await fetchMediaAs(email, media.id, proKey)).isFollowing, "la fiche pro suit le média").toBe(true);
+    // Se désabonner, au nom de la fiche aussi.
+    await button.click();
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    expect((await fetchMediaAs(email, media.id, proKey)).isFollowing).toBe(false);
+    // Le média ne se suit pas lui-même (casquette = la page) ; sans casquette, le propriétaire non plus.
+    await page.goto(`/m/${media.id}?auteur=${encodeURIComponent(ownKey)}&onglet=albums`);
+    await expect(page.getByTestId("page-actor")).toBeVisible();
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+    await page.goto(`/m/${media.id}?onglet=albums`);
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+  } finally {
+    // Le média de la recette est retiré : le compte retrouve l'état de la graine (sans casquette Média).
+    try {
+      if (mediaId) {
+        await sql("delete from page_follows where target_id = $1", [mediaId]);
+        await sql("delete from media_profiles where id = $1", [mediaId]);
+      }
+    } finally {
+      await ctx?.close();
+    }
+  }
+});
+
+for (const theme of ["sable", "beton"] as const) {
+  test(`le fondu de bord de la rangée d'onglets, avec un vrai débordement (police agrandie, 384 px, ${theme})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const sudCars = await personaOf("leo@orasso.local", "media");
+    const ctx = await browser.newContext({ viewport: { width: 384, height: 860 } });
+    const page = await ctx.newPage();
+    await setTheme(page, theme);
+    await open(page, "damien@orasso.local", `/m/${sudCars.id}?onglet=albums`);
+    // Police agrandie (×1,5 sur les onglets : le site pose ses tailles en px, `html` ne les suit pas) : la rangée déborde et défile.
+    await page.addStyleTag({ content: ".pg-page .utabs__tab { font-size: 24px !important; }" });
+    const tabs = page.getByTestId("page-tabs");
+    await expect
+      .poll(() => tabs.evaluate((el) => el.scrollWidth - el.clientWidth), { message: "la rangée déborde" })
+      .toBeGreaterThan(8);
+    // Au bord gauche : l'ombre n'apparaît que du côté droit (il reste de la rangée à voir) ; au milieu, des deux côtés ; au bord droit, à gauche.
+    await shot(page, `onglets-fondu-gauche-${theme}-384-x150`);
+    await tabs.evaluate((el) => el.scrollTo({ left: Math.round((el.scrollWidth - el.clientWidth) / 2) }));
+    await shot(page, `onglets-fondu-milieu-${theme}-384-x150`);
+    await tabs.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+    await shot(page, `onglets-fondu-droite-${theme}-384-x150`);
+    await noHorizontalScroll(page);
+    await ctx.close();
+  });
+}
 
 test("Les onglets d'une page publique gardent `retour` : le ✕ ramène à l'écran d'origine", async ({ browser }) => {
   test.setTimeout(240_000);

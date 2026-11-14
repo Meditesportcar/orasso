@@ -83,6 +83,20 @@ async function ownView(v: Viewer, id: string): Promise<FeedPostView> {
   return view;
 }
 
+/**
+ * Le rejeu d'un envoi rend la publication déjà enregistrée. Si elle n'est plus lisible (page suspendue ou retirée depuis), il
+ * répond comme le premier envoi l'aurait fait : le refus de la casquette (403 `persona_forbidden`, même message), jamais un
+ * 404 qui dirait autre chose ; si la casquette est en règle, l'absence reste un 404 (rien de plus n'est révélé).
+ */
+async function replayView(v: Viewer, id: string, input: FeedPostCreate): Promise<FeedPostView> {
+  try {
+    return await ownView(v, id);
+  } catch (error) {
+    if (error instanceof AppError && error.status === 404) await requireAuthorship(v, input);
+    throw error;
+  }
+}
+
 /** La publication déjà enregistrée pour ce `clientId` (rejeu d'un envoi), ou `undefined`. */
 async function findReplay(ex: Executor, userId: string, clientId: string | null | undefined) {
   if (!clientId) return undefined;
@@ -182,7 +196,7 @@ export const feedPostsService = {
         .where(
           and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, input.clientId), isNull(feedPosts.deletedAt)),
         );
-      if (again) return ownView(v, again.id);
+      if (again) return replayView(v, again.id, input);
     }
 
     // Une « Info importante » ne se co-signe pas (R8o) : refusé avant tout le reste.
@@ -303,7 +317,7 @@ export const feedPostsService = {
       if (!byKey.has(key)) {
         // Le même envoi vient peut-être d'être validé par une autre requête qui a consommé ces photos.
         const again = await findReplay(db, userId, input.clientId);
-        if (again) return ownView(v, again);
+        if (again) return replayView(v, again, input);
         throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
       }
     }
@@ -463,14 +477,14 @@ export const feedPostsService = {
       });
     } catch (error) {
       for (const key of written) await removeOrRetry(key);
-      if (error instanceof Replayed) return ownView(v, error.id);
+      if (error instanceof Replayed) return replayView(v, error.id, input);
       // Deux envois simultanés du même `clientId` : le second rend la publication du premier.
       if (input.clientId && sqlState(error) === "23505") {
         const [again] = await db
           .select({ id: feedPosts.id })
           .from(feedPosts)
           .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, input.clientId)));
-        if (again) return ownView(v, again.id);
+        if (again) return replayView(v, again.id, input);
       }
       if (sqlState(error) === "23505" || sqlState(error) === "40P01") {
         throw new AppError(409, "conflict", "Quelqu'un vient de faire la même chose : réessaie.");

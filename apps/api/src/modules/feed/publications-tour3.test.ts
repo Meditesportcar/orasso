@@ -139,6 +139,49 @@ describe("GET /me/feed-posts/by-client/:clientId", () => {
     expect(back.status, back.text).toBe(200);
     expect(back.json.id).toBe(sent.json.id);
   });
+  it("rejeu du POST d'une page suspendue (même clientId) : le refus du premier envoi (403 persona_forbidden, même message), jamais 404 ; réactivée : la même publication (B2b, R1 de R9h)", async () => {
+    const { owner, sent } = await pagePost();
+    const body = (extra: object = {}) => ({
+      persona: "organizer",
+      structureId: undefined as string | undefined,
+      caption: "Le plan est en ligne",
+      clientId: CLIENT,
+      ...extra,
+    });
+    const [structure] = await db.select().from(structures).where(eq(structures.createdBy, owner.id));
+    const send = () => call(owner, "POST", "/me/feed-posts", body({ structureId: structure?.id }));
+    // Le refus du premier envoi, tel que la page suspendue le donne pour un nouvel identifiant.
+    await db
+      .update(structures)
+      .set({ verification: "suspended", suspendedReason: "moderation" })
+      .where(eq(structures.createdBy, owner.id));
+    const first = await call(
+      owner,
+      "POST",
+      "/me/feed-posts",
+      body({ structureId: structure?.id, clientId: "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0b77" }),
+    );
+    expect(first.status).toBe(403);
+    const replay = await send();
+    expect(replay.status, replay.text).toBe(403);
+    expect(replay.json.error.code).toBe("persona_forbidden");
+    expect(replay.json.error.message).toBe(first.json.error.message);
+    // Rien de la publication n'est révélé.
+    expect(replay.text).not.toContain(sent.json.id);
+    expect(replay.text).not.toContain("Le plan est en ligne");
+    // Un autre compte rejouant le même identifiant n'a aucune publication à lui : sa réponse ne dépend pas de celle-ci.
+    const other = await signUp("Autre_B2b");
+    const stranger = await call(other, "POST", "/me/feed-posts", body({ structureId: structure?.id }));
+    expect(stranger.status).toBe(403);
+    // Réactivée : le rejeu rend la publication déjà enregistrée.
+    await db
+      .update(structures)
+      .set({ verification: "verified", suspendedReason: null })
+      .where(eq(structures.createdBy, owner.id));
+    const back = await send();
+    expect(back.status, back.text).toBe(201);
+    expect(back.json.id).toBe(sent.json.id);
+  });
   it("un identifiant mal formé : 400", async () => {
     const { owner } = await pagePost();
     expect((await call(owner, "GET", "/me/feed-posts/by-client/pas-un-uuid")).status).toBe(400);

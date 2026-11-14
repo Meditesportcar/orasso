@@ -13,22 +13,82 @@ import {
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { EventRow, ProRow } from "@/features/explorer/rows";
+import { SmallButton } from "@/features/sorties/bits";
 import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
 
+import type { MoreEventsView } from "./useMoreEvents";
+
 const { space1, space3 } = tokens.spacing;
+
+/** « Voir plus » sous une liste ; après un échec, la panne se dit et « Réessayer » relit la même suite (jamais une liste vidée). */
+function MoreEvents({
+  more,
+  label,
+  errorText,
+  testID,
+}: {
+  more: MoreEventsView | undefined;
+  label: string;
+  errorText: string;
+  testID: string;
+}) {
+  if (!more || (more.next === null && !more.failed)) return null;
+  return (
+    <>
+      {more.failed ? (
+        <Notice tone="error" testID={`${testID}-error`}>
+          {errorText}
+        </Notice>
+      ) : null}
+      <SmallButton
+        icon={more.failed ? "undo" : "down"}
+        disabled={more.busy}
+        onPress={more.onMore}
+        testID={more.failed ? `${testID}-retry` : testID}
+      >
+        {more.failed ? L.readRetry : label}
+      </SmallButton>
+    </>
+  );
+}
+
+/** La première lecture d'une liste a échoué : la panne se dit et « Réessayer » la relit, jamais « Aucun événement » ni un silence. */
+function ReadFailed({ text, onRetry, testID }: { text: string; onRetry: () => void; testID: string }) {
+  return (
+    <>
+      <Notice tone="error" testID={testID}>
+        {text}
+      </Notice>
+      <SmallButton icon="undo" onPress={onRetry} testID={`${testID}-retry`}>
+        {L.readRetry}
+      </SmallButton>
+    </>
+  );
+}
 
 export function StructureEvents({
   structure: s,
   upcoming,
   past,
   partners,
+  upcomingMore,
+  pastMore,
+  onRetryUpcoming,
+  onRetryPast,
 }: {
   structure: StructurePublic;
   /** `null` : la lecture n'a pas abouti (ou n'est pas finie) : on ne dit pas « aucun ». */
   upcoming: EventCard[] | null;
   past: EventCard[] | null;
   partners: ProCard[] | null;
+  /** « Voir plus » au-delà des 50 à venir et des 12 passés. */
+  upcomingMore?: MoreEventsView;
+  pastMore?: MoreEventsView;
+  /** Présent quand la première lecture de la liste a échoué (panne, pas encore en cours) : « Réessayer » la relit. */
+  onRetryUpcoming?: (() => void) | null;
+  onRetryPast?: (() => void) | null;
 }) {
   const { t } = useTheme();
   const where = [s.postalCode, s.city].filter(Boolean).join(" ");
@@ -37,17 +97,33 @@ export function StructureEvents({
   return (
     <View style={styles.wrap} testID="structure-events">
       <SectionTitle>{L.eventsNext}</SectionTitle>
+      {upcoming === null && onRetryUpcoming ? (
+        <ReadFailed text={L.eventsReadError} onRetry={onRetryUpcoming} testID="structure-upcoming-error" />
+      ) : null}
       {upcoming && upcoming.length === 0 ? <Muted variant="body">{explorerLabels.structureNoEvents}</Muted> : null}
       {upcoming?.map((e) => (
         <EventRow key={e.id} event={e} hints={false} />
       ))}
+      <MoreEvents
+        more={upcomingMore}
+        label={L.eventsMore}
+        errorText={L.eventsReadError}
+        testID="structure-upcoming-more"
+      />
 
+      {past === null && onRetryPast ? (
+        <>
+          <SectionTitle>{L.eventsPast}</SectionTitle>
+          <ReadFailed text={L.pastReadError} onRetry={onRetryPast} testID="structure-past-error" />
+        </>
+      ) : null}
       {past && past.length > 0 ? (
         <>
           <SectionTitle>{L.eventsPast}</SectionTitle>
           {past.map((e) => (
             <EventRow key={e.id} event={e} hints={false} />
           ))}
+          <MoreEvents more={pastMore} label={L.pastMore} errorText={L.pastReadError} testID="structure-past-more" />
         </>
       ) : null}
 

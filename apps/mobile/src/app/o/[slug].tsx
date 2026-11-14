@@ -35,6 +35,7 @@ import { PageMentions } from "@/features/pages/PageMentions";
 import { PagePublications } from "@/features/pages/PagePublications";
 import { PageTabs } from "@/features/pages/PageTabs";
 import { StructureEvents } from "@/features/pages/StructureEvents";
+import { useMoreEvents } from "@/features/pages/useMoreEvents";
 import { useReloadToken } from "@/features/pages/useReloadToken";
 import { SideIcon } from "@/features/profil/ProfileHead";
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -69,6 +70,9 @@ export default function StructurePage() {
   const past = useApi(() => api.exploreEvents({ structureId: s?.id, scope: "past", limit: 12 }), [s?.id], {
     enabled: Boolean(s),
   });
+  // « Voir plus » au-delà des 50 à venir et des 12 passés (parité avec le site) : la suite se lit au curseur, sans vider la liste.
+  const moreUpcoming = useMoreEvents(s?.id, "upcoming", upcoming.data);
+  const morePast = useMoreEvents(s?.id, "past", past.data);
   const partners = useApi(() => api.structurePros(slug), [slug], { enabled: Boolean(s) });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
@@ -188,8 +192,8 @@ export default function StructurePage() {
   });
   const key = authorKeyOf("structure", s.id);
   const ring = session ? profileRingState(s.stories) : null;
-  const upcomingItems: EventCard[] | null = upcoming.data ? upcoming.data.items : null;
-  const pastItems: EventCard[] | null = past.data ? past.data.items : null;
+  const upcomingItems: EventCard[] | null = moreUpcoming.items;
+  const pastItems: EventCard[] | null = morePast.items;
   const partnerItems: ProCard[] | null = partners.data ?? null;
 
   return (
@@ -267,7 +271,18 @@ export default function StructurePage() {
       </StickyHeader>
 
       {tab === "events" ? (
-        <StructureEvents structure={s} upcoming={upcomingItems} past={pastItems} partners={partnerItems} />
+        <StructureEvents
+          structure={s}
+          upcoming={upcomingItems}
+          past={pastItems}
+          partners={partnerItems}
+          upcomingMore={moreUpcoming.more}
+          pastMore={morePast.more}
+          onRetryUpcoming={
+            upcoming.data === null && upcoming.error && !upcoming.loading ? () => void upcoming.reload() : null
+          }
+          onRetryPast={past.data === null && past.error && !past.loading ? () => void past.reload() : null}
+        />
       ) : tab === "publications" ? (
         <PagePublications
           reloadToken={reloadToken}

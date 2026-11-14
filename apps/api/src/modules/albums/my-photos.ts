@@ -325,6 +325,7 @@ export const myPhotosService = {
         },
       },
       media: { key: mediaKey(join.m.id), name: join.m.name, logoUrl: storage.url(join.m.logoKey) },
+      viewerIsAuthor: isMediaAuthor,
       vehicle: vehicle ? { id: vehicle.id, label: vehicleLabel(vehicle) } : null,
       photos: mine,
     };

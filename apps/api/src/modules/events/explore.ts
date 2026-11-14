@@ -41,6 +41,25 @@ const encodeOffset = (offset: number): string => Buffer.from(String(offset)).toS
 const UNLIMITED = 2_147_483_647;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Lot B2b, tour 2 : un début de curseur est une date ISO UTC lue en base à la microseconde (jamais coupée à la milliseconde :
+ * des débuts écrits par `now()` en ont). Validé strictement : un jour ou une heure impossible (`2026-02-30`) refuserait le
+ * `::timestamptz` de PostgreSQL (500) au lieu du repli en 200 ; la valeur rendue est celle du texte, déjà normalisée.
+ */
+const ISO_UTC = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/;
+function strictIsoUtc(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const m = ISO_UTC.exec(value);
+  if (!m) return null;
+  const [y, mo, d, h, mi, sec] = m.slice(1, 7).map(Number) as [number, number, number, number, number, number];
+  const t = new Date(Date.UTC(y, mo - 1, d, h, mi, sec));
+  if (t.getUTCFullYear() !== y || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d) return null;
+  if (t.getUTCHours() !== h || t.getUTCMinutes() !== mi || t.getUTCSeconds() !== sec) return null;
+  return value;
+}
+/** Le début d'une ligne à la microseconde, tel que PostgreSQL le relit (colonne de plus de l'ordre par début). */
+const startsAtUs = sql<string>`to_char(${events.startsAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
 /** Lot M4, tour 2 : curseur du tri « Places restantes » (le dernier événement vu : ses places, son début, son id). */
 type SeatsCursor = { seats: number; startsAt: string; id: string };
 const encodeSeatsCursor = (c: SeatsCursor): string => Buffer.from(JSON.stringify(c)).toString("base64url");
@@ -49,8 +68,29 @@ function decodeSeatsCursor(cursor: string | undefined): SeatsCursor | null {
   try {
     const c = JSON.parse(Buffer.from(cursor, "base64url").toString()) as Partial<SeatsCursor>;
     if (!Number.isSafeInteger(c.seats) || typeof c.id !== "string" || !UUID.test(c.id)) return null;
-    if (typeof c.startsAt !== "string" || Number.isNaN(Date.parse(c.startsAt))) return null;
-    return { seats: c.seats as number, startsAt: c.startsAt, id: c.id };
+    const startsAt = strictIsoUtc(c.startsAt);
+    if (!startsAt) return null;
+    return { seats: c.seats as number, startsAt, id: c.id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lot B2b, tour 1 : curseur du tri par date (le dernier événement vu : son début et son id). Un décalage numérique sautait
+ * un événement quand un autre de la première page se terminait ou était annulé avant « Voir plus ». L'ancien curseur numérique
+ * reste accepté (repli sur le décalage) : l'APK en ligne le renvoie tel qu'il l'a reçu.
+ */
+type DateCursor = { startsAt: string; id: string };
+const encodeDateCursor = (c: DateCursor): string => Buffer.from(JSON.stringify(c)).toString("base64url");
+function decodeDateCursor(cursor: string | undefined): DateCursor | null {
+  if (!cursor) return null;
+  try {
+    const c = JSON.parse(Buffer.from(cursor, "base64url").toString()) as Partial<DateCursor> | null;
+    if (!c || typeof c !== "object" || typeof c.id !== "string" || !UUID.test(c.id)) return null;
+    const startsAt = strictIsoUtc(c.startsAt);
+    if (!startsAt) return null;
+    return { startsAt, id: c.id };
   } catch {
     return null;
   }
@@ -223,6 +263,16 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
         or (${events.startsAt} = ${after.startsAt}::timestamptz and ${events.id} > ${after.id}::uuid))))`,
     );
   }
+  // Tri par date : curseur sur (début, id), stable quand la liste change entre deux pages.
+  const byDate = sort === "date";
+  const dateAfter = byDate ? decodeDateCursor(q.cursor) : null;
+  if (dateAfter) {
+    const cmp = upcoming ? sql`>` : sql`<`;
+    filters.push(
+      sql`(${events.startsAt} ${cmp} ${dateAfter.startsAt}::timestamptz
+        or (${events.startsAt} = ${dateAfter.startsAt}::timestamptz and ${events.id} > ${dateAfter.id}::uuid))`,
+    );
+  }
   const order: SQL[] =
     sort === "recent"
       ? [sql`${events.publishedAt} desc nulls last`, asc(events.startsAt), asc(events.id)]
@@ -236,7 +286,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
               ? [asc(events.startsAt), asc(events.id)]
               : [desc(events.startsAt), asc(events.id)];
 
-  const offset = sort === "seats" ? 0 : decodeOffset(q.cursor);
+  const offset = sort === "seats" || dateAfter ? 0 : decodeOffset(q.cursor);
   const rows = await db
     .select({
       e: events,
@@ -245,6 +295,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
       followed: sort === "affinity" ? followedSql : sql<boolean>`false`,
       common: sort === "affinity" ? commonSql : sql<number>`0`,
       seats: sort === "seats" ? seatsSql : sql<number | null>`null`,
+      startsUs: startsAtUs,
     })
     .from(events)
     .innerJoin(structures, eq(structures.id, events.structureId))
@@ -275,7 +326,9 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
     rows.length <= q.limit || !last
       ? null
       : sort === "seats"
-        ? encodeSeatsCursor({ seats: Number(last.seats), startsAt: last.e.startsAt.toISOString(), id: last.e.id })
-        : encodeOffset(offset + q.limit);
+        ? encodeSeatsCursor({ seats: Number(last.seats), startsAt: last.startsUs, id: last.e.id })
+        : byDate
+          ? encodeDateCursor({ startsAt: last.startsUs, id: last.e.id })
+          : encodeOffset(offset + q.limit);
   return total === undefined ? { items, nextCursor } : { items, nextCursor, total };
 }

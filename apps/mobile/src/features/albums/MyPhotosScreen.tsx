@@ -8,11 +8,13 @@ import {
   albumLabels,
   createOperationGate,
   emptyPhotosState,
+  exitAfterRemoval,
   albumTagLabels as L,
   liveStoryAt,
   type MyPhoto,
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
+  reconcileRemovals,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -87,7 +89,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
   const exitWanted = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `close` est recréé à chaque rendu
   useEffect(() => {
-    if (exitWanted.current && focused && view.error?.status === 404) {
+    if (exitAfterRemoval({ wanted: exitWanted.current, focused, status: view.error?.status })) {
       exitWanted.current = false;
       close();
     }
@@ -137,11 +139,13 @@ export function MyPhotosScreen({ id }: { id: string }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: seulement quand de nouvelles données arrivent
   useEffect(() => {
     if (!v || removed.size === 0) return;
-    const present = new Set(v.photos.map((p) => p.tagId));
-    const kept = new Set([...removed].filter((id) => present.has(id)));
-    if (kept.size === removed.size) return;
-    setRemoved(kept);
-    if (kept.size === 0) exitWanted.current = false;
+    const next = reconcileRemovals(
+      removed,
+      v.photos.map((p) => p.tagId),
+    );
+    if (next.same) return;
+    setRemoved(next.kept);
+    if (next.cleared) exitWanted.current = false;
   }, [v]);
   // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
   // les retraits ne sont levés qu'après une lecture réussie.
@@ -214,10 +218,14 @@ export function MyPhotosScreen({ id }: { id: string }) {
             onClose={() => setSheet(null)}
             onRemove={(p) => void remove(p)}
             onReport={report}
-            onContact={() => {
-              setSheet(null);
-              void contact.open();
-            }}
+            onContact={
+              v?.viewerIsAuthor
+                ? undefined
+                : () => {
+                    setSheet(null);
+                    void contact.open();
+                  }
+            }
           />
           <StorySheet
             photo={story}
@@ -256,7 +264,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
               </Text>
             </View>
             {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
-            {photos.length > 0 ? <ContactMediaButton busy={contact.busy} onPress={() => void contact.open()} /> : null}
+            {photos.length > 0 && !v?.viewerIsAuthor ? (
+              <ContactMediaButton busy={contact.busy} onPress={() => void contact.open()} />
+            ) : null}
           </View>
           {note ? <Notice testID="my-photos-note">{note}</Notice> : null}
           {error ? (
