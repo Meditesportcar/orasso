@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiOnly, ownerMarkers, watchOwnerLeak } from "./ownerLeak";
 import { RELAIS } from "./relais";
 
 // Lot R9i, côté appli (version web de recette, `APP_URL`) : la conversation de page d'un média. Kenji_66 voit « Sud Cars » (ligne,
@@ -13,28 +14,15 @@ const OWNER = "Leo_SudCars";
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 30_000 });
 
-/** Garde la lecture de chaque réponse /api/ ; `done()` les attend toutes (aucune n'est perdue en route), puis contrôle l'absence du pseudo du titulaire. */
-function watchApi(page: Page) {
-  const reads: Promise<string>[] = [];
-  page.on("response", (res) => {
-    if (!res.url().includes("/api/")) return;
-    // Un flux (SSE) ne se termine jamais : seulement les réponses à corps fini ; chaque lecture est bornée (15 s).
-    if (res.headers()["content-type"]?.includes("event-stream")) return;
-    reads.push(
-      Promise.race([
-        res.text().catch(() => ""),
-        new Promise<string>((resolve) => setTimeout(() => resolve(""), 15_000)),
-      ]),
-    );
-  });
-  return {
-    async done() {
-      const texts = await Promise.all(reads);
-      expect(texts.length).toBeGreaterThan(0);
-      expect(texts.filter((t) => t.includes(OWNER))).toEqual([]);
-    },
-  };
-}
+/**
+ * Garde la lecture de chaque réponse reçue (/api/) ; `done()` les attend toutes et ÉCHOUE si un corps attendu
+ * reste illisible ou dépasse le délai, puis contrôle l'absence du pseudo, de l'e-mail et de l'identifiant du titulaire (`ownerLeak.ts`).
+ */
+let ownerIds: string[] = [];
+test.beforeAll(async () => {
+  ownerIds = await ownerMarkers();
+});
+const watchApi = (page: Page) => watchOwnerLeak(page, { markers: ownerIds, match: apiOnly });
 
 type Theme = "beton" | "sable";
 

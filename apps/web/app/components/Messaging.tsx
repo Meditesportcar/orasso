@@ -3,14 +3,13 @@ import {
   albumTagLabels,
   type ConversationSummary,
   conversationTag,
+  createContactMediaFlow,
   messagingLabels,
-  type OpenConversationResult,
-  parseAuthorKey,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { Form, useActionData, useNavigate, useNavigation } from "react-router";
 
-import { apiFetch } from "../lib/api.client";
+import { contactMediaCall } from "../lib/contactMedia";
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
@@ -126,30 +125,24 @@ export function ContactMedia({
 }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const running = useRef(false);
-  const open = async () => {
-    const id = parseAuthorKey(mediaKey)?.id;
-    if (!id || running.current) return;
-    running.current = true;
-    setBusy(true);
-    onError(null);
-    const res = await apiFetch<OpenConversationResult>(`/media/${encodeURIComponent(id)}/conversation`, {
-      method: "POST",
+  // Une opération à la fois, périmée au démontage (retour arrière, autre écran) : sa réponse tardive n'ouvre rien et ne dit rien.
+  const flow = useRef(createContactMediaFlow());
+  useEffect(() => {
+    const f = flow.current;
+    return () => f.cancel();
+  }, []);
+  const open = () => {
+    const call = contactMediaCall(mediaKey);
+    if (!call) return;
+    void flow.current.open(call, {
+      setBusy,
+      onError,
+      navigate: (id) => navigate(`/app/messages/${id}`),
     });
-    running.current = false;
-    setBusy(false);
-    if (!res.ok) return onError(res.error.message);
-    navigate(`/app/messages/${res.data.id}`);
   };
   if (variant === "row") {
     return (
-      <button
-        type="button"
-        className="myp-sheet__row"
-        disabled={busy}
-        onClick={() => void open()}
-        data-testid="photo-sheet-contact"
-      >
+      <button type="button" className="myp-sheet__row" disabled={busy} onClick={open} data-testid="photo-sheet-contact">
         <Icon name="chat" size={20} />
         <span>
           <strong>{albumTagLabels.contactName(name)}</strong>
@@ -159,14 +152,7 @@ export function ContactMedia({
     );
   }
   return (
-    <Button
-      type="button"
-      variant="secondary"
-      icon="chat"
-      loading={busy}
-      onClick={() => void open()}
-      data-testid="my-photos-contact"
-    >
+    <Button type="button" variant="secondary" icon="chat" loading={busy} onClick={open} data-testid="my-photos-contact">
       {albumTagLabels.contact}
     </Button>
   );

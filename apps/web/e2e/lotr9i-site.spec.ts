@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { apiOrLoaderData, ownerMarkers, watchOwnerLeak } from "./ownerLeak";
 import { RELAIS } from "./relais";
 
 // Lot R9i, côté site : la conversation de page d'un média (graine : Kenji_66 ↔ « Sud Cars », tenue par Leo_SudCars).
@@ -12,28 +13,15 @@ const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r9i-captures/apres/recett
 const OWNER = "Leo_SudCars";
 test.use({ actionTimeout: 30_000 });
 
-/** Garde la lecture de chaque réponse /api/ ; `done()` les attend toutes (aucune n'est perdue en route), puis contrôle l'absence du pseudo du titulaire. */
-function watchApi(page: Page) {
-  const reads: Promise<string>[] = [];
-  page.on("response", (res) => {
-    if (!res.url().includes("/api/")) return;
-    // Un flux (SSE) ne se termine jamais : seulement les réponses à corps fini ; chaque lecture est bornée (15 s).
-    if (res.headers()["content-type"]?.includes("event-stream")) return;
-    reads.push(
-      Promise.race([
-        res.text().catch(() => ""),
-        new Promise<string>((resolve) => setTimeout(() => resolve(""), 15_000)),
-      ]),
-    );
-  });
-  return {
-    async done() {
-      const texts = await Promise.all(reads);
-      expect(texts.length).toBeGreaterThan(0);
-      expect(texts.filter((t) => t.includes(OWNER))).toEqual([]);
-    },
-  };
-}
+/**
+ * Garde la lecture de chaque réponse reçue (/api/ et données des chargeurs *.data) ; `done()` les attend toutes et ÉCHOUE si un corps attendu
+ * reste illisible ou dépasse le délai, puis contrôle l'absence du pseudo, de l'e-mail et de l'identifiant du titulaire (`ownerLeak.ts`).
+ */
+let ownerIds: string[] = [];
+test.beforeAll(async () => {
+  ownerIds = await ownerMarkers();
+});
+const watchApi = (page: Page) => watchOwnerLeak(page, { markers: ownerIds, match: apiOrLoaderData });
 
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
@@ -57,6 +45,8 @@ for (const theme of ["beton", "sable"] as const) {
       const row = page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" });
       await expect(row).toBeVisible();
       await expect(row).toContainText("Média");
+      // Le logo de la page (pas seulement son nom) : l'avatar de la ligne porte l'adresse du logo de Sud Cars.
+      await expect(row.locator('img[src*="sud-cars-logo"]')).toBeVisible();
       await shot(page, `liste-personne-${theme}-${viewport.width}`);
       await row.click();
       await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
@@ -101,6 +91,7 @@ for (const theme of ["beton", "sable"] as const) {
       await shot(page2, `liste-titulaire-${theme}-${viewport.width}`);
       await row2.click();
       await expect(page2.getByTestId("reply-as")).toContainText("Tu réponds en tant que Sud Cars");
+      await expect(page2.getByTestId("reply-as").locator('img[src*="sud-cars-logo"]')).toBeVisible();
       await expect(page2.getByTestId("reply-as")).toContainText(
         "Kenji_66 voit le nom et le logo de ta page, jamais ton compte personnel.",
       );

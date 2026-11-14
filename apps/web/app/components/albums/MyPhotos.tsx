@@ -177,7 +177,10 @@ export function MyPhotos({
             {headline}
           </span>
         </span>
-        <ContactMedia mediaKey={view.media.key} name={view.media.name} variant="header" onError={setError} />
+        {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
+        {count > 0 && (
+          <ContactMedia mediaKey={view.media.key} name={view.media.name} variant="header" onError={setError} />
+        )}
       </div>
       {note && (
         <p className="s-notice" role="status" data-testid="my-photos-note">
