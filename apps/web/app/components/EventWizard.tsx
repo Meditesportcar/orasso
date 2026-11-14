@@ -10,6 +10,7 @@
 import "../styles/wizard.css";
 import { Button } from "@orasso/design-system/web";
 import {
+  accountAfterAnnouncement,
   afterNeedWrites,
   afterZoneWrites,
   type CategoryOption,
@@ -34,6 +35,7 @@ import {
   type NotifyPreview,
   needChanges,
   needsFromSaved,
+  newTicket,
   noNeedWrites,
   noRefusals,
   notifyChanged,
@@ -58,7 +60,9 @@ import {
   voteOrgaLabels,
   wizardV2Labels as W,
   type WaitedAction,
+  type WaitTicket,
   type WizardMemo,
+  waitIsStale,
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
@@ -75,6 +79,7 @@ import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
+import { currentSession, listenSession } from "../lib/sessionChannel";
 import { RecipientsBanner } from "./event/NotifySignup";
 import { ArrivalsStep } from "./wizard/ArrivalsStep";
 import { CriteriaStep } from "./wizard/CriteriaStep";
@@ -247,7 +252,7 @@ export function EventWizard(props: Props) {
     if (!event) return;
     let alive = true;
     setNeedsState((s) => (s === "ok" ? s : "loading"));
-    void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`).then((res) => {
+    void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`, { timeoutMs: 15_000 }).then((res) => {
       if (!alive) return;
       if (!res.ok) return setNeedsState("failed");
       const loaded = needsFromSaved(res.data, event.startsAt);
@@ -264,9 +269,17 @@ export function EventWizard(props: Props) {
   // R9-assistant : un clic donné pendant le chargement des missions est mis en attente (`waiting`), puis exécuté une fois
   // les missions arrivées ET la saisie gardée remise (`due`, un rendu plus tard : l'action lit alors la saisie à jour).
   // Une panne de lecture, un changement d'étape ou la sortie de l'assistant l'annulent ; un seul clic à la fois.
-  const [waiting, setWaiting] = useState<WaitedAction | null>(null);
-  const [due, setDue] = useState<WaitedAction | null>(null);
-  const queued = waiting ?? due;
+  // Tour 2 : l'attente est liée à l'étape, à la saisie (`epoch` : change quand une saisie gardée est restaurée ou effacée)
+  // et au compte vus au clic ; tout changement de l'un d'eux, ou la fenêtre « Quitter », l'annule (`waiting` et `due`).
+  const [waiting, setWaiting] = useState<WaitTicket | null>(null);
+  const [due, setDue] = useState<WaitTicket | null>(null);
+  const queued = (waiting ?? due)?.action ?? null;
+  const [epoch, setEpoch] = useState(0);
+  const [account, setAccount] = useState<string | null>(currentSession);
+  useEffect(
+    () => listenSession((announced, self) => setAccount((was) => accountAfterAnnouncement(was, announced, self))),
+    [],
+  );
   /** Message qui empêche d'enregistrer tant que les missions manquent, ou `null`. */
   const needsBlock = needsState === "loading" ? W.needsLoading : needsState === "failed" ? W.needsFailed : null;
   // Le refus « les missions se chargent » ne reste pas affiché une fois les missions arrivées : il disait d'attendre, plus de
@@ -330,6 +343,7 @@ export function EventWizard(props: Props) {
       const draft = loadedNeeds.current ? withLoadedNeeds(stored.draft, loadedNeeds.current) : stored.draft;
       if (sameDraft(draft, pristine.current)) return;
       setD(draft);
+      setEpoch((e) => e + 1);
       // `?temps=` prime ; un index écrit avec l'ancien découpage (douze étapes) est ignoré.
       const kept = storedStepIndex(stored.steps, stored.index);
       if (!props.stepWanted && kept !== null) setIndex(kept);
@@ -358,8 +372,14 @@ export function EventWizard(props: Props) {
   const discardLocal = () => {
     writeStorage(storageKey, null);
     setD(pristine.current);
+    setEpoch((e) => e + 1);
     setRestored(null);
   };
+  const leavingAsked = blocker.state === "blocked";
+  const waitCtx = useMemo(
+    () => ({ step: index, epoch, account, leaving: leavingAsked }),
+    [index, epoch, account, leavingAsked],
+  );
 
   /**
    * Enregistre `sent` : l'événement (POST la première fois, PATCH ensuite ; l'affiche générée est rendue par l'API avec
@@ -515,7 +535,7 @@ export function EventWizard(props: Props) {
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
     const click = decideClick(needsState, resumed ? null : queued, isDraft && Boolean(saved || step !== "type"));
     if (click === "ignore") return;
-    if (click === "wait") return setWaiting("next");
+    if (click === "wait") return setWaiting(newTicket("next", waitCtx));
     if (click === "refuse" && needsBlock) return setError(needsBlock);
     let sent = d;
     const problem = eventStepProblem(step, sent);
@@ -558,7 +578,7 @@ export function EventWizard(props: Props) {
     if (click === "ignore") return;
     if (click === "wait") {
       setError(null);
-      return setWaiting(mode);
+      return setWaiting(newTicket(mode, waitCtx));
     }
     if (click === "refuse" && needsBlock) return setError(needsBlock);
     // Publier exige aussi l'affiche ; « Brouillon », « Aperçu » et un événement publié, non.
@@ -611,23 +631,26 @@ export function EventWizard(props: Props) {
   const runWaited = useRef<(action: WaitedAction) => void>(() => undefined);
   runWaited.current = (action) => void (action === "next" ? go(1, true) : finish(action, true));
   useEffect(() => {
-    const out = settleWait(waiting, needsState);
-    if (out === "run") {
-      setDue(waiting);
+    const out = settleWait(waiting?.action ?? null, needsState);
+    if (out === "run" && waiting) {
+      if (!waitIsStale(waiting, waitCtx)) setDue(waiting);
       setWaiting(null);
     } else if (out === "fail") {
       setWaiting(null);
       setError(W.needsFailed);
     }
-  }, [waiting, needsState]);
+  }, [waiting, needsState, waitCtx]);
   useEffect(() => {
     if (!due) return;
     setDue(null);
-    runWaited.current(due);
-  }, [due]);
-  // Quitter l'étape annule le clic en attente (ex. « Retour » pendant l'attente).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement d'étape l'annule.
-  useEffect(() => setWaiting(null), [index]);
+    // Étape, saisie ou compte changés depuis le clic, ou fenêtre « Quitter » ouverte : l'action ne part pas.
+    if (!waitIsStale(due, waitCtx)) runWaited.current(due.action);
+  }, [due, waitCtx]);
+  // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
+  useEffect(() => {
+    if (waiting && waitIsStale(waiting, waitCtx)) setWaiting(null);
+    if (due && waitIsStale(due, waitCtx)) setDue(null);
+  }, [waiting, due, waitCtx]);
 
   const [title, intro] = HEADS[step];
   let body: ReactNode = null;
@@ -774,7 +797,7 @@ export function EventWizard(props: Props) {
               icon="send"
               onClick={() => void finish("publish")}
               loading={halted || queued === "publish"}
-              disabled={!verified || halted}
+              disabled={!verified || halted || (queued !== null && queued !== "publish")}
               data-testid="wizard-publish"
               fullWidth
             >

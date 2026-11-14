@@ -330,7 +330,7 @@ test("appli : réponse de création perdue, le nouvel essai ne recrée pas la mi
 
 test("appli : « Recharger les missions » ne débloque l'enregistrement qu'après la réponse", async ({ browser }) => {
   test.setTimeout(240_000);
-  const { id } = await appliDraft(`Appli recharge ${unique()}`, ["food_truck"]);
+  const { damien, id } = await appliDraft(`Appli recharge ${unique()}`, ["food_truck"]);
   const { ctx, page } = await open(browser);
   await signInOrganizer(page);
   let mode: "fail" | "hold" | "pass" = "fail";
@@ -353,16 +353,21 @@ test("appli : « Recharger les missions » ne débloque l'enregistrement qu'apr�
   await page.goto(`/evenement/${id}/modifier?temps=type`);
   await expect(v(page, "wizard-needs-failed")).toBeVisible({ timeout: 30_000 });
   mode = "hold";
+  const title = `Appli attente ${unique()}`;
+  await v(page, "wizard-title").fill(title);
   await page.getByRole("button", { name: "Recharger les missions" }).click();
-  // Réponse retenue : le clic est mis en attente (R9-assistant), rien ne s'enregistre ni n'avance, à aucun moment.
+  // Réponse retenue : le clic est mis en attente (R9-assistant), rien ne s'enregistre ni n'avance, à aucun moment
+  // (le titre saisi n'est pas enregistré côté API).
   await v(page, "wizard-next").click();
   for (let i = 0; i < 6; i++) {
     await expect(v(page, "wizard-next")).toContainText("Chargement…");
     await expect(v(page, "wizard-step")).toContainText("Type");
+    expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
     await page.waitForTimeout(300);
   }
   mode = "pass";
   release();
   await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
   await ctx.close();
 });

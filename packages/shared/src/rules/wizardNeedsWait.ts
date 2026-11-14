@@ -34,3 +34,30 @@ export function settleWait(waiting: WaitedAction | null, needsState: NeedsState)
   if (needsState === "loading") return "keep";
   return needsState === "ok" ? "run" : "fail";
 }
+
+/**
+ * Tour 2 : un clic en attente est lié à ce que la personne voyait en cliquant : l'étape, la saisie (`epoch` : change quand
+ * une saisie gardée est restaurée, effacée ou recommencée) et le compte. Tout changement de l'un d'eux, ou une sortie
+ * (fenêtre « Quitter l'assistant ? »), annule l'attente (`waiting` et `due`) : la personne reclique si elle le veut.
+ */
+export type WaitTicket = { action: WaitedAction; step: number; epoch: number; account: string | null };
+
+export type WaitContext = { step: number; epoch: number; account: string | null; leaving: boolean };
+
+export const newTicket = (action: WaitedAction, ctx: WaitContext): WaitTicket => ({
+  action,
+  step: ctx.step,
+  epoch: ctx.epoch,
+  account: ctx.account,
+});
+
+/** Le billet est périmé : sortie en cours, ou étape, saisie ou compte différents de ceux vus au clic. */
+export const waitIsStale = (ticket: WaitTicket, ctx: WaitContext): boolean =>
+  ctx.leaving || ticket.step !== ctx.step || ticket.epoch !== ctx.epoch || ticket.account !== ctx.account;
+
+/** Le compte vu par l'assistant après une annonce de session d'une AUTRE fenêtre : tout autre identifiant (ou aucun) le change. */
+export const accountAfterAnnouncement = (
+  current: string | null,
+  announced: string | null,
+  fromThisWindow: boolean,
+): string | null => (fromThisWindow ? current : announced);

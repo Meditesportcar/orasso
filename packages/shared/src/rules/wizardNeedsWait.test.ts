@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { decideClick, settleWait, type WaitedAction } from "./wizardNeedsWait";
+import {
+  accountAfterAnnouncement,
+  decideClick,
+  newTicket,
+  settleWait,
+  type WaitedAction,
+  waitIsStale,
+} from "./wizardNeedsWait";
 
 describe("clic pendant le chargement des missions (R9-assistant)", () => {
   it("missions chargées : le clic s'exécute tout de suite", () => {
@@ -36,5 +43,38 @@ describe("clic pendant le chargement des missions (R9-assistant)", () => {
     expect(settleWait("publish", "failed")).toBe("fail");
     expect(settleWait("save", "failed")).toBe("fail");
     expect(settleWait(null, "failed")).toBe("none");
+  });
+});
+
+describe("l'attente est liée à l'étape, à la saisie et au compte vus au clic (tour 2)", () => {
+  const seen = { step: 2, epoch: 0, account: "a", leaving: false };
+  const ticket = newTicket("publish", seen);
+
+  it("rien n'a changé : l'attente tient", () => {
+    expect(waitIsStale(ticket, seen)).toBe(false);
+  });
+
+  it("changement d'étape (Retour, frise, restauration d'une étape) : annulée", () => {
+    expect(waitIsStale(ticket, { ...seen, step: 1 })).toBe(true);
+    expect(waitIsStale(ticket, { ...seen, step: 3 })).toBe(true);
+  });
+
+  it("saisie gardée restaurée, effacée ou recommencée : annulée", () => {
+    expect(waitIsStale(ticket, { ...seen, epoch: 1 })).toBe(true);
+  });
+
+  it("sortie (fenêtre « Quitter l'assistant ? ») : annulée", () => {
+    expect(waitIsStale(ticket, { ...seen, leaving: true })).toBe(true);
+  });
+
+  it("autre compte (annonce d'une autre fenêtre) : annulée", () => {
+    expect(waitIsStale(ticket, { ...seen, account: "b" })).toBe(true);
+    expect(waitIsStale(ticket, { ...seen, account: null })).toBe(true);
+  });
+
+  it("le compte suit les annonces des autres fenêtres, pas celles de la fenêtre elle-même", () => {
+    expect(accountAfterAnnouncement("a", "b", false)).toBe("b");
+    expect(accountAfterAnnouncement("a", null, false)).toBeNull();
+    expect(accountAfterAnnouncement("a", "b", true)).toBe("a");
   });
 });

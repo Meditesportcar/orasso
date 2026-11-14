@@ -30,6 +30,7 @@ import {
   eventEditorLabels as L,
   type NeedDraft,
   needsFromSaved,
+  newTicket,
   notifyChanged,
   notifyFieldsOfDraft,
   notifySavedCode,
@@ -49,7 +50,9 @@ import {
   voteOrgaLabels,
   wizardV2Labels as W,
   type WaitedAction,
+  type WaitTicket,
   type WizardMemo,
+  waitIsStale,
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
@@ -72,6 +75,7 @@ import { formatStamp } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { useEventFormats, useVendorTypes } from "@/lib/lists";
 import type { PickedPhoto } from "@/lib/photos";
+import { useSession } from "@/lib/session";
 import { imageForm } from "@/lib/structureFiles";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -200,9 +204,18 @@ export function EventWizard({
   // R9-assistant (parité avec le site, D20) : un clic donné avant la fin de l'ouverture ou pendant le chargement des
   // missions est mis en attente (`waiting`), puis exécuté un rendu plus tard (`due`, la saisie restaurée est alors à
   // jour). Panne de lecture, changement d'étape ou sortie l'annulent ; un seul clic à la fois.
-  const [waiting, setWaiting] = useState<WaitedAction | null>(null);
-  const [due, setDue] = useState<WaitedAction | null>(null);
-  const queued = waiting ?? due;
+  // Tour 2 : l'attente est liée à l'étape, à la saisie (`epoch`) et au compte vus au clic ; tout changement de l'un
+  // d'eux, ou la fenêtre « Quitter », l'annule (`waiting` et `due`).
+  const [waiting, setWaiting] = useState<WaitTicket | null>(null);
+  const [due, setDue] = useState<WaitTicket | null>(null);
+  const queued = (waiting ?? due)?.action ?? null;
+  const [epoch, setEpoch] = useState(0);
+  const { me } = useSession();
+  const account = me?.user.id ?? null;
+  const waitCtx = useMemo(
+    () => ({ step: index, epoch, account, leaving: quitting }),
+    [index, epoch, account, quitting],
+  );
   const clickState = needsFailed ? "failed" : canSave ? "ok" : "loading";
   // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
   const needsTurn = useRef(0);
@@ -268,6 +281,7 @@ export function EventWizard({
           setPosterState(stored.poster ?? null);
           setKeptPoster(stored.poster ?? null);
           setResumed(stored);
+          setEpoch((e) => e + 1);
         }
       }
       setLoaded(true);
@@ -511,7 +525,7 @@ export function EventWizard({
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
     const click = decideClick(clickState, resumed ? null : queued, true);
     if (click === "ignore") return;
-    if (click === "wait") return setWaiting("next");
+    if (click === "wait") return setWaiting(newTicket("next", waitCtx));
     if (click === "refuse") return setError(W.needsFailed);
     let sent = d;
     const problem = eventStepProblem(step, sent);
@@ -557,6 +571,7 @@ export function EventWizard({
     setPosterState(null);
     setKeptPoster(null);
     setResumed(null);
+    setEpoch((e) => e + 1);
     setError(null);
   }
 
@@ -568,7 +583,7 @@ export function EventWizard({
     if (click === "ignore") return;
     if (click === "wait") {
       setError(null);
-      return setWaiting(mode);
+      return setWaiting(newTicket(mode, waitCtx));
     }
     if (click === "refuse") return setError(W.needsFailed);
     const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
@@ -628,23 +643,26 @@ export function EventWizard({
   const runWaited = useRef<(action: WaitedAction) => void>(() => undefined);
   runWaited.current = (action) => void (action === "next" ? go(1, true) : finish(action, true));
   useEffect(() => {
-    const out = settleWait(waiting, clickState);
-    if (out === "run") {
-      setDue(waiting);
+    const out = settleWait(waiting?.action ?? null, clickState);
+    if (out === "run" && waiting) {
+      if (!waitIsStale(waiting, waitCtx)) setDue(waiting);
       setWaiting(null);
     } else if (out === "fail") {
       setWaiting(null);
       setError(W.needsFailed);
     }
-  }, [waiting, clickState]);
+  }, [waiting, clickState, waitCtx]);
   useEffect(() => {
     if (!due) return;
     setDue(null);
-    runWaited.current(due);
-  }, [due]);
-  // Quitter l'étape annule le clic en attente.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement d'étape l'annule.
-  useEffect(() => setWaiting(null), [index]);
+    // Étape, saisie ou compte changés depuis le clic, ou fenêtre « Quitter » ouverte : l'action ne part pas.
+    if (!waitIsStale(due, waitCtx)) runWaited.current(due.action);
+  }, [due, waitCtx]);
+  // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
+  useEffect(() => {
+    if (waiting && waitIsStale(waiting, waitCtx)) setWaiting(null);
+    if (due && waitIsStale(due, waitCtx)) setDue(null);
+  }, [waiting, due, waitCtx]);
 
   const ctx: StepContext = {
     d,

@@ -174,6 +174,82 @@ test("panne de lecture des missions pendant l'attente : le clic en attente est a
   await ctx.close();
 });
 
+test("clic en attente puis « Retour » : l'attente est annulée, l'assistant reste à l'étape d'avant, rien n'est enregistré", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Retour ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  // Au temps 2 : « Retour » existe. Le clic sur « Continuer » attend, « Retour » l'annule.
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=lieu`);
+  const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  await page.getByTestId("wizard-back").click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  // Les missions arrivées, rien ne part : on reste à l'étape d'avant et rien n'est enregistré.
+  await page.waitForTimeout(1_500);
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
+  await ctx.close();
+});
+
+test("saisie gardée + clic pendant le chargement : la saisie reprise est montrée, rien n'est enregistré, l'assistant n'avance pas", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Reprise ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  // Une première ouverture écrit une saisie gardée (titre changé, jamais enregistré), puis la page est rouverte.
+  const kept = `Gardé ${unique()}`;
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  await page.getByLabel("Titre").fill(kept);
+  await page.waitForTimeout(1_000);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  // La restauration de la saisie annule l'attente : saisie reprise visible, aucune avancée, rien d'enregistré.
+  await expect(page.getByTestId("wizard-restored")).toBeVisible();
+  await page.waitForTimeout(1_500);
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await expect(page.getByLabel("Titre")).toHaveValue(kept);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(kept);
+  await ctx.close();
+});
+
 test("panne de relecture après la création d'une mission : le nouvel essai ne la recrée pas", async ({ browser }) => {
   test.setTimeout(180_000);
   const damien = await login("damien@orasso.local");
