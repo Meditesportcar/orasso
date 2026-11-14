@@ -260,6 +260,11 @@ export function EventWizard(props: Props) {
   }, [event, needsAttempt]);
   /** Message qui empêche d'enregistrer tant que les missions manquent, ou `null`. */
   const needsBlock = needsState === "loading" ? W.needsLoading : needsState === "failed" ? W.needsFailed : null;
+  // Le refus « les missions se chargent » ne reste pas affiché une fois les missions arrivées : il disait d'attendre, plus de
+  // raison de le garder (avant : il restait jusqu'au clic suivant, et l'assistant semblait bloqué alors qu'il était prêt).
+  useEffect(() => {
+    if (needsState === "ok") setError((e) => (e === W.needsLoading || e === W.needsFailed ? null : e));
+  }, [needsState]);
 
   // Mémoire du brouillon (temps atteint, récurrence) : relue à l'ouverture, écrite à chaque temps.
   const memo = useRef<WizardMemo>({ reached: -1, recurrence: null });
