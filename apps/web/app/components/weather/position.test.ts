@@ -2,6 +2,17 @@
 // effacée et aucune coordonnée ne repart (ni relecture forcée) ; un autre compte ne la voit pas.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Réchauffe le graphe de modules (transformation de `@orasso/shared`, du canal de session et de la position) à la COLLECTE, qui n'a pas
+// de délai par test : sans cela, le premier test paie seul ces imports à froid, et dans la suite complète du site (45 fichiers qui se
+// disputent le processeur) il dépassait les 5 s alloués (reproduit avec le processeur saturé : « Test timed out in 5000ms »,
+// jamais une assertion fausse). Les doubles posés dans `setup` ne changent pas : les imports de `setup` repartent d'un registre vide.
+vi.stubGlobal("window", { addEventListener: () => undefined, removeEventListener: () => undefined });
+vi.stubGlobal("BroadcastChannel", undefined);
+await import("../../lib/sessionChannel");
+await import("./position");
+vi.unstubAllGlobals();
+vi.resetModules();
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
