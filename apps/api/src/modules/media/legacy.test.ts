@@ -240,6 +240,16 @@ describe("POST /me/media-contents (kind gallery) : le chemin d'avant crée un al
     expect(facade.json[0].photos).toHaveLength(2);
   });
 
+  it("une galerie publiée par l'APK en ligne prévient le responsable de la structure (`album_published`, une seule fois, même rejouée)", async () => {
+    const a = await sendUpload(leo, "media_content");
+    const body = { eventId, kind: "gallery", title: "Galerie du soir", photoKeys: [a.key] };
+    expect((await call(leo, "POST", "/me/media-contents", body)).status).toBe(201);
+    expect((await call(leo, "POST", "/me/media-contents", body)).status).toBe(201);
+    const rows = await db.select().from(notifications).where(eq(notifications.type, "album_published"));
+    expect(rows.map((n) => n.userId)).toEqual([orga.id]);
+    expect(rows[0]?.title).toContain("Sud Cars");
+  });
+
   it("rejouée avec les mêmes clés, elle rend le même album (rien de plus, pas de limite de débit consommée)", async () => {
     const a = await sendUpload(leo, "media_content");
     const body = { eventId, kind: "gallery", title: "Galerie", photoKeys: [a.key] };

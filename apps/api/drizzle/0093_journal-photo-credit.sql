@@ -1,0 +1,6 @@
+ALTER TABLE "feed_post_photos" ADD COLUMN "credit_media_id" uuid;--> statement-breakpoint
+ALTER TABLE "feed_post_photos" ADD COLUMN "source_album_photo_id" uuid;--> statement-breakpoint
+ALTER TABLE "feed_post_photos" ADD CONSTRAINT "feed_post_photos_credit_media_id_media_profiles_id_fk" FOREIGN KEY ("credit_media_id") REFERENCES "public"."media_profiles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feed_post_photos" ADD CONSTRAINT "feed_post_photos_source_album_photo_id_event_album_photos_id_fk" FOREIGN KEY ("source_album_photo_id") REFERENCES "public"."event_album_photos"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "feed_post_photos_source_key" ON "feed_post_photos" USING btree ("source_album_photo_id") WHERE "feed_post_photos"."source_album_photo_id" is not null;--> statement-breakpoint
+ALTER TABLE "feed_post_photos" ADD CONSTRAINT "feed_post_photos_credit_check" CHECK ("feed_post_photos"."credit_media_id" is null or "feed_post_photos"."source_album_photo_id" is not null);

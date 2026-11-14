@@ -8,7 +8,7 @@
 // par le média sur 5 photos et par lui-même sur une sixième (« 6 photos de ta … ») ; Kenji_66 (place retenue et pointée) l’est par son pseudo ;
 // Lea_11 (place retenue et pointée) a retiré une identification (« Ce n'est pas moi », `not_mine`). Damien reçoit la notification `album_tagged`
 // (5 photos : jamais celle qu'il a posée lui-même), livrée tout de suite.
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -18,6 +18,7 @@ import { accessService } from "../../src/modules/access/service";
 import { adoptLegacyGalleries } from "../../src/modules/albums/reprise";
 import { sendTaggedNotifications } from "../../src/modules/albums/tags-notify";
 import { albumPhotoKey } from "../../src/modules/albums/view";
+import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { blurPlateRegions } from "../../src/modules/vehicles/photos-blur";
 import { apply, DAY, HOUR, now } from "./helpers";
 import { putRealPhoto } from "./photos";
@@ -165,6 +166,100 @@ export async function seedAlbums() {
   }
   // Lot R9f : les identifications de l'album publié.
   await seedAlbumTags();
+  // Lot R9g : l'album officiel et une photo reprise dans le journal.
+  await seedAlbumOfficialAndRepost();
+}
+
+/**
+ * Lot R9g : l'album de Sud Cars est l'album **officiel** du Rassemblement ; la structure de l'événement a repris une photo du plateau dans son
+ * journal, avec le crédit de Sud Cars (publication créditée, légende « Merci à Sud Cars pour cette photo du plateau. »). Idempotent : une
+ * photo déjà reprise n'est pas reprise deux fois. La photo copiée est celle de l'album (« aucune plaque » confirmée).
+ */
+export async function seedAlbumOfficialAndRepost() {
+  const rassemblement = await db.query.events.findFirst({ where: eq(t.events.slug, RASSEMBLEMENT) });
+  const [leo] = await db.select({ id: t.user.id }).from(t.user).where(eq(t.user.email, "leo@orasso.local"));
+  const media = leo ? await db.query.mediaProfiles.findFirst({ where: eq(t.mediaProfiles.userId, leo.id) }) : null;
+  if (!rassemblement || !media) return;
+  const [album] = await db
+    .select()
+    .from(t.eventAlbums)
+    .where(
+      and(
+        eq(t.eventAlbums.eventId, rassemblement.id),
+        eq(t.eventAlbums.mediaProfileId, media.id),
+        eq(t.eventAlbums.status, "published"),
+        isNull(t.eventAlbums.deletedAt),
+      ),
+    );
+  if (!album) return;
+  const [official] = await db
+    .select({ id: t.eventAlbums.id })
+    .from(t.eventAlbums)
+    .where(and(eq(t.eventAlbums.eventId, rassemblement.id), sql`${t.eventAlbums.officialAt} is not null`));
+  if (!official) {
+    await db.update(t.eventAlbums).set({ officialAt: now }).where(eq(t.eventAlbums.id, album.id));
+    console.log("Albums : l'album de Sud Cars est l'album officiel du Rassemblement.");
+  }
+  // Une photo du plateau (la cinquième : « aucune plaque » confirmée) reprise dans le journal de la structure.
+  const [photo] = await db
+    .select()
+    .from(t.eventAlbumPhotos)
+    .where(
+      and(
+        eq(t.eventAlbumPhotos.albumId, album.id),
+        eq(t.eventAlbumPhotos.position, 4),
+        isNull(t.eventAlbumPhotos.deletedAt),
+      ),
+    );
+  // Jamais une plaque lisible : seule une photo déjà floutée ou « aucune plaque » est copiée telle quelle (« gardée » exigerait de flouter les cadres,
+  // « inconnue » est refusée comme par l'API).
+  if (!photo || (photo.plateState !== "blurred" && photo.plateState !== "none")) return;
+  const [done] = await db
+    .select({ id: t.feedPostPhotos.id })
+    .from(t.feedPostPhotos)
+    .where(eq(t.feedPostPhotos.sourceAlbumPhotoId, photo.id));
+  if (done) return;
+  const [owner] = await db
+    .select({ userId: t.structureMembers.userId })
+    .from(t.structureMembers)
+    .where(
+      and(
+        eq(t.structureMembers.structureId, rassemblement.structureId),
+        eq(t.structureMembers.role, "owner"),
+        eq(t.structureMembers.status, "active"),
+      ),
+    );
+  const source = await storage.get(photo.storageKey);
+  if (!owner || !source) return;
+  const postId = randomUUID();
+  const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
+  await storage.put(key, source);
+  const createdAt = new Date(now.getTime() - 2 * HOUR);
+  await db.insert(t.feedPosts).values({
+    id: postId,
+    authorId: owner.userId,
+    persona: "organizer",
+    structureId: rassemblement.structureId,
+    eventId: rassemblement.id,
+    eventRole: "organizer",
+    caption: "Merci à Sud Cars pour cette photo du plateau.",
+    aspect: (photo.width ?? 1) / (photo.height ?? 1) >= 1.1 ? "landscape" : "square",
+    department: rassemblement.department ?? "66",
+    createdAt,
+    updatedAt: createdAt,
+  });
+  await db.insert(t.feedPostPhotos).values({
+    postId,
+    storageKey: key,
+    width: photo.width ?? 1,
+    height: photo.height ?? 1,
+    position: 0,
+    plateBlurred: photo.plateState === "blurred",
+    noPlateConfirmed: photo.plateState !== "blurred",
+    creditMediaId: media.id,
+    sourceAlbumPhotoId: photo.id,
+  });
+  console.log("Albums : une photo de Sud Cars reprise dans le journal du Rassemblement, crédit conservé.");
 }
 
 /** Une identification (idempotente : les deux index uniques sont sans filtre). */

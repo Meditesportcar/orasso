@@ -579,3 +579,101 @@
     height: 180px;
   }
 }
+
+/* Lot R9g : la section « Photos » de la fiche, les actions de l'organisateur dans la visionneuse, le crédit d'une photo reprise. Jetons seulement. */
+.alb-sec__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.alb-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--surface);
+  list-style: none;
+}
+.alb-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.alb-card__head .alb-cover {
+  flex: none;
+  width: calc(var(--space-12) * 2);
+  height: calc(var(--space-12) + var(--space-6));
+}
+.alb-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.alb-card__menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.alb-more {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: var(--space-1);
+}
+.alb-org,
+.alb-repost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.alb-repost {
+  align-self: stretch;
+}
+.alb-repost__preview {
+  position: relative;
+  align-self: stretch;
+  max-height: calc(var(--space-12) * 4);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--night);
+}
+.alb-repost__preview img {
+  width: 100%;
+  max-height: calc(var(--space-12) * 4);
+  object-fit: cover;
+  display: block;
+}
+.credit-overlay {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--night);
+  color: var(--night-ink);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.credit-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.credit-foot__text {
+  flex: 1;
+}
+.credit-foot__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

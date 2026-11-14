@@ -85,6 +85,20 @@ export const albumsListQuery = z.object({
 });
 export type AlbumsListQuery = z.infer<typeof albumsListQuery>;
 
+/**
+ * `POST /events/:id/albums/:albumId/photos/:photoId/repost` (lot R9g, T44) : la légende de la publication du journal. Absente ou vide : la
+ * légende par défaut « Photo : <média> » est posée par l'API.
+ */
+export const albumRepostSchema = z.object({
+  caption: z
+    .string()
+    .trim()
+    .max(2000)
+    .nullish()
+    .transform((v) => (v ? v : null)),
+});
+export type AlbumRepost = z.infer<typeof albumRepostSchema>;
+
 // --- Vues -------------------------------------------------------------------------------------------------------------
 
 /** Une photo d'album. `width` et `height` sont nuls pour une photo reprise d'une ancienne galerie (dimensions inconnues). */
@@ -140,7 +154,12 @@ export type AlbumView = AlbumSummary & {
 };
 
 /** `GET /me/albums`, `GET /events/:id/albums`, `GET /media/:id/albums`. */
-export type AlbumsList = { items: AlbumSummary[]; nextCursor: string | null };
+export type AlbumsList = {
+  items: AlbumSummary[];
+  nextCursor: string | null;
+  /** Lot R9g : `GET /events/:id/albums` seulement : le nombre d'albums publiés visibles de l'événement (la page n'en montre que `limit`). */
+  total?: number;
+};
 
 /** Le contenu de la carte « album » du Fil : une carte à part, pas une publication (ni flamme, ni commentaire en R9e). */
 export type AlbumCardView = {

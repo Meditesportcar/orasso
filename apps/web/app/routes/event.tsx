@@ -10,6 +10,7 @@ import {
   StatusBadge,
 } from "@orasso/design-system/web";
 import {
+  type AlbumsList,
   type AnnouncementView,
   type AudiencePrizeBoard,
   applicationStatusLabels,
@@ -66,11 +67,11 @@ import { InviteBanner, WhoGoes } from "../components/EventInvite";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
 import { NotifyBell } from "../components/event/NotifyBell";
+import { PhotosSection } from "../components/event/PhotosSection";
 import { EventJournal } from "../components/event-journal/EventJournal";
 import { type JournalPage, toFeedPosts } from "../components/event-journal/useJournal";
 import { CarGrid, ProItem, VisitorNotice } from "../components/Lineup";
 import { ContactOrganizer } from "../components/Messaging";
-import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { ShareDialog } from "../components/ShareSheet";
@@ -107,27 +108,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const event = found.ok
     ? found.data
     : await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, lineup, weather, feed, media, journal] = await Promise.all([
-    apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
-    api<Category[]>(request, "/vehicle-reference/categories"),
-    getMe(request),
-    api<EventReviews>(request, `/events/by-slug/${encodeURIComponent(slug)}/reviews`),
-    api<{ offer: TicketOffer | null; mine: MyTicket[] }>(
-      request,
-      `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
-    ),
-    // Lot R4b : le plateau (six vignettes, les pros sur place) ; sans compte, l'API n'envoie aucun pseudo.
-    api<EventLineup>(request, `/events/${event.id}/lineup?limit=${LINEUP_BLOCK_SIZE}`),
-    // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
-    api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
-    // Fil de l'événement (lot 20) : public, enrichi pour les retenus et l'organisation.
-    api<{ items: AnnouncementView[] }>(request, `/events/by-slug/${encodeURIComponent(slug)}/announcements`),
-    // Contenus des médias accrédités (lot 45) : liens et galeries publiés sur l'événement.
-    api<MediaContentView[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/media-contents`),
-    // Lot R8d : le journal de l'événement (publications de l'organisateur, l'épinglée en tête) ; sans session, la liste blanche
-    // publique (T4). Une panne ne casse pas la fiche : la section disparaît.
-    api<JournalPage>(request, `/events/${event.id}/feed-posts`),
-  ]);
+  const [structure, categories, me, reviews, tickets, lineup, weather, feed, media, journal, albums] =
+    await Promise.all([
+      apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
+      api<Category[]>(request, "/vehicle-reference/categories"),
+      getMe(request),
+      api<EventReviews>(request, `/events/by-slug/${encodeURIComponent(slug)}/reviews`),
+      api<{ offer: TicketOffer | null; mine: MyTicket[] }>(
+        request,
+        `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
+      ),
+      // Lot R4b : le plateau (six vignettes, les pros sur place) ; sans compte, l'API n'envoie aucun pseudo.
+      api<EventLineup>(request, `/events/${event.id}/lineup?limit=${LINEUP_BLOCK_SIZE}`),
+      // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
+      api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
+      // Fil de l'événement (lot 20) : public, enrichi pour les retenus et l'organisation.
+      api<{ items: AnnouncementView[] }>(request, `/events/by-slug/${encodeURIComponent(slug)}/announcements`),
+      // Contenus des médias accrédités (lot 45) : liens et galeries publiés sur l'événement.
+      api<MediaContentView[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/media-contents`),
+      // Lot R8d : le journal de l'événement (publications de l'organisateur, l'épinglée en tête) ; sans session, la liste blanche
+      // publique (T4). Une panne ne casse pas la fiche : la section disparaît.
+      api<JournalPage>(request, `/events/${event.id}/feed-posts`),
+      // Lot R9g : la section « Photos » (albums publiés des médias accrédités, l'officiel en tête) ; la liste publique se lit sans session (T34).
+      api<AlbumsList>(request, `/public/events/by-slug/${encodeURIComponent(slug)}/albums?limit=50`),
+    ]);
   // Inscription en crew (lot 19) : proposée au chef d'un crew, sauf événement sur invitation seulement.
   const crews = me && event.admission !== "invite_only" ? await api<MyCrew[]>(request, "/me/crews") : null;
   // Prix du public (lot 49) : le gagnant, une fois l'événement réglé (connecté seulement : le classement exige un compte).
@@ -159,7 +163,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     journal: journal.ok ? { items: toFeedPosts(journal.data.items), nextCursor: journal.data.nextCursor } : null,
     manager: Boolean(me?.personas?.some((p) => p.kind === "organizer" && p.id === event.structure.id)),
     userId: me?.user.id ?? null,
-    media: media.ok ? media.data : [],
+    // Lot R9g : les galeries sont des albums (section « Photos ») : ici ne restent que les liens.
+    media: media.ok ? media.data.filter((c) => c.kind !== "gallery") : [],
+    albums: albums.ok ? albums.data.items : [],
+    // Une panne n'est pas une absence : « Réessayer » (404 : la fiche n'a pas de section). Le total et la suite au-delà de 50 albums.
+    albumsFailed: !albums.ok && albums.status !== 404,
+    albumsTotal: albums.ok ? (albums.data.total ?? albums.data.items.length) : 0,
+    albumsNext: albums.ok ? albums.data.nextCursor : null,
     prize: board?.ok && board.data.settled ? board.data.winner : null,
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
@@ -468,6 +478,10 @@ function EventPage({
     lineup,
     grade,
     media,
+    albums,
+    albumsFailed,
+    albumsTotal,
+    albumsNext,
     prize,
     leadsCrew,
     shareable,
@@ -780,6 +794,17 @@ function EventPage({
           </section>
         )}
 
+        {/* Lot R9g : « Photos », avant le règlement et le journal ; rien sans album publié. */}
+        <PhotosSection
+          albums={albums}
+          manager={manager}
+          countViews={Boolean(userId)}
+          failed={albumsFailed}
+          total={albumsTotal}
+          nextCursor={albumsNext}
+          moreUrl={`/api/public/events/by-slug/${encodeURIComponent(event.slug)}/albums`}
+        />
+
         {media.length > 0 && (
           <section className="s-section" data-testid="media-contents" aria-labelledby="media-title">
             <h2 className="s-h2" id="media-title">
@@ -798,7 +823,6 @@ function EventPage({
                         Voir le contenu
                       </a>
                     )}
-                    {c.photos.length > 0 && <PhotoGallery contentId={c.id} title={c.title} photos={c.photos} />}
                   </span>
                 </li>
               ))}

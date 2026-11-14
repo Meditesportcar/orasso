@@ -1,7 +1,7 @@
 // Le journal d'un événement **sans session** (T4) : une lecture complète, sans interaction (légende entière, date, lieu, étiquettes ;
 // ni flamme, ni commentaires, ni menu, ni vignette qui ouvre).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedPostView, tileMeta } from "@orasso/shared";
+import { creditLine, type FeedPostView, tileMeta } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
@@ -34,6 +34,11 @@ export function PublicJournalList({ posts }: { posts: readonly FeedPostView[] })
               </Text>
             ) : null}
             <Muted variant="caption">{meta.place ? `${meta.date} · ${meta.place}` : meta.date}</Muted>
+            {creditLine(photo?.credit) ? (
+              <Muted variant="caption" testID="journal-public-credit">
+                {creditLine(photo?.credit)}
+              </Muted>
+            ) : null}
           </View>
         );
       })}

@@ -10,6 +10,7 @@ import {
   BUSINESS_TIMEZONE,
   type ErrorCode,
   eventFormatLabels,
+  eventPhotosLabels,
   type Frame,
   formatDayDate,
   localDate,
@@ -24,7 +25,7 @@ import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { events, eventVotes, feedPostPhotos, feedPosts, profiles, vehiclePhotos } from "../../db/schema";
+import { events, eventVotes, feedPostPhotos, feedPosts, mediaProfiles, profiles, vehiclePhotos } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
@@ -69,6 +70,8 @@ export type LinkedContent = {
   mine: boolean;
   /** Auteur public (publication : un compte privé ne se repartage pas). */
   authorPublic: boolean;
+  /** Lot R9g (T45) : « Photo : <média> » quand la photo de la publication vient d'un album (le crédit suit la photo, dans la carte et à l'export). */
+  credit?: string | null;
 };
 
 export type LinkedRefusal = {
@@ -260,6 +263,15 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
     // Sans photo propre : l’affiche de l’événement en fond flouté, comme le Fil.
     const firstData = first ? await storage.get(first.storageKey) : await postEventVisual(id);
     if (!firstData) return refuse(404, "not_found", shareLabels.errors.notFound);
+    const credited = first?.creditMediaId
+      ? (
+          await db
+            .select({ name: mediaProfiles.name })
+            .from(mediaProfiles)
+            .where(eq(mediaProfiles.id, first.creditMediaId))
+        )[0]
+      : undefined;
+    const credit = credited ? eventPhotosLabels.creditOnPhoto(credited.name) : null;
     const excerpt = post.caption
       ? post.caption.length > 72
         ? `${post.caption.slice(0, 71).trimEnd()}…`
@@ -272,7 +284,8 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
         id,
         title: `@${post.author.pseudo}`,
         subtitle: excerpt,
-        kicker: shareLabels.kicker.feed_post,
+        kicker: [shareLabels.kicker.feed_post, credit].filter(Boolean).join(" · "),
+        credit,
         badge: null,
         stats: [],
         stripe: false,

@@ -6,11 +6,13 @@ import type {
   AlbumPhotoAdd,
   AlbumPhotoView,
   AlbumStatus,
+  AlbumSummary,
   AlbumsList,
   AlbumTagCreate,
   AlbumTagRemove,
   AlbumTagView,
   AlbumView,
+  FeedPostView,
   MyAlbumTagsList,
   MyPhotosView,
   Taggable,
@@ -37,6 +39,22 @@ export const albumsApi = {
   deleteAlbumPhoto: (id: string, photoId: string) =>
     request<null>(`/api/me/albums/${id}/photos/${photoId}`, { method: "DELETE" }),
   publishAlbum: (id: string) => request<AlbumView>(`/api/me/albums/${id}/publish`, { method: "POST" }),
+  /** Lot R9g : les albums de la fiche d'un événement (publiés, l'officiel d'abord) ; `signedIn` faux : la liste publique (photos à l'adresse publique). */
+  eventAlbums: (slug: string, signedIn: boolean, cursor?: string | null) =>
+    request<AlbumsList>(
+      signedIn
+        ? `/api/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50, cursor })}`
+        : `/api/public/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50, cursor })}`,
+    ),
+  /** Lot R9g : l'organisateur pose (`on`) ou retire l'étoile « officiel » de l'album. */
+  setAlbumOfficial: (eventId: string, albumId: string, on: boolean) =>
+    request<AlbumSummary>(`/api/events/${eventId}/albums/${albumId}/official`, { method: on ? "PUT" : "DELETE" }),
+  /** Lot R9g : l'organisateur reprend une photo dans le journal de l'événement (crédit du média conservé). */
+  repostAlbumPhoto: (eventId: string, albumId: string, photoId: string, caption: string | null) =>
+    request<FeedPostView>(`/api/events/${eventId}/albums/${albumId}/photos/${photoId}/repost`, {
+      method: "POST",
+      body: { caption },
+    }),
   /** Les albums publiés d'une page de média (`GET /media/:id/albums`). */
   mediaAlbums: (mediaId: string, cursor?: string | null) =>
     request<AlbumsList>(`/api/media/${mediaId}/albums${qs({ cursor, limit: 20 })}`),

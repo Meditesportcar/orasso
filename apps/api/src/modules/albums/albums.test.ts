@@ -490,7 +490,7 @@ describe("publication", () => {
     expect((await albumRow(album.id))?.publishedAt?.toISOString()).toBe(publishedAt?.toISOString());
   });
 
-  it("l'accréditation retirée avant la publication : 403 ; aucun e-mail ni notification en R9e", async () => {
+  it("l'accréditation retirée avant la publication : 403 ; aucun e-mail ; une seule notification `album_published`, pour le responsable de la structure (R9g)", async () => {
     const album = await draftOf(leo, eventId);
     await addPhoto(leo, album.id);
     await db.execute(sql`update applications set status = 'refused' where media_profile_id = ${leoMedia}`);
@@ -498,7 +498,7 @@ describe("publication", () => {
     await db.execute(sql`update applications set status = 'accepted' where media_profile_id = ${leoMedia}`);
     expect((await call(leo, "POST", `/me/albums/${album.id}/publish`)).status).toBe(200);
     const n = await db.execute(sql`select count(*)::int as n from notifications where type = 'album_published'`);
-    expect((n.rows[0] as { n: number }).n).toBe(0);
+    expect((n.rows[0] as { n: number }).n).toBe(1);
   });
 
   it("l'album d'un autre ne se publie pas (404)", async () => {

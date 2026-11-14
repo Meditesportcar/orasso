@@ -397,9 +397,17 @@ export const albumsService = {
       .orderBy(sql`${official} desc`, desc(eventAlbums.publishedAt), desc(eventAlbums.id))
       .limit(q.limit + 1);
     const page = rows.slice(0, q.limit);
+    // Le total des albums visibles (la page n'en montre que `limit`) : l'écran distingue « chargés » et « au total », et propose la suite.
+    const [count] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(eventAlbums)
+      .innerJoin(events, eq(events.id, eventAlbums.eventId))
+      .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
+      .where(and(eq(eventAlbums.eventId, event.id), albumVisibleSql(now())));
     return {
       items: await summariesOf(db, page, v.user.id),
       nextCursor: rows.length > q.limit ? (page.at(-1)?.a.id ?? null) : null,
+      total: count?.n ?? 0,
     };
   },
 
