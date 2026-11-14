@@ -3,7 +3,13 @@
 // (« Identifier les voitures »), la grille de photos (par paquets : une photo se lit toute seule, avec le jeton), la visionneuse. « Plus » :
 // Partager, Signaler ; pour le média : Modifier le titre, Autoriser l'enregistrement, Supprimer. Aucun nom de véhicule ni pseudo en R9e.
 import { Button, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type AlbumPhotoView, type AlbumView, albumLabels as L } from "@orasso/shared";
+import {
+  type AlbumPhotoView,
+  type AlbumView,
+  albumViewerRoleOf,
+  albumLabels as L,
+  albumTagLabels as tagLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InteractionManager, Platform, Pressable, Share, StyleSheet, View } from "react-native";
@@ -25,7 +31,9 @@ import { AlbumCover } from "./AlbumCover";
 import { AlbumPhoto } from "./AlbumPhoto";
 import { AlbumPhotoViewer } from "./AlbumPhotoViewer";
 import { OrganizerHost, useIsEventOrganizer } from "./actions/OrganizerActions";
-import type { AlbumViewerRole } from "./actions/registry";
+import { TagHost } from "./actions/TagActions";
+import { tagHost } from "./actions/tagHost";
+import { IdentifyBanner } from "./IdentifyBanner";
 
 const { space1, space2, space3 } = tokens.spacing;
 /** Vignettes montrées d'abord, puis « Voir plus » : chaque photo est lue en entier (1 600 px), 200 d'un coup pèseraient trop. */
@@ -46,6 +54,10 @@ export function AlbumScreen({ id }: { id: string }) {
   const [titling, setTitling] = useState<string | null>(null);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const a: AlbumView | null = album.data;
+  // Lot R9f : qui je suis pour identifier (le média auteur le sait déjà ; un passionné ou un organisateur le demande à l'API).
+  const taggable = useApi(() => api.albumTaggable(id), [id, Boolean(a), a?.mine, a?.status], {
+    enabled: Boolean(a) && !a?.mine && a?.status === "published",
+  });
 
   async function patch(body: { title?: string | null; allowSave?: boolean }) {
     setError(null);
@@ -124,11 +136,21 @@ export function AlbumScreen({ id }: { id: string }) {
     }
   }
 
-  // Lot R9g : l'organisateur de l'événement a ses actions dans la visionneuse (reprise au journal, album officiel).
+  // Lot R9g : l'organisateur de l'événement a ses actions dans la visionneuse (reprise au journal, album officiel) ; la visionneuse les ajoute
+  // à celles du rôle (R9f) quand la casquette d'organisateur est celle de l'événement.
   const organizer = useIsEventOrganizer(a ?? null);
-  // La propriété (`mine`) et la casquette d'organisateur se calculent séparément : un média qui est aussi l'organisateur de l'événement,
-  // sous sa casquette d'organisateur, a ses droits de titulaire **et** les actions de l'organisateur.
-  const role: AlbumViewerRole = a?.mine ? "media" : organizer ? "organizer" : "member";
+  const role = albumViewerRoleOf({ mine: Boolean(a?.mine), taggable: taggable.data });
+  const identified = a?.tagsCount ?? 0;
+  const hasMine = Boolean(a?.photos.some((p) => p.tags?.some((tag) => tag.mine)));
+  /** « Continuer » : la première photo sans identification s'ouvre, la feuille des identifications dessus. */
+  function continueIdentify() {
+    if (!a) return;
+    const i = a.photos.findIndex((p) => !(p.tags && p.tags.length > 0));
+    const photo = a.photos[i < 0 ? 0 : i];
+    if (!photo) return;
+    openViewer(i < 0 ? 0 : i);
+    tagHost.open(photo.id);
+  }
   return (
     <FlowScreen
       title={a?.media.name ?? L.albums}
@@ -244,6 +266,7 @@ export function AlbumScreen({ id }: { id: string }) {
               onClose={() => setViewer(null)}
               onDismiss={Platform.OS === "ios" ? runAfterClose : undefined}
               onReport={reportPhoto}
+              actions={<TagHost album={a} role={role} onChanged={album.reload} />}
               onRemove={(photo) => {
                 // Comme « Signaler » : un Modal natif resterait devant la confirmation, qui s'ouvre à la fermeture de la visionneuse.
                 afterClose.current = () => setRemoving(photo);
@@ -286,8 +309,14 @@ export function AlbumScreen({ id }: { id: string }) {
               <Icon name="next" size={14} color={t.color.accentText} />
             </Pressable>
           </View>
-          {/* Emplacement de R9f : « Identifier les voitures » (pas de contenu en R9e). */}
-          <View testID="album-identify-slot" />
+          <IdentifyBanner
+            identified={identified}
+            total={a.photos.length}
+            canIdentify={role === "media" || role === "organizer"}
+            hasMine={hasMine}
+            onContinue={continueIdentify}
+            onMine={() => router.push(`/album/${a.id}/mes-photos` as never)}
+          />
           {a.mine && a.status === "draft" ? (
             <Button
               variant="primary"
@@ -310,6 +339,18 @@ export function AlbumScreen({ id }: { id: string }) {
                 testID="album-photo"
               >
                 <AlbumPhoto photo={p} style={styles.img} cover />
+                {p.tags && p.tags.length > 0 ? (
+                  <View style={[styles.carBadge, { backgroundColor: t.color.night }]} testID="album-photo-car-badge">
+                    <Icon name="vehicle" size={12} color={t.color.nightInk} />
+                    <Text
+                      variant="caption"
+                      color={t.color.nightInk}
+                      accessibilityLabel={tagLabels.screens.carBadge(p.tags.length)}
+                    >
+                      {p.tags.length}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             ))}
           </View>
@@ -361,4 +402,15 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space1 },
   tile: { width: "32.5%", aspectRatio: 1, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
   img: { width: "100%", height: "100%" },
+  carBadge: {
+    position: "absolute",
+    right: space1,
+    bottom: space1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: tokens.radius.radiusPill,
+    paddingHorizontal: space2,
+    paddingVertical: 2,
+  },
 });

@@ -3,6 +3,7 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { memoryLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
+import { MemoryAlbumLine } from "@/features/albums/MemoryAlbumLine";
 import { MemoryPhoto } from "@/features/memories/MemoryPhoto";
 import { SmButton } from "@/ui/Kit";
 import { useCardRouter } from "../openFromCard";
@@ -59,6 +60,7 @@ export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
           {memoryLabels.plateauLine(memory.car.label, memory.car.rank, memory.car.total)}
         </Text>
       ) : null}
+      <MemoryAlbumLine memory={memory} tone="plain" testID="feed-memory-album" />
     </CardShell>
   );
 }

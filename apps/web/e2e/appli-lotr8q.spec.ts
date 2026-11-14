@@ -252,6 +252,9 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("practical-row-0")).toContainText(/Station-service|Lavage/);
   await shot(page, "appli-liste-sable-384");
   const all = await list.getByTestId(/practical-row-\d+$/).count();
+  const rowTitles = (await list.getByTestId(/practical-row-\d+$/).allInnerTexts()).map(
+    (t) => t.split("\n")[0]?.trim() ?? "",
+  );
   expect(all).toBeGreaterThan(2);
   // Triée par distance : les km ne décroissent jamais.
   const kms = (await list.getByTestId(/practical-row-\d+$/).allInnerTexts()).map((t) =>
@@ -272,13 +275,25 @@ test("« Voir tout » : liste, filtres, carte, lieu touché, « Y aller » princ
   await expect(page.getByTestId("practical-map-view")).toBeVisible();
   const pins = page.locator('[data-testid^="practical-pin-"]');
   await expect(pins.first()).toBeVisible({ timeout: 30_000 });
-  expect(await pins.count()).toBe(all);
+  // Petit lot de fin F : chaque ligne de la liste est une épingle, ou est dans une pastille (jamais un lieu perdu, jamais deux lignes pour une seule
+  // épingle : le titre est consommé une fois).
+  const bag = [
+    ...(await pins.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))),
+    ...(await page
+      .getByTestId("practical-group")
+      .evaluateAll((els) => els.flatMap((e) => JSON.parse((e as HTMLElement).dataset.titles ?? "[]") as string[]))),
+  ];
+  for (const title of rowTitles) {
+    const at = bag.indexOf(title);
+    expect(at, `« ${title} » : ni épingle ni pastille`).toBeGreaterThanOrEqual(0);
+    bag.splice(at, 1);
+  }
   await expect(page.getByTestId("practical-selected")).toBeVisible();
   await expect(page.getByTestId("practical-selected")).toContainText(/ · \d+,\d\skm/);
   await shot(page, "appli-carte-sable-384");
   // Toucher une autre épingle change le lieu sélectionné.
   const before = await page.getByTestId("practical-selected").innerText();
-  // Les stations voisines se recouvrent sur la carte cadrée sur 30 km : le clic part directement sur l'épingle visée.
+  // Le clic part directement sur l'épingle visée.
   await pins.nth(2).dispatchEvent("click");
   await expect(page.getByTestId("practical-selected")).not.toHaveText(before);
   await page.getByTestId("practical-selected-go").click();

@@ -1,11 +1,12 @@
 import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useNavigation } from "react-router";
+import { AlbumMentionsBlock } from "../components/albums/AlbumMentions";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { cardVisibility, FollowAction, PersonAvatar, PersonRow } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { VehicleTrophies } from "../components/VehicleTrophies";
-import { api, apiOrThrow, safeReturn } from "../lib/api.server";
+import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import { followAction } from "../lib/follow.server";
 import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/vehicule";
@@ -22,10 +23,12 @@ export function meta() {
 export async function loader({ request, params }: Route.LoaderArgs) {
   // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
   const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
+  const me = await requireMe(request);
   const vehicle = await apiOrThrow<OtherVehicle>(request, `/vehicles/${params.id}`);
   const nearby = await api<PeopleSearchPage & { sector: string[] }>(request, `/vehicles/${params.id}/owners-nearby`);
   return {
     back,
+    myId: me.user.id,
     vehicle,
     nearby: nearby.ok ? nearby.data : null,
   };
@@ -36,7 +39,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Vehicule({ loaderData, actionData }: Route.ComponentProps) {
-  const { vehicle: v, nearby } = loaderData;
+  const { vehicle: v, nearby, myId } = loaderData;
   const busy = useNavigation().state !== "idle";
   const full = "photos" in v ? v : null;
   const reduced = "photos" in v ? null : v;
@@ -133,6 +136,8 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
           </dl>
         )}
         {full && <VehicleTrophies vehicle={full} />}
+        {/* Lot R9f : « Vu au <événement> · N photos » ; c'est ma voiture : « Voir les N photos » ouvre « Tes photos ». */}
+        <AlbumMentionsBlock mentions={v.albumMentions} mine={v.owner.userId === myId} />
         {full?.description && <p className="s-prewrap">{full.description}</p>}
         {full?.preparation && (
           <>

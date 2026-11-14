@@ -1,4 +1,4 @@
-import { practicalInput, weatherCell } from "@orasso/shared";
+import { practicalInput, roundZoneOutward, weatherCell } from "@orasso/shared";
 import { Hono } from "hono";
 
 import { rateLimit } from "../../lib/rateLimit";
@@ -14,12 +14,15 @@ export const practicalRoutes = new Hono<AppEnv>().post("/practical", async (c) =
   rateLimit("practicalHour", v.user.id);
   const input = await body(c, practicalInput);
   // La position est arrondie à la case de 0,1° dès la première ligne : la valeur reçue ne va pas plus loin.
+  // Une zone de carte est arrondie vers l'extérieur au 0,1° de la même façon, avant tout autre usage.
   const target: PracticalTarget =
     input.near === "position"
       ? { near: "position", cell: weatherCell(input) }
-      : input.near === "outing"
-        ? { near: "outing", ...(input.eventId ? { eventId: input.eventId } : {}) }
-        : { near: "city" };
+      : input.near === "zone"
+        ? { near: "zone", zone: roundZoneOutward(input), ...(input.cursor ? { cursor: input.cursor } : {}) }
+        : input.near === "outing"
+          ? { near: "outing", ...(input.eventId ? { eventId: input.eventId } : {}) }
+          : { near: "city" };
   c.header("cache-control", "private, no-store");
   return c.json(await practicalService.get(v, target));
 });
