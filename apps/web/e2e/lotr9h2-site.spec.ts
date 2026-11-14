@@ -716,6 +716,33 @@ test("/m/<id> à deux casquettes du même compte : la fiche pro suit son propre 
   }
 });
 
+for (const theme of ["sable", "beton"] as const) {
+  test(`le fondu de bord de la rangée d'onglets, avec un vrai débordement (police agrandie, 384 px, ${theme})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const sudCars = await personaOf("leo@orasso.local", "media");
+    const ctx = await browser.newContext({ viewport: { width: 384, height: 860 } });
+    const page = await ctx.newPage();
+    await setTheme(page, theme);
+    await open(page, "damien@orasso.local", `/m/${sudCars.id}?onglet=albums`);
+    // Police agrandie (×1,5 sur les onglets : le site pose ses tailles en px, `html` ne les suit pas) : la rangée déborde et défile.
+    await page.addStyleTag({ content: ".pg-page .utabs__tab { font-size: 24px !important; }" });
+    const tabs = page.getByTestId("page-tabs");
+    await expect
+      .poll(() => tabs.evaluate((el) => el.scrollWidth - el.clientWidth), { message: "la rangée déborde" })
+      .toBeGreaterThan(8);
+    // Au bord gauche : l'ombre n'apparaît que du côté droit (il reste de la rangée à voir) ; au milieu, des deux côtés ; au bord droit, à gauche.
+    await shot(page, `onglets-fondu-gauche-${theme}-384-x150`);
+    await tabs.evaluate((el) => el.scrollTo({ left: Math.round((el.scrollWidth - el.clientWidth) / 2) }));
+    await shot(page, `onglets-fondu-milieu-${theme}-384-x150`);
+    await tabs.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+    await shot(page, `onglets-fondu-droite-${theme}-384-x150`);
+    await noHorizontalScroll(page);
+    await ctx.close();
+  });
+}
+
 test("Les onglets d'une page publique gardent `retour` : le ✕ ramène à l'écran d'origine", async ({ browser }) => {
   test.setTimeout(240_000);
   const brasa = await personaOf("sofia@orasso.local", "provider");
