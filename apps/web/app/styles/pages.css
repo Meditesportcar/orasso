@@ -288,3 +288,16 @@
     flex: 1 1 100%;
   }
 }
+
+/* Une rangée d'onglets qui défile (police agrandie) le montre : un fondu de bord n'apparaît que du côté où il reste de la rangée à voir
+   (les deux voiles `local` de la couleur du fond cachent les ombres `scroll` quand on est au bord ou quand tout tient). Jetons seulement. */
+.pg-page .utabs {
+  background:
+    linear-gradient(to right, var(--ground) 30%, transparent) left center / var(--space-6) 100% no-repeat local,
+    linear-gradient(to left, var(--ground) 30%, transparent) right center / var(--space-6) 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 28%, transparent), transparent) left center / var(--space-3)
+    100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 28%, transparent), transparent) right center / var(--space-3)
+    100% no-repeat scroll,
+    var(--ground);
+}

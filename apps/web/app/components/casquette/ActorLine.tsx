@@ -33,7 +33,7 @@ export function ActorLine({
           {casquette.name}
         </strong>
         {note ? (
-          <small className="o-t-credit" data-testid={`${testId}-note`}>
+          <small className="o-t-caption s-muted" data-testid={`${testId}-note`}>
             {note}
           </small>
         ) : null}

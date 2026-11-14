@@ -4,7 +4,7 @@
 // espace de casquette, il rend `null` et rien ne change. Le serveur ne croit pas l'en-tête (il relit les droits) ; ce fichier ne fait
 // que le poser, sur la liste blanche seulement (`actorRoutes.ts`).
 import { type Me, resolveStoryAuthor } from "@orasso/shared";
-import { createContext, createElement, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
+import { createContext, createElement, Fragment, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
 
 import { postLive } from "../components/fil/commentsLive";
 
@@ -34,6 +34,14 @@ export function ActorProvider({ casquette, children }: { casquette: Casquette | 
     return () => postLive.clear();
   }, [key]);
   return createElement(CasquetteContext.Provider, { value }, children);
+}
+
+/**
+ * Une page publique ouverte avec `?auteur=` (partie 2, tour 3) : le fournisseur n'existe que s'il y a une casquette ; sans elle, rien ne
+ * s'enveloppe, le magasin des commentaires n'est pas vidé pour rien et le contenu reste en place.
+ */
+export function ActorIfAny({ casquette, children }: { casquette: Casquette | null; children: ReactNode }) {
+  return casquette ? createElement(ActorProvider, { casquette, children }) : createElement(Fragment, null, children);
 }
 
 /** La clé d'auteur de la casquette de l'espace, ou `null` (on agit en son propre nom). */

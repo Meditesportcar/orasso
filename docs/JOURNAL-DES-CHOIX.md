@@ -6895,6 +6895,13 @@ La Page du propriétaire des quatre casquettes sur le site, les pages publiques 
 - **Point 5, panne** : `PageAlbums` n'affiche pas la ligne « N albums · N photos » quand les compteurs sont inconnus et que la lecture a échoué.
 - **Point 6, `retour`** : `pageHref` de `m.tsx` garde `retour` (le chargeur le rend seulement s'il est dans l'adresse).
 
+### Lot R9h, partie 2, tour 3 (14/11/2026) : corrections de la relecture Opus (sur eb71de84)
+- **Point 1, le constat du tour 2 était faux** : « ni `/providers` ni `/m` n'ont de commentaire en ligne » est **faux** : la vue « Une par une » (`PublicationsTab` → `ViewToggle` → `PublicationsOneByOne` → carte du Fil) a le bouton de commentaire et `CommentsDialog` dans la page, et le choix de vue est retenu. Seule la vue par défaut (la grille) mène à `/app/publication/<id>`. Recette ajoutée (`lotr9h2-site`) : `/providers/<brasa>?auteur=s:…`, « Publications », « Une par une », `feed-post-comment`, envoi : l'en-tête `x-orasso-actor` de `POST /feed-posts/:id/comments` est la clé de la structure et le commentaire s'affiche signé par la page.
+- **Point 2, la ligne sous la pastille est exacte** (décision du coordinateur) : « Sur cette page, tes commentaires partent au nom de la page. Réactions, partages et signalements restent à ton nom ; une publication ouverte seule repasse à ton nom. » (plus de « masquages » : un visiteur n'a aucune action de masquage ici ; « partages » ajouté : republication et envoi en message partent au nom de la personne). La recette attend le texte exact. Garder la casquette jusqu'à `/app/publication/<id>` est noté pour plus tard, hors de ce lot.
+- **Point 3** : la note est en `o-t-caption s-muted` (lisible en plein soleil), à la place de `o-t-credit` (9 px, majuscules).
+- **Point 4** : `ActorIfAny` n'enveloppe que s'il y a une casquette ; sans `auteur`, le magasin des commentaires n'est pas vidé pour rien (test unitaire des deux cas).
+- **Point 5** : fondu de bord de la rangée d'onglets (`pages.css`) : deux voiles `local` de la couleur du fond cachent deux ombres `scroll` (jeton `ink` mélangé) ; l'ombre n'apparaît que du côté où il reste de la rangée à voir, jamais quand tout tient.
+
 ### À revoir avec Damien (lot R9h, partie 2)
 - **Le bouton « Publier » dans l'état vide d'une Page** : ajouté sur le site (l'appli ne l'a pas) ; à aligner dans l'appli si Damien le veut.
 - **Le nom du prestataire n'a pas de logo** (comme dans l'appli) : la page montre l'initiale dans l'anneau.

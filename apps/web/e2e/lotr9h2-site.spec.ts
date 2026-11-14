@@ -478,7 +478,7 @@ async function tabsFit(page: Page) {
   expect(fits, "la rangée d'onglets ne coupe rien").toBe(true);
 }
 
-test("/providers/<id>?auteur= : la pastille dit ce qui part au nom de la page ; « Signaler » dit qu'il reste personnel ; la vignette ouvre la publication", async ({
+test("/providers/<id>?auteur= : la pastille dit ce qui part au nom de la page ; un commentaire de la vue « Une par une » part au nom de la page ; « Signaler » reste personnel ; la vignette ouvre la publication", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -493,7 +493,23 @@ test("/providers/<id>?auteur= : la pastille dit ce qui part au nom de la page ; 
     `/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=publications`,
   );
   await expect(page.getByTestId("page-actor-name")).toHaveText(structure.label);
-  await expect(page.getByTestId("page-actor-note")).toContainText("commentaires partent au nom de la page");
+  await expect(page.getByTestId("page-actor-note")).toHaveText(
+    "Sur cette page, tes commentaires partent au nom de la page. Réactions, partages et signalements restent à ton nom ; une publication ouverte seule repasse à ton nom.",
+  );
+  // La vue « Une par une » a les commentaires dans la page : le commentaire part au nom de la page (en-tête de la casquette), signé par elle.
+  await page.getByTestId("publications-view-one").click();
+  await page.getByTestId("feed-post-comment").first().click();
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible();
+  const text = `Commentaire de la page ${Date.now()}`;
+  await page.getByTestId("feed-comment-input").fill(text);
+  const sent = page.waitForRequest((r) => r.method() === "POST" && /\/feed-posts\/[^/]+\/comments$/.test(r.url()));
+  await page.getByTestId("feed-comment-send").click();
+  expect((await (await sent).allHeaders())["x-orasso-actor"], "le commentaire part au nom de la casquette").toBe(key);
+  const mine = page.getByTestId("feed-comment").filter({ hasText: text });
+  await expect(mine).toBeVisible({ timeout: 30_000 });
+  await expect(mine.locator("b").first()).toHaveText(structure.label);
+  await page.getByTestId("feed-comments-close").click();
+  await page.getByTestId("publications-view-grid").click();
   // « Signaler » reste personnel, et la feuille le dit sous la pastille.
   await page.getByTestId("page-more").locator("summary").click();
   await page.getByTestId("report-open").click();

@@ -49,8 +49,9 @@ export const casquettesLabels = {
   actingAs: "Tu agis au nom de",
   inMyName: "En mon nom",
   inMyNameHint: "Revenir à ton nom : la page s'ouvre sans casquette",
-  /** Sous la pastille : ce qui part au nom de la page et ce qui reste personnel (réactions, masquage, signalement). */
-  actingNote: "Tes commentaires partent au nom de la page. Réactions, masquages et signalements restent à ton nom.",
+  /** Sous la pastille : ce qui part au nom de la page et ce qui reste personnel (réactions, partages, signalement). */
+  actingNote:
+    "Sur cette page, tes commentaires partent au nom de la page. Réactions, partages et signalements restent à ton nom ; une publication ouverte seule repasse à ton nom.",
   /** Dans la feuille « Signaler » ouverte sous une casquette : le signalement reste personnel. */
   reportStaysPersonal: (name: string) => `Ce signalement part à ton nom, pas au nom de ${name}.`,
   followAs: (name: string) => `Suivre en tant que ${name}`,

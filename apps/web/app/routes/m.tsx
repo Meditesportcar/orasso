@@ -38,7 +38,7 @@ import { PageMore } from "../components/pages/PageMore";
 import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ShareButtons } from "../components/ShareButtons";
-import { ActorProvider, casquetteOfParam, withoutActorParam } from "../lib/actor";
+import { ActorIfAny, casquetteOfParam, withoutActorParam } from "../lib/actor";
 import { api, apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/albums.css";
@@ -150,7 +150,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
     photos: m.photosCount ?? null,
   });
   return (
-    <ActorProvider casquette={casquette}>
+    <ActorIfAny casquette={casquette}>
       <FicheBar heading={false} title="Média" back={loaderData.back} />
       <div className="s-narrow s-stack pg-page" data-testid="media-public">
         {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
@@ -250,7 +250,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
           />
         )}
       </div>
-    </ActorProvider>
+    </ActorIfAny>
   );
 }
 

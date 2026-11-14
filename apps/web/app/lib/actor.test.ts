@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ActorIfAny,
   ActorProvider,
   actorOfParam,
   casquetteOfParam,
@@ -186,5 +187,21 @@ describe("ActorProvider autour d'une page publique portant `auteur`", () => {
       createElement(ActorProvider, { casquette: null, children: createElement(Probe) }),
     );
     expect(without).toBe("<i>null|undefined</i>");
+    // `ActorIfAny` : sans casquette, le contenu reste tel quel ; avec, il lit la casquette.
+    expect(
+      renderToStaticMarkup(
+        // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise
+        createElement(ActorIfAny, { casquette: null, children: createElement(Probe) }),
+      ),
+    ).toBe("<i>null|undefined</i>");
+    expect(
+      renderToStaticMarkup(
+        createElement(ActorIfAny, {
+          casquette: { key: "m:m1", name: "Sud Cars", logoUrl: null },
+          // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise
+          children: createElement(Probe),
+        }),
+      ),
+    ).toBe("<i>m:m1|Sud Cars</i>");
   });
 });
