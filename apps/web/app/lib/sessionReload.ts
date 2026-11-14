@@ -54,8 +54,12 @@ function replaceByGet(): void {
 // Un rechargement lancé : un second appel (deux effets, deux annonces) ne le recompte pas.
 let reloading = false;
 
-/** Au bout de ce délai, un rechargement lancé qui n'a pas quitté la page est tenu pour échoué (« Recharger la page »). */
-export const RELOAD_STALL_MS = 8_000;
+/**
+ * Au bout de ce délai, un rechargement lancé qui n'a pas quitté la page est tenu pour lent : « Mise à jour… » reste affiché et le
+ * bouton « Recharger la page » apparaît DESSOUS (plus long que `ME_TIMEOUT_MS` : sur un réseau lent, la navigation en cours n'est pas
+ * dérangée). Le verrou n'est levé qu'à la restauration de la page.
+ */
+export const RELOAD_STALL_MS = 15_000;
 let stallTimer: ReturnType<typeof setTimeout> | null = null;
 const stallListeners = new Set<() => void>();
 
@@ -64,20 +68,24 @@ function clearStall(): void {
   stallTimer = null;
 }
 
-/** Le rechargement n'a pas quitté la page : le verrou est levé (un nouvel essai est possible) et les pages abonnées passent « failed ». */
+/** Le rechargement n'a pas quitté la page : les pages abonnées ajoutent le bouton sous « Mise à jour… » (le verrou reste posé). */
 function armStall(): void {
   clearStall();
   stallTimer = setTimeout(() => {
     stallTimer = null;
-    reloading = false;
     for (const listener of [...stallListeners]) listener();
   }, RELOAD_STALL_MS);
 }
 
-/** Le verrou global est levé (document restauré depuis le cache de navigation : il revenait avec `reloading === true`). */
-export function resetReloadLock(): void {
+/**
+ * Le verrou global est levé (document restauré depuis le cache de navigation : il revenait avec `reloading === true`). Renvoie vrai
+ * si un rechargement était en cours : la page ne sait plus s'il aboutira, elle doit offrir « Recharger la page ».
+ */
+export function resetReloadLock(): boolean {
+  const was = reloading;
   reloading = false;
   clearStall();
+  return was;
 }
 
 /** S'abonne à « le rechargement n'a pas quitté la page » ; renvoie le désabonnement. */
@@ -139,13 +147,24 @@ export function nextConfirmation(was: SessionConfirmation, res: MeResult, owner:
  * L'état de confirmation LIÉ au compte et à l'origine de la page qu'il a confirmés : une instance gardée montée qui reçoit un autre
  * `owner` (ou un nouveau résultat « après un rechargement ») ne garde jamais le « ok » de l'ancien.
  */
-export type TrackedConfirmation = { owner: string; afterReload: boolean; state: SessionConfirmation };
+export type TrackedConfirmation = {
+  owner: string;
+  afterReload: boolean;
+  state: SessionConfirmation;
+  /** Le rechargement est lent ou a été interrompu : le bouton « Recharger la page » s'ajoute sous « Mise à jour… ». */
+  stalled: boolean;
+};
 
 export const freshConfirmation = (owner: string, afterReload: boolean): TrackedConfirmation => ({
   owner,
   afterReload,
   state: afterReload ? "checking" : "ok",
+  stalled: false,
 });
+
+/** Le bouton « Recharger la page » apparaît (ou disparaît) ; sans effet sur une confirmation qui ne suit plus ce compte. */
+export const setStalledOf = (prev: TrackedConfirmation, stalled: boolean): TrackedConfirmation =>
+  prev.stalled === stalled ? prev : { ...prev, stalled };
 
 /** Au rendu : si `owner` ou `afterReload` a changé, une nouvelle confirmation est demandée (« checking » tout de suite, pas dans un effet). */
 export const trackConfirmation = (
@@ -180,12 +199,14 @@ export function createConfirmer(read: () => Promise<MeResult>) {
  * `owner` : le compte qui a chargé les données de la page. `afterReload` : la page vient d'un rechargement automatique (le chargeur
  * lit `isAfterReload`) : elle démarre « checking » et le reste jusqu'à ce que `/me` confirme `owner`.
  */
-export function useSessionConfirmation(owner: string, afterReload: boolean): SessionConfirmation {
+export function useSessionConfirmation(
+  owner: string,
+  afterReload: boolean,
+): { confirmed: SessionConfirmation; stalled: boolean } {
   const [tracked, setTracked] = useState<TrackedConfirmation>(() => freshConfirmation(owner, afterReload));
   // Réajusté au rendu (modèle React « état dérivé »), avant tout effet : « checking » dès que le compte ou l'origine change.
   const current = trackConfirmation(tracked, owner, afterReload);
   if (current !== tracked) setTracked(current);
-  const [stalled, setStalled] = useState(false);
   const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
   if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
   const verify = useCallback(
@@ -225,8 +246,9 @@ export function useSessionConfirmation(owner: string, afterReload: boolean): Ses
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
         // Document restauré : son verrou de rechargement et son éventuel échec datent d'avant.
-        resetReloadLock();
-        setStalled(false);
+        // Un rechargement était en cours : on ne sait pas s'il aboutira, donc le bouton (la page ne change pas, rien ne relance).
+        const wasReloading = resetReloadLock();
+        setTracked((prev) => setStalledOf(prev, wasReloading));
         void verify();
       }
     };
@@ -234,7 +256,7 @@ export function useSessionConfirmation(owner: string, afterReload: boolean): Ses
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
-    const offStalled = onReloadStalled(() => setStalled(true));
+    const offStalled = onReloadStalled(() => setTracked((prev) => setStalledOf(prev, true)));
     return () => {
       offStalled();
       document.removeEventListener("visibilitychange", onVisibility);
@@ -243,7 +265,7 @@ export function useSessionConfirmation(owner: string, afterReload: boolean): Ses
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [verify]);
-  return stalled ? "failed" : current.state;
+  return { confirmed: current.state, stalled: current.stalled };
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */

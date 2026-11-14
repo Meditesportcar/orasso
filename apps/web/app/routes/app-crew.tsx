@@ -195,7 +195,7 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   // Après un rechargement automatique, la page reste neutre tant que `/me` n'a pas confirmé que la session courante est celle des
   // données : une annonce reçue par l'ANCIEN document (ou une déconnexion) ne parvient jamais à celui-ci. Revérifié au retour de
   // l'onglet, du focus et sur `pageshow`.
-  const confirmed = useSessionConfirmation(owner, loaderData.afterReload);
+  const { confirmed, stalled } = useSessionConfirmation(owner, loaderData.afterReload);
   const foreign = isForeign({ owner, layoutUserId: layout?.userId, announced, confirmed });
   // Page « pending » (née d'un rechargement) dont le compte est confirmé : on navigue sans la marque, ce qui relit le chargeur pour
   // le compte courant et retire la marque de l'adresse.
@@ -232,9 +232,22 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   }
   if (foreign || confirmed === "checking" || loaderData.mode === "pending") {
     return (
-      <p className="s-muted" role="status" data-testid="crew-refreshing">
-        {L.refreshing}
-      </p>
+      <div className="s-narrow s-stack">
+        <p className="s-muted" role="status" data-testid="crew-refreshing">
+          {L.refreshing}
+        </p>
+        {stalled ? (
+          // Rechargement lent ou interrompu (page restaurée) : « Mise à jour… » reste, le bouton s'ajoute dessous.
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => reloadManually(RELOAD_SCOPE)}
+            data-testid="crew-refresh-slow"
+          >
+            {L.refreshReload}
+          </Button>
+        ) : null}
+      </div>
     );
   }
   if (loaderData.mode === "error") {

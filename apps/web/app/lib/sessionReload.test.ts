@@ -17,6 +17,7 @@ import {
   reloadAutomatically,
   reloadManually,
   type SessionConfirmation,
+  setStalledOf,
   trackConfirmation,
 } from "./sessionReload";
 
@@ -309,7 +310,7 @@ describe("verrou global de rechargement", () => {
     mod.resetReloadLock();
   });
 
-  it("un rechargement qui n'a pas quitté la page au bout du délai : abonnés prévenus (« failed »), verrou levé", async () => {
+  it("un rechargement qui n'a pas quitté la page au bout du délai : abonnés prévenus (bouton sous « Mise à jour… » ; le verrou reste posé", async () => {
     vi.useFakeTimers();
     try {
       vi.resetModules();
@@ -322,7 +323,11 @@ describe("verrou global de rechargement", () => {
       expect(stalled).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
       expect(stalled).toHaveBeenCalledTimes(1);
-      // Le verrou est levé : le bouton « Recharger la page » (ou un nouvel essai) navigue.
+      // Le délai dépasse celui de /me (10 s) : une navigation lente n'est pas dérangée, le verrou reste posé.
+      expect(mod.RELOAD_STALL_MS).toBeGreaterThan(ME_TIMEOUT_MS);
+      expect(mod.reloadAutomatically("crew")).toBe("started");
+      expect(replaced).toHaveLength(1);
+      // Le geste de l'utilisateur, lui, recharge.
       mod.reloadManually("crew");
       expect(replaced).toHaveLength(2);
       off();
@@ -348,5 +353,45 @@ describe("verrou global de rechargement", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("restauration pendant un rechargement, et bouton lié au compte (tour 10)", () => {
+  it("resetReloadLock dit si un rechargement était en cours", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    expect(mod.resetReloadLock()).toBe(false);
+    mod.reloadAutomatically("crew");
+    expect(mod.resetReloadLock()).toBe(true);
+    expect(mod.resetReloadLock()).toBe(false);
+  });
+
+  it("page restaurée pendant un rechargement, `foreign` inchangé : le bouton est affiché (stalled), sans nouvelle navigation", async () => {
+    vi.resetModules();
+    const { replaced } = stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    // « Mise à jour… » : discordance, rechargement lancé.
+    let tracked = mod.freshConfirmation("A", false);
+    tracked = mod.applyConfirmation(tracked, "A", () => "mismatch");
+    mod.reloadAutomatically("crew");
+    expect(replaced).toHaveLength(1);
+    // Retour puis Avant : pageshow persisté. Le crochet applique exactement ceci.
+    tracked = mod.setStalledOf(tracked, mod.resetReloadLock());
+    tracked = mod.applyConfirmation(tracked, "A", (was) => mod.nextConfirmation(was, me("C"), "A"));
+    expect(tracked.state).toBe("mismatch");
+    expect(tracked.stalled).toBe(true);
+    expect(replaced).toHaveLength(1);
+    // Une restauration sans rechargement en cours ne montre pas le bouton.
+    expect(mod.setStalledOf(tracked, mod.resetReloadLock()).stalled).toBe(false);
+  });
+
+  it("le bouton retombe quand le compte ou l'origine de la page change (même recalage que la confirmation)", () => {
+    const slow = setStalledOf(freshConfirmation("A", false), true);
+    expect(slow.stalled).toBe(true);
+    expect(trackConfirmation(slow, "A", false)).toBe(slow);
+    expect(trackConfirmation(slow, "B", false).stalled).toBe(false);
+    expect(trackConfirmation(slow, "A", true).stalled).toBe(false);
+    expect(setStalledOf(slow, true)).toBe(slow);
   });
 });
