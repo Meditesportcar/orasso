@@ -3,8 +3,8 @@
 // **passe à la ligne**, jamais tronqué), le type et la vérification, « Suivre » (le seul bouton principal), la bio sur une ligne
 // avec « plus », à droite les icônes empilées ; dessous la bande de compteurs. Rendu côté serveur : tout marche sans JavaScript.
 import { AvatarRing, type AvatarRingState, Icon } from "@orasso/design-system/web";
-import { pagesLabels as L, type PageCounter } from "@orasso/shared";
-import type { ReactNode } from "react";
+import { pagesLabels as L, type PageCounter, widestWordEm } from "@orasso/shared";
+import type { CSSProperties, ReactNode } from "react";
 
 import "../../styles/pages.css";
 import { type BandCell, CounterBand, ProfileBio } from "../profile/ProfileHead";
@@ -69,9 +69,17 @@ export function PageHead({
           </AvatarRing>
         </div>
         <div className="pt-id__mid">
-          <Name id={nameId} className="pg-id__name o-t-poster-l" data-testid="page-name">
-            {name}
-          </Name>
+          {/* Lot B3a : le corps suit le mot le plus large dans la colonne (`--em`), jamais coupé en plein mot (« MÉDITESP / ORTCAR » à ~296 px). */}
+          <div className="pt-id__namebox">
+            <Name
+              id={nameId}
+              className="pg-id__name o-t-poster-l"
+              style={{ "--em": widestWordEm(name) } as CSSProperties}
+              data-testid="page-name"
+            >
+              {name}
+            </Name>
+          </div>
           <div className="pt-id__gl">
             <span className="pg-type" data-testid="page-type">
               {typeLabel}
