@@ -24,6 +24,14 @@ import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewLastCookie, crewLastOf, pickCrew } from "../lib/crew-last.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
 import { listenSession } from "../lib/sessionChannel";
+import {
+  isAfterReload,
+  isForeign,
+  nextAnnounced,
+  reloadAutomatically,
+  reloadManually,
+  useSessionConfirmation,
+} from "../lib/sessionReload";
 import type { Route } from "./+types/app-crew";
 
 // Onglet Crew (lot R7b2, D38, maquette R7.11), comme l'appli : le sélecteur de crew (plusieurs crews ; le dernier ouvert
@@ -62,8 +70,10 @@ export function shouldRevalidate({
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const mine = await api<MyCrew[]>(request, "/me/crews");
-  if (!mine.ok) return { mode: "error" as const, message: mine.error.message, userId: me.user.id };
   const url = new URL(request.url);
+  // Page née d'un rechargement automatique : elle reste neutre tant que `/me` n'a pas confirmé le compte (`useSessionConfirmation`).
+  const afterReload = isAfterReload(url);
+  if (!mine.ok) return { mode: "error" as const, message: mine.error.message, userId: me.user.id, afterReload };
   if (mine.data.length === 0) {
     const asked = await api<CrewInboxRequest[]>(request, "/me/crew-requests");
     // La recherche se montre sur place (comme l'appli) : deux lettres au moins, pas d'annuaire.
@@ -75,6 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       mode: "none" as const,
       userId: me.user.id,
+      afterReload,
       invitations: asked.ok ? asked.data.filter((r) => r.kind === "invitation") : [],
       q,
       searching,
@@ -102,7 +113,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       ? undefined
       : { "Set-Cookie": crewLastCookie(request, me.user.id, current.slug) };
   return data(
-    { mode: "crew" as const, crews: mine.data, crew, members, pending, userId: me.user.id, tab },
+    { mode: "crew" as const, crews: mine.data, crew, members, pending, userId: me.user.id, tab, afterReload },
     { headers },
   );
 }
@@ -140,34 +151,8 @@ export async function action({ request }: Route.ActionArgs) {
   return data<CrewActionData>({ crewError: "Action inconnue." }, { status: 400 });
 }
 
-/** Rechargements automatiques du Crew : au troisième en moins de 20 s, on s'arrête (jamais de boucle). */
-const RELOAD_KEY = "orasso-crew-reloads";
-const RELOAD_WINDOW_MS = 20_000;
-const RELOAD_MAX = 3;
-
-/** Sans stockage, la marque du rechargement automatique est portée par `window.name` (il survit à un rechargement, sans stockage). */
-const RELOAD_MARK = "orasso-crew-reload:";
-
-/**
- * Note un rechargement automatique ; faux (et rien n'est rechargé) si c'est le troisième en moins de 20 s. Sans stockage : un seul
- * rechargement automatique en moins de 20 s, marqué dans `window.name`.
- */
-function mayReload(now: number): boolean {
-  try {
-    const raw = sessionStorage.getItem(RELOAD_KEY);
-    const stamps = (raw ? (JSON.parse(raw) as unknown[]) : []).filter(
-      (t): t is number => typeof t === "number" && now - t >= 0 && now - t < RELOAD_WINDOW_MS,
-    );
-    if (stamps.length + 1 >= RELOAD_MAX) return false;
-    sessionStorage.setItem(RELOAD_KEY, JSON.stringify([...stamps, now]));
-    return true;
-  } catch {
-    const last = window.name.startsWith(RELOAD_MARK) ? Number(window.name.slice(RELOAD_MARK.length)) : Number.NaN;
-    if (now - last >= 0 && now - last < RELOAD_WINDOW_MS) return false;
-    window.name = `${RELOAD_MARK}${now}`;
-    return true;
-  }
-}
+/** Portée du compteur de rechargements automatiques (`sessionReload.ts`). */
+const RELOAD_SCOPE = "crew";
 
 export default function AppCrew({ loaderData, actionData }: Route.ComponentProps) {
   // Les données du Crew (sorties, garage, demandes) sont celles du compte qui les a chargées (`userId`). Si le compte courant est un
@@ -179,49 +164,39 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   useEffect(
     () =>
       listenSession((id, self) => {
-        if (!self) setAnnounced(id);
+        setAnnounced((was) => nextAnnounced(was, id, self));
       }),
     [],
   );
   // `userId` est dans tous les résultats du chargeur (sans crew, les invitations de `/me/crew-requests` sont aussi privées).
   const owner = loaderData.userId;
-  const foreign =
-    (layout?.userId !== undefined && layout.userId !== owner) || (announced !== undefined && announced !== owner);
+  // Après un rechargement automatique, la page reste neutre tant que `/me` n'a pas confirmé que la session courante est celle des
+  // données : une annonce reçue par l'ANCIEN document (ou une déconnexion) ne parvient jamais à celui-ci. Revérifié au retour de
+  // l'onglet, du focus et sur `pageshow`.
+  const confirmed = useSessionConfirmation(owner, loaderData.afterReload);
+  const foreign = isForeign({ owner, layoutUserId: layout?.userId, announced, confirmed });
   const [gaveUp, setGaveUp] = useState(false);
   useEffect(() => {
     if (!foreign) {
       setGaveUp(false);
       return;
     }
-    if (mayReload(Date.now())) window.location.reload();
-    else setGaveUp(true);
+    if (reloadAutomatically(RELOAD_SCOPE) === "refused") setGaveUp(true);
   }, [foreign]);
-  if (foreign && gaveUp) {
-    // Les rechargements n'ont pas résolu la discordance : jamais « Mise à jour… » à vie, une action de reprise.
+  if ((foreign && gaveUp) || confirmed === "failed") {
+    // Les rechargements n'ont pas résolu la discordance (ou le compte n'a pas pu être confirmé) : jamais « Mise à jour… » à vie.
     return (
       <div className="s-narrow s-stack" data-testid="crew-refresh-failed">
         <p className="s-error" role="alert">
           {L.refreshFailed}
         </p>
-        <Button
-          variant="secondary"
-          icon="undo"
-          onClick={() => {
-            try {
-              sessionStorage.removeItem(RELOAD_KEY);
-            } catch {
-              // Stockage indisponible : le rechargement a lieu quand même.
-            }
-            if (window.name.startsWith(RELOAD_MARK)) window.name = "";
-            window.location.reload();
-          }}
-        >
+        <Button variant="secondary" icon="undo" onClick={() => reloadManually(RELOAD_SCOPE)}>
           {L.refreshReload}
         </Button>
       </div>
     );
   }
-  if (foreign) {
+  if (foreign || confirmed === "checking") {
     return (
       <p className="s-muted" role="status" data-testid="crew-refreshing">
         {L.refreshing}
