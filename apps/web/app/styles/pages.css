@@ -195,3 +195,62 @@
   gap: var(--space-1);
   padding: 0 var(--space-2);
 }
+
+/* Lot R9h, partie 2 : la Page du propriétaire (chips de gestion, QR, pied « Mes casquettes ») et « Suivre » d'un prestataire ou d'un média.
+   Jetons seulement. */
+.pg-gest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pg-gest__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 750;
+  text-decoration: none;
+}
+.pg-gest__chip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pg-gest__chip:focus-visible,
+.pg-row:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.pg-qr {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.pg-qr svg {
+  width: min(100%, 288px);
+  height: auto;
+}
+.pg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pg-row__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.pg-row__text strong {
+  overflow-wrap: anywhere;
+}

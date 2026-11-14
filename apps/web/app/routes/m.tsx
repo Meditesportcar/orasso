@@ -1,26 +1,48 @@
-// Fiche d'un média (lot 57) : ce que voient les connectés et les organisations quand ils trient une demande
-// d'accréditation (nom, formats, présentation, liens, zone couverte, « Profil vérifié »). `GET /media/:id` est réservé
-// aux connectés (lot 45) : la fiche vit dans l'espace connecté, comme les profils (`/u/:pseudo`).
+// La page d'un média (`/m/<id>`) vue par un connecté (lot 57 ; lot R9h partie 2, T54, maquette R9.3 `n-page`, vue « Un visiteur »), au gabarit
+// de la page d'une structure et de la fiche d'un pro (R8g) : le logo dans l'anneau de ses stories, le nom (jamais tronqué), « Média » et
+// « Média vérifié », « Suivre » (le seul bouton principal) ou « Suivi », la bio sur une ligne, « Plus » (Partager, « Modifier » pour son
+// propriétaire), la bande « abonnés · albums · photos » ; puis « Publications » (ouvert par défaut quand il y en a), « Albums » (ses albums
+// publiés, puis ses liens) et « Mentions · N ». Les formats, la zone couverte et les réseaux d'hier restent sous l'en-tête, au-dessus des
+// onglets. « Suivre » écrit l'abonnement de la casquette portée par l'adresse (`?auteur=`, T48) : vu depuis l'espace d'une casquette, c'est
+// la page qui suit (T6 et T14). `GET /media/:id` est réservé aux connectés (lot 45) : la page vit dans l'espace connecté.
 import { Button, Chip, ChipRow, Plate } from "@orasso/design-system/web";
 import {
-  type AlbumSummary,
   type AlbumsList,
   albumLabels,
+  authorKeyOf,
   instagramHandle,
   instagramUrl,
   mediaAppLabels as L,
   type MediaContentView,
   type MediaPage as MediaPageData,
   mediaFormatLabels,
+  PAGE_TAB_PARAM,
   type Page,
+  type PageFollowResult,
+  pageCounters,
+  pageMentionsCount,
+  pagePublicationsCount,
+  pageShownTab,
   pagesLabels,
+  pageTabs,
+  profileRingState,
+  type WithPageExtras,
 } from "@orasso/shared";
-import { useState } from "react";
-import { apiFetch } from "../lib/api.client";
-import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
+import { useEffect, useState } from "react";
+import { PageAlbums } from "../components/pages/PageAlbums";
+import { PageFollow } from "../components/pages/PageFollow";
+import { PageHead } from "../components/pages/PageHead";
+import { PageMentions } from "../components/pages/PageMentions";
+import { PageMore } from "../components/pages/PageMore";
+import { PagePublications } from "../components/pages/PagePublications";
+import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
+import { ShareButtons } from "../components/ShareButtons";
+import { actorOfParam } from "../lib/actor";
+import { api, apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/albums.css";
 import "../styles/media.css";
+import "../styles/pages.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/m";
 
@@ -32,17 +54,25 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const url = new URL(request.url);
   // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
-  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
-  await requireMe(request);
+  const back = safeReturn(url.searchParams.get("retour"), "/app");
+  const me = await requireMe(request);
   const id = encodeURIComponent(params.id);
-  const media = await apiOrThrow<MediaPageData>(request, `/media/${id}`);
+  // Lot R9h (T48) : la casquette qui regarde est portée par l'adresse (`?auteur=`), revérifiée ici et par l'API.
+  const actor = actorOfParam(url.searchParams.get("auteur"), me.personas);
+  const media = await apiOrThrow<WithPageExtras<MediaPageData>>(request, `/media/${id}`, { actor });
+  const owner = me.personas.some((p) => p.kind === "media" && p.id === media.id);
+  const tab = pageShownTab("media", {
+    raw: url.searchParams.get(PAGE_TAB_PARAM),
+    counts: { publications: pagePublicationsCount(media) },
+    session: true,
+  });
   // Lot R9e : les albums publiés (une page, la suite se charge au clic) ; les photos viennent d'une route protégée (session).
   const albumsRes = await api<AlbumsList>(request, `/media/${id}/albums?limit=${ALBUMS_PAGE}`);
   const albums = albumsRes.ok ? albumsRes.data : null;
   // Contenus publiés (relecture du lot 57) : une page par appel, au curseur de l'API (`?cursor=`), 20 par page
   // (`?taille=` : de 1 à 20, pour alléger la page). « Voir la suite » charge la suivante, sans plafond de pages.
-  const url = new URL(request.url);
   const size = Math.min(PAGE_SIZE, Math.max(1, Math.floor(Number(url.searchParams.get("taille"))) || PAGE_SIZE));
   const cursor = cursorParam(url);
   const chunk = await loadChunk<MediaContentView>(cursor, async (c) => {
@@ -55,6 +85,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     back,
     media,
+    owner,
+    actor,
+    tab,
+    origin: originOf(request),
     albums,
     chunk,
     size,
@@ -72,26 +106,75 @@ function pageHref(id: string, size: number, cursor: string): string {
   const query = params.toString();
   return `/m/${id}${query ? `?${query}` : ""}`;
 }
+
 export default function MediaPage({ loaderData }: Route.ComponentProps) {
-  const m = loaderData.media;
+  const { media: m, owner, actor, tab, origin } = loaderData;
   const ig = instagramUrl(m.instagram);
+  const [follow, setFollow] = useState({ following: m.isFollowing, followers: m.followersCount });
+  const [mentionsDelta, setMentionsDelta] = useState(0);
+  // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet l'état à zéro
+  useEffect(() => {
+    setFollow({ following: m.isFollowing, followers: m.followersCount });
+    setMentionsDelta(0);
+  }, [m]);
+  const path = `/m/${m.id}`;
+  // La casquette qui regarde reste dans l'adresse des onglets.
+  const tabPath = actor ? `${path}?auteur=${encodeURIComponent(actor)}` : path;
+  const key = authorKeyOf("media", m.id);
+  const tabs = pageTabs("media", {
+    session: true,
+    mentionsCount: mentionsShown(pageMentionsCount(m), mentionsDelta),
+  });
+  const counters = pageCounters("media", {
+    followers: follow.followers,
+    albums: m.albumsCount ?? null,
+    photos: m.photosCount ?? null,
+  });
   return (
     <>
       <FicheBar heading={false} title="Média" back={loaderData.back} />
-      <div className="s-narrow s-stack" data-testid="media-public">
-        <div className="s-row">
-          {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
-          <div className="s-stack s-stack--tight">
-            <h1 className="s-title o-never-truncate">{m.name}</h1>
-            <ChipRow className="s-chips-wrap">
-              {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
-              {m.formats.map((f) => (
-                <Chip key={f}>{mediaFormatLabels[f]}</Chip>
-              ))}
-            </ChipRow>
-          </div>
-        </div>
-        {m.description && <p className="s-prewrap">{m.description}</p>}
+      <div className="s-narrow s-stack pg-page" data-testid="media-public">
+        <PageHead
+          testId="media-head"
+          name={m.name}
+          logoUrl={m.logoUrl}
+          ring={profileRingState(m.stories)}
+          storiesHref={(m.stories?.count ?? 0) > 0 ? `/app/story/${encodeURIComponent(key)}` : undefined}
+          typeLabel={pagesLabels.typeMedia}
+          verifiedLabel={m.verified ? pagesLabels.verifiedMedia : null}
+          follow={
+            owner ? null : (
+              <PageFollow
+                targetKey={key}
+                actor={actor}
+                following={follow.following}
+                onDone={(r: PageFollowResult) => setFollow({ following: r.following, followers: r.followersCount })}
+              />
+            )
+          }
+          bio={m.description}
+          side={
+            <PageMore>
+              <div className="s-stack s-stack--tight">
+                <ShareButtons url={`${origin}${path}`} title={`${m.name} sur Orasso`} />
+                {owner ? (
+                  <a className="s-linkbutton o-t-button" href="/app/media/page" data-testid="page-edit">
+                    {pagesLabels.edit}
+                  </a>
+                ) : null}
+              </div>
+            </PageMore>
+          }
+          counters={counters}
+        />
+        {m.formats.length > 0 ? (
+          <ChipRow className="s-chips-wrap">
+            {m.formats.map((f) => (
+              <Chip key={f}>{mediaFormatLabels[f]}</Chip>
+            ))}
+          </ChipRow>
+        ) : null}
         <Plate className="s-stack s-stack--tight">
           <div className="o-t-label">{L.profileCover}</div>
           <p>{m.departments.length ? m.departments.join(", ") : L.profileCoverAll}</p>
@@ -113,13 +196,37 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
             </Button>
           )}
         </div>
-        <MediaAlbums mediaId={m.id} first={loaderData.albums} counts={m} />
-        <MediaContents
-          key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
-          mediaId={m.id}
-          first={loaderData.chunk}
-          size={loaderData.size}
-        />{" "}
+
+        <PageTabs value={tab} items={tabs} path={tabPath} />
+
+        {tab === "albums" ? (
+          <PageAlbums mediaId={m.id} owner={false} first={loaderData.albums} counts={m}>
+            <MediaContents
+              key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
+              mediaId={m.id}
+              first={loaderData.chunk}
+              size={loaderData.size}
+            />
+          </PageAlbums>
+        ) : tab === "publications" ? (
+          <PagePublications
+            authorKey={key}
+            name={m.name}
+            path={tabPath}
+            withFilter={false}
+            filter="all"
+            total={pagePublicationsCount(m) ?? null}
+            session
+            publicFirst={null}
+          />
+        ) : (
+          <PageMentions
+            pageKey={key}
+            pageName={m.name}
+            manage={owner}
+            onHiddenChange={(d) => setMentionsDelta((v) => v + d)}
+          />
+        )}
       </div>
     </>
   );
@@ -127,90 +234,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
 
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
-/** Albums publiés du média : « N albums · M photos », une ligne par album (mosaïque réduite, titre, événement), « Voir plus » au curseur. */
-function MediaAlbums({
-  mediaId,
-  first,
-  counts,
-}: {
-  mediaId: string;
-  first: AlbumsList | null;
-  counts: Pick<MediaPageData, "albumsCount" | "photosCount">;
-}) {
-  const [items, setItems] = useState<AlbumSummary[]>(first?.items ?? []);
-  const [next, setNext] = useState<string | null>(first?.nextCursor ?? null);
-  const [failed, setFailed] = useState(first === null);
-  const [busy, setBusy] = useState(false);
-  async function more() {
-    setBusy(true);
-    const res = await apiFetch<AlbumsList>(
-      `/media/${mediaId}/albums?limit=${ALBUMS_PAGE}${next ? `&cursor=${encodeURIComponent(next)}` : ""}`,
-    );
-    setBusy(false);
-    if (!res.ok) {
-      setFailed(true);
-      return;
-    }
-    setFailed(false);
-    setItems((list) => [...list, ...res.data.items.filter((a) => !list.some((x) => x.id === a.id))]);
-    setNext(res.data.nextCursor);
-  }
-  const albums = counts.albumsCount ?? items.length;
-  const photos = counts.photosCount ?? items.reduce((n, a) => n + a.photosCount, 0);
-  if (items.length === 0 && !failed) return null;
-  return (
-    <section className="s-stack" aria-labelledby="m-albums" data-testid="media-public-albums">
-      <h2 id="m-albums" className="s-h2">
-        {albumLabels.albums}
-      </h2>
-      <p className="o-t-caption s-muted" data-testid="media-public-albums-count">
-        {pagesLabels.albumsCount(albums)} · {pagesLabels.photosCount(photos)}
-      </p>
-      <ul className="alb-list">
-        {items.map((a) => (
-          <li key={a.id}>
-            <a className="alb-row" href={`/albums/${a.id}`} data-testid="media-public-album">
-              <span className="alb-row__thumb">
-                {a.cover[0] ? <img src={a.cover[0].url} alt="" loading="lazy" decoding="async" /> : null}
-              </span>
-              <span className="alb-row__text">
-                <strong className="o-never-truncate">{a.title}</strong>
-                <span className="o-t-caption s-muted">
-                  {a.event.title} · {albumLabels.photosCount(a.photosCount)}
-                </span>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
-      {failed && (
-        <Plate className="s-stack s-stack--tight" role="alert" data-testid="media-public-albums-error">
-          <strong>{albumLabels.loadFailed}</strong>
-          <div>
-            <Button icon="undo" disabled={busy} onClick={() => void more()} data-testid="media-public-albums-retry">
-              {albumLabels.retry}
-            </Button>
-          </div>
-        </Plate>
-      )}
-      {next !== null && !failed && (
-        <div>
-          <Button
-            variant="secondary"
-            icon="down"
-            disabled={busy}
-            onClick={() => void more()}
-            data-testid="media-public-albums-more"
-          >
-            {albumLabels.loadMore}
-          </Button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/** Contenus publiés : toutes les photos d'une galerie, « Voir la suite » au curseur, panne avec « Réessayer ». */
+/** Contenus publiés : les liens d'un média, « Voir la suite » au curseur, panne avec « Réessayer ». */
 function MediaContents({
   mediaId,
   first,

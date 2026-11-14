@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { ACTOR_HEADER } from "@orasso/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
+import { actorOfParam, withActorParam } from "./actor";
 import { api } from "./api.server";
 
 /** Les appels de l'appli qui passent `actor` : `METHOD /chemin`, lus dans `apps/mobile/src/lib/api/*.ts`. */
@@ -103,5 +104,35 @@ describe("api (serveur, loaders) ne pose l'en-tête que sur la liste", () => {
       return new Headers(init.headers).get(ACTOR_HEADER);
     });
     expect(sent).toEqual(["p:p1", null, null]);
+  });
+});
+
+// Lot R9h, partie 2 : la page d'un prestataire ou d'un média ouverte depuis l'espace d'une casquette garde la casquette dans son adresse
+// (`?auteur=`), jamais dans un cookie ; une clé qui n'est pas au compte n'est jamais crue.
+describe("la casquette portée par l'adresse (`?auteur=`)", () => {
+  const personas = [
+    { kind: "fan", id: "u1", label: "Moi", assisted: false },
+    { kind: "organizer", id: "st1", label: "Roues Libres 66", assisted: false },
+    { kind: "pro", id: "pr1", label: "Garage", assisted: false },
+    { kind: "organizer", id: "st2", label: "Survolée", assisted: true },
+    { kind: "organizer", id: "st3", label: "Suspendue", assisted: false, suspended: true },
+  ] as unknown as Parameters<typeof actorOfParam>[1];
+
+  it("withActorParam : sans casquette l'adresse ne change pas ; avec, `?auteur=` ou `&auteur=` (clé encodée)", () => {
+    expect(withActorParam("/providers/p1", null)).toBe("/providers/p1");
+    expect(withActorParam("/providers/p1", "s:st1")).toBe("/providers/p1?auteur=s%3Ast1");
+    expect(withActorParam("/m/m1?onglet=albums", "s:st1")).toBe("/m/m1?onglet=albums&auteur=s%3Ast1");
+  });
+
+  it("actorOfParam : la clé d'une page tenue est reprise ; absente, `me`, inconnue, survolée ou suspendue : la personne (null)", () => {
+    expect(actorOfParam("s:st1", personas)).toBe("s:st1");
+    expect(actorOfParam("p:pr1", personas)).toBe("p:pr1");
+    expect(actorOfParam(null, personas)).toBeNull();
+    expect(actorOfParam("me", personas)).toBeNull();
+    expect(actorOfParam("s:inconnue", personas)).toBeNull();
+    expect(actorOfParam("p:st1", personas), "l'identifiant d'une autre casquette").toBeNull();
+    expect(actorOfParam("s:st2", personas), "survol d'assistance").toBeNull();
+    expect(actorOfParam("s:st3", personas), "page suspendue").toBeNull();
+    expect(actorOfParam("x:st1", personas), "préfixe inconnu").toBeNull();
   });
 });

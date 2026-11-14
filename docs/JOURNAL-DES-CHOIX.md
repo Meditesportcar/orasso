@@ -6842,3 +6842,43 @@ Cause réelle de la remarque de Damien : sur le serveur de dev, le cache de « P
 - **Règle** (`seedableSources`) : la graine ne pose les caches inventés de `osm:66` et `fuel2:66` que pour une source remplacée par un faux service ou coupée (`OVERPASS_URL` ou `FUEL_API_URL` différente de l'adresse par défaut de `env.ts`, ou `off`), source par source. Avec les deux vraies adresses, elle ne pose rien. Les recettes de Pratique tournent avec des faux services : la graine y écrit comme avant (la commande de graine doit alors recevoir les mêmes variables que l'API).
 - **Nettoyage** : avec une source réelle, la graine supprime, parmi `osm:66`, `wash:66` (lavages) ou `fuel2:66`, `fuel:66` (stations), les lignes dont le contenu est EXACTEMENT l'une des listes inventées (Pratique ou Accueil) : comparaison des lieux (nom, adresse, position ; ni les prix ni les dates, ni l'ordre). Une ligne remplie par une vraie source, même d'un seul lieu de plus ou de moins, ou d'un autre département, n'est jamais touchée. Rejouable.
 - **À savoir au déploiement** : les lignes inventées de la graine sont retirées au premier passage de `SEED_DEMO` avec les vraies sources ; le premier chargement de Pratique lit alors Overpass et le jeu public (délai de fond jusqu'à 60 s par département ; réponse `loading` d'abord).
+
+## Lot R9h, partie 2 (14/11/2026) : la « Page » du propriétaire et les pages publiques au gabarit (site seul, aucune migration, aucune route d'API)
+
+La Page du propriétaire des quatre casquettes sur le site, les pages publiques du prestataire (`/providers/:id`) et du média (`/m/:id`) au gabarit de R8g avec « Suivre » par `page-follows`, et les liens de T54 que les routes déjà fusionnées permettent.
+
+### Points tranchés (défauts de la fiche, appliqués)
+- **T50, la Page du propriétaire** : `routes/casquette-page.tsx` remplace la redirection de la partie 1 ; une route sous quatre chemins (`/orga/:s/page`, `/pro/:p/page`, `/app/media/page`, `/app/prestataire/page`), le composant `components/pages/OwnerPage.tsx` : `PageHead` de R8g (anneau de stories → `/app/story/<clé>`, nom jamais tronqué, type et « Vérifié », **pas** de « Suivre », « QR de la page » et « Réglages » en icônes de côté, trois compteurs de `pageCounters`, bio), les chips de gestion (`PageGest`, des liens), `PageTabs` dans `?onglet=` (organisateur « Événements · Publications · Mentions », pro « Publications · Offres · Mentions », prestataire « Publications · Prestations · Mentions », média « Publications · Albums · Mentions » ; « Publications » s'ouvre par défaut quand il y en a), le corps de l'onglet, le pied « Mes casquettes » → `/app/moi`. Les tableaux de bord d'aujourd'hui restent à leur adresse.
+- **Adresses des chips** : organisateur « Équipe » → `/orga/:s/staff`, « Réglages de la structure » → `/orga/:s/structure` ; pro « Modifier ma fiche » → `/pro/:p` (le site n'a pas de « mode édition » séparé : la fiche est le formulaire), « Abonnement » → `/pro/:p/abonnement` ; prestataire « Modifier ma vitrine » → `/app/prestataire` ; média « Modifier ma page » → `/app/media`. « Réglages » (icône de côté) → `/app/moi#reglages` (le site n'a pas de `/app/reglages`).
+- **« QR de la page »** : une fenêtre (`<dialog>`) avec le QR du site (`Qr`, sombre sur clair dans les deux thèmes) du lien public (`/o/<slug>`, `/p/<slug>`, `/providers/<id>`, `/m/<id>`), le nom, et les boutons de partage de `ShareButtons`.
+- **« Publier » depuis la Page** : `PublicationsTab` reçoit `publishAs` (clé d'auteur) : le bouton « Publier » (icône `camera`, le seul bouton principal de l'onglet) mène à `/app/fil/publier?auteur=<clé>`. Il est aussi montré **dans l'état vide** (l'appli ne le montre que dans l'en-tête quand la liste existe : un propriétaire sans publication n'avait pas de porte). Pas de `publishAs` en survol d'assistance ni quand la casquette de l'espace n'est pas celle de la page (T48).
+- **T54, pages publiques** : `/providers/:id` et `/m/:id` sont refaites au gabarit (`PageHead`, `PageTabs`, `PagePublications`, `PagePrestations` / `PageAlbums`, `PageMentions`), « Suivre » par `PUT|DELETE /me/page-follows/<clé>` (`PageFollow`) : la réponse de l'écriture est appliquée tout de suite (état et nombre d'abonnés), une panne se dit. « Plus » : Partager, « Signaler » (prestataire, pas pour son propriétaire), « Modifier » (propriétaire) → sa Page. Le média garde sous l'en-tête ses formats, sa zone couverte et ses liens d'hier (au-dessus des onglets, comme avant). Les anciens repères de recette (`media-public-albums`, `-album`, `-content`, `-more`, `-error`, `-retry`, `provider-public`, `vitrine-*`) sont conservés.
+- **T48 dans l'adresse, pour une page ouverte depuis un espace** : le site n'a pas de casquette dans la session ; une page publique ouverte depuis l'espace d'une casquette porte donc la casquette dans son adresse, `?auteur=<clé>` (comme `app-story-publier`). Le chargeur la relit (`actorOfParam` : `resolveStoryAuthor`, jamais une clé qui n'est pas au compte, ni survolée, ni suspendue), lit la page avec l'en-tête, et « Suivre » part avec l'acteur : **c'est la page qui suit** (T6, T14). Les onglets gardent `auteur`. Les liens posés dans les espaces : « Voir la vitrine » (`orga-prestataires.tsx`) et le nom du média d'une demande de presse (`orga-presse.tsx`) passent par `withActorParam(href, useActor())` (fichiers hors liste, deux lignes chacun).
+- **Album / `routes/event.tsx`** : aucune ligne à ajouter. `routes/album.tsx` mène déjà à `/m/<id>` (« album-media-link ») et à l'événement ; `event.tsx` n'avait rien à gagner de plus (le lien « Photos » de la gestion d'un événement et « Tes photos » dépendent de R9f partie 2 et de R9g, non fusionnés : voir « Ce qui attend »).
+
+### Choix pris seul
+- **Albums du propriétaire** : `PageAlbums` lit `/me/albums` (brouillons compris, pastille « Brouillon ») ; les liens du média (`PageOwnLinks`) sont lus dans le navigateur (`kind=link`, « Voir la suite ») et leur gestion reste dans `/app/media?onglet=contenus` (bouton « Modifier ma page » sous la liste). Le visiteur garde `MediaContents` (adresse `?cursor=`, `?taille=`), donc les recettes de R9e et du lot 57 gardent leurs repères.
+- **Un simple staff** n'a pas la Page de la structure : `/orga/:s/page` le renvoie à `/orga/:s` (il n'a pas non plus le lien).
+- **Média non vérifié** : le site n'a pas d'étiquette « Vérification en attente » dans `PageHead` (l'appli en a une) ; elle n'est pas posée.
+- **`pageTabHref`** accepte un chemin qui porte déjà une requête (`&onglet=`) : nécessaire pour garder `?auteur=`.
+
+### Inventaire appli → site (partie 2)
+| Geste de l'appli | Adresse sur le site |
+|---|---|
+| Page (organisateur, pro, prestataire, média) | `/orga/:s/page`, `/pro/:p/page`, `/app/prestataire/page`, `/app/media/page` |
+| Chips de gestion | voir « Adresses des chips » |
+| QR de la page, Réglages | fenêtre `page-qr-dialog` ; `/app/moi#reglages` |
+| « Publier » depuis la Page | `/app/fil/publier?auteur=<clé>` |
+| « Publier une offre » | `/app/fil/publier?fiche=<id>&etiquette=offre` (onglet « Offres ») |
+| « Nouvel album » | `/app/media/albums/nouveau` ; un album : `/albums/:id` |
+| Page publique du prestataire / du média, « Suivre » | `/providers/:id`, `/m/:id` (`?auteur=` depuis un espace) |
+| Mes casquettes | `/app/moi` |
+| Copie hors ligne, scanner | absents sur le site (permis : ils n'ont pas de sens sur le site) |
+
+### Ce qui attend (dépendances non fusionnées au moment de ce lot)
+- **« Tes photos »** (`/app/albums/:id/mes-photos`) et l'identification : R9f partie 2 (route `app-album-mes-photos.tsx`, pas dans `vague-r8`) : le lien se pose à la fusion.
+- **« Photos » dans la gestion d'un événement** (`/orga/:s/e/:eventId/photos` ou `orga-presse.tsx`) : R9g, non fusionné.
+
+### À revoir avec Damien (lot R9h, partie 2)
+- **Le bouton « Publier » dans l'état vide d'une Page** : ajouté sur le site (l'appli ne l'a pas) ; à aligner dans l'appli si Damien le veut.
+- **Le nom du prestataire n'a pas de logo** (comme dans l'appli) : la page montre l'initiale dans l'anneau.

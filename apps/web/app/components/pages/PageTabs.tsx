@@ -15,8 +15,9 @@ const ICON: Record<PageTab, IconName> = {
   mentions: "bubble",
 };
 
-/** L'adresse d'un onglet : le chemin de la page et `?onglet=`. */
-export const pageTabHref = (path: string, tab: PageTab): string => `${path}?${PAGE_TAB_PARAM}=${pageTabSlug(tab)}`;
+/** L'adresse d'un onglet : le chemin de la page et `?onglet=` (`&onglet=` si le chemin porte déjà une requête : `?auteur=`, R9h). */
+export const pageTabHref = (path: string, tab: PageTab): string =>
+  `${path}${path.includes("?") ? "&" : "?"}${PAGE_TAB_PARAM}=${pageTabSlug(tab)}`;
 
 export function PageTabs({ value, items, path }: { value: PageTab; items: readonly PageTabItem[]; path: string }) {
   return (

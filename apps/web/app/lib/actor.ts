@@ -3,6 +3,7 @@
 // l'espace pose un `ActorProvider` ; les composants partagés (Fil, barre des stories, commentaires) lisent `useActor()`. Hors d'un
 // espace de casquette, il rend `null` et rien ne change. Le serveur ne croit pas l'en-tête (il relit les droits) ; ce fichier ne fait
 // que le poser, sur la liste blanche seulement (`actorRoutes.ts`).
+import { type Me, resolveStoryAuthor } from "@orasso/shared";
 import { createContext, createElement, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
 
 import { postLive } from "../components/fil/commentsLive";
@@ -47,3 +48,25 @@ export function useCasquette(): Casquette | null {
 
 /** Le 403 d'une casquette périmée (structure quittée, fiche supprimée) : l'adresse où le navigateur est renvoyé, avec l'avis. */
 export const CASQUETTE_GONE_HREF = "/app/moi?casquette=indisponible";
+
+/**
+ * Lot R9h (partie 2, T48) : une page ouverte depuis l'espace d'une casquette (la vitrine d'un prestataire, la page d'un média) garde
+ * la casquette **dans son adresse** (`?auteur=<clé>`), jamais dans un cookie : c'est la page qui suit (T6, T14). Sans casquette
+ * (hors d'un espace), l'adresse ne change pas. La clé est revérifiée à l'arrivée (`resolveStoryAuthor`) et par l'API.
+ */
+export function withActorParam(href: string, actor: string | null): string {
+  if (!actor) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}auteur=${encodeURIComponent(actor)}`;
+}
+
+/**
+ * La casquette que porte une adresse (`?auteur=<clé>`) : la clé d'une page que le compte tient (structure, fiche pro, prestataire, média ;
+ * jamais en assistance ni suspendue : `resolveStoryAuthor`), sinon `null` (la personne). Une clé qui n'est pas au compte n'est jamais crue.
+ */
+export function actorOfParam(asked: string | null, personas: Me["personas"]): string | null {
+  const choice = resolveStoryAuthor(
+    asked,
+    personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended),
+  );
+  return choice?.kind === "page" ? choice.key : null;
+}
