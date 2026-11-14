@@ -2,7 +2,7 @@
 // casquette (le logo seul, qui mène à sa Page), la loupe, la cloche et la bulle, chacune avec sa pastille. Même geste que la barre de
 // l'appli ; les compteurs se relisent à l'arrivée d'un message ou d'une notification (`user:<id>`, comme `layouts/app.tsx`) et
 // toutes les 60 s, onglet affiché. Jetons seulement (styles de la barre du kit + `styles/casquette.css`).
-import { AppBarAction, initialsOf, Logo } from "@orasso/design-system/web";
+import { AppBarAction, initialsOf, Logo, Monogram } from "@orasso/design-system/web";
 import { casquettesLabels as C, navLabels } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -78,6 +78,7 @@ export function CasquetteBar({
   return (
     <header className="o-appbar o-appbar--tab cas-bar" data-testid="casquette-bar">
       <Logo width={118} className="o-appbar__logo" />
+      <Monogram className="o-appbar__monogram" />
       <a
         className="o-appbar__persona is-round cas-bar__chip"
         href={pageHref}

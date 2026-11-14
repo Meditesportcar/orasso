@@ -146,6 +146,11 @@
 .o-appbar__logo {
   flex: none;
 }
+/* Lot B3b : le monogramme n'apparaît que sous ~290 px (règle de marque : moins de 100 px de large, le monogramme). Sélecteurs
+   renforcés : la règle des barres (`:is(.o-appbar…) .o-brand-img--auto`) pose `display` sur chaque version de la marque. */
+.o-appbar--tab .o-appbar__monogram.o-brand-img.o-brand-img--auto {
+  display: none;
+}
 @media (max-width: 359px) {
   .o-appbar__logo {
     width: 112px;
@@ -159,6 +164,16 @@
   .o-appbar--tab .o-appbar__logo {
     flex: 0 1 112px;
     min-width: 100px;
+  }
+}
+@media (max-width: 289px) {
+  .o-appbar--tab .o-logo.o-appbar__logo.o-brand-img.o-brand-img--auto {
+    display: none;
+  }
+  .o-appbar--tab .o-appbar__monogram.o-brand-img.o-brand-img--auto.o-brand-img--dark {
+    display: block;
+    width: var(--brand-mark);
+    height: var(--brand-mark);
   }
 }
 /* `.capchip` : logo rond 22 px (ou initiales sur moutarde) et nom de la casquette. */
