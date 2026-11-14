@@ -235,7 +235,9 @@ test("clic en attente : l'étape est figée, « Annuler l'attente » rend la mai
   await ctx.close();
 });
 
-test("clic en attente puis sortie par le ✕ de l'en-tête : rien n'est enregistré ni publié", async ({ browser }) => {
+test("clic en attente puis sortie par un lien ordinaire (hors du gel) : rien n'est enregistré ni publié", async ({
+  browser,
+}) => {
   test.setTimeout(180_000);
   const damien = await login("damien@orasso.local");
   const id = await draftEvent(damien, `Sortie ${unique()}`, ["food_truck"]);
@@ -257,29 +259,45 @@ test("clic en attente puis sortie par le ✕ de l'en-tête : rien n'est enregist
   const destinationHeld = new Promise<void>((r) => {
     openDestination = r;
   });
-  const destination = new RegExp(`/orga/meditesportcar/e/${id}(.data)?(?|$)`);
+  const destination = new RegExp(`/orga/meditesportcar/e/${id}(\\.data)?(\\?|$)`);
   await page.route(destination, async (route) => {
     if (route.request().url().includes("/modifier")) return route.continue();
-    await destinationHeld;
+    // Soupape : si le test échoue avant de relâcher la destination, la requête ne bloque pas la fermeture.
+    await Promise.race([destinationHeld, new Promise((r) => setTimeout(r, 40_000))]);
     await route.continue();
   });
   await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
   const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
   const writes = writesOf(page, id);
+  // Titre changé : sans cela l'étape n'a rien à enregistrer et le test ne prouverait rien.
+  await page.getByLabel("Titre").fill(`Sortie ${unique()}`);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
-  await page.locator(".o-appbar__close").first().click();
+  // Un lien ordinaire (`<a href>` hors de la zone figée, comme ceux de l'en-tête du site) : navigation complète, retenue.
+  // (Le ✕ de l'en-tête passe par le routeur : `useNavigation` l'annule déjà, il ne discrimine pas le point 2.)
+  await page.evaluate((href) => {
+    const a = document.createElement("a");
+    a.id = "zz-lien-ordinaire";
+    a.href = href;
+    a.textContent = "Lien ordinaire";
+    document.body.append(a);
+  }, `/orga/meditesportcar/e/${id}`);
+  await page.locator("#zz-lien-ordinaire").click({ noWaitAfter: true });
   const answered = page.waitForResponse(
     (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
   );
   release();
   await answered;
-  await page.waitForLoadState("networkidle");
-  // Les missions sont arrivées, l'assistant est encore affiché (navigation retenue) : rien ne doit être parti.
-  await expect(page.getByTestId("wizard-step")).toContainText("Type");
-  expect(writes).toEqual([]);
+  // Fenêtre d'observation (le réseau n'est jamais « au repos » : la navigation retenue reste en attente) : sans
+  // l'annulation au clic, l'écriture part dans les 300 ms après l'arrivée des missions (essai rouge du tour 5).
+  await page.waitForTimeout(1_500);
+  // Les missions sont arrivées, la navigation est encore retenue (la page ne se laisse pas interroger) : on lit les requêtes
+  // d'écriture déjà vues côté test, rien ne doit être parti.
+  const writesDuringHold = [...writes];
+  // La destination est relâchée avant les assertions : un échec ne laisse pas une requête retenue bloquer la fermeture.
   openDestination();
-  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(?|$)`), { timeout: 30_000 });
+  expect(writesDuringHold).toEqual([]);
+  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(\\?|$)`), { timeout: 30_000 });
   expect(writes).toEqual([]);
   expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
   await ctx.close();
