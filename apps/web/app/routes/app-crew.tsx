@@ -145,9 +145,12 @@ const RELOAD_KEY = "orasso-crew-reloads";
 const RELOAD_WINDOW_MS = 20_000;
 const RELOAD_MAX = 3;
 
+/** Sans stockage, la marque du rechargement automatique est portée par `window.name` (il survit à un rechargement, sans stockage). */
+const RELOAD_MARK = "orasso-crew-reload:";
+
 /**
- * Note un rechargement automatique ; faux (et rien n'est rechargé) si c'est le troisième en moins de 20 s. Sans stockage, un seul
- * rechargement automatique : la page rechargée par le navigateur lui-même (type « reload ») n'en refait pas.
+ * Note un rechargement automatique ; faux (et rien n'est rechargé) si c'est le troisième en moins de 20 s. Sans stockage : un seul
+ * rechargement automatique en moins de 20 s, marqué dans `window.name`.
  */
 function mayReload(now: number): boolean {
   try {
@@ -159,8 +162,10 @@ function mayReload(now: number): boolean {
     sessionStorage.setItem(RELOAD_KEY, JSON.stringify([...stamps, now]));
     return true;
   } catch {
-    const nav = performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined;
-    return nav?.type !== "reload";
+    const last = window.name.startsWith(RELOAD_MARK) ? Number(window.name.slice(RELOAD_MARK.length)) : Number.NaN;
+    if (now - last >= 0 && now - last < RELOAD_WINDOW_MS) return false;
+    window.name = `${RELOAD_MARK}${now}`;
+    return true;
   }
 }
 
@@ -207,6 +212,7 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
             } catch {
               // Stockage indisponible : le rechargement a lieu quand même.
             }
+            if (window.name.startsWith(RELOAD_MARK)) window.name = "";
             window.location.reload();
           }}
         >
