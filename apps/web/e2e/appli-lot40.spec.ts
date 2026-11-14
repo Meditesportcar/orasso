@@ -45,7 +45,8 @@ const BARS = {
     ["Tri", "tri", "Tri"],
     ["Direct", "direct", null],
     ["Le Fil", "fil", null],
-    ["Page", "page", "Ma structure"],
+    // Lot R9b (journal, « la vraie Page au lieu de l'écran provisoire de R9n ») : le titre est le nom de la structure.
+    ["Page", "page", OWN_NAME],
   ],
   pro: [
     ["Scanner", "scanner", "Scanner"],
@@ -66,7 +67,8 @@ const BARS = {
     ["Le Fil", "fil", null],
     ["Accueil", "accueil", null],
     ["Presse", "presse", "Accréditations"],
-    ["Page", "page", "Contenus"],
+    // Lot R9b : la Page du média (même gabarit que la structure et le pro) a pour titre le nom du média.
+    ["Page", "page", OWN_NAME],
   ],
 } as const;
 
@@ -74,6 +76,20 @@ type Kind = keyof typeof BARS;
 
 /** Nom de la fiche pro ou de la vitrine du compte qui porte la casquette (titre de Ma fiche et de Ma vitrine). */
 async function ownName(kind: Kind): Promise<string> {
+  // Lot R9b : la casquette organisateur de Damien est MéditeSportCar ; le média est la page de son titulaire.
+  if (kind === "organizer") {
+    const [s] = await sql<{ name: string }>("select name from structures where slug = 'meditesportcar'");
+    if (!s) throw new Error("Pas de structure meditesportcar");
+    return s.name;
+  }
+  if (kind === "media") {
+    const [m] = await sql<{ name: string }>(
+      `select m.name from media_profiles m join "user" u on u.id = m.user_id where u.email = $1 and m.deleted_at is null`,
+      [ACCOUNTS[kind]],
+    );
+    if (!m) throw new Error(`Pas de média pour ${ACCOUNTS[kind]}`);
+    return m.name;
+  }
   const table = kind === "pro" ? "pro_profiles" : "provider_profiles";
   const owner = kind === "pro" ? "owner_user_id" : "user_id";
   const [row] = await sql<{ name: string }>(

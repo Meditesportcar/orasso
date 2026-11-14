@@ -195,8 +195,10 @@ test("un pro partenaire : la phrase de la mention, puis « Collaboration commerc
 
 test("la demande d'une page que Damien gère s'écrit « avec <page> »", async ({ page }) => {
   test.setTimeout(180_000);
-  await openAs(page, "damien@orasso.local", "/app/activite/demandes");
-  const request = page.getByTestId("request-coauthor").filter({ hasText: "avec MéditeSportCar" });
+  // Lot R9d (journal, T26 et décision du point 9 du tour 1) : une invitation adressée à une structure se traite dans les demandes
+  // de la structure (`/orga/<slug>/activite?vue=demandes`), plus dans la liste personnelle (comme `appli-lotr8o`).
+  await openAs(page, "damien@orasso.local", "/orga/meditesportcar/activite?vue=demandes");
+  const request = page.getByTestId("sact-request-coauthor").filter({ hasText: "avec MéditeSportCar" });
   await expect(request).toBeVisible();
   await expect(request).toContainText("Kenji_66 te propose de publier avec MéditeSportCar");
 });

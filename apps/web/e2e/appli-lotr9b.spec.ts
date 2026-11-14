@@ -318,7 +318,12 @@ test("une carte du Fil d'un média ouvre sa page (`/m/<id>`)", async ({ browser 
   await go(page, "/fil");
   // Damien suit Sud Cars : sa publication est dans « Abonnements ».
   await page.getByRole("tab", { name: "Abonnements", exact: true }).click();
-  const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "Sud Cars" }).first();
+  // Lot R9g (journal, tour 1 : la graine reprend une photo de Sud Cars dans le journal du Rassemblement) : la carte de
+  // MéditeSportCar porte aussi « Photo : Sud Cars » ; on prend celle dont l'auteur (le lien) est Sud Cars.
+  const card = page
+    .getByTestId("feed-card-feed_post")
+    .filter({ has: page.getByRole("link", { name: "Sud Cars", exact: true }) })
+    .first();
   await expect(card).toBeVisible({ timeout: 60_000 });
   await card.getByRole("link", { name: "Sud Cars" }).first().click();
   await page.waitForURL(/\/m\//, { timeout: 30_000 });
