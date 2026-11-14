@@ -184,6 +184,20 @@
   .crw-tabsbar .crw-tab-outings {
     display: none;
   }
+  /* `?onglet=sorties` à cette largeur : l'onglet Fil porte le soulignement (celui des sorties est masqué). Même rendu que `data-on`. */
+  .crw-tabsbar .utabs .utabs__tab.crw-tab-wide-on {
+    color: var(--ink);
+  }
+  .crw-tabsbar .utabs__tab.crw-tab-wide-on::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 0;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--accent);
+  }
 }
 .crw-sech {
   display: flex;
@@ -465,18 +479,6 @@ fieldset.crw-seg {
   display: inline-flex;
   gap: var(--space-2);
   margin-left: auto;
-}
-/* Tour 2 : un seul bouton principal par écran. Sur grand écran, le fil (et son « Publier ») est à côté des sorties :
-   « Proposer une sortie » y est secondaire ; sur téléphone, l'onglet Sorties est seul et le garde en principal. */
-@media (max-width: 999px) {
-  .crw-side .crw-propose--wide {
-    display: none;
-  }
-}
-@media (min-width: 1000px) {
-  .crw-side .crw-propose--narrow {
-    display: none;
-  }
 }
 
 /* Lot R6-retouches : le nom du crew rapetisse pour que son mot le plus large tienne (voir `.s-title--fit`). */

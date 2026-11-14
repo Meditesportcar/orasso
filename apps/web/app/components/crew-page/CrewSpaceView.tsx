@@ -84,29 +84,16 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
       {space.canProposeOuting ? (
         <>
           {/* Un seul bouton principal par écran : « Publier » (icône moutarde, au bout des onglets). « Proposer une sortie » est
-              toujours secondaire (deux versions, l'une cachée selon la largeur : CSS `crw-propose--narrow` / `--wide`). */}
+              toujours secondaire, un seul bouton : la colonne des sorties est affichée ou non selon la largeur (CSS `.crw-side`). */}
           <Button
             variant="secondary"
             icon="add"
             href={`/c/${crew.slug}/sortie`}
             fullWidth
-            className={main === "fil" ? "crw-propose--narrow" : undefined}
             data-testid="crew-propose-outing"
           >
             {L.proposeOuting}
           </Button>
-          {main === "fil" ? (
-            <Button
-              variant="secondary"
-              icon="add"
-              href={`/c/${crew.slug}/sortie`}
-              fullWidth
-              className="crw-propose--wide"
-              data-testid="crew-propose-outing-wide"
-            >
-              {L.proposeOuting}
-            </Button>
-          ) : null}
         </>
       ) : (
         <p className="o-t-caption s-muted" data-testid="crew-propose-reserved">

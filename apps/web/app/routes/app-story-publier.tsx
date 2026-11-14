@@ -1,6 +1,13 @@
-import { storyPublishLabels as L, resolveStoryAuthor, type StoryAuthor } from "@orasso/shared";
+import { Button } from "@orasso/design-system/web";
+import {
+  askedPageUnavailable,
+  casquettesLabels,
+  storyPublishLabels as L,
+  resolveStoryAuthor,
+  type StoryAuthor,
+} from "@orasso/shared";
 
-import { ficheHandle } from "../components/FicheBar";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PublishForm } from "../components/stories/PublishForm";
 import { api, requireMe } from "../lib/api.server";
 import { filHrefOfAuthor } from "../lib/casquetteFil";
@@ -27,6 +34,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     asked,
     me.personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended),
   );
+  // Une page demandée que le compte ne tient pas (ou plus) : jamais remplacée en silence par « Moi » (même règle que l'appli).
+  const authorLost = askedPageUnavailable(asked, choice);
   const author: StoryAuthor =
     choice?.kind === "page"
       ? {
@@ -38,6 +47,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       : { persona: "fan" };
   const authorKey = choice?.kind === "page" ? choice.key : "me";
   return {
+    authorLost,
     userId: me.user.id,
     author,
     authorKey,
@@ -60,6 +70,24 @@ export function meta() {
 }
 
 export default function AppStoryPublier({ loaderData }: Route.ComponentProps) {
+  if (loaderData.authorLost) {
+    return (
+      <div className="fil" data-testid="story-author-lost">
+        <FicheBar title={L.title} back={loaderData.back} />
+        <p className="o-t-body" role="alert">
+          {casquettesLabels.authorLost(casquettesLabels.authorLostUnknown)}
+        </p>
+        <Button
+          icon="profile"
+          variant="secondary"
+          href="/app/story/publier?auteur=me"
+          data-testid="story-author-lost-me"
+        >
+          {casquettesLabels.authorLostChoice}
+        </Button>
+      </div>
+    );
+  }
   return (
     <PublishForm
       key={loaderData.userId}

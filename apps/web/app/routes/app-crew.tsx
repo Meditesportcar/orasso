@@ -14,7 +14,15 @@ import {
   explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { data, redirect } from "react-router";
+import { useEffect, useState } from "react";
+import {
+  data,
+  redirect,
+  type ShouldRevalidateFunctionArgs,
+  useLocation,
+  useNavigate,
+  useRouteLoaderData,
+} from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
@@ -22,6 +30,16 @@ import { CrewRowR2, PeopleEmpty, PeopleSection, PrivacyNote } from "../component
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewLastCookie, crewLastOf, pickCrew } from "../lib/crew-last.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
+import { listenSession } from "../lib/sessionChannel";
+import {
+  AFTER_RELOAD_PARAM,
+  isAfterReload,
+  isForeign,
+  nextAnnounced,
+  reloadAutomatically,
+  reloadManually,
+  useSessionConfirmation,
+} from "../lib/sessionReload";
 import type { Route } from "./+types/app-crew";
 
 // Onglet Crew (lot R7b2, D38, maquette R7.11), comme l'appli : le sélecteur de crew (plusieurs crews ; le dernier ouvert
@@ -33,10 +51,41 @@ export function meta() {
   return [{ title: `${navLabels.crewTab.title} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
+/**
+ * Retirer `publier` de l'adresse (la fenêtre de publication est ouverte, un F5 ne doit pas la rouvrir : `CrewSpaceView`) est une
+ * navigation du routeur : sans ceci, elle relancerait les quatre lectures de la page (mes crews, le crew, ses membres, ses demandes)
+ * pour rien, et une panne à cet instant ferait basculer la page sur la limite d'erreur. Rien d'autre ne change : la page ne se relit pas.
+ */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return defaultShouldRevalidate;
+  const without = (url: URL) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("publier");
+    return `${url.pathname}?${p.toString()}`;
+  };
+  const droppedPublier =
+    currentUrl.searchParams.has("publier") &&
+    !nextUrl.searchParams.has("publier") &&
+    without(currentUrl) === without(nextUrl);
+  return droppedPublier ? false : defaultShouldRevalidate;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
+  // Page née d'un rechargement automatique : le chargeur ne lit RIEN de privé (la session a pu changer pendant la lecture : rien de
+  // l'ancien compte ne doit rester dans le HTML ni dans les données sérialisées). La page confirme le compte par `/me`
+  // (`useSessionConfirmation`), puis navigue sans la marque : le chargeur relit pour le compte courant.
+  if (isAfterReload(new URL(request.url))) {
+    return { mode: "pending" as const, userId: me.user.id, afterReload: true as const };
+  }
   const mine = await api<MyCrew[]>(request, "/me/crews");
-  if (!mine.ok) return { mode: "error" as const, message: mine.error.message };
+  if (!mine.ok)
+    return { mode: "error" as const, message: mine.error.message, userId: me.user.id, afterReload: false as const };
   const url = new URL(request.url);
   if (mine.data.length === 0) {
     const asked = await api<CrewInboxRequest[]>(request, "/me/crew-requests");
@@ -48,6 +97,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       : null;
     return {
       mode: "none" as const,
+      userId: me.user.id,
+      afterReload: false as const,
       invitations: asked.ok ? asked.data.filter((r) => r.kind === "invitation") : [],
       q,
       searching,
@@ -75,7 +126,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       ? undefined
       : { "Set-Cookie": crewLastCookie(request, me.user.id, current.slug) };
   return data(
-    { mode: "crew" as const, crews: mine.data, crew, members, pending, userId: me.user.id, tab },
+    {
+      mode: "crew" as const,
+      crews: mine.data,
+      crew,
+      members,
+      pending,
+      userId: me.user.id,
+      tab,
+      afterReload: false as const,
+    },
     { headers },
   );
 }
@@ -113,7 +173,83 @@ export async function action({ request }: Route.ActionArgs) {
   return data<CrewActionData>({ crewError: "Action inconnue." }, { status: 400 });
 }
 
+/** Portée du compteur de rechargements automatiques (`sessionReload.ts`). */
+const RELOAD_SCOPE = "crew";
+
 export default function AppCrew({ loaderData, actionData }: Route.ComponentProps) {
+  // Les données du Crew (sorties, garage, demandes) sont celles du compte qui les a chargées (`userId`). Si le compte courant est un
+  // autre, rien n'en est affiché et la page se recharge en entier (rendu serveur avec le cookie courant : les données sont celles du
+  // compte courant, ou la page de connexion). Aucune relecture, aucune réconciliation.
+  const layout = useRouteLoaderData("layouts/app") as { userId?: string } | undefined;
+  // Le dernier compte annoncé par une AUTRE fenêtre (les annonces de cette fenêtre, dont celle de sa propre mise en page, sont ignorées).
+  const [announced, setAnnounced] = useState<string | null | undefined>(undefined);
+  useEffect(
+    () =>
+      listenSession((id, self) => {
+        setAnnounced((was) => nextAnnounced(was, id, self));
+      }),
+    [],
+  );
+  // `userId` est dans tous les résultats du chargeur (sans crew, les invitations de `/me/crew-requests` sont aussi privées).
+  const owner = loaderData.userId;
+  // Après un rechargement automatique, la page reste neutre tant que `/me` n'a pas confirmé que la session courante est celle des
+  // données : une annonce reçue par l'ANCIEN document (ou une déconnexion) ne parvient jamais à celui-ci. Revérifié au retour de
+  // l'onglet, du focus et sur `pageshow`.
+  const { confirmed, stalled } = useSessionConfirmation(owner, loaderData.afterReload);
+  const foreign = isForeign({ owner, layoutUserId: layout?.userId, announced, confirmed });
+  // Page « pending » (née d'un rechargement) dont le compte est confirmé : on navigue sans la marque, ce qui relit le chargeur pour
+  // le compte courant et retire la marque de l'adresse.
+  const navigate = useNavigate();
+  const { pathname, search } = useLocation();
+  const pending = loaderData.mode === "pending";
+  useEffect(() => {
+    if (!pending || confirmed !== "ok" || foreign) return;
+    const params = new URLSearchParams(search);
+    params.delete(AFTER_RELOAD_PARAM);
+    const rest = params.toString();
+    void navigate(`${pathname}${rest ? `?${rest}` : ""}`, { replace: true });
+  }, [pending, confirmed, foreign, pathname, search, navigate]);
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!foreign) {
+      setGaveUp(false);
+      return;
+    }
+    if (reloadAutomatically(RELOAD_SCOPE) === "refused") setGaveUp(true);
+  }, [foreign]);
+  if ((foreign && gaveUp) || confirmed === "failed") {
+    // Les rechargements n'ont pas résolu la discordance (ou le compte n'a pas pu être confirmé) : jamais « Mise à jour… » à vie.
+    return (
+      <div className="s-narrow s-stack" data-testid="crew-refresh-failed">
+        <p className="s-error" role="alert">
+          {L.refreshFailed}
+        </p>
+        <Button variant="secondary" icon="undo" onClick={() => reloadManually(RELOAD_SCOPE)}>
+          {L.refreshReload}
+        </Button>
+      </div>
+    );
+  }
+  if (foreign || confirmed === "checking" || loaderData.mode === "pending") {
+    return (
+      <div className="s-narrow s-stack">
+        <p className="s-muted" role="status" data-testid="crew-refreshing">
+          {L.refreshing}
+        </p>
+        {stalled ? (
+          // Rechargement lent ou interrompu (page restaurée) : « Mise à jour… » reste, le bouton s'ajoute dessous.
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => reloadManually(RELOAD_SCOPE)}
+            data-testid="crew-refresh-slow"
+          >
+            {L.refreshReload}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
   if (loaderData.mode === "error") {
     return (
       <div className="s-narrow s-stack" data-testid="load-error">

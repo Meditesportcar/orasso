@@ -27,8 +27,8 @@ async function afterOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function open(browser: Browser, email: string, theme = "beton", scale = 1) {
-  const ctx = await browser.newContext({ viewport: { width: 384, height: 844 }, baseURL: APP });
+async function open(browser: Browser, email: string, theme = "beton", scale = 1, width = 384) {
+  const ctx = await browser.newContext({ viewport: { width, height: 844 }, baseURL: APP });
   await ctx.addInitScript(
     ([t, s]) => {
       localStorage.setItem("orasso.onboarded", "1");
@@ -64,6 +64,40 @@ async function box(page: Page, id: string) {
   const b = await page.getByTestId(id).first().boundingBox();
   expect(b, id).not.toBeNull();
   return b as { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * Le fondu du bord droit de la rangée d'onglets : présent exactement quand la rangée déborde de plus de 8 px (le seuil de `UnderTabs`,
+ * la marge intérieure d'un onglet) et qu'il reste du contenu à droite ; absent une fois au bout. C'est le frère du défileur dans sa
+ * boîte, en dégradé. `mustOverflow` : la recette exige que la rangée déborde (sinon elle ne prouverait que l'absence).
+ */
+async function checkFade(page: Page, mustOverflow: boolean) {
+  // Un dégradé SVG (28 px) posé contre le bord droit de la rangée, frère du défileur.
+  const fadeShown = () =>
+    page.getByTestId("crew-tabs").evaluate((el) => {
+      const svg = el.nextElementSibling?.querySelector("svg");
+      if (!svg?.querySelector("linearGradient")) return false;
+      const fade = svg.getBoundingClientRect();
+      const row = el.getBoundingClientRect();
+      return fade.width >= 20 && Math.abs(fade.right - row.right) <= 1;
+    });
+  const geometry = () =>
+    page.getByTestId("crew-tabs").evaluate((el) => ({
+      overflow: el.scrollWidth - el.clientWidth,
+      room: el.scrollWidth - el.clientWidth - el.scrollLeft,
+    }));
+  const start = await geometry();
+  if (mustOverflow)
+    expect(start.overflow, "la rangée déborde : le fondu a quelque chose à annoncer").toBeGreaterThan(8);
+  expect(await fadeShown(), `fondu au début (débordement ${start.overflow} px, seuil 8)`).toBe(
+    start.overflow > 8 && start.room > 1,
+  );
+  await page.getByTestId("crew-tabs").evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await page.waitForTimeout(400);
+  expect((await geometry()).room, "au bout de la rangée").toBeLessThanOrEqual(1);
+  expect(await fadeShown(), "fondu absent au bout de la rangée").toBe(false);
 }
 
 /** Un crew de recette avec un fil bien plus long que l'écran (le collant des onglets se vérifie en défilant). */
@@ -156,10 +190,7 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
   expect(feed.y, `premier contenu du fil à ${feed.y} px à ×1,3`).toBeLessThanOrEqual(MAX_Y_X13);
   // À ×1,3 le dernier onglet reste atteignable (la rangée défile de côté au besoin), sans passer sous « Publier ».
   const tabs = await box(page, "crew-tabs");
-  await page.getByTestId("crew-tabs").evaluate((el) => {
-    el.scrollLeft = el.scrollWidth;
-  });
-  await page.waitForTimeout(400);
+  await checkFade(page, false);
   const spots = await box(page, "crew-tab-spots");
   const pub = await box(page, "crew-feed-publish");
   expect(spots.x + spots.width, "« Spots » entier dans la rangée").toBeLessThanOrEqual(tabs.x + tabs.width + 1);
@@ -169,10 +200,24 @@ test("×1,3 : le premier contenu reste haut, le nom et la rangée d'onglets ne s
   await ctx.close();
 });
 
+test("×1,3 sur un écran étroit (320 px) : la rangée déborde, le fondu annonce la suite puis disparaît au bout", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const crew = await r5Crew(unique());
+  const { ctx, page } = await open(browser, crew.chef.email, "beton", 1.3, 320);
+  await go(page, `/crew?crew=${crew.slug}`);
+  await checkFade(page, true);
+  await shot(page, "chef-rangee-320-x13");
+  await ctx.close();
+});
+
 test("un nom long passe à la ligne, jamais tronqué", async ({ browser }) => {
   test.setTimeout(240_000);
   const crew = await r5Crew(unique());
-  const long = `Pilotes Dimanche Canet ${unique().slice(-5)}`;
+  // 39 caractères (le maximum d'un nom de crew est 40) : le cas le plus long qu'un chef puisse saisir. Le suffixe rend le nom unique.
+  const long = `Pilotes du Dimanche de Canet-R ${unique().slice(-8)}`;
+  expect(long.length, "le nom de la recette est près du maximum").toBe(39);
   expect((await apiCall(crew.chef.cookie, "PATCH", `/crews/${crew.id}`, { name: long })).status).toBe(200);
   const { ctx, page } = await open(browser, crew.chef.email);
   await go(page, `/crew?crew=${crew.slug}`);
@@ -274,13 +319,28 @@ test("tour 1 : changer d'onglet après avoir défilé ramène le début du nouve
     expect(c.y, `le début de ${tab} est à l'écran`).toBeLessThan(500);
     // Avoir défilé n'est pas requis pour la suite : une zone déjà en haut ne bouge pas.
   }
-  // Non défilé : on ne bouge pas.
-  await page.getByTestId("crew-tab").evaluate((el) => {
-    el.scrollTop = 0;
-  });
+  // Défilé un peu seulement (le haut du crew est encore en vue, sous la place de la rangée) : changer d'onglet ne bouge pas la zone.
+  // Les Membres sont courts : on les allonge pour que la zone puisse garder sa position (sinon le navigateur la ramènerait seul).
   await page.getByTestId("crew-tab-feed").click();
+  await expect(page.getByTestId("crew-post").first()).toBeVisible();
+  await page.addStyleTag({ content: '[data-testid="crew-members"] { min-height: 2400px; }' });
+  const little = 80;
+  const tabsY = (await box(page, "crew-tabs")).y;
+  await page.getByTestId("crew-tab").evaluate((el, y) => {
+    el.scrollTop = y;
+  }, little);
   await page.waitForTimeout(400);
-  expect(await page.getByTestId("crew-tab").evaluate((el) => el.scrollTop)).toBe(0);
+  expect(await page.getByTestId("crew-tab").evaluate((el) => el.scrollTop), "départ : défilé de 80 px").toBe(little);
+  await page.getByTestId("crew-tab-members").click();
+  await expect(page.getByTestId("crew-members")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(
+    await page.getByTestId("crew-tab").evaluate((el) => el.scrollTop),
+    "non défilé au-delà du haut du crew : la position ne bouge pas",
+  ).toBe(little);
+  expect(tabsY, "la rangée n'était pas encore collée (80 px de défilement ne l'atteignent pas)").toBeGreaterThan(
+    little,
+  );
   await ctx.close();
 });
 
