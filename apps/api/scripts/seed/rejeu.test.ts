@@ -11,8 +11,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db, pool } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { resetDb } from "../../test/helpers";
-import { LYDIA_ORGA_POSTS } from "./feed";
-import { JULIE_CAPTION } from "./feed-mentions";
+import { BRASA_POST_CAPTION, KENJI_PRESENT_CAPTION, LYDIA_ORGA_POSTS } from "./feed";
+import { JULIE_CAPTION, MARC_CAPTION } from "./feed-mentions";
 import { createAccount } from "./helpers";
 
 const API = fileURLToPath(new URL("../..", import.meta.url));
@@ -177,40 +177,128 @@ describe("rejeu de la graine après une activité réelle", () => {
     expect(seed()).toContain("Messagerie : Kenji_66");
   }, 900_000);
 
-  it("renouvellement du Lydia : publications de la graine rattachées à la nouvelle édition, sans doublon ni plantage", async () => {
-    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
-    const ids = LYDIA_ORGA_POSTS.map((p) => p.id);
-    expect(await db.select().from(t.feedPosts).where(inArray(t.feedPosts.id, ids))).toHaveLength(3);
-    // Une des trois publications est supprimée par Sarah_66 : elle ne revient jamais.
-    await db
-      .update(t.feedPosts)
-      .set({ deletedAt: new Date() })
-      .where(eq(t.feedPosts.id, ids[2] ?? ""));
-    // Le Lydia finit dans une heure : le déploiement le recrée.
+  /** Les publications de la graine liées au Lydia : (pseudo de l'auteur, légende). Sarah_66 ×3, La Brasa, Julie_66, Marc_66, la sortie. */
+  const lydiaKeys: [string, string][] = [
+    ...LYDIA_ORGA_POSTS.map((p) => ["Sarah_66", p.caption] as [string, string]),
+    ["Sofia_66", BRASA_POST_CAPTION],
+    ["Julie_66", JULIE_CAPTION],
+    ["Marc_66", MARC_CAPTION],
+  ];
+  const OUTING = "Le programme de la journée est en ligne%";
+  /** Nombre de lignes non supprimées d'un auteur avec une légende (aucun doublon : au plus une). */
+  const rows = async (pseudo: string, caption: string) => {
+    const p = await profile(pseudo);
+    return db
+      .select()
+      .from(t.feedPosts)
+      .where(
+        and(eq(t.feedPosts.authorId, p.userId), like(t.feedPosts.caption, caption), isNull(t.feedPosts.deletedAt)),
+      );
+  };
+  const renew = async () => {
     await db
       .update(t.events)
       .set({ endsAt: new Date(Date.now() + 3_600_000) })
       .where(eq(t.events.slug, "rassemblement-du-lydia"));
     seed();
-    const fresh = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
-    expect(fresh?.id).not.toBe(old?.id);
-    const posts = await db.select().from(t.feedPosts).where(inArray(t.feedPosts.id, ids));
-    expect(posts).toHaveLength(3);
-    for (const p of posts.filter((x) => x.deletedAt === null)) expect(p.eventId).toBe(fresh?.id);
-    expect(posts.filter((x) => x.deletedAt !== null)).toHaveLength(1);
-    // Épingle du journal du nouveau Lydia sur une publication de la graine.
+    return (await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") })) ?? null;
+  };
+  const brasaKept = async (eventId: string) => {
+    const sofia = await profile("Sofia_66");
+    return db
+      .select()
+      .from(t.applications)
+      .where(
+        and(
+          eq(t.applications.eventId, eventId),
+          eq(t.applications.userId, sofia.userId),
+          eq(t.applications.kind, "provider"),
+          eq(t.applications.status, "accepted"),
+        ),
+      );
+  };
+
+  it("renouvellement du Lydia ×2 : chaque publication de la graine (dont La Brasa, sa candidature, la sortie) sur le Lydia courant, sans doublon", async () => {
+    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    const ids = LYDIA_ORGA_POSTS.map((p) => p.id);
+    expect(await db.select().from(t.feedPosts).where(inArray(t.feedPosts.id, ids))).toHaveLength(3);
+    for (const [pseudo, caption] of lydiaKeys) expect(await rows(pseudo, caption), `${pseudo} avant`).toHaveLength(1);
+    const outingBefore = await db.select().from(t.feedPosts).where(like(t.feedPosts.caption, OUTING));
+    expect(outingBefore.length).toBeLessThanOrEqual(1);
+    // Une des trois publications de Roues Libres 66 est supprimée par Sarah_66 : elle ne revient jamais.
+    await db
+      .update(t.feedPosts)
+      .set({ deletedAt: new Date() })
+      .where(eq(t.feedPosts.id, ids[2] ?? ""));
+
+    const first = await renew();
+    expect(first?.id).not.toBe(old?.id);
+    for (const [pseudo, caption] of lydiaKeys) {
+      const found = await rows(pseudo, caption);
+      const expected = caption === LYDIA_ORGA_POSTS[2]?.caption ? 0 : 1;
+      expect(found, `${pseudo} après le 1er renouvellement : ${caption.slice(0, 25)}`).toHaveLength(expected);
+      for (const p of found) expect(p.eventId, `${pseudo} rattachée au Lydia courant`).toBe(first?.id);
+    }
+    expect(await brasaKept(first?.id ?? "")).toHaveLength(1);
     const pinned = await db
       .select({ id: t.feedPosts.id })
       .from(t.feedPosts)
       .where(
         and(
-          eq(t.feedPosts.eventId, fresh?.id ?? ""),
+          eq(t.feedPosts.eventId, first?.id ?? ""),
           isNull(t.feedPosts.deletedAt),
           sql`${t.feedPosts.pinnedAt} is not null`,
         ),
       );
     expect(pinned).toHaveLength(1);
     expect(ids).toContain(pinned[0]?.id);
+    const kenjiBefore = await rows("Kenji_66", KENJI_PRESENT_CAPTION);
+    const outing = await db
+      .select()
+      .from(t.feedPosts)
+      .where(and(like(t.feedPosts.caption, OUTING), isNull(t.feedPosts.deletedAt)));
+    expect(outing.length).toBeLessThanOrEqual(1);
+
+    // Deuxième renouvellement : aucun doublon (par auteur et légende), la publication supprimée ne revient toujours pas.
+    const second = await renew();
+    expect(second?.id).not.toBe(first?.id);
+    for (const [pseudo, caption] of lydiaKeys) {
+      const found = await rows(pseudo, caption);
+      const expected = caption === LYDIA_ORGA_POSTS[2]?.caption ? 0 : 1;
+      expect(found, `${pseudo} après le 2e renouvellement`).toHaveLength(expected);
+      for (const p of found) expect(p.eventId).toBe(second?.id);
+    }
+    expect(await brasaKept(second?.id ?? "")).toHaveLength(1);
+    expect(await rows("Kenji_66", KENJI_PRESENT_CAPTION)).toHaveLength(kenjiBefore.length);
+    expect(
+      (
+        await db
+          .select()
+          .from(t.feedPosts)
+          .where(and(like(t.feedPosts.caption, OUTING), isNull(t.feedPosts.deletedAt)))
+      ).length,
+    ).toBe(outing.length);
+  }, 900_000);
+
+  it("renouvellement : propriétaire hors graine ou structure supprimée, rien n'est supprimé", async () => {
+    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    // Structure supprimée.
+    await db.update(t.structures).set({ deletedAt: new Date() }).where(eq(t.structures.slug, "roues-libres-66"));
+    const kept = await renew();
+    expect(kept?.id).toBe(old?.id);
+    await db.update(t.structures).set({ deletedAt: null }).where(eq(t.structures.slug, "roues-libres-66"));
+    // Propriétaire de la structure hors graine (compte réel).
+    const sarah = await profile("Sarah_66");
+    await db
+      .update(t.user)
+      .set({ email: `reel-${randomUUID().slice(0, 8)}@example.com` })
+      .where(eq(t.user.id, sarah.userId));
+    const keptAgain = await renew();
+    expect(keptAgain?.id).toBe(old?.id);
+    expect(await brasaKept(old?.id ?? "")).toHaveLength(1);
+    for (const p of LYDIA_ORGA_POSTS) {
+      expect((await db.query.feedPosts.findFirst({ where: eq(t.feedPosts.id, p.id) }))?.eventId).toBe(old?.id);
+    }
   }, 900_000);
 
   it("structure du Lydia suspendue : le renouvellement est sauté, l'ancienne édition est gardée", async () => {

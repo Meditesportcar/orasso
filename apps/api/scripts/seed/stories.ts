@@ -43,7 +43,7 @@ export async function seedStories() {
   }
   const crew = await db.query.crews.findFirst({ where: eq(t.crews.slug, "roussillon-drift") });
   const structure = await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") });
-  const event = await db.query.events.findFirst({ where: eq(t.events.title, "Rassemblement du Lydia") });
+  const event = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
 
   // Damien suit ceux dont on veut voir l'anneau dans sa barre.
   for (const who of [kenji, lea, marc, theo]) {
@@ -117,7 +117,7 @@ export async function seedStories() {
     } catch (error) {
       // Compte suspendu (403), devenu privé (400), sorti du crew, limite (429) : la graine continue sans cette story.
       if (error instanceof AppError && [400, 403, 404, 409, 429].includes(error.status)) {
-        console.log(`Stories : une story de ${who.profile.pseudo} non posée (${error.status}).`);
+        console.warn(`Stories : une story de ${who.profile.pseudo} non posée (${error.status} : ${error.message}).`);
         continue;
       }
       throw error;

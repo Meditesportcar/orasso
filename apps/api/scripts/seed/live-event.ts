@@ -41,6 +41,7 @@ import { ensureAllCategories } from "../../src/modules/votes/context";
 import { votesLifecycle } from "../../src/modules/votes/lifecycle";
 import { createEvent, DAY, parisAt } from "./helpers";
 import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
+import { isSeedAccount } from "./seed-scope";
 
 const SLUG = "rassemblement-du-lydia";
 const TITLE = "Rassemblement du Lydia";
@@ -95,7 +96,7 @@ const VOTES: [string, string][] = [
 
 async function viewer(pseudo: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({
-    where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`,
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
   });
   if (!profile || profile.deletedAt) return null;
   const [u] = await db.select().from(t.user).where(eq(t.user.id, profile.userId));
@@ -266,23 +267,31 @@ async function themedVotes(
   return n;
 }
 
-/** La structure du Lydia (Roues Libres 66, sinon MéditeSportCar) et son propriétaire peuvent-ils créer un événement ? */
-async function renewalPossible(): Promise<boolean> {
+/**
+ * Ce qu'il faut pour créer (ou recréer) le Lydia : la structure (Roues Libres 66, sinon MéditeSportCar) ni supprimée ni suspendue, son
+ * propriétaire actif, de la graine, ni banni ni suspendu, et Damien_66 (compte de la graine). Contrôlé AVANT toute suppression :
+ * sinon rien n'est supprimé ni créé (jamais au nom d'un compte réel).
+ */
+async function liveParticipants() {
   const structure =
     (await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") })) ??
     (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") }));
-  if (!structure || structure.verification === "suspended") return false;
+  if (!structure || structure.deletedAt || structure.verification === "suspended") return null;
   const owner = await db.query.structureMembers.findFirst({
     where: and(
       eq(t.structureMembers.structureId, structure.id),
       eq(t.structureMembers.role, "owner"),
       eq(t.structureMembers.status, "active"),
+      isSeedAccount(t.structureMembers.userId),
     ),
   });
-  if (!owner) return false;
-  const profile = await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) });
-  if (!profile || profile.bannedAt || profile.deletedAt) return false;
-  return !(profile.suspendedUntil && profile.suspendedUntil > new Date());
+  const profile = owner ? await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) }) : null;
+  if (!profile || profile.bannedAt || profile.deletedAt) return null;
+  if (profile.suspendedUntil && profile.suspendedUntil > new Date()) return null;
+  const orga = await viewer(profile.pseudo, "totp");
+  const damien = await viewer("Damien_66");
+  if (!orga || !damien || damien.profile.bannedAt) return null;
+  return { structure, orga, damien };
 }
 
 export async function seedLiveEvent() {
@@ -306,33 +315,20 @@ export async function seedLiveEvent() {
     }
     // Renouvellement : l'éligibilité de la structure et de son propriétaire est contrôlée AVANT de supprimer l'ancienne édition (une
     // structure suspendue ou un propriétaire banni ferait échouer la création : l'ancien Lydia serait perdu pour rien).
-    if (!(await renewalPossible())) {
+    if (!(await liveParticipants())) {
       console.log(
-        "En direct : structure ou propriétaire suspendus, renouvellement sauté (l'ancienne édition est gardée).",
+        "En direct : structure, propriétaire ou compte de démonstration inéligibles, renouvellement sauté (l'ancienne édition est gardée).",
       );
       return;
     }
     await teardown(existing);
   }
-  const structure =
-    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") })) ??
-    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") }));
-  const owner = structure
-    ? await db.query.structureMembers.findFirst({
-        where: and(
-          eq(t.structureMembers.structureId, structure.id),
-          eq(t.structureMembers.role, "owner"),
-          eq(t.structureMembers.status, "active"),
-        ),
-      })
-    : undefined;
-  const orgProfile = owner ? await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) }) : null;
-  const orga = orgProfile ? await viewer(orgProfile.pseudo, "totp") : null;
-  const damien = await viewer("Damien_66");
-  if (!structure || !orga || !damien) {
-    console.log("En direct : structure ou comptes de démonstration absents, rien ajouté.");
+  const participants = await liveParticipants();
+  if (!participants) {
+    console.log("En direct : structure ou comptes de démonstration absents ou inéligibles, rien ajouté.");
     return;
   }
+  const { structure, orga, damien } = participants;
   // Tâches planifiées (verrouillage, règlement) comme une vraie publication : pg-boss sans traitement.
   const boss = await startJobs({ work: false });
   try {

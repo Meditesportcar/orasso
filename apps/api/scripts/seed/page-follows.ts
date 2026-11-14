@@ -194,7 +194,13 @@ async function seedPageFeed(pages: {
   }
   // Roues Libres 66 (son propriétaire, second facteur) commente une publication de Kenji_66, La Brasa lui répond.
   const owner = await db.query.structureMembers.findFirst({
-    where: and(eq(t.structureMembers.structureId, pages.rouesLibres.id), eq(t.structureMembers.role, "owner")),
+    where: and(
+      eq(t.structureMembers.structureId, pages.rouesLibres.id),
+      eq(t.structureMembers.role, "owner"),
+      eq(t.structureMembers.status, "active"),
+      // Jamais au nom d'un propriétaire réel : propriétaire de la graine, actif, sinon rien.
+      isSeedAccount(t.structureMembers.userId),
+    ),
   });
   const sarah = owner ? await viewerOfUser(owner.userId, "totp") : null;
   const sofia = await viewerOfUser(pages.brasa.userId);
@@ -210,7 +216,7 @@ async function seedPageFeed(pages: {
   const replied = await exists(sofia.user.id, SECOND_COMMENT_ID);
   if (already && replied) return;
   const kenji = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'kenji_66'` });
-  // Publication de la graine seulement (identifiant fixe, ou légende et auteur pour une base posée avant `SEED_ADOPT_BEFORE`).
+  // Publication de la graine seulement (identifiant fixe seulement).
   const [post] = kenji
     ? await db
         .select()

@@ -10,7 +10,7 @@ import { SEED_PLAN_POSTS } from "./feed";
 import { HOUR, now } from "./helpers";
 import { isSeedAccount, isSeedPost, type SeedPost } from "./seed-scope";
 
-/** Les deux publications de Kenji_66 du plan de `feed.ts` (identifiant fixe, ou légende et auteur pour une base posée avant `SEED_ADOPT_BEFORE`). */
+/** Les deux publications de Kenji_66 du plan de `feed.ts` (identifiant fixe seulement : aucune adoption des anciennes publications). */
 const planPost = (caption: string): SeedPost => {
   const found = SEED_PLAN_POSTS.find((p) => p.author === "Kenji_66" && p.caption === caption);
   if (!found) throw new Error(`Publication du plan absente : ${caption}`);
@@ -62,11 +62,19 @@ export async function seedFeedComments() {
   }
 
   const ids = new Map<string, string>();
-  const userOf = async (pseudo: string) => {
+  // Tous les comptes de la graine nécessaires sont résolus AVANT d'écrire quoi que ce soit : un compte absent (supprimé) = rien d'ajouté,
+  // jamais une graine arrêtée à moitié.
+  const wanted = new Set(["Damien_66", "Lea_11", ...TOP.flatMap(([author, , , flames]) => [author, ...flames])]);
+  const users = new Map<string, string>();
+  for (const pseudo of wanted) {
     const p = await byPseudo(pseudo);
-    if (!p) throw new Error(`Compte du seed absent : ${pseudo}`);
-    return p.userId;
-  };
+    if (!p) {
+      console.log(`Commentaires du Fil : compte du seed absent (${pseudo}), rien ajouté.`);
+      return;
+    }
+    users.set(pseudo, p.userId);
+  }
+  const userOf = async (pseudo: string) => users.get(pseudo) ?? "";
   const at = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * HOUR);
 
   let total = 0;

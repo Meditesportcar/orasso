@@ -6,7 +6,7 @@
 //   organisatrice : « Pour ta sortie de samedi ».
 // Rejouable : les lignes existantes ne sont jamais doublées (clés uniques, légende repérée).
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -158,8 +158,24 @@ export async function seedFeedSeen() {
   const event = outing.rows[0];
   let journal = "aucune sortie à venir pour Damien_66";
   if (event) {
+    // Identifiant fixe sans l'identifiant de l'événement : rattachée à l'événement courant si elle existe (renouvellement), jamais
+    // recréée si elle a été supprimée, pas de doublon d'une ancienne publication de même légende sur cet événement.
+    const outingId = seedPostId(`outing:${OUTING_CAPTION}`);
+    await db
+      .update(t.feedPosts)
+      .set({ eventId: event.id })
+      .where(
+        and(
+          eq(t.feedPosts.id, outingId),
+          isNull(t.feedPosts.deletedAt),
+          sql`${t.feedPosts.eventId} is distinct from ${event.id}::uuid`,
+        ),
+      );
     const already = await db.query.feedPosts.findFirst({
-      where: and(eq(t.feedPosts.eventId, event.id), eq(t.feedPosts.caption, OUTING_CAPTION)),
+      where: or(
+        eq(t.feedPosts.id, outingId),
+        and(eq(t.feedPosts.eventId, event.id), eq(t.feedPosts.caption, OUTING_CAPTION)),
+      ),
     });
     if (already) journal = "déjà présente";
     else {
@@ -176,7 +192,7 @@ export async function seedFeedSeen() {
       const photo = await reviewedNoPlateCar(4);
       if (owner && structure && (photo || event.poster)) {
         const createdAt = new Date(at - 5 * HOUR);
-        const id = seedPostId(`outing:${event.id}`);
+        const id = outingId;
         const inserted = await db
           .insert(t.feedPosts)
           .values({

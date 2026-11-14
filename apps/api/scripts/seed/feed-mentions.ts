@@ -17,7 +17,7 @@ import { isSeedAccount, isSeedPost, seedPostId } from "./seed-scope";
 
 const LYDIA_SLUG = "rassemblement-du-lydia";
 export const JULIE_CAPTION = "J'y serai avec la Clio : à samedi au pied du Lydia !";
-const MARC_CAPTION = "Compte privé : cette publication ne doit apparaître sur aucune fiche.";
+export const MARC_CAPTION = "Compte privé : cette publication ne doit apparaître sur aucune fiche.";
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({
