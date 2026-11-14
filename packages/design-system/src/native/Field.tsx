@@ -74,6 +74,8 @@ export type TextFieldProps = Shell &
   Omit<TextInputProps, "style" | "placeholderTextColor"> & {
     /** Mot de passe : l'œil pour afficher ou masquer la saisie. */
     revealable?: boolean;
+    /** Champ long : hauteur maximale de la saisie seule (elle défile au-delà) ; l'étiquette et le compteur restent hors du plafond. */
+    inputMaxHeight?: number;
   };
 
 /** Champ de saisie : étiquette étroite au-dessus, champ de 48 px, aide en dessous. */
@@ -84,6 +86,7 @@ export function TextField({
   tall,
   style,
   revealable,
+  inputMaxHeight,
   secureTextEntry,
   onFocus,
   onBlur,
@@ -121,7 +124,11 @@ export function TextField({
             styles.input,
             textStyles.body,
             multiline
-              ? [styles.multiline, { minHeight: tall ? MULTILINE_MIN + 8 : MULTILINE_MIN }]
+              ? [
+                  styles.multiline,
+                  { minHeight: tall ? MULTILINE_MIN + 8 : MULTILINE_MIN },
+                  inputMaxHeight !== undefined ? { maxHeight: inputMaxHeight } : null,
+                ]
               : { height: tall ? 56 : spacing.touch },
             {
               color: f.ink,

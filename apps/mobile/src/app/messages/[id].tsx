@@ -33,6 +33,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SheetBoundary } from "@/ui/Overlay";
 
+const INPUT_MAX_HEIGHT = tokens.spacing.touch * 3;
 const { space1, space2, space3, space4 } = tokens.spacing;
 
 type Pending = { clientId: string; body?: string; imageKey?: string; failed: boolean; error?: string };
@@ -420,6 +421,7 @@ export function ConversationScreen({
                 onChangeText={setDraft}
                 multiline
                 maxLength={MESSAGE_BODY_MAX}
+                inputMaxHeight={INPUT_MAX_HEIGHT}
                 style={styles.field}
                 testID="message-body"
               />
@@ -500,7 +502,8 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusMd,
   },
   composer: { paddingHorizontal: space4, paddingTop: space2, gap: space2 },
-  // Lot B3a : pas de hauteur maximale sur le champ entier (étiquette + saisie + compteur) : elle rognait le compteur « 0 / 2000 » sous « Envoyer ». La saisie plafonne déjà seule.
+  // Lot B3a : aucun plafond sur le champ entier (étiquette + saisie + compteur) : il rognait le compteur « 0 / 2000 » sous « Envoyer ».
+  // Le plafond est sur la saisie seule (`inputMaxHeight`), qui défile au-delà.
   field: { minHeight: 48 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: space2, justifyContent: "flex-end" },
   viewer: { flex: 1, alignItems: "center", justifyContent: "center" },
