@@ -79,6 +79,8 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   );
   release();
   await answered;
+  // Les missions arrivées, le refus « se chargent » ne reste plus affiché.
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect((await needsOf(damien, id)).map((n) => n.trade).sort()).toEqual(["food_truck", "photographer"]);
@@ -112,6 +114,7 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   await page.unroute(`**/api/events/${id}/needs`);
   await page.getByRole("button", { name: "Recharger les missions" }).click();
   await expect(page.getByTestId("wizard-needs-failed")).toHaveCount(0);
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect(await needsOf(damien, id)).toHaveLength(2);

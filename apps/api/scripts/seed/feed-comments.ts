@@ -3,10 +3,14 @@
 // aux commentaires coupés. Rejouable : rien n'est ajouté si la publication a déjà des commentaires. Les compteurs sont ceux
 // que l'API tiendrait (commentaires non supprimés, réponses comprises).
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { HOUR, now } from "./helpers";
+
+/** Les deux publications de Kenji_66 posées par `feed.ts` (même légende). */
+export const KENJI_RECENT_CAPTION = "Retour de la sortie du Roussillon Drift.";
+const OLDER_CAPTION = "Sur le plateau ce week-end.";
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
@@ -26,11 +30,17 @@ export async function seedFeedComments() {
     console.log("Commentaires du Fil : Kenji_66 absent, rien ajouté.");
     return;
   }
-  const posts = (
-    await db.select().from(t.feedPosts).where(eq(t.feedPosts.authorId, kenji.userId)).orderBy(t.feedPosts.createdAt)
-  ).filter((p) => !p.deletedAt);
-  const recent = posts.at(-1);
-  const older = posts.at(-2);
+  // Les publications du seed (légende du plan de `feed.ts`), jamais « la dernière » de Kenji_66 : une vraie publication n'est pas touchée.
+  const own = (caption: string) =>
+    db.query.feedPosts.findFirst({
+      where: and(
+        eq(t.feedPosts.authorId, kenji.userId),
+        eq(t.feedPosts.caption, caption),
+        isNull(t.feedPosts.deletedAt),
+      ),
+    });
+  const recent = await own(KENJI_RECENT_CAPTION);
+  const older = await own(OLDER_CAPTION);
   if (!recent) return;
   const [existing] = await db
     .select({ id: t.feedPostComments.id })

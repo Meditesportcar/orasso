@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { openCasquettes } from "@/features/casquettes/sheetStore";
 import { api } from "@/lib/api";
 import { mutationCount } from "@/lib/http";
+import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { homeOf, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useChannel } from "@/lib/realtime";
@@ -109,7 +110,8 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     () => ({
       persona: showPersona
         ? {
-            logoUrl: active.logoUrl,
+            // Adresse relative de l'API (`/api/files/…`) : sans l'hôte de l'API, la pastille restait un disque vide.
+            logoUrl: mediaSource(active.logoUrl)?.uri ?? null,
             label: active.label,
             // Les casquettes de page : le logo seul (le nom est dans la feuille) ; l'Administration garde son libellé.
             ...(isPage

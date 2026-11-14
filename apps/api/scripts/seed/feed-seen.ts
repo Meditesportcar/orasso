@@ -6,12 +6,13 @@
 //   organisatrice : « Pour ta sortie de samedi ».
 // Rejouable : les lignes existantes ne sont jamais doublées (clés uniques, légende repérée).
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
+import { SEED_PLAN_CAPTIONS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
 
@@ -39,6 +40,11 @@ export async function seedFeedSeen() {
         sql`${t.profiles.deletedAt} is null and ${t.profiles.bannedAt} is null and ${t.profiles.visibility} = 'public'`,
         sql`${t.feedPosts.authorId} <> ${damien.userId}`,
         sql`exists (select 1 from feed_post_photos ph where ph.post_id = ${t.feedPosts.id})`,
+        // Seulement les publications du seed (légendes du plan, journal du Lydia de Roues Libres 66) : jamais une publication réelle.
+        or(
+          inArray(t.feedPosts.caption, SEED_PLAN_CAPTIONS),
+          sql`(${t.feedPosts.structureId}, ${t.feedPosts.eventId}) in (select s.id, e.id from structures s, events e where s.slug = 'roues-libres-66' and e.slug = 'rassemblement-du-lydia')`,
+        ),
       ),
     )
     .orderBy(desc(t.feedPosts.createdAt));
