@@ -3,6 +3,7 @@
 // partenaires, le lien d'invitation (aux organisateurs de la structure). Rendu côté serveur.
 import { Button, Plate } from "@orasso/design-system/web";
 import {
+  EVENTS_CURSOR_PARAM,
   type EventCard,
   pagesLabels as L,
   type ProCard,
@@ -10,14 +11,13 @@ import {
   structureKindLabels,
 } from "@orasso/shared";
 
-import { useState } from "react";
 import { useLocation, useRevalidator } from "react-router";
 
-import { apiFetch } from "../../lib/api.client";
 import { EventTile } from "../EventTile";
 import { ProTile } from "../ProTile";
 import { ShareButtons } from "../ShareButtons";
 import { Stars } from "../Stars";
+import { useMoreEvents } from "./useMoreEvents";
 
 /** Une lecture qui a échoué : le message et « Réessayer » (relit la page), jamais une absence. */
 function ReadError({ text, testId }: { text: string; testId: string }) {
@@ -35,6 +35,8 @@ function ReadError({ text, testId }: { text: string; testId: string }) {
           disabled={revalidator.state !== "idle"}
           onClick={(event) => {
             event.preventDefault();
+            // Une relecture est déjà en cours : un deuxième clic ne la double pas.
+            if (revalidator.state !== "idle") return;
             void revalidator.revalidate();
           }}
           data-testid={`${testId}-retry`}
@@ -46,51 +48,12 @@ function ReadError({ text, testId }: { text: string; testId: string }) {
   );
 }
 
-const UPCOMING_PAGE = 50;
-const PAST_PAGE = 12;
-
-type More = { base: EventCard[] | null; extra: EventCard[]; next: string | null; failed: boolean; busy: boolean };
-
-/**
- * Les événements d'une liste (à venir ou passés) : la première page lue par le serveur, puis « Voir plus » au curseur
- * (au-delà des 50 à venir et des 12 passés). Après l'échec d'une page, « Réessayer » relit la suite, jamais une liste
- * fusionnée à moitié. Une nouvelle lecture de la page (« Réessayer » général) repart de ses données.
- */
-function useMoreEvents(
-  structureId: string,
-  scope: "upcoming" | "past",
-  first: EventCard[] | null,
-  firstNext: string | null,
-) {
-  const fresh: More = { base: first, extra: [], next: firstNext, failed: false, busy: false };
-  const [state, setState] = useState<More>(fresh);
-  const cur = state.base === first ? state : fresh;
-  async function more() {
-    setState({ ...cur, busy: true });
-    const limit = scope === "past" ? PAST_PAGE : UPCOMING_PAGE;
-    const res = await apiFetch<{ items: EventCard[]; nextCursor: string | null }>(
-      `/events?structureId=${encodeURIComponent(structureId)}&limit=${limit}${scope === "past" ? "&scope=past" : ""}&cursor=${encodeURIComponent(cur.next ?? "")}`,
-    );
-    if (!res.ok) {
-      setState({ ...cur, failed: true, busy: false });
-      return;
-    }
-    const known = new Set([...(first ?? []), ...cur.extra].map((e) => e.id));
-    setState({
-      ...cur,
-      extra: [...cur.extra, ...res.data.items.filter((e) => !known.has(e.id))],
-      next: res.data.nextCursor,
-      failed: false,
-      busy: false,
-    });
-  }
-  return {
-    items: first === null ? null : [...first, ...cur.extra],
-    next: cur.next,
-    failed: cur.failed,
-    busy: cur.busy,
-    more,
-  };
+/** Le lien de « Voir plus » sans JavaScript : la même page, lue à partir du curseur de la suite. */
+function moreHref(location: { pathname: string; search: string }, param: string, next: string | null): string {
+  const params = new URLSearchParams(location.search);
+  if (next) params.set(param, next);
+  const query = params.toString();
+  return `${location.pathname}${query ? `?${query}` : ""}`;
 }
 
 function MoreEvents({
@@ -100,6 +63,8 @@ function MoreEvents({
   onMore,
   testId,
   label,
+  errorText,
+  href,
 }: {
   next: string | null;
   failed: boolean;
@@ -107,21 +72,28 @@ function MoreEvents({
   onMore: () => void;
   testId: string;
   label: string;
+  errorText: string;
+  href: string;
 }) {
   if (next === null && !failed) return null;
   return (
     <div className="s-stack s-stack--tight">
       {failed ? (
         <p className="s-notice" role="alert" data-testid={`${testId}-error`}>
-          {L.eventsReadError}
+          {errorText}
         </p>
       ) : null}
       <div>
         <Button
           variant="secondary"
           icon={failed ? "undo" : "down"}
+          // Sans JavaScript, le lien ouvre la suite ; avec, le bouton la lit sans quitter la page.
+          href={href}
           disabled={busy}
-          onClick={onMore}
+          onClick={(event) => {
+            event.preventDefault();
+            onMore();
+          }}
           data-testid={failed ? `${testId}-retry` : testId}
         >
           {failed ? L.readRetry : label}
@@ -153,8 +125,16 @@ export function StructureEvents({
   inviteFailed: boolean;
   origin: string;
 }) {
-  const up = useMoreEvents(structure.id, "upcoming", firstUpcoming, upcomingNext);
-  const old = useMoreEvents(structure.id, "past", firstPast, pastNext);
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const up = useMoreEvents(
+    structure.id,
+    "upcoming",
+    firstUpcoming,
+    upcomingNext,
+    params.get(EVENTS_CURSOR_PARAM.upcoming),
+  );
+  const old = useMoreEvents(structure.id, "past", firstPast, pastNext, params.get(EVENTS_CURSOR_PARAM.past));
   const upcoming = up.items;
   const past = old.items;
   const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
@@ -184,6 +164,8 @@ export function StructureEvents({
           onMore={() => void up.more()}
           testId="structure-upcoming-more"
           label={L.eventsMore}
+          errorText={L.eventsReadError}
+          href={moreHref(location, EVENTS_CURSOR_PARAM.upcoming, up.next)}
         />
       </section>
 
@@ -211,6 +193,8 @@ export function StructureEvents({
             onMore={() => void old.more()}
             testId="structure-past-more"
             label={L.pastMore}
+            errorText={L.pastReadError}
+            href={moreHref(location, EVENTS_CURSOR_PARAM.past, old.next)}
           />
         </section>
       ) : null}

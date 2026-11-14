@@ -10,6 +10,7 @@ import {
   type AuthorPostsFilter,
   authorKeyOf,
   countFr,
+  EVENTS_CURSOR_PARAM,
   type EventCard,
   explicitPageFilter,
   pagesLabels as L,
@@ -27,6 +28,7 @@ import {
   type StructureOrganizer,
   type StructurePublic,
   staffRequestLabels,
+  structureEventsPath,
   structureKindLabels,
   type WithPageExtras,
 } from "@orasso/shared";
@@ -51,9 +53,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     request,
     `/structures/by-slug/${encodeURIComponent(slug)}`,
   );
+  // Sans JavaScript, « Voir plus » est un lien : la liste se lit alors à partir du curseur de l'adresse (lot B2b, tour 1).
+  const url = new URL(request.url);
+  const upStart = url.searchParams.get(EVENTS_CURSOR_PARAM.upcoming);
+  const pastStart = url.searchParams.get(EVENTS_CURSOR_PARAM.past);
   const [upcoming, past, me, partners] = await Promise.all([
-    api<Page<EventCard>>(request, `/events?structureId=${structure.id}&limit=50`),
-    api<Page<EventCard>>(request, `/events?structureId=${structure.id}&scope=past&limit=12`),
+    api<Page<EventCard>>(request, structureEventsPath(structure.id, "upcoming", 50, upStart)),
+    api<Page<EventCard>>(request, structureEventsPath(structure.id, "past", 12, pastStart)),
     getMe(request),
     api<ProCard[]>(request, `/structures/by-slug/${encodeURIComponent(slug)}/pros`),
   ]);
@@ -65,7 +71,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Devenir staff (lot 24) : où en est ma demande ou mon appartenance à cette structure.
   const mine = me?.memberships.find((m) => m.structureId === structure.id);
   // Lot R8g : l'onglet et le filtre se lisent dans l'adresse ; « Publications » s'ouvre par défaut quand la page en a.
-  const url = new URL(request.url);
   const session = Boolean(me);
   const tab = pageShownTab("structure", {
     raw: url.searchParams.get(PAGE_TAB_PARAM),
@@ -85,7 +90,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     staffState: (mine && mine.role === "staff" ? mine.status : null) as "active" | "invited" | "requested" | null,
     structure,
     // Le total des événements n'est dit que si les deux listes sont lues en entier.
-    eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
+    eventsComplete:
+      !upStart && !pastStart && upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
     staffSent: url.searchParams.get("staff") === "demande",
     // Une lecture qui échoue reste `null` : l'onglet dit la panne avec « Réessayer », jamais une liste vide (comme la Page du propriétaire).
     upcoming: upcoming.ok ? upcoming.data.items : null,

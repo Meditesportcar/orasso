@@ -28,6 +28,8 @@ let down: string[] = [];
 let forbidden: string[] = [];
 /** Les listes d'événements dont la page suivante existe : adresses (début) → curseur rendu. */
 let cursors: Record<string, string> = {};
+/** Les adresses lues par le chargeur (pour vérifier le curseur de départ). */
+let asked: string[] = [];
 
 vi.mock("../lib/api.server", () => {
   const answer = (path: string) => {
@@ -51,7 +53,10 @@ vi.mock("../lib/api.server", () => {
       personas: [],
       memberships: [{ structureSlug: "roues-libres-66", status: "active", role: "owner" }],
     }),
-    api: async (_r: Request, path: string) => answer(path),
+    api: async (_r: Request, path: string) => {
+      asked.push(path);
+      return answer(path);
+    },
     apiOrThrow: async (_r: Request, path: string) => {
       const res = answer(path);
       if (res.ok) return res.data;
@@ -89,6 +94,7 @@ beforeEach(() => {
   down = [];
   forbidden = [];
   cursors = {};
+  asked = [];
 });
 
 /** L'onglet « Événements » rendu comme le site le rend, avec ce que le chargeur a lu. */
@@ -180,5 +186,21 @@ describe("chargeur de la Page d'une structure", () => {
     const data = (await loadPage("?onglet=evenements")) as Record<string, unknown>;
     expect(data.upcomingNext).toBeNull();
     expect(data.pastNext).toBeNull();
+  });
+
+  it("sans JavaScript : « Voir plus » est un lien, et le chargeur lit la liste à partir du curseur de l'adresse", async () => {
+    cursors = { "/events?structureId=st-1&limit=50": "SUITE-A-VENIR" };
+    const data = (await loadPage("?onglet=evenements")) as Record<string, unknown>;
+    const html = await render(data as never);
+    expect(html).toMatch(/<a[^>]*href="[^"]*a-venir=SUITE-A-VENIR[^"]*"[^>]*data-testid="structure-upcoming-more"/);
+    expect(html).toContain("onglet=evenements");
+    // Le lien suivi : la liste est lue à partir de ce curseur, le total des événements reste inconnu.
+    const next = (await loadPage("?onglet=evenements&a-venir=SUITE-A-VENIR&passes=SUITE-PASSES")) as Record<
+      string,
+      unknown
+    >;
+    expect(asked).toContain("/events?structureId=st-1&limit=50&cursor=SUITE-A-VENIR");
+    expect(asked).toContain("/events?structureId=st-1&scope=past&limit=12&cursor=SUITE-PASSES");
+    expect(next.eventsComplete).toBe(false);
   });
 });
