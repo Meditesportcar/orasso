@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
-import { apiOnly, ownerMarkers, watchOwnerLeak } from "./ownerLeak";
+import { apiOnly, type ContextLike, ownerMarkers, watchOwnerLeakViaRoutes } from "./ownerLeak";
 import { RELAIS } from "./relais";
 
 // Lot R9i, côté appli (version web de recette, `APP_URL`) : la conversation de page d'un média. Kenji_66 voit « Sud Cars » (ligne,
@@ -22,7 +22,9 @@ let ownerIds: string[] = [];
 test.beforeAll(async () => {
   ownerIds = await ownerMarkers();
 });
-const watchApi = (page: Page) => watchOwnerLeak(page, { markers: ownerIds, match: apiOnly });
+// Les réponses sont lues par le contrôle lui-même (`route.fetch`) : une partie des requêtes de l'appli part d'un worker, dont CDP ne livre pas les corps.
+const watchApi = (page: Page) =>
+  watchOwnerLeakViaRoutes(page.context() as unknown as ContextLike, { markers: ownerIds, match: apiOnly });
 
 type Theme = "beton" | "sable";
 
@@ -65,7 +67,7 @@ for (const theme of ["beton", "sable"] as const) {
   test(`conversation de page, côté personne puis côté titulaire (${theme})`, async ({ browser }) => {
     test.setTimeout(300_000);
     const { ctx, page } = await openApp(browser, theme, "kenji@orasso.local");
-    const api = watchApi(page);
+    const api = await watchApi(page);
     await page.goto("/messages");
     const row = page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" });
     await expect(row).toBeVisible({ timeout: 30_000 });
@@ -119,7 +121,7 @@ for (const theme of ["beton", "sable"] as const) {
 
     // Retour chez Kenji : la réponse est signée « Sud Cars », le titre est celui de la page.
     const back = await openApp(browser, theme, "kenji@orasso.local");
-    const backApi = watchApi(back.page);
+    const backApi = await watchApi(back.page);
     await back.page.goto("/messages");
     await back.page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
     await expect(back.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
@@ -140,7 +142,7 @@ for (const theme of ["beton", "sable"] as const) {
     const opened = await apiCall<{ id: string }>(damienCookie, "POST", `/media/${detail.data.page.id}/conversation`);
     expect(opened.status).toBeLessThan(300);
     const damien = await openApp(browser, theme, "damien@orasso.local");
-    const damienApi = watchApi(damien.page);
+    const damienApi = await watchApi(damien.page);
     await damien.page.goto(`/messages/${opened.data.id}`);
     await expect(damien.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
       timeout: 30_000,
@@ -180,7 +182,7 @@ for (const theme of ["beton", "sable"] as const) {
       const albumId = tags.data.items[0]?.albumId as string;
       expect(albumId).toBeTruthy();
       const { ctx, page } = await openApp(browser, theme, "kenji@orasso.local", scale);
-      const api = watchApi(page);
+      const api = await watchApi(page);
       const tag = scale === 1 ? "" : "-x1_3";
       await page.goto(`/album/${albumId}/mes-photos`);
       await afterOpening(page);

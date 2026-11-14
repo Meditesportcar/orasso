@@ -71,6 +71,10 @@ export function watchOwnerLeak(
       }),
     );
   });
+  return checker(reads, opts.markers);
+}
+
+function checker(reads: Promise<Read>[], markers: string[]) {
   return {
     /** Attend toutes les lectures, puis contrôle : aucune illisible, au moins un corps non vide lu, aucun marqueur du titulaire. */
     async done() {
@@ -81,11 +85,69 @@ export function watchOwnerLeak(
       ).toEqual([]);
       const bodies = all.filter((r): r is Read & { text: string } => r.text !== null);
       expect(bodies.filter((r) => r.text.length > 0).length, "aucun corps de réponse lu").toBeGreaterThan(0);
-      const lower = opts.markers.map((m) => m.toLowerCase());
+      const lower = markers.map((m) => m.toLowerCase());
       expect(
         bodies.filter((r) => lower.some((m) => r.text.toLowerCase().includes(m))).map((r) => r.url),
         "réponses qui portent le pseudo, l'e-mail ou l'identifiant du titulaire",
       ).toEqual([]);
     },
   };
+}
+
+export type FetchedLike = { status(): number; headers(): Record<string, string>; text(): Promise<string> };
+export type RouteLike = {
+  request(): { url(): string; headers(): Record<string, string> };
+  fetch(options?: { timeout?: number }): Promise<FetchedLike>;
+  fulfill(options: { response: FetchedLike }): Promise<void>;
+  fallback(): Promise<void>;
+  abort(): Promise<void>;
+};
+export type ContextLike = {
+  route(match: (url: URL) => boolean, handler: (route: RouteLike) => Promise<void>): Promise<unknown>;
+};
+
+/**
+ * Même contrôle, pour une appli dont une partie des requêtes part d'un worker (appli web : couche hors ligne) : CDP ne peut pas lire le corps
+ * de ces réponses (`response.text()` échoue), le contrôle les lit donc lui-même (`route.fetch`), puis les rend telles quelles à la page.
+ * Mêmes règles : une réponse sans corps ou un flux passe sans lecture ; tout autre corps doit être lu, sinon le contrôle échoue.
+ */
+export async function watchOwnerLeakViaRoutes(
+  context: ContextLike,
+  opts: { markers: string[]; match?: (url: string) => boolean; readTimeoutMs?: number },
+) {
+  const match = opts.match ?? apiOnly;
+  const timeoutMs = opts.readTimeoutMs ?? 15_000;
+  const reads: Promise<Read>[] = [];
+  await context.route(
+    (u) => match(u.toString()),
+    async (route) => {
+      const url = route.request().url();
+      if (route.request().headers().accept?.includes("event-stream")) return route.fallback();
+      let resolveRead: (r: Read) => void = () => undefined;
+      reads.push(new Promise<Read>((resolve) => (resolveRead = resolve)));
+      let fetched: FetchedLike;
+      try {
+        fetched = await route.fetch({ timeout: timeoutMs });
+      } catch (e) {
+        resolveRead({ url, text: null, problem: `requête impossible (${e instanceof Error ? e.message : String(e)})` });
+        return route.abort().catch(() => undefined);
+      }
+      if (fetched.headers()["content-type"]?.includes("event-stream") || hasNoBody(fetched.status())) {
+        resolveRead({ url, text: "", problem: null });
+      } else {
+        try {
+          resolveRead({ url, text: await fetched.text(), problem: null });
+        } catch (e) {
+          resolveRead({
+            url,
+            text: null,
+            problem: `lecture impossible (${e instanceof Error ? e.message : String(e)})`,
+          });
+        }
+      }
+      // La page reçoit la réponse telle quelle ; si elle est déjà partie, il n'y a plus rien à lui rendre.
+      await route.fulfill({ response: fetched }).catch(() => undefined);
+    },
+  );
+  return checker(reads, opts.markers);
 }
