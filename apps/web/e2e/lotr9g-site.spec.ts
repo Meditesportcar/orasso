@@ -236,19 +236,32 @@ test("une page suivante partie avant une actualisation est ignorée (51 albums, 
       await loginInBrowser(page, DAMIEN, undefined, `/e/${SLUG}`);
       await page.waitForLoadState("networkidle");
       await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
-      // La page suivante est retenue 3 s (mise en scène) ; l'actualisation (retirer « officiel ») part pendant ce temps.
+      // La page suivante est retenue (mise en scène) jusqu'à ce que l'actualisation soit **rendue** ; alors seulement on la relâche.
+      let releaseStale: () => void = () => {};
+      const staleGate = new Promise<void>((resolve) => {
+        releaseStale = resolve;
+      });
       await page.route("**/api/public/events/by-slug/*/albums?*cursor=*", async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        await staleGate;
         await route.continue();
       });
-      const late = page.waitForResponse((r) => /albums\?.*cursor=/.test(r.url()), { timeout: 30_000 });
+      const stale = page.waitForResponse((r) => /albums?.*cursor=/.test(r.url()), { timeout: 30_000 });
       await page.getByTestId("event-photos-more-albums").click();
       await page.getByTestId("event-photos-more").first().click();
       await page.getByTestId("event-photos-official-toggle").click();
       await expect(page.getByTestId("event-photos-notice")).toHaveText("« Officiel » retiré");
-      await late;
-      // La réponse ancienne est arrivée : elle n'a pas réinjecté son album dans la liste actualisée.
+      // L'actualisation est rendue : l'album n'est plus officiel dans la liste relue.
+      await expect(page.getByTestId("event-photos-official")).toHaveCount(0);
       await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
+      releaseStale();
+      const response = await stale;
+      await response.finished();
+      // Le navigateur a rendu la réponse ancienne (deux images plus tard) : elle n'a pas réinjecté son album dans la liste actualisée.
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
+      );
+      await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
+      await expect(page.getByTestId("event-photos-more-albums")).toBeEnabled();
       await page.unroute("**/api/public/events/by-slug/*/albums?*cursor=*");
       await page.getByTestId("event-photos-more").first().click();
       await page.getByTestId("event-photos-official-toggle").click();

@@ -88,6 +88,8 @@ export function PhotosSection({
     const again = () => {
       tries += 1;
       if (tries >= REVEAL_TRIES) {
+        // On abandonne, mais on défile à la dernière position mesurée (la page bougeait encore : mieux vaut près de la section que loin).
+        if (!Number.isNaN(last)) scrollRef.current?.scrollTo({ y: last, animated: false });
         onRevealed?.();
         return;
       }
@@ -105,7 +107,7 @@ export function PhotosSection({
           if (cancelled) return;
           stable = Math.abs(y - last) < 1 ? stable + 1 : 0;
           last = y;
-          if (stable >= 2 || tries >= REVEAL_TRIES) {
+          if (stable >= 2) {
             page.scrollTo({ y, animated: false });
             onRevealed?.();
             return;
@@ -203,7 +205,7 @@ export function PhotosSection({
           </SmButton>
         </Plate>
       ))}
-      {list.error ? (
+      {list.error && list.error.status !== 404 ? (
         // Des albums déjà lus restent affichés : l'actualisation a échoué, on le dit.
         <View testID="event-photos-refresh-error">
           <LoadError message={L.refreshFailed} onRetry={() => void list.reload()} />

@@ -49,9 +49,9 @@ export function PhotosSection({
   const [more, setMore] = useState<{ items: AlbumSummary[]; cursor: string | null } | null>(null);
   const [moreFailed, setMoreFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: la liste relue repart de la première page.
   // Génération de la liste : une page suivante partie avant une actualisation est ignorée (jamais d'album retiré réinjecté).
   const generation = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la liste relue repart de la première page.
   useEffect(() => {
     generation.current += 1;
     setMore(null);

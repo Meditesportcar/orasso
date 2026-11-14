@@ -47,6 +47,17 @@ async function open(browser: Browser, email: string, opts: { theme?: string; sca
   return { ctx, page };
 }
 
+/** Pas d'ancrage du défilement du navigateur (le natif n'en a pas) : un bloc qui arrive au-dessus repousse vraiment la section. */
+async function withoutScrollAnchoring(page: Page) {
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = "* { overflow-anchor: none !important; }";
+      document.head.append(style);
+    });
+  });
+}
+
 async function go(page: Page, path: string) {
   await page.goto(path);
   await afterOpening(page);
@@ -431,7 +442,37 @@ test("lien profond « Photos » : le plateau, lu en retard, repousse la section 
 }) => {
   const { ctx, page } = await open(browser, DAMIEN);
   try {
+    await withoutScrollAnchoring(page);
     // La réponse du plateau est retenue 2,5 s (mise en scène), puis la section doit être posée en haut une fois le plateau affiché.
+    await page.route(`**/api/events/*/lineup*`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      await route.continue();
+    });
+    await go(page, `/e/${SLUG}?section=photos`);
+    await expect(page.getByTestId("lineup-block")).toBeVisible({ timeout: 30_000 });
+    const section = page.getByTestId("event-photos");
+    await expect
+      .poll(async () => (await section.boundingBox())?.y ?? Number.NaN, { timeout: 30_000 })
+      .toBeLessThan(160);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("lien profond « Photos » : fiche retardée puis plateau retardé ; l'attente du plateau part de la lecture de l'événement", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    await withoutScrollAnchoring(page);
+    // La fiche arrive après 3 s, puis le plateau après 2,5 s de plus (mises en scène) : plus de 4 s après l'ouverture de l'écran.
+    await page.route(
+      (url) => url.pathname.endsWith(`/api/events/by-slug/${SLUG}`),
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        await route.continue();
+      },
+    );
     await page.route(`**/api/events/*/lineup*`, async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 2_500));
       await route.continue();
