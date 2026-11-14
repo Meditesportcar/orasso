@@ -56,6 +56,25 @@ function decodeSeatsCursor(cursor: string | undefined): SeatsCursor | null {
   }
 }
 
+/**
+ * Lot B2b, tour 1 : curseur du tri par date (le dernier événement vu : son début et son id). Un décalage numérique sautait
+ * un événement quand un autre de la première page se terminait ou était annulé avant « Voir plus ». L'ancien curseur numérique
+ * reste accepté (repli sur le décalage) : l'APK en ligne le renvoie tel qu'il l'a reçu.
+ */
+type DateCursor = { startsAt: string; id: string };
+const encodeDateCursor = (c: DateCursor): string => Buffer.from(JSON.stringify(c)).toString("base64url");
+function decodeDateCursor(cursor: string | undefined): DateCursor | null {
+  if (!cursor) return null;
+  try {
+    const c = JSON.parse(Buffer.from(cursor, "base64url").toString()) as Partial<DateCursor> | null;
+    if (!c || typeof c !== "object" || typeof c.id !== "string" || !UUID.test(c.id)) return null;
+    if (typeof c.startsAt !== "string" || Number.isNaN(Date.parse(c.startsAt))) return null;
+    return { startsAt: c.startsAt, id: c.id };
+  } catch {
+    return null;
+  }
+}
+
 /** Places restantes de plusieurs événements en une requête (capacité moins retenus et offres en cours). */
 async function remainingMany(rows: EventRow[]): Promise<Map<string, number | null>> {
   const out = new Map<string, number | null>();
@@ -223,6 +242,16 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
         or (${events.startsAt} = ${after.startsAt}::timestamptz and ${events.id} > ${after.id}::uuid))))`,
     );
   }
+  // Tri par date : curseur sur (début, id), stable quand la liste change entre deux pages.
+  const byDate = sort === "date";
+  const dateAfter = byDate ? decodeDateCursor(q.cursor) : null;
+  if (dateAfter) {
+    const cmp = upcoming ? sql`>` : sql`<`;
+    filters.push(
+      sql`(${events.startsAt} ${cmp} ${dateAfter.startsAt}::timestamptz
+        or (${events.startsAt} = ${dateAfter.startsAt}::timestamptz and ${events.id} > ${dateAfter.id}::uuid))`,
+    );
+  }
   const order: SQL[] =
     sort === "recent"
       ? [sql`${events.publishedAt} desc nulls last`, asc(events.startsAt), asc(events.id)]
@@ -236,7 +265,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
               ? [asc(events.startsAt), asc(events.id)]
               : [desc(events.startsAt), asc(events.id)];
 
-  const offset = sort === "seats" ? 0 : decodeOffset(q.cursor);
+  const offset = sort === "seats" || dateAfter ? 0 : decodeOffset(q.cursor);
   const rows = await db
     .select({
       e: events,
@@ -276,6 +305,8 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
       ? null
       : sort === "seats"
         ? encodeSeatsCursor({ seats: Number(last.seats), startsAt: last.e.startsAt.toISOString(), id: last.e.id })
-        : encodeOffset(offset + q.limit);
+        : byDate
+          ? encodeDateCursor({ startsAt: last.e.startsAt.toISOString(), id: last.e.id })
+          : encodeOffset(offset + q.limit);
   return total === undefined ? { items, nextCursor } : { items, nextCursor, total };
 }

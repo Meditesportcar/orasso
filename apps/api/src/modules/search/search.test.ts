@@ -21,6 +21,7 @@ import { db, pool } from "../../db/client";
 import {
   applications,
   eventDays,
+  events,
   profileInterests,
   profiles,
   proProfiles,
@@ -375,6 +376,80 @@ describe("tris de l'Explorer : GET /events?sort=recent | seats", () => {
     expect(third.json.nextCursor).toBeNull();
     // Un curseur illisible repart du début (B est maintenant dernier).
     expect(ids((await get(null, "/events?sort=seats&limit=2&cursor=bidon")).json.items)).toEqual([a.slug, c.slug]);
+  });
+});
+
+// Lot B2b, tour 1 (relecture Codex) : le curseur du tri par date repose sur (début, id), pas sur un décalage.
+describe("pagination par date : GET /events?structureId=…", () => {
+  const offsetCursor = (n: number) => Buffer.from(String(n)).toString("base64url");
+
+  it("à venir : un événement qui disparaît entre deux pages ne fait rien sauter", async () => {
+    const owner = await person("Orga_Date");
+    const s = await createStructure(owner.id);
+    const t0 = now().getTime();
+    const made = [];
+    // Deux événements au même début : l'id les départage.
+    for (const [i, days] of [1, 2, 3, 3, 4, 5, 6].entries()) {
+      made.push(await createEvent(s.id, { title: `E${i}`, startsAt: new Date(t0 + days * DAY) }));
+    }
+    const order = [...made]
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || (a.id < b.id ? -1 : 1))
+      .map((e) => e.slug);
+    for (const mode of MODES) {
+      const url = `/events?structureId=${s.id}&limit=3`;
+      const first = await get(null, url, mode);
+      expect(ids(first.json.items)).toEqual(order.slice(0, 3));
+      expect(first.json.nextCursor).toBeTruthy();
+      // Le premier de la page s'annule (il quitte la liste) avant « Voir plus ».
+      await db.update(events).set({ status: "cancelled" }).where(eq(events.slug, order[0]!));
+      const second = await get(null, `${url}&cursor=${encodeURIComponent(first.json.nextCursor)}`, mode);
+      expect(ids(second.json.items)).toEqual(order.slice(3, 6));
+      const third = await get(null, `${url}&cursor=${encodeURIComponent(second.json.nextCursor)}`, mode);
+      expect(ids(third.json.items)).toEqual(order.slice(6));
+      expect(third.json.nextCursor).toBeNull();
+      await db.update(events).set({ status: "published" }).where(eq(events.slug, order[0]!));
+    }
+  });
+
+  it("passés : même règle, du plus récent au plus ancien", async () => {
+    const owner = await person("Orga_Date_Passe");
+    const s = await createStructure(owner.id);
+    const t0 = now().getTime();
+    const made = [];
+    for (const days of [1, 2, 3, 4, 5]) {
+      made.push(await createEvent(s.id, { title: `P${days}`, startsAt: new Date(t0 - days * DAY) }));
+    }
+    const order = made.map((e) => e.slug);
+    const url = `/events?structureId=${s.id}&scope=past&limit=2`;
+    const first = await get(null, url);
+    expect(ids(first.json.items)).toEqual(order.slice(0, 2));
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.slug, order[0]!));
+    const second = await get(null, `${url}&cursor=${encodeURIComponent(first.json.nextCursor)}`);
+    expect(ids(second.json.items)).toEqual(order.slice(2, 4));
+    const third = await get(null, `${url}&cursor=${encodeURIComponent(second.json.nextCursor)}`);
+    expect(ids(third.json.items)).toEqual(order.slice(4));
+    expect(third.json.nextCursor).toBeNull();
+  });
+
+  it("l'ancien curseur numérique (APK en ligne) reste accepté, sans 400", async () => {
+    const owner = await person("Orga_Date_Ancien");
+    const s = await createStructure(owner.id);
+    const t0 = now().getTime();
+    const made = [];
+    for (const days of [1, 2, 3, 4, 5]) made.push(await createEvent(s.id, { startsAt: new Date(t0 + days * DAY) }));
+    const order = made.map((e) => e.slug);
+    const res = await get(null, `/events?structureId=${s.id}&limit=2&cursor=${offsetCursor(2)}`);
+    expect(res.status).toBe(200);
+    expect(ids(res.json.items)).toEqual(order.slice(2, 4));
+    // La page suivante est servie au nouveau curseur.
+    const next = await get(
+      null,
+      `/events?structureId=${s.id}&limit=2&cursor=${encodeURIComponent(res.json.nextCursor)}`,
+    );
+    expect(ids(next.json.items)).toEqual(order.slice(4));
+    const odd = await get(null, `/events?structureId=${s.id}&limit=2&cursor=bidon`);
+    expect(odd.status).toBe(200);
+    expect(ids(odd.json.items)).toEqual(order.slice(0, 2));
   });
 });
 
