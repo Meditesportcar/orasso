@@ -19,7 +19,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, View } from "react-native";
-
+import { ContactMediaButton, useContactMedia } from "@/features/messages/ContactMediaButton";
 import { openReport } from "@/features/ReportSheet";
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
@@ -53,6 +53,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const contact = useContactMedia(v?.media.key ?? "", setError);
+  const cancelContact = useRef(contact.cancel);
+  cancelContact.current = contact.cancel;
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   // Les identifications que je viens de retirer disparaissent tout de suite, **rangées par `tagId`** : une photo peut porter deux
@@ -76,6 +79,8 @@ export function MyPhotosScreen({ id }: { id: string }) {
       return () => {
         setFocused(false);
         saveGate.current.invalidate();
+        // « Contacter » en route : sa réponse tardive n'ouvre rien par-dessus l'écran où l'on est parti.
+        cancelContact.current();
       };
     }, []),
   );
@@ -213,6 +218,10 @@ export function MyPhotosScreen({ id }: { id: string }) {
             onClose={() => setSheet(null)}
             onRemove={(p) => void remove(p)}
             onReport={report}
+            onContact={() => {
+              setSheet(null);
+              void contact.open();
+            }}
           />
           <StorySheet
             photo={story}
@@ -250,6 +259,8 @@ export function MyPhotosScreen({ id }: { id: string }) {
                 {headline}
               </Text>
             </View>
+            {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
+            {photos.length > 0 ? <ContactMediaButton busy={contact.busy} onPress={() => void contact.open()} /> : null}
           </View>
           {note ? <Notice testID="my-photos-note">{note}</Notice> : null}
           {error ? (

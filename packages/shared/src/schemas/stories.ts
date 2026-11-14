@@ -167,6 +167,8 @@ export type StoryCreated = {
   skipped: { kind: StoryTagKind | "event" | "vehicle"; id: string; reason: string }[];
   /** Vrai quand c'est une reprise : la story existait déjà (réponse perdue), sans les dernières modifications. */
   replayed?: boolean;
+  /** Le public réel de la story, rendu à une reprise (celui du 1er envoi, pas celui du dernier essai). */
+  audience?: StoryAudience;
 };
 
 export type StoryTagView = {

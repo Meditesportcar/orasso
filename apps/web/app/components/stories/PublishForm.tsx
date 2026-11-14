@@ -18,11 +18,14 @@ import {
   feedPublishLabels,
   fillFrame,
   fitDefault,
+  forgetSendKey,
   frameState,
   isStoryRatio,
   storyPublishLabels as L,
   limitFrame,
+  mayRenewSendKey,
   moveFrame,
+  newSendUncertainty,
   noCommercialDraft,
   type PeopleSearchPage,
   type PlateRect,
@@ -38,6 +41,7 @@ import {
   type StoryTagPick,
   storyVideoLabels as SV,
   sendIfAlive,
+  settleSendAttempt,
   storyAudienceOptions,
   storyBody,
   storyEffectiveVisibility,
@@ -168,6 +172,9 @@ function uploadWithProgress(
   });
 }
 
+/** Délai du POST de publication : sans réponse, l'issue est « incertaine » (la story est peut-être publiée), jamais une attente sans fin. */
+export const POST_TIMEOUT_MS = 20_000;
+
 const PERSON: StoryAuthor = { persona: "fan" };
 
 export function PublishForm({
@@ -191,11 +198,13 @@ export function PublishForm({
   const [maybePosted, setMaybePosted] = useState(false);
   // Un envoi antérieur est parti sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être ; un refus ultérieur (4xx, y
   // compris 409 `account_changed`) ne le prouve pas, l'incertitude reste jusqu'à une réponse positive.
-  const uncertainBefore = useRef(false);
+  // La clé d'envoi suit la même incertitude (`sendKey.ts`) : gardée tant qu'une tentative antérieure peut encore aboutir.
+  const uncertainBefore = useRef(newSendUncertainty());
   const settlePost = (res: { ok: boolean; status: number }) => {
-    if (res.ok) return;
-    if (res.status === 0 || res.status >= 500) uncertainBefore.current = true;
-    else if (res.status >= 400 && !uncertainBefore.current) setMaybePosted(false);
+    if (res.ok) return settleSendAttempt(uncertainBefore.current, res);
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
+    settleSendAttempt(uncertainBefore.current, res);
+    if (renewable) setMaybePosted(false);
   };
   useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
@@ -299,6 +308,7 @@ export function PublishForm({
       setClip(null);
       clipKeys.current = null;
       uploaded.current = null;
+      forgetSendKey(uncertainBefore.current);
       setPhoto(next);
       setFrame(fitDefault(next.width, next.height));
       setRects([]);
@@ -325,6 +335,7 @@ export function PublishForm({
       setPhoto(null);
       uploaded.current = null;
       clipKeys.current = null;
+      forgetSendKey(uncertainBefore.current);
       setClip(next);
       setRects([]);
       setNoPlate(false);
@@ -423,7 +434,11 @@ export function PublishForm({
       async () => {
         setMaybePosted(true);
         const post = () =>
-          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
+          apiFetch<StoryCreated>("/me/stories", {
+            method: "POST",
+            json: { ...body, expectedUserId: userId },
+            timeoutMs: POST_TIMEOUT_MS,
+          });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code === "validation_error") return post();
         return first;
@@ -435,14 +450,19 @@ export function PublishForm({
     setProgress(null);
     if (res.ok) {
       clipKeys.current = null;
+      settlePost(res);
       return setDone(res.data);
     }
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
     settlePost(res);
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
     if (res.error.code === "account_changed") return setSessionStale(true);
+    // Aucune réponse (réseau perdu ou délai) : la requête est peut-être arrivée, la story existe peut-être : pas un échec certain.
+    if (res.status === 0) return setError(L.publishUncertain);
     if (res.status === 429) return setError(L.tooManyRequests);
-    if (res.status >= 400 && res.status < 500) clipKeys.current = null;
+    // Un refus net : tout repart, sauf si une tentative antérieure reste incertaine (elle peut aboutir : même clé).
+    if (renewable) clipKeys.current = null;
     setError(res.error.message);
   }
 
@@ -489,7 +509,11 @@ export function PublishForm({
       async () => {
         setMaybePosted(true);
         const post = () =>
-          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
+          apiFetch<StoryCreated>("/me/stories", {
+            method: "POST",
+            json: { ...body, expectedUserId: userId },
+            timeoutMs: POST_TIMEOUT_MS,
+          });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code !== "plate_decision_required") return post();
         return first;
@@ -501,15 +525,20 @@ export function PublishForm({
     setProgress(null);
     if (res.ok) {
       uploaded.current = null;
+      settlePost(res);
       return setDone(res.data);
     }
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
     settlePost(res);
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
     if (res.error.code === "account_changed") return setSessionStale(true);
+    // Aucune réponse (réseau perdu ou délai) : la requête est peut-être arrivée, la story existe peut-être : pas un échec certain.
+    if (res.status === 0) return setError(L.publishUncertain);
     if (res.status === 429) return setError(L.tooManyRequests);
-    // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
-    if (res.status === 400) uploaded.current = null;
+    // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart, sauf si une tentative antérieure reste
+    // incertaine (elle peut encore aboutir : la même clé la retrouve, une autre créerait une 2e story).
+    if (res.status === 400 && renewable) uploaded.current = null;
     setError(res.error.message);
   }
 
@@ -546,7 +575,9 @@ export function PublishForm({
         <FicheBar title={L.done} back={back} />
         <div className="story-done">
           <p className="o-t-body">
-            {clip ? SV.doneText(L.doneAudience[audience]) : L.doneText(L.doneAudience[audience])}
+            {clip
+              ? SV.doneText(L.doneAudience[done.audience ?? audience])
+              : L.doneText(L.doneAudience[done.audience ?? audience])}
           </p>
           {done.replayed ? (
             <p className="o-t-caption">{L.doneReplayed}</p>

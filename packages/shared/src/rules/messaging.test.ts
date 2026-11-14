@@ -6,8 +6,10 @@ import {
   isAfter,
   isReadBy,
   MESSAGE_PUSH_INTERVAL_MS,
+  mediaKey,
   messagePreview,
   organizerKey,
+  parseMediaKey,
   shorten,
   shouldPushMessage,
 } from "./messaging";
@@ -19,6 +21,27 @@ describe("messagerie : règles pures", () => {
     expect(directKey("b", "a")).toBe("a:b");
     expect(directKey("a", "b")).toBe("a:b");
     expect(organizerKey("s1", "u1")).toBe("structure:s1:u1");
+  });
+
+  it("clé d'une conversation de page (lot R9i) : relue sans perte, rien d'autre n'en est une", () => {
+    const media = "0b6f3f6a-1c2d-4e8f-9a0b-1c2d3e4f5a6b";
+    expect(mediaKey(media, "u1")).toBe(`media:${media}:u1`);
+    expect(parseMediaKey(mediaKey(media, "u1"))).toEqual({ mediaId: media, userId: "u1" });
+    // Un identifiant de compte qui contiendrait « : » reste entier (découpe sur le premier « : » après l'identifiant de page).
+    expect(parseMediaKey(mediaKey(media, "a:b"))).toEqual({ mediaId: media, userId: "a:b" });
+    for (const other of [
+      organizerKey("s1", "u1"),
+      directKey("a", "b"),
+      "media:",
+      "media:x",
+      "media:x:",
+      "media::u",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(parseMediaKey(other)).toBeNull();
+    }
   });
 
   it("aperçu : texte raccourci, photo, message supprimé", () => {

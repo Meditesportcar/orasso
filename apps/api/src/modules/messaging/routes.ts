@@ -42,6 +42,12 @@ export const messagingRoutes = new Hono<AppEnv>()
     const result = await messagingService.openWithStructure(v, uuidParam(c, "id"));
     return c.json(result, result.created ? 201 : 200);
   })
+  .post("/media/:id/conversation", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("conversationOpen", v.user.id);
+    const result = await messagingService.openWithMedia(v, uuidParam(c, "id"));
+    return c.json(result, result.created ? 201 : 200);
+  })
   .post("/structures/:id/conversations/with/:userId", async (c) => {
     const v = await requireUser(c);
     rateLimit("conversationOpen", v.user.id);

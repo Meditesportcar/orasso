@@ -369,12 +369,19 @@ export const storiesService = {
     const id = storyIdFor(v.user.id, sendKey);
     const replay = async (): Promise<StoryCreated | null> => {
       const [done] = await db
-        .select({ status: stories.status, expiresAt: stories.expiresAt })
+        .select({ status: stories.status, expiresAt: stories.expiresAt, audience: stories.audience })
         .from(stories)
         .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id)));
       // `skipped` n'est pas relu : il dépendait des réglages du premier envoi, que rien ne garde (écart accepté, journal).
       return done
-        ? { id, status: done.status, expiresAt: done.expiresAt.toISOString(), skipped: [], replayed: true }
+        ? {
+            id,
+            status: done.status,
+            expiresAt: done.expiresAt.toISOString(),
+            skipped: [],
+            replayed: true,
+            audience: done.audience,
+          }
         : null;
     };
     const again = await replay();
