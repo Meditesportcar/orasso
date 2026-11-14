@@ -2,6 +2,17 @@
 
 À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 14/11/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
+## État au 14/11/2026, 21 h : graine de démo sûre et assistant d'événement « clic mis en attente » en ligne
+
+- **En ligne sur dev.orasso.fr** : `main` = **`4a3b9c04`** (= `vague-r8`, poussé, déployé le 14/11 vers 20 h 55, `/api/health` ok). Aucune migration. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261114-194846.dump`, 7,4 Mo). Graine jouée jusqu'au bout sur la base existante sans rien ajouter (aucun doublon). Disque du VPS : 49 Go libres sur 99.
+- **APK** : `Orasso APK/Orasso-2026-11-14-4a3b9c04-R9b.apk` sur le Drive (236 Mo, signature habituelle). Essayée sur le Xiaomi (Kenji_66) : Accueil, Fil, aucun plantage ni erreur JavaScript. **Installer cette APK** (l'assistant d'événement de l'appli a changé).
+- **Contenu** (relu par Opus et Codex ; détail dans `docs/JOURNAL-DES-CHOIX.md`) :
+  - **R9-fix, tours 3 à 7** : la graine de démo n'agit plus que sur ses propres objets (identifiants fixes, preuve d'origine : slug, structure et créateur de la graine) et n'écrit qu'au nom de comptes de démo actifs ; la démo du Lydia survit à ses renouvellements (La Brasa, Julie, Marc, épingle) ; le renouvellement est contrôlé avant toute suppression ; plus aucun plantage. Test `apps/api/scripts/seed/rejeu.test.ts` (15 cas).
+  - **R9-assistant** (décision B de Damien) : dans l'assistant de création ou de modification d'un événement (site et appli), un clic donné pendant le chargement des missions est gardé et part à leur arrivée ; pendant l'attente l'étape est figée avec « Annuler l'attente », toute sortie annule, une vraie modification annule et le dit ; jamais d'avancée ni d'enregistrement sans les missions.
+- **À revoir avec Damien** (journal des choix) : sur la base du dev, au premier renouvellement du Lydia (après le 15/11), 5 à 7 anciennes publications de démo restent une fois en double dans le Fil (leur origine ne se prouve pas, la graine n'y touche pas) ; 3 annonces reprises orphelines par renouvellement (préexistant).
+- **Petites dettes** : réserve `lots/b3-reserve.md` du relais (titre coupé à 384 px ×1,3 en premier ; mineurs de R9-fix et de R9-assistant ; affiche du « Salon de printemps » en tête du Fil avec une zone photo vide, à regarder).
+- **Prochaine étape** : petit lot tiré de `b3-reserve.md`, en commençant par le titre d'événement coupé en plein mot sur le téléphone de Damien.
+
 ## État au 14/11/2026 : vague R8 + R9 entière en ligne (livraison 3 terminée)
 
 - **En ligne sur dev.orasso.fr** : `main` = **`cbcf7923`** (= `vague-r8`, poussé, déployé le 14/11 vers 17 h 50, `/api/health` ok). **6 migrations appliquées, `0089` à `0094`** (albums des médias avec reprise des anciennes galeries, activité de structure, identifications sur les photos, index des candidatures par casquette, crédit d'une photo reprise dans le journal, conversations de page d'un média) : 95 migrations en tout. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261114-164202.dump`, 7,4 Mo). Graine jouée jusqu'au bout (albums de Sud Cars, identifications, photo reprise avec son crédit, conversation de page « Sud Cars », abonnements de pages, activité de structure). Disque du VPS : 48 Go libres sur 99.
