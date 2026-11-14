@@ -146,7 +146,7 @@ describe("événements d'une Page : « Voir plus »", () => {
     let hold = false;
     const read = chain(pages);
     const { pager, key } = setup(async (c) => {
-      if (hold) await gate.promise;
+      if (hold) return gate.promise;
       return read(c);
     });
     await pager.more();
@@ -161,6 +161,75 @@ describe("événements d'une Page : « Voir plus »", () => {
     hold = false;
     gate.resolve({ ok: false });
     await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    // La lecture a échoué : rien n'a bougé, « Voir plus » reste possible, aucun message.
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b", "c", "d"]);
+    expect(pager.current).toMatchObject({ pages: 2, failed: false, next: null });
+  });
+
+  it("relecture identique réussie : la liste et le curseur sont inchangés à la fin", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("a", "b"), next: "c2" },
+      c2: { items: ev("c", "d"), next: null },
+    };
+    const { pager, key } = setup(chain(pages));
+    await pager.more();
+    await pager.more();
+    pager.sync(key, "c1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b", "c", "d"]);
+    expect(pager.current).toMatchObject({ next: null, pages: 2, failed: false });
+  });
+
+  it("un vrai échec après une première page relue avec succès : liste, curseur et profondeur intacts", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("a"), next: "c2" },
+      c2: { items: ev("b"), next: "c3" },
+      c3: { items: ev("c"), next: null },
+    };
+    const asked: string[] = [];
+    const read = chain(pages);
+    const { pager, key } = setup(async (c) => {
+      asked.push(c);
+      return c === "d2" ? { ok: false } : read(c);
+    });
+    await pager.more();
+    await pager.more();
+    await pager.more();
+    // La relecture réussit sur « d1 » (page 1) puis échoue sur « d2 » (page 2) : rien n'est remplacé.
+    pages.d1 = { items: ev("z"), next: "d2" };
+    asked.length = 0;
+    pager.sync(key, "d1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(asked).toEqual(["d1", "d2"]);
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b", "c"]);
+    expect(pager.current).toMatchObject({ next: null, pages: 3, failed: false });
+  });
+
+  it("la lecture de la première page en panne ne remet rien à zéro (même clé) ; une autre clé, si", async () => {
+    const { pager, key } = setup(async () => ({ ok: true, data: { items: ev("a"), nextCursor: "c2" } }));
+    await pager.more();
+    pager.onRead(key, null, false);
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a"]);
+    expect(pager.current.next).toBe("c2");
+    pager.onRead(eventsPagerKey("s2", "upcoming", null), null, false);
+    expect(pager.current.extra).toEqual([]);
+  });
+
+  it("l'expiration du délai (lecture rejetée) garde la liste et réactive le bouton, à « Voir plus » comme à la relecture", async () => {
+    let timeout = false;
+    const { pager, key } = setup(async () => {
+      if (timeout) throw new DOMException("délai dépassé", "TimeoutError");
+      return { ok: true, data: { items: ev("a"), nextCursor: "c2" } };
+    });
+    await pager.more();
+    timeout = true;
+    await pager.more();
+    expect(pager.current).toMatchObject({ busy: false, failed: true, pages: 1 });
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a"]);
+    pager.sync(key, "c1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a"]);
+    expect(pager.current.next).toBe("c2");
   });
 
   it("événement annulé en 2e page : remplacé d'un coup après la relecture", async () => {

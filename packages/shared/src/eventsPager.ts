@@ -91,6 +91,14 @@ export class EventsPager<T extends { id: string }> {
     void this.reread(generation, firstNext, Math.min(st.pages, EVENTS_REREAD_MAX_PAGES));
   }
 
+  /**
+   * La lecture de la première page par l'écran : réussie, c'est un `sync` ; en panne (`ok` faux), rien ne change quand la clé est
+   * la même (les pages ajoutées restent, aucune génération n'est ouverte), sinon la liste repart de zéro.
+   */
+  onRead(key: string, firstNext: string | null, ok: boolean): void {
+    if (ok || key !== this.state.key) this.sync(key, firstNext);
+  }
+
   private async reread(generation: number, firstNext: string | null, depth: number): Promise<void> {
     this.set({ ...this.state, busy: true });
     let cursor = firstNext;

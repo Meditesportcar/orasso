@@ -55,7 +55,7 @@ export function useMoreEvents(
   // Chaque lecture de la première page (la réponse change à chaque lecture) ouvre une génération : remise à zéro si la clé change,
   // sinon les pages ajoutées sont relues en arrière-plan et remplacées d'un coup.
   // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
-  useEffect(() => pager.sync(key, firstNext), [first, key]);
+  useEffect(() => pager.onRead(key, firstNext, first !== null), [first, key]);
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
   return {
     items: first ? mergeEvents(first.items, cur.extra) : null,

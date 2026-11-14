@@ -4,6 +4,7 @@
 import {
   type EventCard,
   type EventsPage,
+  type EventsPageResult,
   EventsPager,
   type EventsPagerState,
   eventsPagerKey,
@@ -17,6 +18,22 @@ import { apiFetch } from "../../lib/api.client";
 
 export const UPCOMING_PAGE = 50;
 export const PAST_PAGE = 12;
+
+/** Un délai : une connexion qui pend ne bloque pas « Voir plus » (le bouton se réactive, la liste reste). */
+export const EVENTS_READ_TIMEOUT_MS = 15_000;
+
+/** Lit une page d'événements d'une structure ; une panne, un refus ou l'expiration du délai rendent `ok: false`. */
+export async function readEventsPage(
+  structureId: string,
+  scope: "upcoming" | "past",
+  cursor: string,
+): Promise<EventsPageResult<EventCard>> {
+  const res = await apiFetch<EventsPage<EventCard>>(
+    structureEventsPath(structureId, scope, scope === "past" ? PAST_PAGE : UPCOMING_PAGE, cursor),
+    { timeoutMs: EVENTS_READ_TIMEOUT_MS },
+  );
+  return res.ok ? { ok: true, data: res.data } : { ok: false };
+}
 
 export function useMoreEvents(
   structureId: string,
@@ -37,10 +54,7 @@ export function useMoreEvents(
       new EventsPager<EventCard>(
         async (cursor) => {
           const { structureId: id, scope: kind } = where.current;
-          const res = await apiFetch<EventsPage<EventCard>>(
-            structureEventsPath(id, kind, kind === "past" ? PAST_PAGE : UPCOMING_PAGE, cursor),
-          );
-          return res.ok ? { ok: true, data: res.data } : { ok: false };
+          return readEventsPage(id, kind, cursor);
         },
         setState,
         key,
@@ -50,7 +64,7 @@ export function useMoreEvents(
   // Chaque lecture de la page (le tableau change à chaque lecture du chargeur) ouvre une génération : le pager repart de zéro si la
   // clé change, sinon relit les pages ajoutées en arrière-plan et les remplace d'un coup.
   // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
-  useEffect(() => pager.sync(key, firstNext), [first, key]);
+  useEffect(() => pager.onRead(key, firstNext, first !== null), [first, key]);
   // Avant que l'effet ne passe : la clé neuve montre déjà la liste neuve, jamais l'ancienne suite sur la nouvelle base.
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
   return {
