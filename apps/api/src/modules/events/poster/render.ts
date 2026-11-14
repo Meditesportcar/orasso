@@ -88,7 +88,19 @@ const PALETTES = [
   { quality: 60, colours: 128, dither: 0.5 },
 ];
 
-async function pixels(input: PosterInput, format: PosterFormat, width?: number) {
+/** Lot B3a : la photo, seulement si elle se décode vraiment (sinon l'affiche est celle d'une affiche sans photo, signature comprise). */
+async function decodable(photo: Buffer | null): Promise<Buffer | null> {
+  if (!photo) return null;
+  try {
+    await sharp(photo).rotate().resize(8, 8, { fit: "cover" }).raw().toBuffer();
+    return photo;
+  } catch {
+    return null;
+  }
+}
+
+async function pixels(source: PosterInput, format: PosterFormat, width?: number) {
+  const input = { ...source, photo: await decodable(source.photo) };
   const ctx = ctxOf(input, format, width);
   const { data, info } = await renderLayout(posterTemplates[input.style](ctx), input, ctx.W, ctx.H);
   return () => sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } });

@@ -47,3 +47,16 @@ describe("affiche sans photo", () => {
     expect(mustard).toBeGreaterThan(2);
   });
 });
+
+describe("photo illisible (lot B3a, tour 1)", () => {
+  it("billet : un buffer corrompu donne une affiche sans photo, signature claire comprise", async () => {
+    const png = await render(input("ticket", Buffer.from("pas une image")), "post", 360);
+    // Zone photo sombre ; la signature claire se lit dans la zone (au moins quelques pixels clairs à son niveau).
+    expect(luma(await pixel(png, 60, 60))).toBeLessThan(80);
+    const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    let light = 0;
+    for (let y = 205; y < 225; y++)
+      for (let x = 220; x < 340; x++) if ((data[(y * info.width + x) * info.channels] ?? 0) > 200) light++;
+    expect(light).toBeGreaterThan(20);
+  });
+});
