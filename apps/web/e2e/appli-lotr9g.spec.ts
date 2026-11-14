@@ -241,8 +241,33 @@ test("Léo, titulaire du média ET organisateur de l'événement : ses droits de
         timeout: 30_000,
       });
       await expect(page.getByTestId("album-action-official")).toBeVisible();
+      // Tour 7 : un seul « Identifier une voiture » (celui du rôle R9f), jamais doublé par la casquette d'organisateur.
+      await expect(page.getByTestId("album-action-tag-identify")).toHaveCount(1);
       await expect(page.getByTestId("album-viewer-report")).toHaveCount(0);
       await shot(page, "visionneuse-cumul-media-organisateur");
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+// Tour 7 : les droits du compte (co-organisateur) ne suffisent pas, la casquette active compte : en casquette passionné, aucune action d'organisateur.
+test("Léo, co-organisateur de l'événement mais en casquette passionné : aucune action d'organisateur dans la visionneuse", async ({
+  browser,
+}) => {
+  await withLeoAsCoOrganizer(async () => {
+    const { ctx, page } = await open(browser, LEO);
+    try {
+      await go(page, `/e/${SLUG}`);
+      await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await page.getByTestId("event-photos-open").click();
+      await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("album-photo").nth(1).click();
+      await expect(page.getByTestId("album-viewer")).toBeVisible();
+      await expect(page.getByTestId("album-viewer-remove")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("album-action-tag-identify")).toHaveCount(1, { timeout: 30_000 });
+      await expect(page.getByTestId("album-action-repost")).toHaveCount(0);
+      await expect(page.getByTestId("album-action-official")).toHaveCount(0);
     } finally {
       await ctx.close();
     }

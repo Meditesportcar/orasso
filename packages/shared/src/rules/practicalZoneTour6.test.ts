@@ -224,7 +224,9 @@ describe("anciennes versions remplacées quand une case devient complète", () =
     z.searchHere();
     await vi.advanceTimersByTimeAsync(0);
     // La vue se pose sur la case incomplète (celle du 201e lieu), dans la zone demandée : la page suivante de la même zone.
-    const incomplete = (await read.mock.results[0]?.value).partialCells[0] as [number, number];
+    const firstRead = await read.mock.results[0]?.value;
+    expect(firstRead).toBeDefined();
+    const incomplete = firstRead.partialCells[0] as [number, number];
     z.setView({
       south: incomplete[0] / 10 + 0.02,
       west: incomplete[1] / 10 + 0.02,

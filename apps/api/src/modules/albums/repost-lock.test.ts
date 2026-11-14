@@ -88,7 +88,14 @@ it.each(Object.entries(revocations))(
     expect((await call(leo, "POST", `/me/albums/${album.id}/publish`)).status).toBe(200);
     const [photo] = await photoRows(album.id);
     const pending = call(orga, "POST", `/events/${eventId}/albums/${album.id}/photos/${photo?.id}/repost`);
-    await gate.started;
+    // Si la reprise échoue avant l'insertion (403, 404…), la porte ne s'ouvre jamais : on échoue tout de suite avec la réponse, pas au délai de vitest.
+    await Promise.race([
+      gate.started,
+      pending.then((r) => {
+        if (r.status >= 400) throw new Error(`La reprise a échoué avant l'insertion : ${r.status} ${r.text}`);
+        return new Promise<never>(() => undefined);
+      }),
+    ]);
     // La révocation par son chemin réel, pendant que la reprise est suspendue avant l'insertion ; on attend qu'elle bloque sur un verrou.
     const revoking = revoke({ eventId, applicationId });
     try {
