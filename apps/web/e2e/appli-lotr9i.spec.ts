@@ -22,7 +22,8 @@ let ownerIds: string[] = [];
 test.beforeAll(async () => {
   ownerIds = await ownerMarkers();
 });
-// Les réponses sont lues par le contrôle lui-même (`route.fetch`) : une partie des requêtes de l'appli part d'un worker, dont CDP ne livre pas les corps.
+// Les réponses sont lues par le contrôle lui-même (`route.fetch`) : pour l'appli, `response.text()` par CDP échouait ou ne finissait pas sur une
+// partie des requêtes (cause non établie : aucun worker dans `apps/mobile/src`) ; l'interception lit les corps au niveau du réseau.
 const watchApi = (page: Page) =>
   watchOwnerLeakViaRoutes(page.context() as unknown as ContextLike, { markers: ownerIds, match: apiOnly });
 
@@ -88,6 +89,10 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `conversation-personne-${theme}-384`);
     await page.getByTestId("view-page").click();
     await page.waitForURL(/\/m\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    // L'adresse change avant le GET du nouvel écran : on attend son contenu visible, puis la période calme de `done()`.
+    await expect(page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
     await api.done();
     expect(await page.content()).not.toContain(OWNER);
     await ctx.close();
@@ -129,8 +134,8 @@ for (const theme of ["beton", "sable"] as const) {
     });
     await expect(back.page.getByTestId("messages").getByText(answer)).toBeVisible();
     await expect(back.page.getByTestId("messages").getByText("Sud Cars", { exact: true }).first()).toBeVisible();
-    expect(await back.page.content()).not.toContain(OWNER);
     await backApi.done();
+    expect(await back.page.content()).not.toContain(OWNER);
     await back.ctx.close();
 
     // Damien_66 : l'ouverture par un appel d'API dans sa session, puis l'écran.
@@ -148,8 +153,8 @@ for (const theme of ["beton", "sable"] as const) {
       timeout: 30_000,
     });
     await expect(damien.page.getByTestId("view-page")).toBeVisible();
-    expect(await damien.page.content()).not.toContain(OWNER);
     await damienApi.done();
+    expect(await damien.page.content()).not.toContain(OWNER);
     await shot(damien.page, `conversation-damien-${theme}-384`);
     await damien.ctx.close();
 
@@ -232,6 +237,11 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByTestId("photo-sheet-contact").click();
       await page.waitForURL(/\/messages\/[0-9a-f-]{36}/, { timeout: 30_000 });
       expect(page.url()).toBe(conversationUrl);
+      // L'écran d'arrivée est rendu (son GET est parti après le changement d'adresse) avant le contrôle.
+      await expect(page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("view-page")).toBeVisible();
       await api.done();
       expect(await page.content()).not.toContain(OWNER);
       await ctx.close();

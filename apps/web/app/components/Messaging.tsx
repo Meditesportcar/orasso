@@ -1,15 +1,9 @@
 import { Button, Icon } from "@orasso/design-system/web";
-import {
-  albumTagLabels,
-  type ConversationSummary,
-  conversationTag,
-  createContactMediaFlow,
-  messagingLabels,
-} from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
-import { Form, useActionData, useLocation, useNavigate, useNavigation } from "react-router";
+import { albumTagLabels, type ConversationSummary, conversationTag, messagingLabels } from "@orasso/shared";
+import { useContext, useEffect, useRef, useState } from "react";
+import { Form, UNSAFE_DataRouterContext, useActionData, useLocation, useNavigate, useNavigation } from "react-router";
 
-import { contactMediaCall, guardedNavigate, type NavigationSnapshot, navigationLeavesPage } from "../lib/contactMedia";
+import { contactMediaCall, createContactMediaController } from "../lib/contactMedia";
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
@@ -109,37 +103,48 @@ export function ContactOrganizer({
 
 /**
  * L'enchaînement « Contacter <média> » depuis « Tes photos » (lot R9i) : un seul par écran, partagé par le bouton de l'en-tête et la
- * rangée de la feuille. Périmé au démontage, et dès qu'une navigation vers une autre adresse commence (l'ancien écran reste monté
- * pendant que les chargeurs de la page suivante tournent) ; la navigation n'a lieu que si le routeur est au repos à la réponse.
+ * rangée de la feuille. Le contrôleur (`createContactMediaController`) lit l'état du routeur de données lui-même ; périmé au démontage, à
+ * la perte de la session (`stale`, changement de compte) et dès qu'une navigation vers une autre adresse commence.
  */
-export function useContactMedia(mediaKey: string, onError: (message: string | null) => void) {
+export function useContactMedia(mediaKey: string, onError: (message: string | null) => void, stale = false) {
   const navigate = useNavigate();
-  const navigation = useNavigation();
   const location = useLocation();
+  // `UNSAFE_DataRouterContext` : seul accès au routeur lui-même (son état change avant le rendu, `useNavigation()` après) ; limite au journal.
+  const router = useContext(UNSAFE_DataRouterContext)?.router;
   const [busy, setBusy] = useState(false);
-  const flow = useRef(createContactMediaFlow());
-  // Lu à l'instant de la réponse, pas au rendu qui a lancé l'appel.
-  const nav = useRef<NavigationSnapshot>({ state: navigation.state, pathname: navigation.location?.pathname ?? null });
-  nav.current = { state: navigation.state, pathname: navigation.location?.pathname ?? null };
+  const latest = useRef({ navigate, onError, router });
+  latest.current = { navigate, onError, router };
+  const controller = useRef<ReturnType<typeof createContactMediaController> | null>(null);
+  if (!controller.current) {
+    controller.current = createContactMediaController({
+      // Jamais absent sous `<HydratedRouter>` ; sans routeur, au repos (la garde ne retient rien).
+      router: {
+        get state() {
+          return latest.current.router?.state ?? IDLE_ROUTER_STATE;
+        },
+        subscribe: (l) => latest.current.router?.subscribe(l) ?? (() => undefined),
+      },
+      navigate: (to) => latest.current.navigate(to),
+      onError: (m) => latest.current.onError(m),
+      setBusy,
+    });
+  }
   useEffect(() => {
-    const f = flow.current;
-    return () => f.cancel();
+    const c = controller.current;
+    return () => c?.cancel();
   }, []);
-  const leaving = navigationLeavesPage(nav.current, location.pathname);
   useEffect(() => {
-    if (leaving) flow.current.cancel(setBusy);
-  }, [leaving]);
+    if (stale) controller.current?.cancel();
+  }, [stale]);
   const open = () => {
     const call = contactMediaCall(mediaKey);
     if (!call) return;
-    void flow.current.open(call, {
-      setBusy,
-      onError,
-      navigate: guardedNavigate(() => nav.current, navigate),
-    });
+    void controller.current?.open(call, location.pathname);
   };
   return { busy, open };
 }
+
+const IDLE_ROUTER_STATE = { location: { pathname: "" }, navigation: { state: "idle" as const } };
 
 /** Le bouton de l'en-tête (`header`) ou la rangée de la feuille d'une photo (`row`) : l'enchaînement vient de `useContactMedia`. */
 export function ContactMedia({

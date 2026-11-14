@@ -228,3 +228,40 @@ test("temps réel : une trame reçue du WebSocket qui porte le pseudo fait écho
   g.frame(OWNER_PSEUDO);
   await expect(w2.done()).resolves.toBeUndefined();
 });
+
+// Tour 4 : `settle()` rendait la main dès que les lectures connues étaient finies. Dans l'appli (Expo), l'adresse change avant le GET du
+// nouvel écran, qui part ensuite : une requête émise juste après l'appel de `done()` échappait au contrôle. Il faut une période calme.
+test("une requête émise 50 ms après l'appel de done(), qui porte le pseudo, fait échouer (période calme)", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(body('{"ok":true}'));
+  const done = w.done();
+  setTimeout(() => {
+    const req = f.request("http://x.test/api/ecran-suivant");
+    f.start(req);
+    f.emit({ url: "http://x.test/api/ecran-suivant", ...body(`{"by":"${OWNER_PSEUDO}"}`) });
+    f.finish(req);
+  }, 50);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});
+
+test("sans période calme (quietMs: 0, l'ancien comportement), la même requête tardive passait à tort", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS, quietMs: 0 });
+  f.emit(body('{"ok":true}'));
+  const done = w.done();
+  setTimeout(() => f.emit(body(`{"by":"${OWNER_PSEUDO}"}`)), 50);
+  await expect(done).resolves.toBeUndefined();
+});
+
+test("la période calme n'attend pas indéfiniment : des requêtes sans fin font échouer au délai dur", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS, readTimeoutMs: 40, quietMs: 100 });
+  f.emit(body('{"ok":true}'));
+  const timer = setInterval(() => f.emit(body("{}")), 20);
+  try {
+    await expect(w.done()).rejects.toThrow(/ne se stabilise pas/);
+  } finally {
+    clearInterval(timer);
+  }
+});

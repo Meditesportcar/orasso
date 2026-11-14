@@ -5,8 +5,10 @@ import { apiCall, login } from "./helpers";
 // pseudo, l'identifiant ni l'e-mail du titulaire de la page du média. Le contrôle **échoue** quand un corps attendu n'a pas pu être lu
 // (erreur de lecture, délai dépassé) : seules les réponses sans corps (204, 205, 304, redirections) et les flux sont écartées ; seuls les
 // corps réellement lus comptent, et au moins un corps non vide doit avoir été lu. Les requêtes attendues sont suivies dès leur départ et
-// `done()` attend que la collection soit stable (plus aucune requête en vol, aucune lecture ajoutée) avant de contrôler : une réponse
-// arrivée pendant l'attente finale est contrôlée comme les autres. Les trames reçues du WebSocket (temps réel) passent par le même contrôle.
+// `done()` attend que la collection soit stable (plus aucune requête en vol, aucune lecture ajoutée) puis **une période calme** (500 ms
+// sans nouvelle requête, réponse, lecture ni trame ; tour 4) avant de contrôler : une réponse arrivée pendant l'attente finale, ou une
+// requête qui part juste après l'appel de `done()` (dans l'appli, l'adresse change avant le GET du nouvel écran), est contrôlée comme les
+// autres. Les trames reçues du WebSocket (temps réel) passent par le même contrôle.
 
 export const OWNER_PSEUDO = "Leo_SudCars";
 export const OWNER_EMAIL = "leo@orasso.local";
@@ -49,7 +51,13 @@ export const apiOrLoaderData = (url: string) => {
 export const apiOnly = (url: string) => url.includes("/api/");
 
 type Read = { url: string; text: string | null; problem: string | null };
-type Opts = { markers: string[]; match?: (url: string) => boolean; readTimeoutMs?: number };
+type Opts = {
+  markers: string[];
+  match?: (url: string) => boolean;
+  readTimeoutMs?: number;
+  /** Période calme exigée avant de contrôler (500 ms par défaut ; 0 = l'ancien comportement, pour l'éprouver). */
+  quietMs?: number;
+};
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** Les seules erreurs de livraison qu'on laisse passer : la page, le contexte ou le navigateur est déjà fermé (rien à rendre à personne). */
@@ -62,14 +70,19 @@ export const isClosedError = (e: unknown) =>
  * Ce que le contrôle a vu : les lectures de corps (commencées dès le départ de la requête ou de la réponse), les trames du temps réel,
  * et les requêtes encore en vol. `done()` attend que tout soit stable avant de contrôler.
  */
-function collector(markers: string[], timeoutMs: number) {
+function collector(markers: string[], timeoutMs: number, quietMs = 500) {
   const reads: Promise<Read>[] = [];
+  // Le dernier instant où quelque chose s'est passé (requête, réponse, lecture commencée ou finie, trame) : base de la période calme.
+  let lastActivity = Date.now();
+  const touch = () => {
+    lastActivity = Date.now();
+  };
   const frames: Read[] = [];
   const inflight = new Map<RequestLike, string>();
 
   /** Attend les lectures, y compris celles qui arrivent pendant l'attente, jusqu'à ce qu'aucune requête ne soit plus en vol. */
   async function settle(): Promise<Read[]> {
-    const hardDeadline = Date.now() + 4 * timeoutMs;
+    const hardDeadline = Date.now() + 4 * timeoutMs + quietMs;
     const requestDeadline = Date.now() + timeoutMs;
     for (;;) {
       const n = reads.length;
@@ -84,7 +97,11 @@ function collector(markers: string[], timeoutMs: number) {
         ];
       }
       if (reads.length !== n) continue;
-      if (inflight.size === 0) return [];
+      if (inflight.size === 0) {
+        if (Date.now() - lastActivity >= quietMs) return [];
+        await new Promise((r) => setTimeout(r, 20));
+        continue;
+      }
       if (Date.now() >= requestDeadline) {
         return [...inflight.values()].map((url) => ({
           url,
@@ -100,8 +117,10 @@ function collector(markers: string[], timeoutMs: number) {
     reads,
     frames,
     inflight,
+    touch,
     /** Lit le corps d'une réponse (délai borné) ; une erreur ou un dépassement est un problème, jamais une chaîne vide. */
     readBody(url: string, res: { text(): Promise<string> }) {
+      touch();
       reads.push(
         new Promise<Read>((resolve) => {
           const timer = setTimeout(
@@ -111,10 +130,12 @@ function collector(markers: string[], timeoutMs: number) {
           res.text().then(
             (text) => {
               clearTimeout(timer);
+              touch();
               resolve({ url, text, problem: null });
             },
             (e: unknown) => {
               clearTimeout(timer);
+              touch();
               resolve({ url, text: null, problem: `lecture impossible (${messageOf(e)})` });
             },
           );
@@ -127,6 +148,7 @@ function collector(markers: string[], timeoutMs: number) {
       if (!match(url.replace(/^ws/, "http"))) return;
       ws.on("framereceived", ({ payload }) => {
         const text = typeof payload === "string" ? payload : new TextDecoder().decode(payload);
+        touch();
         frames.push({ url, text, problem: null });
       });
     },
@@ -152,17 +174,27 @@ function collector(markers: string[], timeoutMs: number) {
 
 export function watchOwnerLeak(page: PageLike, opts: Opts) {
   const match = opts.match ?? apiOnly;
-  const c = collector(opts.markers, opts.readTimeoutMs ?? 15_000);
+  const c = collector(opts.markers, opts.readTimeoutMs ?? 15_000, opts.quietMs);
   // Un flux (SSE) ne se termine jamais : sa requête n'est pas suivie.
   const streamRequest = (req: RequestLike) => req.headers().accept?.includes("event-stream");
   page.on("request", (req) => {
-    if (match(req.url()) && !streamRequest(req)) c.inflight.set(req, req.url());
+    if (match(req.url()) && !streamRequest(req)) {
+      c.touch();
+      c.inflight.set(req, req.url());
+    }
   });
-  page.on("requestfinished", (req) => void c.inflight.delete(req));
-  page.on("requestfailed", (req) => void c.inflight.delete(req));
+  page.on("requestfinished", (req) => {
+    c.touch();
+    c.inflight.delete(req);
+  });
+  page.on("requestfailed", (req) => {
+    c.touch();
+    c.inflight.delete(req);
+  });
   page.on("response", (res) => {
     const url = res.url();
     if (!match(url)) return;
+    c.touch();
     if (res.headers()["content-type"]?.includes("event-stream")) return;
     if (hasNoBody(res.status())) return;
     c.readBody(url, res);
@@ -197,7 +229,7 @@ export type ContextLike = {
 export async function watchOwnerLeakViaRoutes(context: ContextLike, opts: Opts) {
   const match = opts.match ?? apiOnly;
   const timeoutMs = opts.readTimeoutMs ?? 15_000;
-  const c = collector(opts.markers, timeoutMs);
+  const c = collector(opts.markers, timeoutMs, opts.quietMs);
   const attach = (page: Pick<PageLike, "on">) => page.on("websocket", (ws) => c.watchSocket(ws, match));
   for (const page of context.pages()) attach(page);
   context.on("page", attach);
@@ -207,8 +239,16 @@ export async function watchOwnerLeakViaRoutes(context: ContextLike, opts: Opts) 
       const url = route.request().url();
       if (route.request().headers().accept?.includes("event-stream")) return route.fallback();
       // La lecture existe dès le départ de la requête et ne se termine qu'une fois la réponse livrée à la page.
-      let resolveRead: (r: Read) => void = () => undefined;
-      c.reads.push(new Promise<Read>((resolve) => (resolveRead = resolve)));
+      c.touch();
+      let resolveRead: (r: Read) => void = (r) => void r;
+      c.reads.push(
+        new Promise<Read>((resolve) => {
+          resolveRead = (r) => {
+            c.touch();
+            resolve(r);
+          };
+        }),
+      );
       let fetched: FetchedLike;
       try {
         fetched = await route.fetch({ timeout: timeoutMs });

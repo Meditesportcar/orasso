@@ -118,8 +118,8 @@ for (const theme of ["beton", "sable"] as const) {
       await page3.goto("/app/messages");
       await page3.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
       await expect(page3.getByTestId("messages")).toContainText(answer);
-      expect(await page3.content()).not.toContain(OWNER);
       await api3.done();
+      expect(await page3.content()).not.toContain(OWNER);
       await ctx3.close();
     });
   }
@@ -166,8 +166,8 @@ test("Damien_66 (identifié par sa voiture) : ouverture par un appel d'API dans 
   await page.goto(`/app/messages/${opened.data.id}`);
   await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
   await expect(page.getByTestId("view-page")).toBeVisible();
-  expect(await page.content()).not.toContain(OWNER);
   await api.done();
+  expect(await page.content()).not.toContain(OWNER);
   await ctx.close();
 });
 
@@ -230,9 +230,64 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByTestId("photo-sheet-contact").click();
       await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
       expect(page.url()).toBe(conversationUrl);
+      // L'écran d'arrivée est rendu avant le contrôle (qui attend ensuite la période calme).
+      await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
+      await expect(page.getByTestId("view-page")).toBeVisible();
       await api.done();
       expect(await page.content()).not.toContain(OWNER);
       await ctx.close();
     });
   }
 }
+
+// Tour 4, point 5 : le câblage réel du crochet. « Contacter » est cliqué, la réponse de l'API est retenue ; l'utilisateur revient en arrière
+// (navigation du routeur : l'ancien écran reste monté pendant que la page précédente charge) ; la réponse est libérée : l'adresse est celle
+// que l'utilisateur a choisie, jamais la conversation. (Retirer la garde ou l'écoute du routeur dans `contactMedia.ts` fait échouer ce test.)
+test("« Contacter » : un retour arrière pendant l'appel n'est pas remplacé par la conversation à la réponse", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const kenjiCookie = await login("kenji@orasso.local");
+  const tags = await apiCall<{ items: { albumId: string }[] }>(kenjiCookie, "GET", "/me/album-tags");
+  const albumId = tags.data.items[0]?.albumId as string;
+  expect(albumId).toBeTruthy();
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/acces");
+  const before = new URL(page.url()).pathname;
+  // Navigation du routeur (pas un chargement complet) : le retour arrière est une navigation du routeur, l'écran reste monté pendant le chargement.
+  await page.evaluate(
+    (path) =>
+      (
+        window as unknown as { __reactRouterDataRouter: { navigate(to: string): Promise<void> } }
+      ).__reactRouterDataRouter.navigate(path),
+    `/app/albums/${albumId}/mes-photos`,
+  );
+  const contact = page.getByTestId("my-photos-contact");
+  await expect(contact).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  let asked: () => void = () => undefined;
+  const askedPromise = new Promise<void>((r) => {
+    asked = r;
+  });
+  await page.route("**/api/media/*/conversation", async (route) => {
+    asked();
+    await held;
+    await route.continue();
+  });
+  await contact.click();
+  await askedPromise;
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === before);
+  release();
+  // La réponse (201/200) est arrivée : on laisse au routeur le temps de réagir à tort, puis on constate.
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(1_500);
+  expect(new URL(page.url()).pathname).toBe(before);
+  expect(page.url()).not.toMatch(/\/messages\//);
+  await ctx.close();
+});

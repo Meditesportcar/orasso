@@ -1,14 +1,14 @@
 // « Contacter <média> » (site, lot R9i tour 2) : l'appel est borné par un délai ; une réponse qui ne vient jamais est abandonnée, l'erreur
 // est dite et le bouton redevient actif. (`apiFetch` abandonne la requête au `timeoutMs` demandé : `api.client.ts` ; ici il est simulé.)
-import { type ContactMediaResult, createContactMediaFlow } from "@orasso/shared";
+import { CONTACT_MEDIA_FALLBACK_MESSAGE, type ContactMediaResult, createContactMediaFlow } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
 import {
   CONTACT_MEDIA_TIMEOUT_MS,
   contactMediaCall,
-  guardedNavigate,
-  type NavigationSnapshot,
+  createContactMediaController,
   navigationLeavesPage,
+  type RouterLike,
 } from "./contactMedia";
 
 const KEY = "m:11111111-1111-4111-8111-111111111111";
@@ -64,9 +64,10 @@ describe("contactMediaCall", () => {
   });
 });
 
-// Le câblage de l'écran (`useContactMedia`) sans DOM : un routeur simulé, dont la navigation vers une autre page (chargeurs en cours) est
-// l'état `loading` ; l'ancien écran reste monté pendant ce temps. Ni la réponse de « Contacter » ni le chargement de la destination ne
-// sont immédiats : on les rend l'une et l'autre à la main, dans l'ordre qui a fait échouer l'ancien code (la réponse d'abord).
+// Le contrôleur câblé au routeur (`createContactMediaController`, celui du site) face à un routeur simulé : la navigation vers une autre page
+// (chargeurs en cours) est l'état `loading` ; l'ancien écran reste monté pendant ce temps. Ni la réponse de « Contacter » ni le chargement
+// de la destination ne sont immédiats : on les rend l'un et l'autre à la main, dans l'ordre qui a fait échouer l'ancien code. Le câblage
+// du crochet au routeur (clic, retour arrière) est prouvé en navigateur par `lotr9i-site.spec.ts`.
 describe("« Contacter <média> » : une navigation choisie ensuite", () => {
   const deferred = <T>() => {
     let resolve!: (v: T) => void;
@@ -75,60 +76,133 @@ describe("« Contacter <média> » : une navigation choisie ensuite", () => {
     });
     return { promise, resolve };
   };
-  function screen(wired: boolean) {
-    const router = { nav: { state: "idle", pathname: null } as NavigationSnapshot, here: "/app/albums/x" };
+  const HERE = "/app/albums/x";
+  function screen(settleTimeoutMs?: number) {
+    const state: RouterLike["state"] = { location: { pathname: HERE }, navigation: { state: "idle" } };
+    const listeners = new Set<() => void>();
+    const router: RouterLike = {
+      state,
+      subscribe: (l) => {
+        listeners.add(l);
+        return () => void listeners.delete(l);
+      },
+    };
     const log = { busy: [] as boolean[], errors: [] as (string | null)[], opened: [] as string[] };
-    const flow = createContactMediaFlow();
-    const setBusy = (b: boolean) => log.busy.push(b);
-    // L'effet de `useContactMedia` : dès qu'une navigation vers une autre adresse commence, l'opération est annulée.
-    const goTo = (pathname: string) => {
-      router.nav = { state: "loading", pathname };
-      if (wired && navigationLeavesPage(router.nav, router.here)) flow.cancel(setBusy);
+    const controller = createContactMediaController({
+      router,
+      navigate: (to) => log.opened.push(to),
+      onError: (m) => log.errors.push(m),
+      setBusy: (b) => log.busy.push(b),
+      settleTimeoutMs,
+    });
+    // Le routeur change d'état ; `notify` : les abonnés sont prévenus (sinon la réponse lit l'état sans avoir été prévenue : fenêtre de
+    // `startTransition`, où l'état rendu dit encore « au repos »).
+    const loading = (pathname: string, notify = true) => {
+      state.navigation = { state: "loading", location: { pathname } };
+      if (notify) for (const l of [...listeners]) l();
     };
-    const arrived = () => {
-      router.nav = { state: "idle", pathname: null };
+    const idle = (at = state.location.pathname) => {
+      state.navigation = { state: "idle" };
+      state.location = { pathname: at };
+      for (const l of [...listeners]) l();
     };
-    const open = (call: () => Promise<ContactMediaResult>) =>
-      flow.open(call, {
-        setBusy,
-        onError: (m) => log.errors.push(m),
-        navigate: guardedNavigate(
-          () => router.nav,
-          (to) => log.opened.push(to),
-        ),
-      });
-    return { router, log, goTo, arrived, open };
+    return { log, controller, loading, idle, listeners };
   }
   it("repos : la conversation s'ouvre", async () => {
-    const t = screen(true);
-    await t.open(async () => ({ ok: true, conversationId: "c1" }));
+    const t = screen();
+    await t.controller.open(async () => ({ ok: true, conversationId: "c1" }), HERE);
     expect(t.log.opened).toEqual(["/app/messages/c1"]);
+    expect(t.listeners.size).toBe(0);
   });
   it("les deux réponses en retard : la destination choisie ensuite n'est pas remplacée, le bouton est libre, aucune erreur", async () => {
-    const t = screen(true);
+    const t = screen();
     const contact = deferred<ContactMediaResult>();
-    const destination = deferred<void>();
-    const p = t.open(() => contact.promise);
-    t.goTo("/app/evenements/autre");
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.loading("/app/evenements/autre");
     contact.resolve({ ok: true, conversationId: "tard" });
     await p;
-    destination.resolve();
-    await destination.promise;
-    t.arrived();
+    t.idle("/app/evenements/autre");
+    expect(t.log.opened).toEqual([]);
+    expect(t.log.errors).toEqual([null]);
+    expect(t.log.busy.at(-1)).toBe(false);
+    expect(t.listeners.size).toBe(0);
+  });
+  it("fenêtre de startTransition : le routeur charge une autre page sans avoir prévenu, la réponse le lit dans le routeur", async () => {
+    const t = screen();
+    const contact = deferred<ContactMediaResult>();
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.loading("/app/evenements/autre", false);
+    contact.resolve({ ok: true, conversationId: "tard" });
+    await p;
     expect(t.log.opened).toEqual([]);
     expect(t.log.errors).toEqual([null]);
     expect(t.log.busy.at(-1)).toBe(false);
   });
-  it("même sans l'annulation, la navigation n'a pas lieu tant que le routeur charge une autre page", async () => {
-    const t = screen(false);
+  it("adresse déjà atteinte (la page a changé avant la réponse) : rien ne s'ouvre", async () => {
+    const t = screen();
     const contact = deferred<ContactMediaResult>();
-    const p = t.open(() => contact.promise);
-    t.goTo("/app/evenements/autre");
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.idle("/app/messages");
     contact.resolve({ ok: true, conversationId: "tard" });
     await p;
     expect(t.log.opened).toEqual([]);
     expect(t.log.errors).toEqual([null]);
-    expect(t.log.busy.at(-1)).toBe(false);
+  });
+  it("même adresse en rechargement à la réponse : on attend le retour au repos, puis la conversation s'ouvre", async () => {
+    const t = screen();
+    const contact = deferred<ContactMediaResult>();
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.loading(HERE);
+    contact.resolve({ ok: true, conversationId: "c2" });
+    await p;
+    expect(t.log.opened).toEqual([]);
+    expect(t.log.errors).toEqual([null]);
+    t.idle();
+    expect(t.log.opened).toEqual(["/app/messages/c2"]);
+    expect(t.listeners.size).toBe(0);
+  });
+  it("même adresse en rechargement qui ne finit pas : l'erreur de reprise est dite au délai, rien ne s'ouvre", async () => {
+    const t = screen(20);
+    const p = t.controller.open(async () => ({ ok: true, conversationId: "c3" }), HERE);
+    t.loading(HERE);
+    await p;
+    await new Promise((r) => setTimeout(r, 60));
+    expect(t.log.opened).toEqual([]);
+    expect(t.log.errors.at(-1)).toBe(CONTACT_MEDIA_FALLBACK_MESSAGE);
+    expect(t.listeners.size).toBe(0);
+  });
+  it("en attente du repos, un départ vers une autre adresse annule l'ouverture sans rien dire", async () => {
+    const t = screen();
+    const p = t.controller.open(async () => ({ ok: true, conversationId: "c4" }), HERE);
+    t.loading(HERE);
+    await p;
+    t.loading("/app/evenements/autre");
+    t.idle("/app/evenements/autre");
+    expect(t.log.opened).toEqual([]);
+    expect(t.log.errors).toEqual([null]);
+    expect(t.listeners.size).toBe(0);
+  });
+  it("changement de compte (cancel) : la réponse de l'ancien compte n'ouvre rien, ne dit rien, le bouton est libre", async () => {
+    const t = screen();
+    const contact = deferred<ContactMediaResult>();
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.controller.cancel();
+    contact.resolve({ ok: true, conversationId: "ancien-compte" });
+    await p;
+    expect(t.log.opened).toEqual([]);
+    expect(t.log.errors).toEqual([null]);
+    expect(t.log.busy).toEqual([true, false]);
+    expect(t.listeners.size).toBe(0);
+  });
+  it("un second appel pendant le premier est ignoré, sans toucher à ses écoutes", async () => {
+    const t = screen();
+    const contact = deferred<ContactMediaResult>();
+    const first = t.controller.open(() => contact.promise, HERE);
+    expect(await t.controller.open(async () => ({ ok: true, conversationId: "deux" }), HERE)).toBe(false);
+    t.loading("/app/evenements/autre");
+    contact.resolve({ ok: true, conversationId: "un" });
+    await first;
+    expect(t.log.opened).toEqual([]);
   });
   it("seule une autre adresse annule : un rechargement de la même page ne coupe pas l'appel", () => {
     expect(navigationLeavesPage({ state: "loading", pathname: "/app/albums/x" }, "/app/albums/x")).toBe(false);

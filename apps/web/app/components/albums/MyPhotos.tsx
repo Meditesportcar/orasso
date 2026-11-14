@@ -89,7 +89,7 @@ export function MyPhotos({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Un seul « Contacter <média> » par écran : le bouton de l'en-tête et la rangée de la feuille partagent le même appel.
-  const contact = useContactMedia(view.media.key, setError);
+  const contact = useContactMedia(view.media.key, setError, stale);
   // Rangées par `tagId` : une photo peut porter deux identifications de moi ; retirer l'une laisse la photo (et son autre identification).
   // L'heure courante à chaque rendu (l'état `tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration
   // d'une story ne bloque pas « En story ».
