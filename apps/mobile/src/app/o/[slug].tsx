@@ -278,6 +278,10 @@ export default function StructurePage() {
           partners={partnerItems}
           upcomingMore={moreUpcoming.more}
           pastMore={morePast.more}
+          onRetryUpcoming={
+            upcoming.data === null && upcoming.error && !upcoming.loading ? () => void upcoming.reload() : null
+          }
+          onRetryPast={past.data === null && past.error && !past.loading ? () => void past.reload() : null}
         />
       ) : tab === "publications" ? (
         <PagePublications

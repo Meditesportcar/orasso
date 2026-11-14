@@ -54,6 +54,20 @@ function MoreEvents({
   );
 }
 
+/** La première lecture d'une liste a échoué : la panne se dit et « Réessayer » la relit, jamais « Aucun événement » ni un silence. */
+function ReadFailed({ text, onRetry, testID }: { text: string; onRetry: () => void; testID: string }) {
+  return (
+    <>
+      <Notice tone="error" testID={testID}>
+        {text}
+      </Notice>
+      <SmallButton icon="undo" onPress={onRetry} testID={`${testID}-retry`}>
+        {L.readRetry}
+      </SmallButton>
+    </>
+  );
+}
+
 export function StructureEvents({
   structure: s,
   upcoming,
@@ -61,6 +75,8 @@ export function StructureEvents({
   partners,
   upcomingMore,
   pastMore,
+  onRetryUpcoming,
+  onRetryPast,
 }: {
   structure: StructurePublic;
   /** `null` : la lecture n'a pas abouti (ou n'est pas finie) : on ne dit pas « aucun ». */
@@ -70,6 +86,9 @@ export function StructureEvents({
   /** « Voir plus » au-delà des 50 à venir et des 12 passés. */
   upcomingMore?: MoreEventsView;
   pastMore?: MoreEventsView;
+  /** Présent quand la première lecture de la liste a échoué (panne, pas encore en cours) : « Réessayer » la relit. */
+  onRetryUpcoming?: (() => void) | null;
+  onRetryPast?: (() => void) | null;
 }) {
   const { t } = useTheme();
   const where = [s.postalCode, s.city].filter(Boolean).join(" ");
@@ -78,6 +97,9 @@ export function StructureEvents({
   return (
     <View style={styles.wrap} testID="structure-events">
       <SectionTitle>{L.eventsNext}</SectionTitle>
+      {upcoming === null && onRetryUpcoming ? (
+        <ReadFailed text={L.eventsReadError} onRetry={onRetryUpcoming} testID="structure-upcoming-error" />
+      ) : null}
       {upcoming && upcoming.length === 0 ? <Muted variant="body">{explorerLabels.structureNoEvents}</Muted> : null}
       {upcoming?.map((e) => (
         <EventRow key={e.id} event={e} hints={false} />
@@ -89,6 +111,12 @@ export function StructureEvents({
         testID="structure-upcoming-more"
       />
 
+      {past === null && onRetryPast ? (
+        <>
+          <SectionTitle>{L.eventsPast}</SectionTitle>
+          <ReadFailed text={L.pastReadError} onRetry={onRetryPast} testID="structure-past-error" />
+        </>
+      ) : null}
       {past && past.length > 0 ? (
         <>
           <SectionTitle>{L.eventsPast}</SectionTitle>
