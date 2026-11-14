@@ -74,12 +74,12 @@ import {
   zoneChanges,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useLocation, useNavigate } from "react-router";
+import { useBlocker, useLocation, useNavigate, useNavigation } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
-import { currentSession, listenSession } from "../lib/sessionChannel";
+import { listenSession } from "../lib/sessionChannel";
 import { RecipientsBanner } from "./event/NotifySignup";
 import { ArrivalsStep } from "./wizard/ArrivalsStep";
 import { CriteriaStep } from "./wizard/CriteriaStep";
@@ -92,6 +92,8 @@ import { TypeStep } from "./wizard/TypeStep";
 import { VotesStep } from "./wizard/VotesStep";
 
 type Props = {
+  /** Le compte qui a chargé la page (tour 3 : le compte vu au clic, jamais `null` au premier chargement). */
+  userId: string;
   structureId: string;
   structureSlug: string;
   structureName: string;
@@ -185,6 +187,16 @@ export function EventWizard(props: Props) {
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
+  // Tour 3 : une modification de la saisie PAR LA PERSONNE (un champ) change `epoch` et annule le clic en attente ; les
+  // fusions automatiques (missions, valeurs calculées) passent par `setD` directement et ne l'annulent pas.
+  const userSet = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
+    setEpoch((e) => e + 1);
+    set(key, value);
+  };
+  const userSetD: typeof setD = (update) => {
+    setEpoch((e) => e + 1);
+    setD(update);
+  };
   // Brouillon (création ou brouillon rouvert) : enregistré à chaque temps ; publié : à la fin seulement.
   const isDraft = !saved || saved.status === "draft";
 
@@ -275,7 +287,7 @@ export function EventWizard(props: Props) {
   const [due, setDue] = useState<WaitTicket | null>(null);
   const queued = (waiting ?? due)?.action ?? null;
   const [epoch, setEpoch] = useState(0);
-  const [account, setAccount] = useState<string | null>(currentSession);
+  const [account, setAccount] = useState<string | null>(props.userId);
   useEffect(
     () => listenSession((announced, self) => setAccount((was) => accountAfterAnnouncement(was, announced, self))),
     [],
@@ -375,7 +387,13 @@ export function EventWizard(props: Props) {
     setEpoch((e) => e + 1);
     setRestored(null);
   };
-  const leavingAsked = blocker.state === "blocked";
+  // Une navigation en cours vers un autre chemin compte aussi comme sortie (tour 3), même sans fenêtre « Quitter ».
+  const navigation = useNavigation();
+  const leavingAsked =
+    blocker.state === "blocked" ||
+    (navigation.state !== "idle" &&
+      navigation.location !== undefined &&
+      navigation.location.pathname !== location.pathname);
   const waitCtx = useMemo(
     () => ({ step: index, epoch, account, leaving: leavingAsked }),
     [index, epoch, account, leavingAsked],
@@ -654,7 +672,7 @@ export function EventWizard(props: Props) {
 
   const [title, intro] = HEADS[step];
   let body: ReactNode = null;
-  const stepProps = { d, set, setD };
+  const stepProps = { d, set: userSet, setD: userSetD };
   if (step === "type")
     body = (
       <TypeStep

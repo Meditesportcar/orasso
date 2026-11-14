@@ -167,6 +167,7 @@ export function EventWizard({
   // La saisie gardée est relue une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
   const [loaded, setLoaded] = useState(false);
   const [resumed, setResumed] = useState<StoredDraft | null>(null);
+  const [showResume, setShowResume] = useState(false);
   // Ce qui est vraiment enregistré : la saisie en diffère tant que quelque chose reste à envoyer.
   const pristine = useRef<EventDraft>(d);
   const done = useRef(false);
@@ -356,6 +357,9 @@ export function EventWizard({
   // Lot 36 : copie d'un événement encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
+    // Tour 3 : une modification PAR LA PERSONNE (un champ) change `epoch` et annule le clic en attente ; les fusions
+    // automatiques (missions, valeurs calculées) passent par `setDraft` et ne l'annulent pas.
+    setEpoch((e) => e + 1);
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
   const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
@@ -366,7 +370,10 @@ export function EventWizard({
     lastStart.current = start;
     setDraft((prev) => withCopyOpening(prev, copyLead, now()));
   }, [copyLead, start]);
-  const setD = useCallback((update: (prev: EventDraft) => EventDraft) => setDraft(update), []);
+  const setD = useCallback((update: (prev: EventDraft) => EventDraft) => {
+    setEpoch((e) => e + 1);
+    setDraft(update);
+  }, []);
 
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
@@ -401,6 +408,8 @@ export function EventWizard({
 
   const leave = () => {
     leaving.current = true;
+    setWaiting(null);
+    setDue(null);
     const pendingAction = pendingLeave.current;
     pendingLeave.current = null;
     if (pendingAction) return pendingAction();
@@ -411,9 +420,15 @@ export function EventWizard({
   // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin.
   const navigation = useNavigation();
   useEffect(() => {
-    if (keepOnDevice || !dirty) return;
     return navigation.addListener("beforeRemove", (e) => {
       if (leaving.current || done.current) return;
+      if (keepOnDevice || !dirty) {
+        // Sortie sans fenêtre « Quitter » (tour 3) : elle annule quand même le clic en attente.
+        leaving.current = true;
+        setWaiting(null);
+        setDue(null);
+        return;
+      }
       e.preventDefault();
       pendingLeave.current = () => navigation.dispatch(e.data.action);
       setQuitting(true);
@@ -561,6 +576,11 @@ export function EventWizard({
   }
 
   async function restart() {
+    // Tour 3 : « Recommencer » annule l'attente tout de suite, avant l'effacement (asynchrone) de la saisie gardée.
+    setWaiting(null);
+    setDue(null);
+    setEpoch((e) => e + 1);
+    setShowResume(false);
     pending.current = null;
     await clearEventDraft(structureId, eventId);
     const fresh = eventId ? pristine.current : initialEventDraft(now());
@@ -656,13 +676,18 @@ export function EventWizard({
     if (!due) return;
     setDue(null);
     // Étape, saisie ou compte changés depuis le clic, ou fenêtre « Quitter » ouverte : l'action ne part pas.
-    if (!waitIsStale(due, waitCtx)) runWaited.current(due.action);
+    if (!waitIsStale(due, waitCtx) && !leaving.current && !done.current) runWaited.current(due.action);
   }, [due, waitCtx]);
   // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
   useEffect(() => {
-    if (waiting && waitIsStale(waiting, waitCtx)) setWaiting(null);
-    if (due && waitIsStale(due, waitCtx)) setDue(null);
-  }, [waiting, due, waitCtx]);
+    const gone = leaving.current || done.current;
+    for (const t of [waiting, due]) {
+      // Tour 3 : une restauration qui annule l'attente montre la saisie reprise (même sur un autre temps).
+      if (t && resumed && t.epoch !== waitCtx.epoch) setShowResume(true);
+    }
+    if (waiting && (gone || waitIsStale(waiting, waitCtx))) setWaiting(null);
+    if (due && (gone || waitIsStale(due, waitCtx))) setDue(null);
+  }, [waiting, due, waitCtx, resumed]);
 
   const ctx: StepContext = {
     d,
@@ -813,7 +838,7 @@ export function EventWizard({
         </View>
       ) : null}
       {notice ? <Notice testID="wizard-notice">{notice}</Notice> : null}
-      {resumed && index === (resumed.step ?? index) ? (
+      {resumed && (showResume || index === (resumed.step ?? index)) ? (
         <View style={styles.resume} testID="wizard-resumed">
           <Notice>{L.draftResume(resumed.draft.title, formatStamp(resumed.savedAt))}</Notice>
           <Button variant="plate" icon="undo" onPress={() => void restart()} testID="wizard-restart">

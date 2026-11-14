@@ -78,3 +78,21 @@ describe("l'attente est liée à l'étape, à la saisie et au compte vus au clic
     expect(accountAfterAnnouncement("a", "b", true)).toBe("a");
   });
 });
+
+describe("modification de la saisie pendant l'attente (tour 3)", () => {
+  const seen = { step: 2, epoch: 4, account: "a", leaving: false };
+  const ticket = newTicket("next", seen);
+
+  it("une modification par la personne fait avancer `epoch` : l'attente est annulée", () => {
+    expect(waitIsStale(ticket, { ...seen, epoch: seen.epoch + 1 })).toBe(true);
+  });
+
+  it("une fusion automatique (missions, valeur calculée) ne change pas `epoch` : l'attente tient", () => {
+    expect(waitIsStale(ticket, seen)).toBe(false);
+  });
+
+  it("une annonce du MÊME compte par une autre fenêtre ne change pas le compte vu", () => {
+    expect(accountAfterAnnouncement("a", "a", false)).toBe("a");
+    expect(waitIsStale(ticket, { ...seen, account: accountAfterAnnouncement("a", "a", false) })).toBe(false);
+  });
+});

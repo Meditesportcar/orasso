@@ -24,6 +24,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   return {
+    userId: me.user.id,
     structure: {
       id: structure.id,
       slug: structure.slug,
@@ -37,11 +38,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function NouvelEvenement({ loaderData }: Route.ComponentProps) {
-  const { structure, categories, makes } = loaderData;
+  const { userId, structure, categories, makes } = loaderData;
   return (
     <>
       <FicheBar title="Nouvel événement" back={`/orga/${structure.slug}`} />
       <EventWizard
+        userId={userId}
         structureId={structure.id}
         structureSlug={structure.slug}
         structureName={structure.name}

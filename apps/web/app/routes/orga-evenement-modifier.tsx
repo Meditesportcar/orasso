@@ -38,6 +38,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const copy = Boolean(event.parentEventId) && event.status === "draft";
   const wanted = eventWizardStepOf(new URL(request.url).searchParams.get("temps")) ?? (copy ? "type" : null);
   return {
+    userId: me.user.id,
     structure: {
       id: structure.id,
       slug: structure.slug,
@@ -56,12 +57,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function ModifierEvenement({ loaderData }: Route.ComponentProps) {
-  const { structure, event, categories, makes, initialStep, stepWanted } = loaderData;
+  const { userId, structure, event, categories, makes, initialStep, stepWanted } = loaderData;
   return (
     <>
       <FicheBar title={event.title} facts="Modifier" back={`/orga/${structure.slug}/e/${event.id}`} />
       <EventWizard
         key={event.id}
+        userId={userId}
         structureId={structure.id}
         structureSlug={structure.slug}
         structureName={structure.name}

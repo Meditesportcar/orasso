@@ -40,6 +40,16 @@ async function draftEvent(cookie: string, title: string, needs: string[] = []): 
   return created.data.id;
 }
 
+/** Les requêtes d'écriture envoyées pour cet événement (surveillées à partir de l'appel). */
+function writesOf(page: Page, id: string): string[] {
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes(`/api/events/${id}`) && ["POST", "PATCH", "PUT", "DELETE"].includes(r.method()))
+      writes.push(`${r.method()} ${r.url()}`);
+  });
+  return writes;
+}
+
 const needsOf = async (cookie: string, id: string) =>
   (await apiCall<{ id: string; trade: string }[]>(cookie, "GET", `/events/${id}/needs`)).data;
 
@@ -194,6 +204,7 @@ test("clic en attente puis « Retour » : l'attente est annulée, l'assistant re
   // Au temps 2 : « Retour » existe. Le clic sur « Continuer » attend, « Retour » l'annule.
   await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=lieu`);
   const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
+  const writes = writesOf(page, id);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
   await page.getByTestId("wizard-back").click();
@@ -204,10 +215,55 @@ test("clic en attente puis « Retour » : l'attente est annulée, l'assistant re
   );
   release();
   await answered;
-  // Les missions arrivées, rien ne part : on reste à l'étape d'avant et rien n'est enregistré.
-  await page.waitForTimeout(1_500);
+  // Les missions arrivées, rien ne part : on reste à l'étape d'avant et aucune écriture n'est envoyée.
+  await page.waitForLoadState("networkidle");
   await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
   expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
+  await ctx.close();
+});
+
+test("clic en attente puis modification de la saisie : l'attente est annulée, rien n'est enregistré, le bouton redevient disponible", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Modif ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const writes = writesOf(page, id);
+  const first = `Premier ${unique()}`;
+  await page.getByLabel("Titre").fill(first);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  // La personne retouche le titre pendant l'attente : le clic en attente est annulé, le bouton redevient « Continuer ».
+  const second = `Second ${unique()}`;
+  await page.getByLabel("Titre").fill(second);
+  await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await expect(page.getByLabel("Titre")).toHaveValue(second);
+  expect(writes).toEqual([]);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(second);
+  // Un nouveau clic aboutit, avec la saisie retouchée.
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(second);
   await ctx.close();
 });
 
@@ -224,7 +280,15 @@ test("saisie gardée + clic pendant le chargement : la saisie reprise est montr�
   const kept = `Gardé ${unique()}`;
   await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
   await page.getByLabel("Titre").fill(kept);
-  await page.waitForTimeout(1_000);
+  // La saisie gardée est écrite après 300 ms : on attend qu'elle soit dans le stockage (pas une durée fixe).
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (t) => Object.entries(localStorage).some(([k, v]) => k.startsWith("orasso-wizard:") && v.includes(t)),
+        kept,
+      ),
+    )
+    .toBe(true);
   let release: () => void = () => undefined;
   const held = new Promise<void>((r) => {
     release = r;
@@ -234,6 +298,7 @@ test("saisie gardée + clic pendant le chargement : la saisie reprise est montr�
     await route.continue();
   });
   await page.reload();
+  const writes = writesOf(page, id);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
   const answered = page.waitForResponse(
@@ -243,8 +308,9 @@ test("saisie gardée + clic pendant le chargement : la saisie reprise est montr�
   await answered;
   // La restauration de la saisie annule l'attente : saisie reprise visible, aucune avancée, rien d'enregistré.
   await expect(page.getByTestId("wizard-restored")).toBeVisible();
-  await page.waitForTimeout(1_500);
+  await page.waitForLoadState("networkidle");
   await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
   await expect(page.getByLabel("Titre")).toHaveValue(kept);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(kept);
   await ctx.close();
