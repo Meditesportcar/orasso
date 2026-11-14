@@ -181,9 +181,9 @@ test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async
   await page.goto(`/e/${SLUG}`);
   await page.waitForLoadState("networkidle");
   await page.getByTestId("event-photos-open").click();
-  await expect(page.getByTestId("album-open"))
-    .toBeVisible({ timeout: 30_000 })
-    .catch(() => undefined);
+  // La navigation finie (l'album, ou la connexion qu'il demande), puis un laps où une vue serait partie : aucune requête de vue.
+  await page.waitForURL((url) => !url.pathname.startsWith("/e/"), { timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1_500);
   expect(views).toEqual([]);
 });
