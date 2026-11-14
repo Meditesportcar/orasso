@@ -2,6 +2,14 @@
 
 À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 14/11/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
+## État au 14/11/2026, 22 h 45 : lot B3a (défauts visibles) en ligne
+
+- **En ligne sur dev.orasso.fr** : `main` = **`8279a27b`** (= `vague-r8`, poussé, déployé le 14/11 vers 22 h 35, `/api/health` ok). Aucune migration. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261114-213106.dump`). Graine jouée sans rien ajouter.
+- **APK** : `Orasso APK/Orasso-2026-11-14-8279a27b-B3a.apk` sur le Drive (236 Mo, signature habituelle) ; installée sur le Xiaomi : aucun plantage ni erreur JavaScript. **Installer cette APK.**
+- **Contenu** (relu par Opus et Codex) : titres d'événement, de pro et de véhicule jamais coupés en plein mot (téléphone de 384 px, police ×1,3 : « RASSEMBLEMENT / DU LYDIA ») ; « Tes abonnés la voient » ; conversation de l'appli : compteur visible, saisie plafonnée qui défile ; site au zoom 130 % (296 et 320 px) : barre de l'espace connecté et nom de Page sans débordement ; affiche générée sans photo (aplat sombre et trait moutarde) ; assistant d'événement : Ctrl+clic ou lien sans destination n'annulent plus l'attente, le focus revient au bouton cliqué ; panne de relecture des événements d'une Page dite une seule fois (site et appli, Page publique et du propriétaire).
+- **À enquêter en premier** (réserve `lots/b3-reserve.md`) : à chaque déploiement, la graine régénère 2 affiches et une carte « Nouveauté d'un abonnement · à l'instant » remonte en tête du Fil, parfois sans image (« Salon de printemps », « Rasso du lac ») : stockage des affiches perdu à chaque nouvelle version ? Préexistant.
+- **Prochaine étape** : cette enquête, puis la suite de la réserve (mineurs de recettes et de la graine).
+
 ## État au 14/11/2026, 21 h : graine de démo sûre et assistant d'événement « clic mis en attente » en ligne
 
 - **En ligne sur dev.orasso.fr** : `main` = **`4a3b9c04`** (= `vague-r8`, poussé, déployé le 14/11 vers 20 h 55, `/api/health` ok). Aucune migration. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261114-194846.dump`, 7,4 Mo). Graine jouée jusqu'au bout sur la base existante sans rien ajouter (aucun doublon). Disque du VPS : 49 Go libres sur 99.
