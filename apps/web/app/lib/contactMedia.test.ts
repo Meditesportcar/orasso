@@ -158,6 +158,9 @@ describe("« Contacter <média> » : une navigation choisie ensuite", () => {
     expect(t.log.opened).toEqual([]);
     expect(t.log.errors).toEqual([null]);
     t.idle();
+    // La navigation part après la fin de la mise à jour du routeur (jamais depuis son propre abonné).
+    expect(t.log.opened).toEqual([]);
+    await Promise.resolve();
     expect(t.log.opened).toEqual(["/app/messages/c2"]);
     expect(t.listeners.size).toBe(0);
   });

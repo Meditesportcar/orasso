@@ -110,7 +110,11 @@ export function createContactMediaController(deps: {
       if (leaves()) return stop();
       if (snapshot().state !== "idle") return;
       stop();
-      deps.navigate(`/app/messages/${conversationId}`);
+      // Après la fin de la mise à jour du routeur (appelée depuis son propre abonné, une navigation lancée ici serait écrasée par la suite de
+      // sa mise à jour) : on relit alors l'état une dernière fois.
+      queueMicrotask(() => {
+        if (!leaves() && snapshot().state === "idle") deps.navigate(`/app/messages/${conversationId}`);
+      });
     });
     const timer = setTimeout(() => {
       stop();

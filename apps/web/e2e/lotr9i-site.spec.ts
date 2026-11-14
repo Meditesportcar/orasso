@@ -281,13 +281,91 @@ test("« Contacter » : un retour arrière pendant l'appel n'est pas remplacé p
   });
   await contact.click();
   await askedPromise;
+  // Les chargeurs de la page précédente sont retenus : le routeur est en « loading » (l'écran « Tes photos » reste monté) quand la réponse arrive.
+  let releaseData: () => void = () => undefined;
+  const heldData = new Promise<void>((r) => {
+    releaseData = r;
+  });
+  let dataAsked: () => void = () => undefined;
+  const dataAskedPromise = new Promise<void>((r) => {
+    dataAsked = r;
+  });
+  await page.route(/\.data(\?|$)/, async (route) => {
+    dataAsked();
+    await heldData;
+    await route.continue();
+  });
   await page.goBack();
-  await page.waitForURL((u) => u.pathname === before);
+  await dataAskedPromise;
+  // La réponse de « Contacter » arrive pendant ce chargement ; on lui laisse le temps d'être traitée.
   release();
-  // La réponse (201/200) est arrivée : on laisse au routeur le temps de réagir à tort, puis on constate.
+  await page.waitForTimeout(1_500);
+  expect(page.url()).not.toMatch(/\/messages\//);
+  releaseData();
+  await page.waitForURL((u) => u.pathname === before);
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1_500);
   expect(new URL(page.url()).pathname).toBe(before);
   expect(page.url()).not.toMatch(/\/messages\//);
+  await ctx.close();
+});
+
+// Tour 4, point 3 : la même adresse recharge (revalidation des chargeurs) quand la réponse arrive : la conversation s'ouvre au retour au repos,
+// elle n'est pas perdue sans un mot.
+test("« Contacter » : un rechargement de la même page à la réponse n'empêche pas d'ouvrir la conversation", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const kenjiCookie = await login("kenji@orasso.local");
+  const tags = await apiCall<{ items: { albumId: string }[] }>(kenjiCookie, "GET", "/me/album-tags");
+  const albumId = tags.data.items[0]?.albumId as string;
+  expect(albumId).toBeTruthy();
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "kenji@orasso.local", undefined, `/app/albums/${albumId}/mes-photos`);
+  const contact = page.getByTestId("my-photos-contact");
+  await expect(contact).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  let asked: () => void = () => undefined;
+  const askedPromise = new Promise<void>((r) => {
+    asked = r;
+  });
+  await page.route("**/api/media/*/conversation", async (route) => {
+    asked();
+    await held;
+    await route.continue();
+  });
+  await contact.click();
+  await askedPromise;
+  // Une revalidation des chargeurs de la même page, retenue : le routeur est en « loading » sur la même adresse quand la réponse arrive.
+  let releaseData: () => void = () => undefined;
+  const heldData = new Promise<void>((r) => {
+    releaseData = r;
+  });
+  let dataAsked: () => void = () => undefined;
+  const dataAskedPromise = new Promise<void>((r) => {
+    dataAsked = r;
+  });
+  await page.route(/\.data(\?|$)/, async (route) => {
+    dataAsked();
+    await heldData;
+    await route.continue();
+  });
+  // Sans attendre la fin de la revalidation (retenue) : l'appel ne doit pas bloquer la page de recette.
+  await page.evaluate(() => {
+    void (
+      window as unknown as { __reactRouterDataRouter: { revalidate(): Promise<void> } }
+    ).__reactRouterDataRouter.revalidate();
+  });
+  await dataAskedPromise;
+  release();
+  await page.waitForTimeout(1_500);
+  expect(page.url()).not.toMatch(/\/messages\//);
+  releaseData();
+  await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await ctx.close();
 });
