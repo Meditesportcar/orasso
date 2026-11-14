@@ -56,6 +56,21 @@ async function providerAs(email: string, providerId: string, actor?: string) {
   return (await res.json()) as { isFollowing: boolean; followersCount: number };
 }
 
+/** Pose l'état d'abonnement voulu par l'API (précondition d'une recette : la graine fait déjà suivre certaines pages). */
+async function setFollowing(email: string, targetKey: string, wanted: boolean, actor?: string) {
+  const res = await fetch(`${API}/api/me/page-follows/${encodeURIComponent(targetKey)}`, {
+    method: wanted ? "PUT" : "DELETE",
+    headers: { cookie: await login(email), origin: WEB, ...(actor ? { "x-orasso-actor": actor } : {}) },
+  });
+  expect(res.status).toBe(200);
+}
+
+/** `GET /media/:id` lu par une personne : son état d'abonnement et son nombre d'abonnés. */
+async function fetchMedia(email: string, mediaId: string) {
+  const res = await fetch(`${API}/api/media/${mediaId}`, { headers: { cookie: await login(email), origin: WEB } });
+  return (await res.json()) as { isFollowing: boolean; followersCount: number };
+}
+
 const SPACES = [
   {
     name: "organisateur",
@@ -108,7 +123,10 @@ const SPACES = [
 
 for (const theme of ["beton", "sable"] as const) {
   for (const space of SPACES) {
-    for (const viewport of [{ name: "1280", size: { width: 1280, height: 900 } }, { name: "390", size: MOBILE }]) {
+    for (const viewport of [
+      { name: "1280", size: { width: 1280, height: 900 } },
+      { name: "390", size: MOBILE },
+    ]) {
       test(`${space.name} : la Page du propriétaire (${theme}, ${viewport.name})`, async ({ browser }) => {
         test.setTimeout(240_000);
         const ctx = await browser.newContext({ viewport: viewport.size });
@@ -167,9 +185,10 @@ for (const theme of ["beton", "sable"] as const) {
         if (viewport.name === "390") {
           // Les chips et les onglets tiennent ou défilent : rien n'est coupé, la page ne défile jamais de côté.
           await noHorizontalScroll(page);
-          const chips = await page.getByTestId("page-gest").locator("a").evaluateAll((els) =>
-            els.map((el) => el.getBoundingClientRect().right),
-          );
+          const chips = await page
+            .getByTestId("page-gest")
+            .locator("a")
+            .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
           for (const right of chips) expect(right, "une chip dépasse de l'écran").toBeLessThanOrEqual(390);
           const name = await page.getByTestId("page-name").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
           expect(name, "le nom n'est jamais coupé").toBe(true);
@@ -178,7 +197,14 @@ for (const theme of ["beton", "sable"] as const) {
 
         // Chaque onglet s'ouvre par son adresse.
         for (const tab of space.tabs) {
-          const slug = { Événements: "evenements", Publications: "publications", Offres: "offres", Albums: "albums", Prestations: "prestations", Mentions: "mentions" }[tab];
+          const slug = {
+            Événements: "evenements",
+            Publications: "publications",
+            Offres: "offres",
+            Albums: "albums",
+            Prestations: "prestations",
+            Mentions: "mentions",
+          }[tab];
           await page.goto(`${path}?onglet=${slug}`);
           await expect(tabs.getByRole("tab", { selected: true })).toContainText(tab);
           await shot(page, `page-${space.name}-${slug}-${theme}-${viewport.name}`);
@@ -221,7 +247,9 @@ test("Le média : « Nouvel album » est le seul bouton principal de l'onglet «
   await open(page, "leo@orasso.local", "/app/media/page?onglet=albums");
   await expect(page.getByTestId("page-album-new")).toHaveAttribute("href", "/app/media/albums/nouveau");
   await expect(page.getByTestId("media-public-albums")).toBeVisible();
-  const published = page.getByTestId("media-public-album").filter({ hasText: "Les photos du Rassemblement Côte Vermeille" });
+  const published = page
+    .getByTestId("media-public-album")
+    .filter({ hasText: "Les photos du Rassemblement Côte Vermeille" });
   await expect(published).toBeVisible();
   // Les brouillons du propriétaire y sont (« Brouillon »).
   await expect(page.getByTestId("media-public-album").filter({ hasText: "Brouillon" }).first()).toBeVisible();
@@ -259,22 +287,28 @@ for (const theme of ["beton", "sable"] as const) {
     const brasa = await personaOf("sofia@orasso.local", "provider");
     const structure = await personaOf("sarah@orasso.local", "organizer");
     const key = `s:${structure.id}`;
+    // Préconditions : ni Damien (la graine le fait suivre La Brasa) ni la structure ne suivent ; l'état d'avant est rendu à la fin.
+    const damienWas = (await providerAs("damien@orasso.local", brasa.id)).isFollowing;
+    const pageWas = (await providerAs("sarah@orasso.local", brasa.id, key)).isFollowing;
+    await setFollowing("damien@orasso.local", `v:${brasa.id}`, false);
+    await setFollowing("sarah@orasso.local", `v:${brasa.id}`, false, key);
     const before = await providerAs("damien@orasso.local", brasa.id);
-    const beforePage = await providerAs("sarah@orasso.local", brasa.id, key);
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await ctx.newPage();
     await setTheme(page, theme);
     const followCalls: string[] = [];
     page.on("request", (r) => {
       if (r.method() === "PUT" || r.method() === "DELETE")
-        if (new URL(r.url()).pathname.includes("/page-follows/")) followCalls.push(r.headers()["x-orasso-actor"] ?? "moi");
+        if (new URL(r.url()).pathname.includes("/page-follows/"))
+          followCalls.push(r.headers()["x-orasso-actor"] ?? "moi");
     });
 
     // Damien, en son nom : « Suivre » devient « Suivi » et le compteur monte d'un.
     await open(page, "damien@orasso.local", `/providers/${brasa.id}`);
     await expect(page.getByTestId("provider-head")).toBeVisible();
     await expect(page.getByTestId("page-name")).toHaveText("La Brasa");
-    for (const word of ["abonnés", "mission", "organisateur"]) await expect(page.getByTestId("page-counts")).toContainText(word);
+    for (const word of ["abonné", "mission", "organisateur"])
+      await expect(page.getByTestId("page-counts")).toContainText(word);
     const tabs = (await page.getByTestId("page-tabs").getByRole("tab").allInnerTexts()).map(clean);
     expect(tabs).toEqual(["Publications", "Prestations", "Mentions"]);
     await page.goto(`/providers/${brasa.id}?onglet=prestations`);
@@ -292,9 +326,11 @@ for (const theme of ["beton", "sable"] as const) {
 
     // Sarah, depuis l'espace de sa structure (`?auteur=`) : c'est la page qui suit, pas la personne.
     followCalls.length = 0;
-    await open(page, "sarah@orasso.local", `/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=prestations`);
-    await expect(page.getByTestId("follow-button")).toContainText(beforePage.isFollowing ? "Suivi" : "Suivre");
-    if (beforePage.isFollowing) await page.getByTestId("follow-button").click();
+    await open(
+      page,
+      "sarah@orasso.local",
+      `/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=prestations`,
+    );
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
     const base = await providerAs("sarah@orasso.local", brasa.id, key);
     await page.getByTestId("follow-button").click();
@@ -321,6 +357,8 @@ for (const theme of ["beton", "sable"] as const) {
     expect(followCalls).toEqual(["moi"]);
     await page.getByTestId("follow-button").click();
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    if (damienWas) await setFollowing("damien@orasso.local", `v:${brasa.id}`, true);
+    if (pageWas) await setFollowing("sarah@orasso.local", `v:${brasa.id}`, true, key);
     await ctx.close();
   });
 }
@@ -352,10 +390,13 @@ for (const theme of ["beton", "sable"] as const) {
     const ctx = await browser.newContext({ viewport: MOBILE });
     const page = await ctx.newPage();
     await setTheme(page, theme);
+    const damienWas = (await fetchMedia("damien@orasso.local", sudCars.id)).isFollowing;
+    await setFollowing("damien@orasso.local", `m:${sudCars.id}`, false);
+    const before = await fetchMedia("damien@orasso.local", sudCars.id);
     await open(page, "damien@orasso.local", `/m/${sudCars.id}?onglet=albums`);
     await expect(page.getByTestId("media-head")).toBeVisible();
     await expect(page.getByTestId("page-name")).toHaveText("Sud Cars");
-    for (const word of ["abonnés", "album", "photo"]) await expect(page.getByTestId("page-counts")).toContainText(word);
+    for (const word of ["abonné", "album", "photo"]) await expect(page.getByTestId("page-counts")).toContainText(word);
     const tabs = (await page.getByTestId("page-tabs").getByRole("tab").allInnerTexts()).map(clean);
     expect(tabs).toEqual(["Publications", "Albums", "Mentions"]);
     await expect(page.getByTestId("media-public-albums")).toBeVisible();
@@ -363,13 +404,15 @@ for (const theme of ["beton", "sable"] as const) {
     await noHorizontalScroll(page);
     await shot(page, `m-visiteur-${theme}`);
     const count = page.getByTestId("page-count-followers");
-    const was = Number(((await count.innerText()).match(/\d+/) ?? ["0"])[0]);
-    const following = (await page.getByTestId("follow-button").innerText()).includes("Suivi");
+    await expect(count).toContainText(String(before.followersCount));
+    await expect(page.getByTestId("follow-button")).toContainText("Suivre");
     await page.getByTestId("follow-button").click();
-    await expect(page.getByTestId("follow-button")).toContainText(following ? "Suivre" : "Suivi");
-    await expect(count).toContainText(String(was + (following ? -1 : 1)));
+    await expect(page.getByTestId("follow-button")).toContainText("Suivi");
+    await expect(count).toContainText(String(before.followersCount + 1));
     await page.getByTestId("follow-button").click();
-    await expect(page.getByTestId("follow-button")).toContainText(following ? "Suivi" : "Suivre");
+    await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    await expect(count).toContainText(String(before.followersCount));
+    if (damienWas) await setFollowing("damien@orasso.local", `m:${sudCars.id}`, true);
     await ctx.close();
   });
 }

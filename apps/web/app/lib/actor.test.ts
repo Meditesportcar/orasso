@@ -4,8 +4,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACTOR_HEADER } from "@orasso/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
 import { actorOfParam, withActorParam } from "./actor";
+import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
 import { api } from "./api.server";
 
 /** Les appels de l'appli qui passent `actor` : `METHOD /chemin`, lus dans `apps/mobile/src/lib/api/*.ts`. */
