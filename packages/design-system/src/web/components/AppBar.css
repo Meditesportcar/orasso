@@ -150,6 +150,16 @@
   .o-appbar__logo {
     width: 112px;
   }
+  /* Lot B3a (zoom 130 % : ~296 px, 320 px) : logotype, pastille de casquette et trois pastilles d'action ne tenaient plus sur
+     la ligne (la barre dépassait de 36 px et la page défilait de côté). Marges et écarts serrés ; le logotype cède le reste. */
+  .o-appbar--tab {
+    gap: 6px;
+    padding-inline: 10px 8px;
+  }
+  .o-appbar--tab .o-appbar__logo {
+    flex: 0 1 112px;
+    min-width: 76px;
+  }
 }
 /* `.capchip` : logo rond 22 px (ou initiales sur moutarde) et nom de la casquette. */
 .o-appbar__persona {
