@@ -113,7 +113,7 @@ export function createReadGate() {
 }
 
 /** Ce qu'une lecture a donné, pour décider de la suite. */
-export type PracticalReadOutcome = "complete" | "partial" | "transient" | "refused";
+export type PracticalReadOutcome = "complete" | "partial" | "transient" | "refused" | "loading" | "partialOnce";
 
 /** Une réponse relue au plus toutes les 60 s au retour sur l'écran (et un refus, seulement après ce délai). */
 export const PRACTICAL_STALE_MS = 60_000;
@@ -144,6 +144,16 @@ export function nextPracticalRead(
 ): { delay: number | null; calendarStep: number; networkAttempt: number } {
   if (outcome === "complete") return { delay: null, calendarStep: 0, networkAttempt: 0 };
   if (outcome === "refused") return { delay: null, calendarStep, networkAttempt };
+  // Lot de fin F : `loading` (calendrier long, borné) et `partial` sans `loading` (une seule relecture).
+  if (outcome === "loading") {
+    const delay = practicalLoadingDelay(calendarStep);
+    return { delay, calendarStep: delay === null ? calendarStep : calendarStep + 1, networkAttempt: 0 };
+  }
+  if (outcome === "partialOnce") {
+    return calendarStep === 0
+      ? { delay: PRACTICAL_PARTIAL_ONCE_MS, calendarStep: 1, networkAttempt: 0 }
+      : { delay: null, calendarStep, networkAttempt: 0 };
+  }
   const pending = outcome === "partial" || calendarStep > 0 ? practicalPendingDelay(calendarStep) : null;
   if (pending !== null) {
     return {
@@ -162,3 +172,20 @@ export function nextPracticalRead(
 export function practicalResumeDelay(lastStartedAt: number, now: number): number {
   return lastStartedAt === 0 ? 0 : Math.max(0, PRACTICAL_MIN_GAP_MS - (now - lastStartedAt));
 }
+
+/**
+ * Petit lot de fin F : le champ `loading` de la réponse (un chargement d'Overpass est encore en cours côté API, jusqu'à 60 s par
+ * département, deux appels à la fois). Même début que le calendrier des lieux partiels (3, 6, 12, 24 s), puis une relecture toutes les
+ * 20 s (jamais sous 15 s), et au plus `PRACTICAL_LOADING_MAX_READS` relectures en tout : environ cinq minutes. Au-delà, plus aucune
+ * relecture automatique : « Réessayer » est proposé.
+ */
+export const PRACTICAL_LOADING_MAX_READS = 16;
+export const PRACTICAL_LOADING_SLOW_MS = 20_000;
+export function practicalLoadingDelay(attempt: number): number | null {
+  const n = Math.max(0, Math.floor(attempt));
+  if (n >= PRACTICAL_LOADING_MAX_READS) return null;
+  return PRACTICAL_PENDING_DELAYS_MS[n] ?? PRACTICAL_LOADING_SLOW_MS;
+}
+
+/** Une réponse `partial` sans `loading` (une source en échec, recul de 10 min à 1 h côté API) : une seule relecture espacée. */
+export const PRACTICAL_PARTIAL_ONCE_MS = 15_000;

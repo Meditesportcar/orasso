@@ -1,5 +1,12 @@
 import { Icon, type IconName } from "@orasso/design-system/web";
-import { type ActivityDay, type ActivityItem, activityWhen, groupedTitle, publicationLinkOf } from "@orasso/shared";
+import {
+  type ActivityDay,
+  type ActivityItem,
+  activityWhen,
+  albumTagLabels,
+  groupedTitle,
+  publicationLinkOf,
+} from "@orasso/shared";
 import type { MouseEvent } from "react";
 
 import { now } from "../../lib/clock";
@@ -56,6 +63,16 @@ export function pathOfItem(item: Pick<ActivityItem, "data">): string | null {
   return typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
 }
 
+/** Ce que la notification d'une identification porte : le logo du média, son nom, jusqu'à quatre vignettes. */
+function albumTaggedParts(item: ActivityItem) {
+  const d = item.data;
+  return {
+    logo: typeof d.mediaLogoUrl === "string" ? d.mediaLogoUrl : null,
+    media: typeof d.mediaName === "string" ? d.mediaName : "?",
+    thumbs: Array.isArray(d.thumbs) ? d.thumbs.filter((u): u is string => typeof u === "string").slice(0, 4) : [],
+  };
+}
+
 function Avatars({ item }: { item: ActivityItem }) {
   const actors = item.actors;
   if (actors.length === 0) {
@@ -96,7 +113,35 @@ export function ActivityRow({
   const { names, rest } = groupedTitle(item.title, item.actors, item.count);
   const when = activityWhen(new Date(item.latestAt), now(), day);
   const path = target ?? pathOfItem(item);
-  const content = (
+  // Lot R9f : « <média> a publié 6 photos de ta … » : le logo du média, le titre, la bande de quatre vignettes et « Voir mes photos ».
+  const tagged = item.type === "album_tagged" ? albumTaggedParts(item) : null;
+  const content = tagged ? (
+    <>
+      <PersonAvatar url={tagged.logo} pseudo={tagged.media} size={40} />
+      <span className="act-row__text" data-testid="activity-album-tagged">
+        <strong>{item.title}</strong>
+        {tagged.thumbs.length > 0 && (
+          <span className="act-strip" data-testid="activity-album-strip">
+            {tagged.thumbs.map((url) => (
+              <span key={url} className="act-strip__thumb">
+                <img src={url} alt="" loading="lazy" />
+              </span>
+            ))}
+          </span>
+        )}
+        <span className="o-t-caption act-go">
+          {albumTagLabels.seeMyPhotos}
+          <Icon name="next" size={14} />
+        </span>
+        <span className="o-t-caption s-muted" suppressHydrationWarning>
+          {when}
+        </span>
+      </span>
+      {item.read ? null : (
+        <span className="act-row__dot" data-testid="activity-unread" role="img" aria-label="Non lu" />
+      )}
+    </>
+  ) : (
     <>
       <Avatars item={item} />
       <span className="act-row__text">

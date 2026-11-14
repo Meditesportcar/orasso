@@ -1,6 +1,7 @@
 // Mes sorties (DA v2, prototype `s-sorties`, lot 57 ; ex-`acces.tsx`, `/app/acces` redirige ici) : les candidatures,
 // billets et missions staff sont des tickets. Trois segments comme l'appli : À venir, Staff, Passées (carnet de route,
 // récap et prix du public).
+
 import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
@@ -44,6 +45,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
+import { AlbumMentionsBlock } from "../components/albums/AlbumMentions";
 import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
@@ -454,6 +456,9 @@ function ApplicationCard({
           )}
         </div>
       )}
+
+      {/* Lot R9f : « Photos de ma voiture · N · <média> » (sortie passée, les photos d'albums où je suis identifié). */}
+      <AlbumMentionsBlock mentions={app.albumPhotos} mine outing />
 
       {/* Lot R4b (maquette R4.4) : la ligne « Le plateau » des sorties retenues, à venir ou passées. */}
       {app.status === "accepted" && <LineupLine slug={app.event.slug} preview={app.lineupPreview} />}

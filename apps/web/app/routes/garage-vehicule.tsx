@@ -12,6 +12,7 @@ import {
   certificationStatusLabels,
   cleanVehicleVersion,
   countryLabel,
+  type OtherVehicle,
   type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
@@ -28,7 +29,7 @@ import {
   vehicleWizardLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { AlbumMentionsBlock } from "../components/albums/AlbumMentions";
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { ShareCard } from "../components/ShareButtons";
@@ -66,7 +67,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : Promise.resolve(null),
   ]);
   const outgoing = transfers?.ok ? transfers.data.outgoing.find((t) => t.id === vehicle.plateTransfer?.id) : undefined;
-  return { vehicle, history, categories, answerBy: outgoing?.answerBy ?? null };
+  // Lot R9f : « Vu au <événement> · N photos » est lu sur la fiche publique de la voiture (une panne ne casse pas la page).
+  const sheet = await api<OtherVehicle>(request, `/vehicles/${encodeURIComponent(id)}`);
+  return {
+    vehicle,
+    history,
+    categories,
+    answerBy: outgoing?.answerBy ?? null,
+    albumMentions: sheet.ok ? sheet.data.albumMentions : undefined,
+  };
 }
 
 type EditFields = {
@@ -217,7 +226,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function VehiclePage({ loaderData, actionData }: Route.ComponentProps) {
-  const { vehicle: v, history, categories, answerBy } = loaderData;
+  const { vehicle: v, history, categories, answerBy, albumMentions } = loaderData;
   const busy = useNavigation().state !== "idle";
   const cert = v.certification;
   const archived = v.status !== "active";
@@ -340,6 +349,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
 
       {/* Lot R7l3 : les podiums de vote (et le partenaire quand l'API le renvoie). */}
       <VehicleTrophies vehicle={v} />
+      <AlbumMentionsBlock mentions={albumMentions} mine />
 
       <section className="s-stack s-stack--tight" aria-labelledby="fiche">
         <h2 id="fiche" className="s-h2">
