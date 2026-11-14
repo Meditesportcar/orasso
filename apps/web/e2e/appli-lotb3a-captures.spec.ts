@@ -121,3 +121,33 @@ for (const m of MATRIX) {
     await ctx.close();
   });
 }
+
+// Point 7 (parité D20) : la relecture de la page en panne garde la liste et la dit à part, comme le site.
+test("page d'une structure : relecture en panne → la liste reste, la panne se dit une fois, pas de « Aucun événement »", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, { scale: 1, theme: "beton" });
+  await visit(page, "/o/roues-libres-66?onglet=evenements");
+  const list = page.getByTestId("structure-events");
+  await expect(list.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
+  const rows = await list.getByTestId("event-row").count();
+  await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0);
+  // Les relectures de la liste tombent en panne ; l'aller-retour par la fiche d'un événement relit la page au retour.
+  await page.route("**/api/events?*structureId=*", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await list.getByTestId("event-row").first().click();
+  await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
+  await page.goBack();
+  await expect(page.getByTestId("structure-upcoming-reread-error")).toBeVisible({ timeout: 30_000 });
+  await expect(list.getByTestId("event-row")).toHaveCount(rows);
+  await expect(page.getByText("Aucun événement à venir")).toHaveCount(0);
+  await expect(page.getByTestId("structure-upcoming-error")).toHaveCount(0);
+  await shot(page, "appli-page-relecture-en-panne-beton-384");
+  // La reprise : la panne disparaît.
+  await page.unroute("**/api/events?*structureId=*");
+  await list.getByTestId("event-row").first().click();
+  await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
+  await page.goBack();
+  await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0, { timeout: 30_000 });
+  await expect(list.getByTestId("event-row")).toHaveCount(rows);
+  await ctx.close();
+});
