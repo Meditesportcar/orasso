@@ -21,7 +21,15 @@ import {
 import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { albumPhotoTags, eventAlbumPhotos, eventAlbums, events, mediaProfiles, profiles } from "../../db/schema";
+import {
+  albumPhotoTags,
+  eventAlbumPhotos,
+  eventAlbums,
+  events,
+  mediaProfiles,
+  profiles,
+  stories,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
@@ -261,6 +269,25 @@ export const myPhotosService = {
     const isMediaAuthor = join.m.userId === v.user.id;
     const byPhoto = new Map<string, typeof tags>();
     for (const t of tags) byPhoto.set(t.tag.photoId, [...(byPhoto.get(t.tag.photoId) ?? []), t]);
+    // « En story » : ma story **originale** (jamais une copie d'une story d'un autre) encore en ligne, par photo.
+    const live = tags.length
+      ? await db
+          .select({ photoId: stories.sourceAlbumPhotoId, audience: stories.audience, expiresAt: stories.expiresAt })
+          .from(stories)
+          .where(
+            and(
+              eq(stories.authorId, v.user.id),
+              inArray(
+                stories.sourceAlbumPhotoId,
+                tags.map((t) => t.tag.photoId),
+              ),
+              isNull(stories.sharedFromStoryId),
+              isNull(stories.deletedAt),
+              sql`${stories.expiresAt} > ${at}`,
+            ),
+          )
+      : [];
+    const liveByPhoto = new Map(live.map((s) => [s.photoId, s]));
     const mine: MyPhoto[] = [];
     for (const p of photos) {
       const list = byPhoto.get(p.id);
@@ -268,6 +295,7 @@ export const myPhotosService = {
       // Une photo peut porter deux identifications de moi (ma voiture et mon pseudo) : celle d'un autre prime sur la mienne.
       const chosen = list.find((t) => t.tag.taggedBy !== v.user.id) ?? list[0];
       if (!chosen) continue;
+      const liveOf = liveByPhoto.get(p.id);
       mine.push({
         id: p.id,
         url: albumPhotoUrl(join.a.id, p.storageKey),
@@ -280,6 +308,7 @@ export const myPhotosService = {
         // Un fichier qui sort d'Orasso a ses plaques traitées : une photo d'ancienne galerie (`unknown`) ne s'enregistre pas.
         canSave: p.plateState !== "unknown" && canSavePhoto({ allowSave: join.a.allowSave, isMediaAuthor }),
         canStory: storyPlateOfAlbumPhoto(p.plateState).ok,
+        liveStory: liveOf ? { audience: liveOf.audience, expiresAt: liveOf.expiresAt.toISOString() } : null,
       });
     }
     const carTag = tags.find((t) => t.tag.vehicleId);

@@ -41,6 +41,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 import { ActivityLine } from "./ActivityRow";
+import { AlbumTaggedRow } from "./rows/AlbumTagged";
 import { StoryMentionRow } from "./rows/StoryMention";
 import { UncertainAction } from "./UncertainAction";
 
@@ -265,6 +266,8 @@ export function ActivityScreen() {
                 <View key={item.id} style={i > 0 ? [styles.divider, { borderTopColor: c.line }] : null}>
                   {item.type === "story_mention" ? (
                     <StoryMentionRow item={shown} day={g.day} onPress={press} />
+                  ) : item.type === "album_tagged" ? (
+                    <AlbumTaggedRow item={shown} day={g.day} onPress={press} />
                   ) : (
                     <ActivityLine item={shown} day={g.day} onPress={press} />
                   )}

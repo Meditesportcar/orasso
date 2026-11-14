@@ -32,6 +32,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { OwnVehicleMentions } from "@/features/albums/AlbumMentions";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { CertificationSheet } from "@/features/garage/CertificationSheet";
 import { trimLine } from "@/features/garage/GarageCard";
@@ -420,6 +421,9 @@ export default function VehiculeFiche() {
       {error && !certOpen ? <Notice tone="error">{error}</Notice> : null}
 
       <VehicleTrophies vehicle={v} />
+
+      {/* Lot R9f : « Vu au <événement> · N photos » (les photos d'albums où ma voiture est identifiée). */}
+      <OwnVehicleMentions vehicleId={id} />
 
       <SecHead title="Fiche" />
       <Card style={styles.factsCard}>

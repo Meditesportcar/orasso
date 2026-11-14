@@ -7,7 +7,15 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { call, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, passportStamps, seasons, userFollows } from "../../db/schema";
+import {
+  eventAlbumPhotos,
+  eventAlbums,
+  passportStamps,
+  seasons,
+  stories,
+  storyTags,
+  userFollows,
+} from "../../db/schema";
 import { paris, publishedAlbum } from "./albums-test-helpers";
 import { type Ref, tagScenario } from "./tags-test-helpers";
 
@@ -52,6 +60,7 @@ describe("« Tes photos » : seulement les miennes", () => {
         "canStory",
         "height",
         "id",
+        "liveStory",
         "position",
         "tagId",
         "taggedBy",
@@ -66,6 +75,40 @@ describe("« Tes photos » : seulement les miennes", () => {
     const kenji = await mine(s.kenji);
     expect(kenji.json.photos.map((p: { id: string }) => p.id)).toEqual([photo(1)]);
     expect(kenji.json.vehicle).toBeNull();
+  });
+
+  it("deux identifications de moi sur la même photo : une seule ligne ; retirer celle d'un autre laisse l'autre, la dernière donne 404", async () => {
+    const byLeo = await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    const bySelf = await pose(s.dam, photo(0), { userId: s.dam.id });
+    const both = await mine(s.dam);
+    expect(both.json.photos).toHaveLength(1);
+    // Celle d'un autre prime : « Ce n'est pas ma voiture » est le geste proposé.
+    expect(both.json.photos[0]).toMatchObject({ tagId: byLeo.json.id, taggedBy: "media" });
+    expect((await call(s.dam, "DELETE", `/me/album-tags/${byLeo.json.id}`)).status).toBe(204);
+    const left = await mine(s.dam);
+    expect(left.status).toBe(200);
+    expect(left.json.photos).toHaveLength(1);
+    expect(left.json.photos[0]).toMatchObject({ tagId: bySelf.json.id, taggedBy: "me" });
+    expect((await call(s.dam, "DELETE", `/me/album-tags/${bySelf.json.id}`)).status).toBe(204);
+    expect((await mine(s.dam)).status).toBe(404);
+  });
+
+  it("`liveStory` : ma story originale encore en ligne (public, fin), jamais une copie d'une story d'un autre ni une story tombée", async () => {
+    await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    await pose(s.leo, photo(0), { userId: s.kenji.id });
+    expect((await mine(s.dam)).json.photos[0].liveStory).toBeNull();
+    const story = await call(s.dam, "POST", `/album-photos/${photo(0)}/share-to-story`, { audience: "followers" });
+    expect(story.status).toBe(201);
+    const live = (await mine(s.dam)).json.photos[0].liveStory;
+    expect(Object.keys(live).sort()).toEqual(["audience", "expiresAt"]);
+    expect(live.audience).toBe("followers");
+    // Kenji repartage la story de Damien (copie qui porte le crédit) : pour lui, rien n'est « déjà en story ».
+    await db.insert(storyTags).values({ storyId: story.json.id, targetKind: "user", targetId: s.kenji.id });
+    expect((await call(s.kenji, "POST", `/stories/${story.json.id}/share-to-mine`, {})).status).toBeLessThan(300);
+    expect((await mine(s.kenji)).json.photos[0].liveStory).toBeNull();
+    // Une story tombée n'est plus « en ligne ».
+    await db.update(stories).set({ deletedAt: new Date() }).where(eq(stories.id, story.json.id));
+    expect((await mine(s.dam)).json.photos[0].liveStory).toBeNull();
   });
 
   it("`canSave` suit `allow_save` ; `canStory` suit l'état de plaque (une photo d'ancienne galerie ne se partage pas en story)", async () => {
