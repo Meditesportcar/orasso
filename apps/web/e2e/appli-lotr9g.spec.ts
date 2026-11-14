@@ -214,7 +214,6 @@ async function withLeoAsCoOrganizer<T>(run: () => Promise<T>): Promise<T> {
 test("Léo, titulaire du média ET organisateur de l'événement : ses droits de titulaire et ceux de l'organisateur", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
   await withLeoAsCoOrganizer(async () => {
     const { ctx, page } = await open(browser, LEO);
     try {
@@ -242,7 +241,6 @@ test("Léo, titulaire du média ET organisateur de l'événement : ses droits de
 test("la liste des albums tombe en panne : « Réessayer » (pas de section qui disparaît), puis la liste se lit", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
   const { ctx, page } = await open(browser, DAMIEN);
   try {
     let down = true;
@@ -272,7 +270,6 @@ test("la liste des albums tombe en panne : « Réessayer » (pas de section qui 
 test("la liste suit le retour sur la fiche (actualisation) et la vue est comptée à l'ouverture d'un album depuis la fiche", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
   const { ctx, page } = await open(browser, DAMIEN);
   try {
     let reads = 0;
@@ -304,7 +301,6 @@ test("la liste suit le retour sur la fiche (actualisation) et la vue est compté
 test("lien profond « Photos » : la section est posée en haut de la page, dans le repère du contenu", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
   const { ctx, page } = await open(browser, DAMIEN);
   try {
     await go(page, `/e/${SLUG}?section=photos`);
@@ -323,7 +319,6 @@ test("lien profond « Photos » : la section est posée en haut de la page, dans
 });
 
 test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute le 51e", async ({ browser }) => {
-  test.setTimeout(240_000);
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
@@ -358,7 +353,6 @@ test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute
 });
 
 test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async ({ browser }) => {
-  test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, baseURL: APP });
   await ctx.addInitScript(() => localStorage.setItem("orasso.onboarded", "1"));
   const page = await ctx.newPage();
@@ -370,11 +364,84 @@ test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async
     await go(page, `/e/${SLUG}`);
     await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
     await page.getByTestId("event-photos-open").click();
-    await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+    // L'album sans session demande la connexion : la navigation finie (album ou connexion), puis un laps où une vue serait partie.
+    await page.waitForURL((url) => !url.pathname.startsWith("/e/"), { timeout: 30_000 });
     await page.waitForLoadState("networkidle");
-    // Un laps où une vue serait partie : aucune requête de vue.
     await page.waitForTimeout(1_500);
     expect(views).toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
+
+// --- Tour 3 -------------------------------------------------------------------------------------------------------------------
+
+test("liste vide réussie, puis actualisation en panne : le message et « Réessayer » (jamais une section qui disparaît), puis la reprise", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    let phase: "empty" | "down" | "ok" = "empty";
+    await page.route(`**/api/events/by-slug/${SLUG}/albums*`, (route) =>
+      phase === "empty"
+        ? route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ items: [], nextCursor: null, total: 0 }),
+          })
+        : phase === "down"
+          ? route.fulfill({
+              status: 500,
+              contentType: "application/json",
+              body: JSON.stringify({ error: { code: "internal", message: "Erreur du serveur" } }),
+            })
+          : route.continue(),
+    );
+    // Retour sur la fiche depuis le plateau : la liste est relue (comme le journal).
+    const leaveAndComeBack = async () => {
+      await page.getByTestId("lineup-block").getByText("Voir le plateau", { exact: false }).first().click();
+      await page.waitForURL(/plateau/, { timeout: 30_000 });
+      await page.goBack();
+      await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
+    };
+    await go(page, `/e/${SLUG}`);
+    await expect(page.getByTestId("lineup-block")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos")).toHaveCount(0);
+    phase = "down";
+    await leaveAndComeBack();
+    await expect(page.getByTestId("event-photos-error")).toBeVisible({ timeout: 30_000 });
+    phase = "ok";
+    await page.getByTestId("event-photos-error").getByText("Réessayer").click();
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    // Des albums déjà lus restent affichés quand l'actualisation échoue, avec le message.
+    phase = "down";
+    await leaveAndComeBack();
+    await expect(page.getByTestId("event-photos-refresh-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1);
+    phase = "ok";
+    await page.getByTestId("event-photos-refresh-error").getByText("Réessayer").click();
+    await expect(page.getByTestId("event-photos-refresh-error")).toHaveCount(0, { timeout: 30_000 });
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("lien profond « Photos » : le plateau, lu en retard, repousse la section ; la page s'y reporte quand même", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    // La réponse du plateau est retenue 2,5 s (mise en scène), puis la section doit être posée en haut une fois le plateau affiché.
+    await page.route(`**/api/events/*/lineup*`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      await route.continue();
+    });
+    await go(page, `/e/${SLUG}?section=photos`);
+    await expect(page.getByTestId("lineup-block")).toBeVisible({ timeout: 30_000 });
+    const section = page.getByTestId("event-photos");
+    await expect
+      .poll(async () => (await section.boundingBox())?.y ?? Number.NaN, { timeout: 30_000 })
+      .toBeLessThan(160);
   } finally {
     await ctx.close();
   }

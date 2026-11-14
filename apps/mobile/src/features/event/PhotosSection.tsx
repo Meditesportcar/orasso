@@ -13,6 +13,7 @@ import { Pressable, type ScrollView, StyleSheet, View } from "react-native";
 import { AlbumCover } from "@/features/albums/AlbumCover";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { accountGuard } from "@/lib/kv";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
@@ -58,11 +59,15 @@ export function PhotosSection({
   const [menu, setMenu] = useState<AlbumSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const block = useRef<View>(null);
+  // Génération de la liste : une actualisation (ou un autre événement, un autre compte) la change ; une page suivante partie avant est ignorée.
+  const generation = useRef(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: la première page relue repart de zéro (`list.data` est la réponse entière).
   useEffect(() => {
+    generation.current += 1;
     setMore(null);
     setMoreFailed(null);
-  }, [list.data]);
+    setLoadingMore(false);
+  }, [list.data, slug, signedIn, refreshKey]);
   const seen = new Set<string>();
   const albums = albumsOrder([...(list.data?.items ?? []), ...(more?.items ?? [])]).filter((a) => {
     if (seen.has(a.id)) return false;
@@ -121,18 +126,22 @@ export function PhotosSection({
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     setMoreFailed(null);
+    const started = generation.current;
+    const guard = accountGuard();
+    const fresh = () => started === generation.current && guard.current();
     try {
       const page = await api.eventAlbums(slug, signedIn, nextCursor);
-      setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], cursor: page.nextCursor }));
+      if (fresh()) setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], cursor: page.nextCursor }));
     } catch (e) {
-      setMoreFailed(errorMessage(e));
+      if (fresh()) setMoreFailed(errorMessage(e));
     } finally {
-      setLoadingMore(false);
+      if (fresh()) setLoadingMore(false);
     }
   }
 
-  // Une panne n'est pas une absence : sans albums déjà lus, le message et « Réessayer » (un 404 : fiche sans section, comme avant).
-  if (list.error && !list.data && list.error.status !== 404) {
+  // Une panne n'est pas une absence : tant qu'aucun album n'est affichable (jamais lu, ou une lecture réussie mais vide avant la panne),
+  // le message et « Réessayer » (un 404 : fiche sans section, comme avant).
+  if (list.error && albums.length === 0 && list.error.status !== 404) {
     return (
       <View style={styles.block} testID="event-photos">
         <SecHead title={L.title} testID="event-photos-title" />
@@ -194,6 +203,12 @@ export function PhotosSection({
           </SmButton>
         </Plate>
       ))}
+      {list.error ? (
+        // Des albums déjà lus restent affichés : l'actualisation a échoué, on le dit.
+        <View testID="event-photos-refresh-error">
+          <LoadError message={L.refreshFailed} onRetry={() => void list.reload()} />
+        </View>
+      ) : null}
       {nextCursor ? (
         <SmButton
           kind="s"

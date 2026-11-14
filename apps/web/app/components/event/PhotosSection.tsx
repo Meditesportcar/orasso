@@ -5,7 +5,7 @@
 // et « Réessayer » ; au-delà de la première page (50 albums), « Voir plus d'albums » (le total vient de l'API).
 import { Button, Icon } from "@orasso/design-system/web";
 import { type AlbumSummary, albumsOrder, eventPhotosLabels as L, showPhotosSection } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import "../../styles/albums.css";
@@ -50,9 +50,13 @@ export function PhotosSection({
   const [moreFailed, setMoreFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: la liste relue repart de la première page.
+  // Génération de la liste : une page suivante partie avant une actualisation est ignorée (jamais d'album retiré réinjecté).
+  const generation = useRef(0);
   useEffect(() => {
+    generation.current += 1;
     setMore(null);
     setMoreFailed(false);
+    setLoadingMore(false);
   }, [albums]);
   const [menu, setMenu] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -92,6 +96,7 @@ export function PhotosSection({
     if (!cursor || !moreUrl || loadingMore) return;
     setLoadingMore(true);
     setMoreFailed(false);
+    const started = generation.current;
     const res = await fetch(
       `${moreUrl}${moreUrl.includes("?") ? "&" : "?"}limit=50&cursor=${encodeURIComponent(cursor)}`,
       {
@@ -101,6 +106,7 @@ export function PhotosSection({
     const page = res?.ok
       ? ((await res.json().catch(() => null)) as { items: AlbumSummary[]; nextCursor: string | null } | null)
       : null;
+    if (started !== generation.current) return;
     if (page) setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], cursor: page.nextCursor }));
     else setMoreFailed(true);
     setLoadingMore(false);

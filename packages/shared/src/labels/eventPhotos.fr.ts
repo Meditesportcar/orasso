@@ -13,6 +13,8 @@ export const eventPhotosLabels = {
   mediaLine: (name: string, photos: number) => `${name} · ${countFr(photos, "photo")}`,
   /** Une panne de lecture n'est pas « aucun album » : le message, puis « Réessayer ». */
   loadFailed: "Les albums n'ont pas pu être chargés.",
+  /** Des albums déjà lus restent affichés mais l'actualisation a échoué. */
+  refreshFailed: "Les albums n'ont pas pu être actualisés.",
   retry: "Réessayer",
   /** Au-delà de la première page (50 albums) : la suite. */
   moreAlbums: "Voir plus d'albums",

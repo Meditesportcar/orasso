@@ -141,7 +141,6 @@ async function withDb<T>(setup: string[], cleanup: string[], params: unknown[], 
 test("Léo, titulaire du média ET co-organisateur : retirer la photo, reprendre au journal et « officiel » ensemble", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
   const cookie = await login(DAMIEN);
   const album = await albumOfEvent(cookie);
   await withDb(
@@ -189,7 +188,6 @@ test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async
 });
 
 test("avec une session, la vue est comptée à l'ouverture depuis la fiche", async ({ page }) => {
-  test.setTimeout(120_000);
   await loginInBrowser(page, DAMIEN, undefined, `/e/${SLUG}`);
   await page.waitForLoadState("networkidle");
   const view = page.waitForRequest((r) => r.method() === "POST" && /\/api\/media-contents\/.+\/view/.test(r.url()), {
@@ -200,7 +198,6 @@ test("avec une session, la vue est comptée à l'ouverture depuis la fiche", asy
 });
 
 test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute le 51e", async ({ page }) => {
-  test.setTimeout(180_000);
   await withDb(
     [
       `insert into event_albums (event_id, media_profile_id, author_id, title, status, published_at, photos_count)
@@ -218,6 +215,44 @@ test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute
       await page.getByTestId("event-photos-more-albums").click();
       await expect(page.getByTestId("event-photos-album")).toHaveCount(51, { timeout: 30_000 });
       await expect(page.getByTestId("event-photos-more-albums")).toHaveCount(0);
+    },
+  );
+});
+
+test("une page suivante partie avant une actualisation est ignorée (51 albums, Damien actualise pendant « Voir plus »)", async ({
+  page,
+}) => {
+  await withDb(
+    [
+      `insert into event_albums (event_id, media_profile_id, author_id, title, status, published_at, photos_count)
+         select a.event_id, a.media_profile_id, a.author_id, 'Extra ' || g, 'published',
+                a.published_at - (g || ' minutes')::interval, 0
+           from event_albums a, generate_series(1, 50) g
+          where a.event_id = (select id from events where slug = $1) and a.official_at is not null`,
+    ],
+    [`delete from event_albums where title like 'Extra %' and event_id = (select id from events where slug = $1)`],
+    [SLUG],
+    async () => {
+      await loginInBrowser(page, DAMIEN, undefined, `/e/${SLUG}`);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
+      // La page suivante est retenue 3 s (mise en scène) ; l'actualisation (retirer « officiel ») part pendant ce temps.
+      await page.route("**/api/public/events/by-slug/*/albums?*cursor=*", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        await route.continue();
+      });
+      const late = page.waitForResponse((r) => /albums\?.*cursor=/.test(r.url()), { timeout: 30_000 });
+      await page.getByTestId("event-photos-more-albums").click();
+      await page.getByTestId("event-photos-more").first().click();
+      await page.getByTestId("event-photos-official-toggle").click();
+      await expect(page.getByTestId("event-photos-notice")).toHaveText("« Officiel » retiré");
+      await late;
+      // La réponse ancienne est arrivée : elle n'a pas réinjecté son album dans la liste actualisée.
+      await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
+      await page.unroute("**/api/public/events/by-slug/*/albums?*cursor=*");
+      await page.getByTestId("event-photos-more").first().click();
+      await page.getByTestId("event-photos-official-toggle").click();
+      await expect(page.getByTestId("event-photos-official")).toHaveText("Album officiel");
     },
   );
 });

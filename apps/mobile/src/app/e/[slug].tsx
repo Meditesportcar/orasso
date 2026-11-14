@@ -144,6 +144,13 @@ export default function EventPage() {
   // Lot R9g : le lien « Photos » (notification d'album publié, gestion de l'événement) défile jusqu'à la section, une seule fois.
   const pageScroll = useRef<ScrollView>(null);
   const scrolledToPhotos = useRef(false);
+  // Le plateau (au-dessus de « Photos ») se lit à part et repousse la section en arrivant : le lien profond attend sa résolution (ou 4 s au plus).
+  const [lineupDone, setLineupDone] = useState(false);
+  const lineupSettled = useCallback(() => setLineupDone(true), []);
+  useEffect(() => {
+    const timer = setTimeout(() => setLineupDone(true), 4_000);
+    return () => clearTimeout(timer);
+  }, []);
   const revealed = useCallback(() => {
     scrolledToPhotos.current = true;
   }, []);
@@ -709,7 +716,7 @@ export default function EventPage() {
         </SmButton>
       ) : null}
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
-      <LineupBlock eventId={e.id} slug={e.slug} />
+      <LineupBlock eventId={e.id} slug={e.slug} onSettled={lineupSettled} />
       {/* Lot R9g : « Photos », les albums des médias accrédités (l'officiel en tête) ; rien sans album publié. */}
       {!cancelled ? (
         <PhotosSection
@@ -717,7 +724,7 @@ export default function EventPage() {
           signedIn={status === "in"}
           ownStructure={ownStructure}
           refreshKey={journalTick}
-          reveal={section === "photos" && !scrolledToPhotos.current}
+          reveal={section === "photos" && lineupDone && !scrolledToPhotos.current}
           scrollRef={pageScroll}
           onRevealed={revealed}
         />

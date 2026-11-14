@@ -16,6 +16,7 @@ import {
   type LineupPro,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -203,12 +204,25 @@ function ProPills({ pros }: { pros: LineupPro[] }) {
 }
 
 /** R4.3 : le bloc « Le plateau » de la fiche. */
-export function LineupBlock({ eventId, slug }: { eventId: string; slug: string }) {
+export function LineupBlock({
+  eventId,
+  slug,
+  onSettled,
+}: {
+  eventId: string;
+  slug: string;
+  /** La lecture du plateau est finie (réponse ou échec) : le bloc a pris sa place, la page ne bougera plus à cause de lui. */
+  onSettled?: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
   const lineup = useLineup(eventId, { limit: LINEUP_BLOCK_SIZE - 1 });
   const data: EventLineup | null = lineup.data;
+  const settled = !lineup.loading;
+  useEffect(() => {
+    if (settled) onSettled?.();
+  }, [settled, onSettled]);
   // Brouillon, privé, annulé : l'API ne montre rien, le bloc non plus.
   if (!data) return null;
   const n = data.counts.cars;
