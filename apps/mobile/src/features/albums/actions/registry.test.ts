@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 // Le vrai registre (`registry.ts`) avec ses vraies lignes R9f (`TagActions`) et R9g (`OrganizerActions`) : seuls les modules d'écran
 // (react-native, design-system, routeur, API, feuilles) sont remplacés par des coquilles, car aucune action n'est exécutée ici.
-vi.mock("react-native", () => ({ StyleSheet: { create: (s: unknown) => s }, View: "View", Modal: "Modal", Pressable: "Pressable" }));
+vi.mock("react-native", () => ({
+  StyleSheet: { create: (s: unknown) => s },
+  View: "View",
+  Modal: "Modal",
+  Pressable: "Pressable",
+}));
 vi.mock("@orasso/design-system/native", () => ({
   Button: "Button",
   Icon: "Icon",
