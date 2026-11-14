@@ -19,6 +19,7 @@ import { data, Form, useNavigation, useRevalidator } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
 import { ProviderTriage } from "../components/ProviderTriage";
+import { useActor, withActorParam } from "../lib/actor";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { fromInput, toInput } from "../lib/datetime";
@@ -190,13 +191,14 @@ function Retained({
   busy: boolean;
   feedback: { error: string | null; ok: string | null; id: string | null } | undefined;
 }) {
+  const actor = useActor();
   const p = app.provider;
   if (!p) return null;
   return (
     <li className="s-card s-stack s-stack--tight" data-testid="need-retained" data-application={app.id}>
       <div className="s-row s-row--between">
         <strong className="o-never-truncate">{p.name}</strong>
-        <a href={`/providers/${p.id}`} className="o-t-caption">
+        <a href={withActorParam(`/providers/${p.id}`, actor)} className="o-t-caption">
           {L.seeVitrine}
         </a>
       </div>

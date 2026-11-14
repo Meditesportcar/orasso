@@ -3,7 +3,8 @@
 // l'espace pose un `ActorProvider` ; les composants partagés (Fil, barre des stories, commentaires) lisent `useActor()`. Hors d'un
 // espace de casquette, il rend `null` et rien ne change. Le serveur ne croit pas l'en-tête (il relit les droits) ; ce fichier ne fait
 // que le poser, sur la liste blanche seulement (`actorRoutes.ts`).
-import { createContext, createElement, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
+import { type Me, resolveStoryAuthor } from "@orasso/shared";
+import { createContext, createElement, Fragment, type ReactNode, useContext, useLayoutEffect, useMemo } from "react";
 
 import { postLive } from "../components/fil/commentsLive";
 
@@ -35,6 +36,14 @@ export function ActorProvider({ casquette, children }: { casquette: Casquette | 
   return createElement(CasquetteContext.Provider, { value }, children);
 }
 
+/**
+ * Une page publique ouverte avec `?auteur=` (partie 2, tour 3) : le fournisseur n'existe que s'il y a une casquette ; sans elle, rien ne
+ * s'enveloppe, le magasin des commentaires n'est pas vidé pour rien et le contenu reste en place.
+ */
+export function ActorIfAny({ casquette, children }: { casquette: Casquette | null; children: ReactNode }) {
+  return casquette ? createElement(ActorProvider, { casquette, children }) : createElement(Fragment, null, children);
+}
+
 /** La clé d'auteur de la casquette de l'espace, ou `null` (on agit en son propre nom). */
 export function useActor(): string | null {
   return useContext(CasquetteContext)?.key ?? null;
@@ -47,3 +56,41 @@ export function useCasquette(): Casquette | null {
 
 /** Le 403 d'une casquette périmée (structure quittée, fiche supprimée) : l'adresse où le navigateur est renvoyé, avec l'avis. */
 export const CASQUETTE_GONE_HREF = "/app/moi?casquette=indisponible";
+
+/**
+ * Lot R9h (partie 2, T48) : une page ouverte depuis l'espace d'une casquette (la vitrine d'un prestataire, la page d'un média) garde
+ * la casquette **dans son adresse** (`?auteur=<clé>`), jamais dans un cookie : c'est la page qui suit (T6, T14). Sans casquette
+ * (hors d'un espace), l'adresse ne change pas. La clé est revérifiée à l'arrivée (`resolveStoryAuthor`) et par l'API.
+ */
+export function withActorParam(href: string, actor: string | null): string {
+  if (!actor) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}auteur=${encodeURIComponent(actor)}`;
+}
+
+/**
+ * La casquette que porte une adresse (`?auteur=<clé>`) : la clé d'une page que le compte tient (structure, fiche pro, prestataire, média ;
+ * jamais en assistance ni suspendue : `resolveStoryAuthor`), sinon `null` (la personne). Une clé qui n'est pas au compte n'est jamais crue.
+ */
+export function actorOfParam(asked: string | null, personas: Me["personas"]): string | null {
+  return casquetteOfParam(asked, personas)?.key ?? null;
+}
+
+/**
+ * La casquette en entier que porte une adresse (clé, nom, logo), ou `null` : de quoi dire, sur la page, au nom de qui on agit
+ * (pastille « Tu agis au nom de » et « Suivre en tant que », partie 2, tour 1). Mêmes règles que `actorOfParam`.
+ */
+export function casquetteOfParam(asked: string | null, personas: Me["personas"]): Casquette | null {
+  const usable = personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended);
+  const choice = resolveStoryAuthor(asked, usable);
+  if (choice?.kind !== "page") return null;
+  const persona = usable.find((p) => p.kind === choice.persona && p.id === choice.id);
+  return { key: choice.key, name: choice.name, logoUrl: persona?.logoUrl ?? null };
+}
+
+/** La même adresse sans `auteur` (« En mon nom ») : chemin, onglet, retour et curseur restent. */
+export function withoutActorParam(url: URL): string {
+  const params = new URLSearchParams(url.search);
+  params.delete("auteur");
+  const query = params.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}`;
+}

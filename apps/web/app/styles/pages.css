@@ -195,3 +195,109 @@
   gap: var(--space-1);
   padding: 0 var(--space-2);
 }
+/* Sous 400 px (R9h partie 2, tour 2) : « Mentions · 0 » n'était plus coupé net que sans icône ; marges au jeton le plus petit, l'icône cède la place. */
+@media (max-width: 400px) {
+  .pg-page .utabs__tab {
+    padding: 0 var(--space-1);
+  }
+  .pg-page .utabs__tab > svg {
+    display: none;
+  }
+}
+/* « Suivre en tant que <nom> » : un nom de page long passe à la ligne, jamais de défilement de côté. */
+.pg-page .o-button.fl-line {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+/* Lot R9h, partie 2 : la Page du propriétaire (chips de gestion, QR, pied « Mes casquettes ») et « Suivre » d'un prestataire ou d'un média.
+   Jetons seulement. */
+.pg-gest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pg-gest__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 750;
+  text-decoration: none;
+}
+.pg-gest__chip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pg-gest__chip:focus-visible,
+.pg-row:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.pg-qr {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.pg-qr svg {
+  width: min(100%, 288px);
+  height: auto;
+}
+.pg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pg-row__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.pg-row__text strong {
+  overflow-wrap: anywhere;
+}
+
+/* La pastille « Tu agis au nom de » d'une page publique (R9h partie 2, tour 2) : un nom long garde toute la largeur, « En mon nom » passe dessous. */
+.pg-page .cas-line {
+  flex-wrap: wrap;
+}
+.pg-page .cas-line__text {
+  flex: 1 1 0;
+  min-width: 60%;
+}
+.pg-page .cas-line__name {
+  overflow-wrap: break-word;
+}
+@media (max-width: 480px) {
+  .pg-page .cas-line__change {
+    flex: 1 1 100%;
+  }
+}
+
+/* Une rangée d'onglets qui défile (police agrandie) le montre : un fondu de bord n'apparaît que du côté où il reste de la rangée à voir
+   (les deux voiles `local` de la couleur du fond cachent les ombres `scroll` quand on est au bord ou quand tout tient). Jetons seulement. */
+.pg-page .utabs {
+  background:
+    linear-gradient(to right, var(--ground) 30%, transparent) left center / var(--space-6) 100% no-repeat local,
+    linear-gradient(to left, var(--ground) 30%, transparent) right center / var(--space-6) 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 28%, transparent), transparent) left center / var(--space-3)
+    100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 28%, transparent), transparent) right center / var(--space-3)
+    100% no-repeat scroll,
+    var(--ground);
+}

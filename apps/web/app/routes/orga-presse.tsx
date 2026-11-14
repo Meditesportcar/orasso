@@ -18,6 +18,7 @@ import {
 import { data, Form, useNavigation } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
+import { useActor, withActorParam } from "../lib/actor";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { fromInput, toInput } from "../lib/datetime";
 import { formatDay, formatWhen } from "../lib/format";
@@ -103,6 +104,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaPresse({ loaderData, actionData }: Route.ComponentProps) {
+  const actor = useActor();
   const { event, settings: s, requests } = loaderData;
   const busy = useNavigation().state !== "idle";
   const pending = requests.filter((r) => r.status === "pending");
@@ -185,7 +187,7 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
           <article key={r.id} className="orga__panel s-stack s-stack--tight" data-testid="press-request">
             <div className="s-row s-row--between">
               <h3 className="s-h2 o-never-truncate">
-                <a href={`/m/${r.media.id}`}>{r.media.name}</a>
+                <a href={withActorParam(`/m/${r.media.id}`, actor)}>{r.media.name}</a>
               </h3>
               {r.media.verified && <Chip variant="verified">{mediaAppLabels.profileVerified}</Chip>}
             </div>
@@ -232,7 +234,7 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
             data-status={r.status}
           >
             <div className="s-stack s-stack--tight">
-              <a href={`/m/${r.media.id}`} className="o-never-truncate">
+              <a href={withActorParam(`/m/${r.media.id}`, actor)} className="o-never-truncate">
                 <strong>{r.media.name}</strong>
               </a>
               {r.status === "refused" && r.refusalNote && <span className="o-t-caption">{r.refusalNote}</span>}

@@ -45,6 +45,17 @@ export const casquettesLabels = {
   /** Casquette périmée (structure quittée, fiche supprimée) : retour à la casquette de base. */
   gone: "Cette casquette n'est plus disponible",
   goneText: "Tu es revenu à ton compte personnel.",
+  /** Une page publique ouverte au nom d'une casquette (`?auteur=`, R9h partie 2, tour 1) : la pastille dit au nom de qui on agit, « En mon nom » l'enlève. */
+  actingAs: "Tu agis au nom de",
+  inMyName: "En mon nom",
+  inMyNameHint: "Revenir à ton nom : la page s'ouvre sans casquette",
+  /** Sous la pastille : ce qui part au nom de la page et ce qui reste personnel (réactions, partages, signalement). */
+  actingNote:
+    "Sur cette page, tes commentaires partent au nom de la page. Réactions, partages et signalements restent à ton nom ; une publication ouverte seule repasse à ton nom.",
+  /** Dans la feuille « Signaler » ouverte sous une casquette : le signalement reste personnel. */
+  reportStaysPersonal: (name: string) => `Ce signalement part à ton nom, pas au nom de ${name}.`,
+  followAs: (name: string) => `Suivre en tant que ${name}`,
+  followingAs: (name: string) => `Suivi en tant que ${name}`,
   /** Le site (lot R9h) : la pastille de la barre du haut d'un espace, la rangée de navigation de la casquette, le Fil d'une page indisponible. */
   siteChipOpen: (name: string) => `Page de ${name}`,
   siteNav: (name: string) => `Navigation de ${name}`,

@@ -3,6 +3,7 @@
 // puis `POST /api/reports`. Pour un message, le serveur joint la copie des 5 messages avant et après.
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  casquettesLabels,
   MODERATION,
   moderationLabels,
   type ReportReason,
@@ -15,6 +16,7 @@ import {
 } from "@orasso/shared";
 import { useId, useRef, useState } from "react";
 
+import { useCasquette } from "../lib/actor";
 import { apiFetch } from "../lib/api.client";
 import { FileField, TextAreaField } from "./Fields";
 import "../styles/moderation.css";
@@ -31,6 +33,8 @@ type Props = {
 export function ReportDialog({ targetType, targetId, look = "button", label }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // Sous une casquette (espace ou page ouverte avec `auteur`) : le signalement reste personnel, et la feuille le dit.
+  const casquette = useCasquette();
   const [reason, setReason] = useState<ReportReason | "">("");
   const [details, setDetails] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -132,6 +136,11 @@ export function ReportDialog({ targetType, targetId, look = "button", label }: P
                 <p className="o-t-caption s-muted">{moderationLabels.messageContextNotice}</p>
               )}
               <p className="o-t-caption s-muted">{reportSheetNotice[targetType]}</p>
+              {casquette ? (
+                <p className="o-t-caption s-muted" data-testid="report-personal">
+                  {casquettesLabels.reportStaysPersonal(casquette.name)}
+                </p>
+              ) : null}
               <fieldset className="mod-reasons">
                 <legend className="o-t-label mod-reasons__legend">{moderationLabels.reason}</legend>
                 {reportReasonsByTarget[targetType].map((r) => {
