@@ -19,6 +19,7 @@ export * from "./casquettes";
 export * from "./coalesce";
 export * from "./coauthors";
 export * from "./commercial";
+export * from "./contactMediaFlow";
 export * from "./conversationTag";
 export * from "./crewFeed";
 export * from "./crewLive";

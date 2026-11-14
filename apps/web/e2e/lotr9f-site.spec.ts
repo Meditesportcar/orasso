@@ -142,7 +142,8 @@ test("Léo identifie la voiture de Damien ; Damien : Tes photos, en story, ce n'
   await expect(kp.getByTestId("story-photo-credit")).toHaveText("Photos : Sud Cars");
   await shot(kp, "kenji-copie-credit-1280");
   await kCtx.close();
-  await expect(dam.getByTestId("my-photos-contact")).toHaveCount(0);
+  // « Contacter » (lot R9i, partie 2) : un bouton secondaire de plus dans l'en-tête.
+  await expect(dam.getByTestId("my-photos-contact")).toBeVisible();
 
   // « Enregistrer » : le fichier part (ou inerte avec sa raison).
   if (await dam.getByTestId("my-photo-save-off").count()) {

@@ -22,6 +22,7 @@ import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-r
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
 import { latchStale } from "../../lib/sessionGuard";
+import { ContactMedia, useContactMedia } from "../Messaging";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
@@ -87,6 +88,8 @@ export function MyPhotos({
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Un seul « Contacter <média> » par écran : le bouton de l'en-tête et la rangée de la feuille partagent le même appel.
+  const contact = useContactMedia(view.media.key, setError, stale);
   // Rangées par `tagId` : une photo peut porter deux identifications de moi ; retirer l'une laisse la photo (et son autre identification).
   // L'heure courante à chaque rendu (l'état `tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration
   // d'une story ne bloque pas « En story ».
@@ -176,6 +179,10 @@ export function MyPhotos({
             {headline}
           </span>
         </span>
+        {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
+        {count > 0 && (
+          <ContactMedia name={view.media.name} variant="header" busy={contact.busy} onOpen={contact.open} />
+        )}
       </div>
       {note && (
         <p className="s-notice" role="status" data-testid="my-photos-note">
@@ -311,6 +318,15 @@ export function MyPhotos({
                 </span>
               </span>
             </button>
+            <ContactMedia
+              name={view.media.name}
+              variant="row"
+              busy={contact.busy}
+              onOpen={() => {
+                setSheet(null);
+                contact.open();
+              }}
+            />
             <div className="myp-sheet__row" data-testid="photo-sheet-report">
               <ReportDialog
                 targetType="album_photo"
