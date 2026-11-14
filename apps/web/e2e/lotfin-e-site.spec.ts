@@ -568,12 +568,15 @@ async function holdNextDocument(page: Page, prepare = false) {
     reached = resolve;
   });
   let armed = false;
+  // La réponse préparée par le serveur sous le compte courant (statut et corps), pour l'inspecter pendant qu'elle est retenue.
+  let response: { status: number; body: string } | null = null;
   await page.route(/\/app\/crew(\?|$)/, async (route) => {
     if (armed && route.request().resourceType() === "document") {
       armed = false;
       if (prepare) {
         // La réponse est RÉELLEMENT préparée par le serveur sous le compte courant (B) puis retenue : le cookie change ensuite.
         const prepared = await route.fetch();
+        response = { status: prepared.status(), body: await prepared.text() };
         reached();
         await held;
         return route.fulfill({ response: prepared });
@@ -589,7 +592,23 @@ async function holdNextDocument(page: Page, prepare = false) {
     },
     arrived,
     release,
+    prepared: () => response,
   };
+}
+
+/** La réponse retenue est bien celle de B (200, page neutre « pending ») et ne contient AUCUNE donnée privée de B : ni l'identifiant,
+ * ni l'adresse, ni le nom de son crew (HTML et données sérialisées), ni le nom. */
+function expectNoPrivateData(
+  held: { status: number; body: string } | null,
+  crew: { id: string; slug: string; name: string },
+) {
+  expect(held, "la réponse retenue").not.toBeNull();
+  const { status, body } = held as { status: number; body: string };
+  expect(status).toBe(200);
+  expect(body, "page neutre du rechargement").toContain("pending");
+  for (const secret of [crew.id, crew.slug, crew.name]) {
+    expect(body.includes(secret), `la réponse retenue contient « ${secret} »`).toBe(false);
+  }
 }
 
 const INVITATION = '[data-testid="crew-tab-invitation"]';
@@ -651,6 +670,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     // Le serveur a rendu le rechargement sous B (réponse lue par `route.fetch()`) ; elle est retenue pendant que C se connecte et
     // s'annonce : l'ANCIEN document reçoit l'annonce de C, le nouveau n'est pas encore là.
     await hold.arrived;
+    expectNoPrivateData(hold.prepared(), crew);
     await swapCookies(ctx, paul);
     await announce(other, crew.paul.id);
     hold.release();
@@ -677,6 +697,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await swapCookies(ctx, chef);
     await announceForbidding(a, crew.chef.id, `${INVITATION}, ${OUTINGS}`);
     await hold.arrived;
+    expectNoPrivateData(hold.prepared(), crew);
     // Pendant que la réponse de B est retenue : B se déconnecte (plus de session) et l'annonce.
     await ctx.clearCookies();
     await announce(other, null);
@@ -762,7 +783,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
     expect(await leaked(a), "« Mise à jour… » est apparu").toBeNull();
     // Aucun rechargement automatique n'a été noté.
-    expect(await a.evaluate(() => sessionStorage.getItem("orasso-crew-reloads"))).toBeNull();
+    expect(await a.evaluate(() => sessionStorage.getItem("orasso-reloads:crew"))).toBeNull();
     await ctx.close();
   });
 
@@ -791,6 +812,11 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
     // Le chargement de départ et deux rechargements automatiques, pas un de plus.
     expect(docs).toBe(3);
+    // Le compteur (clé `orasso-reloads:crew`) a noté exactement ces deux rechargements.
+    const stamps = await a.evaluate(
+      () => JSON.parse(sessionStorage.getItem("orasso-reloads:crew") ?? "[]") as number[],
+    );
+    expect(stamps).toHaveLength(2);
     // Le geste de l'utilisateur remet le compteur à zéro : un rechargement manuel, puis de nouveau deux automatiques.
     await a.getByRole("button", { name: "Recharger la page" }).click();
     await expect.poll(() => docs, { timeout: 60_000 }).toBe(6);
