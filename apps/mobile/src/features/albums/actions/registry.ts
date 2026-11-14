@@ -2,10 +2,12 @@
 // et R9g (« Reprendre dans le journal », « Album officiel ») y ajoutent chacun une ligne, par rôle de la personne qui regarde ; la
 // visionneuse (`AlbumPhotoViewer`) les rend dans son emplacement `actions`. « Signaler » est un geste de la visionneuse elle-même.
 import type { IconName } from "@orasso/design-system/native";
-import type { AlbumPhotoView, AlbumView } from "@orasso/shared";
+import type { AlbumPhotoView, AlbumView, AlbumViewerRole } from "@orasso/shared";
 
-/** Qui regarde : le média auteur, l'organisateur de l'événement, la personne identifiée, ou tout autre membre. */
-export type AlbumViewerRole = "media" | "organizer" | "tagged" | "member";
+import { tagViewerActions } from "./TagActions";
+
+/** Qui regarde : le média auteur, l'organisateur de l'événement, un passionné qui peut s'identifier (`tagged`), ou tout autre membre (règle partagée avec le site). */
+export type { AlbumViewerRole };
 
 export type AlbumViewerActionContext = { album: AlbumView; photo: AlbumPhotoView; role: AlbumViewerRole };
 
@@ -19,7 +21,10 @@ export type AlbumViewerAction = {
 };
 
 /** La liste des actions (une ligne par lot). */
-export const albumViewerActions: AlbumViewerAction[] = [];
+export const albumViewerActions: AlbumViewerAction[] = [
+  // Lot R9f : « Identifier une voiture », « C'est ma voiture », « Voitures identifiées » (`TagActions.tsx`).
+  ...tagViewerActions,
+];
 
 /** Les actions proposées à ce rôle. */
 export const actionsFor = (role: AlbumViewerRole): AlbumViewerAction[] =>
