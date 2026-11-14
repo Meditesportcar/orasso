@@ -309,6 +309,14 @@ async function liveParticipants() {
   const orga = await viewer(profile.pseudo, "totp");
   const damien = await viewer("Damien_66");
   if (!orga || !damien || damien.profile.bannedAt) return null;
+  // Mêmes refus que la candidature de l'API (`applications/service.ts`) : Damien_66 banni de la structure.
+  const banned = await db.query.structureBans.findFirst({
+    where: and(eq(t.structureBans.structureId, structure.id), eq(t.structureBans.userId, damien.user.id)),
+  });
+  if (banned) {
+    console.log("En direct : Damien_66 est banni de la structure, rien supprimé ni créé.");
+    return null;
+  }
   if (!(await carUsable(damien.user.id))) {
     console.log("En direct : Damien_66 n'a pas de voiture utilisable, rien supprimé ni créé.");
     return null;

@@ -55,7 +55,8 @@ export const SEED_EVENT_SLUGS = [
 
 /**
  * Condition SQL « cet événement (colonnes `slug` et `structure_id` de la table d'alias `alias`) est un événement de la graine » :
- * slug de la graine ET structure dont le propriétaire actif est un compte de la graine. Preuve d'origine d'un événement.
+ * slug de la graine ET structure dont le propriétaire actif est un compte de la graine ET créateur (`created_by`) de la graine.
+ * Preuve d'origine d'un événement (même preuve que `live-event.ts`).
  */
 export function isSeedEvent(alias = "events"): SQL {
   const a = sql.raw(alias);
@@ -63,5 +64,6 @@ export function isSeedEvent(alias = "events"): SQL {
     SEED_EVENT_SLUGS.map((slug) => sql`${slug}`),
     sql`, `,
   )}) and exists (select 1 from structure_members sm join "user" su on su.id = sm.user_id
-    where sm.structure_id = ${a}.structure_id and sm.role = 'owner' and sm.status = 'active' and su.email like '%@orasso.local'))`;
+    where sm.structure_id = ${a}.structure_id and sm.role = 'owner' and sm.status = 'active' and su.email like '%@orasso.local')
+    and exists (select 1 from "user" cu where cu.id = ${a}.created_by and cu.email like '%@orasso.local'))`;
 }

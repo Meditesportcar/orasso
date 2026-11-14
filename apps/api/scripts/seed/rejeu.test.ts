@@ -443,4 +443,68 @@ describe("rejeu de la graine après une activité réelle", () => {
     expect((await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") }))?.id).toBe(old?.id);
     expect(out).toContain("Messagerie : Kenji_66");
   }, 900_000);
+
+  it("Damien_66 banni par Roues Libres 66 : l'ancien Lydia est gardé, la graine va au bout", async () => {
+    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    const damien = await profile("Damien_66");
+    const structure = await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") });
+    await db
+      .insert(t.structureBans)
+      .values({ structureId: structure?.id ?? "", userId: damien.userId, reason: "essai" });
+    await db
+      .update(t.events)
+      .set({ endsAt: new Date(Date.now() + 3_600_000) })
+      .where(eq(t.events.slug, "rassemblement-du-lydia"));
+    const out = seed();
+    expect((await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") }))?.id).toBe(old?.id);
+    expect(out).toContain("Messagerie : Kenji_66");
+  }, 900_000);
+
+  it("Kenji « était au » : événement au slug et à la structure de la graine mais de créateur réel : ni présence ni publication", async () => {
+    const kenji = await profile("Kenji_66");
+    const [post] = await rows("Kenji_66", KENJI_PRESENT_CAPTION);
+    expect(post?.eventId).toBeTruthy();
+    const eventId = post?.eventId ?? "";
+    // Le créateur de l'événement n'est plus un compte de la graine ; la publication et la présence de démonstration sont retirées.
+    await db.update(t.events).set({ createdBy: null }).where(eq(t.events.id, eventId));
+    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, post?.id ?? ""));
+    await db
+      .delete(t.eventPresences)
+      .where(and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)));
+    seed();
+    expect(
+      await db.query.eventPresences.findFirst({
+        where: and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)),
+      }),
+    ).toBeUndefined();
+    expect(
+      await db.query.feedPosts.findFirst({
+        where: and(
+          eq(t.feedPosts.eventId, eventId),
+          eq(t.feedPosts.authorId, kenji.userId),
+          like(t.feedPosts.caption, KENJI_PRESENT_CAPTION),
+        ),
+      }),
+    ).toBeUndefined();
+  }, 900_000);
+
+  it("Kenji « était au » : une publication de même légende ailleurs : pas de présence fabriquée sans publication", async () => {
+    const kenji = await profile("Kenji_66");
+    const [post] = await rows("Kenji_66", KENJI_PRESENT_CAPTION);
+    const eventId = post?.eventId ?? "";
+    // La publication de démonstration est retirée et remplacée par une publication réelle de même légende (sans événement) ;
+    // la présence de démonstration est retirée : la graine ne doit ni republier ni refabriquer la présence.
+    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, post?.id ?? ""));
+    await realPost({ authorId: kenji.userId, caption: KENJI_PRESENT_CAPTION });
+    await db
+      .delete(t.eventPresences)
+      .where(and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)));
+    seed();
+    expect(
+      await db.query.eventPresences.findFirst({
+        where: and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)),
+      }),
+    ).toBeUndefined();
+    expect(await rows("Kenji_66", KENJI_PRESENT_CAPTION)).toHaveLength(1);
+  }, 900_000);
 });
