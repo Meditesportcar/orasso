@@ -111,10 +111,10 @@ async function ownPublished(id: string, mediaProfileId: string) {
   return row?.id ?? null;
 }
 
-async function contentById(id: string): Promise<MediaContentView> {
+async function contentById(id: string, ownerOf = false): Promise<MediaContentView> {
   const [row] = await albumBase().where(eq(eventAlbums.id, id));
   if (!row) throw notFound(mediaLabels.contentNotFound);
-  const [view] = await viewsOf([row]);
+  const [view] = await viewsOf([row], ownerOf);
   if (!view) throw notFound(mediaLabels.contentNotFound);
   return view;
 }
@@ -214,7 +214,7 @@ export const albumsLegacy = {
     const profile = await mediaOfUser(db, v.user.id);
     if (profile) {
       const again = await sameGallery(profile.id, input);
-      if (again) return contentById(again);
+      if (again) return contentById(again, true);
     }
     rateLimit("mediaContent", v.user.id);
     const written: string[] = [];
@@ -275,13 +275,13 @@ export const albumsLegacy = {
       });
       committed = true;
       await removeFiles(sources);
-      return await contentById(id);
+      return await contentById(id, true);
     } catch (error) {
       if (!committed) await removeFiles(written);
       // Deux envois simultanés de la même galerie : le second échoue sur les clés que le premier vient de consommer.
       const media = await mediaOfUser(db, v.user.id);
       const winner = media ? await sameGallery(media.id, input) : null;
-      if (winner) return contentById(winner);
+      if (winner) return contentById(winner, true);
       if (isUniqueViolation(error)) throw conflict("conflict", mediaLabels.imageUnknown);
       throw error;
     }
@@ -295,7 +295,7 @@ export const albumsLegacy = {
     assertWritable(v);
     // Seul le titre compte pour un album (ni adresse, ni plateforme) : sans titre, l'album est rendu tel quel.
     if (input.title !== undefined) await albumsService.patch(v, id, { title: input.title });
-    return contentById(id);
+    return contentById(id, true);
   },
 
   /** `DELETE /me/media-contents/:id` sur l'identifiant d'un album ; `false` si ce n'est pas un album du média. */

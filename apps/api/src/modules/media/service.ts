@@ -368,7 +368,7 @@ export const mediaService = {
     // Lot R9e : les liens d'ici et les albums publiés (`albumsLegacy`), par identifiant décroissant comme avant.
     const merged = [
       ...rows.map(({ c, e, m }) => contentView(c, e, m)),
-      ...(await albumsLegacy.forMedia(id, q.limit + 1, q.cursor)),
+      ...(q.kind === "link" ? [] : await albumsLegacy.forMedia(id, q.limit + 1, q.cursor)),
     ].sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
     const items = merged.slice(0, q.limit);
     return {

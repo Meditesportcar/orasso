@@ -87,6 +87,9 @@ export const pagesLabels = {
   verifiedMedia: "Vérifié",
   missions: (n: number) => pluralFr(n, "mission", "missions"),
   accreditations: (n: number) => pluralFr(n, "accréditation", "accréditations"),
+  /** Lot R9e : les compteurs d'un média, « abonnés · albums · photos ». */
+  albumsCount: (n: number) => pluralFr(n, "album", "albums"),
+  photosCount: (n: number) => pluralFr(n, "photo", "photos"),
   publicationsCount: (n: number) => pluralFr(n, "publication", "publications"),
   /** « Contenus » vu par un visiteur, sans rien de publié. */
   contentsEmpty: "Aucun contenu publié pour l'instant.",

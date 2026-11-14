@@ -323,6 +323,8 @@ export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "sponsored",
   // Lot R7j : la carte « Souvenir » est dessinée (appli et site).
   "memory",
+  // Lot R9e : la carte « album » est dessinée (appli et site) ; l'API ne la sert qu'avec `?cards=album`.
+  "album",
 ];
 
 /** Une carte d'un genre réservé à un autre lot : rendue par `UnknownCard` tant que ce lot n'est pas fusionné. */

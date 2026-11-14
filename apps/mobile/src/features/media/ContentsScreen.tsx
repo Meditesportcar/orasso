@@ -16,31 +16,24 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import {
+  albumLabels,
   mediaAppLabels as L,
-  MAX_PLATE_RECTS,
-  MEDIA_GALLERY_MAX_PHOTOS,
   type MediaContentView,
   type MediaPlatform,
   mediaPlatformLabels,
   mediaPlatforms,
-  nextPlateFrame,
-  type PlateRect,
-  vehicleWizardLabels as W,
 } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { formatDay } from "@/lib/format";
-import { ApiRequestError, errorMessage } from "@/lib/http";
-import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
+import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
-import { type PickedPhoto, pickPhotos } from "@/lib/photos";
-import { detectPlates } from "@/lib/plates/detect";
 import { formatCount } from "@/lib/proPresta";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
@@ -48,16 +41,7 @@ import { DirBig } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
-import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
-import {
-  accountRemovalStore,
-  createUploadSession,
-  publishContent,
-  type SentUpload,
-  type UploadSession,
-  UploadsCancelled,
-} from "./galleryUploads";
 import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews } from "./model";
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
@@ -66,14 +50,20 @@ const { space1, space2, space3, space6, space12 } = tokens.spacing;
  * Lot R9b : `embedded` pose l'écran **dans l'onglet « Contenus » de la Page du média** (T22) : ni bande, ni grand titre, ni zone qui
  * défile à lui (celle de la Page), ses feuilles vont dans la zone des feuilles de la Page (`Overlay`) ; `reloadToken` le relit
  * quand la Page est tirée pour recharger. Sans `embedded`, rien ne change.
+ * Lot R9e : « Ajouter » ne crée que des liens (les galeries se publient dans « Nouvel album », une ligne y renvoie) ; `linksOnly` (dans l'onglet
+ * « Albums », sous « Liens », T8) ne montre que les liens, sans les tuiles de vues, et « Ajouter un lien » y est un bouton secondaire (le seul
+ * principal de l'onglet est « Nouvel album »).
  */
 export function ContentsScreen({
   embedded = false,
+  linksOnly = false,
   reloadToken = 0,
 }: {
   embedded?: boolean;
+  linksOnly?: boolean;
   reloadToken?: number;
 } = {}) {
+  const router = useRouter();
   const { t } = useTheme();
   const { goTab } = usePersona();
   const profile = useApi(async () => (await api.myMediaProfile()).profile, [], { cacheKey: "media-profile" });
@@ -82,7 +72,8 @@ export function ContentsScreen({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<MediaContentView | null>(null);
 
-  const list = contents.data ?? [];
+  const all = contents.data ?? [];
+  const list = all.filter((c) => !linksOnly || c.kind === "link");
   const groups = groupByEvent(list);
   // Les événements où l'on peut publier : ceux où l'accréditation est donnée (l'API refuse les autres).
   const accredited = (accreditations.data ?? []).filter((a) => a.status === "accepted");
@@ -120,24 +111,48 @@ export function ContentsScreen({
   const body = (
     <>
       {/* Lot C4b (artefact `s-contenus`) : deux tuiles `.dir-big`, la première crème. */}
+      {/* Les chiffres comptent tous les contenus (liens et albums), même quand seuls les liens sont listés. */}
       <DirBig
         testID="media-stats"
         items={[
-          { value: formatCount(totalViews(list)), label: L.views },
-          { value: formatCount(list.length), label: L.contents },
+          { value: formatCount(totalViews(all)), label: L.views },
+          { value: formatCount(all.length), label: L.contents },
         ]}
       />
 
-      <Button variant="primary" icon="add" fullWidth onPress={() => setAdding(true)} testID="media-add">
-        {L.addContent}
+      <Button
+        variant={linksOnly ? "secondary" : "primary"}
+        icon="add"
+        fullWidth
+        onPress={() => setAdding(true)}
+        testID="media-add"
+      >
+        {linksOnly ? albumLabels.addLink : L.addContent}
       </Button>
+      {linksOnly ? null : (
+        <Button
+          variant="secondary"
+          icon="gallery"
+          fullWidth
+          onPress={() => router.push("/album/nouveau" as never)}
+          testID="media-new-album"
+        >
+          {albumLabels.newAlbumLine}
+        </Button>
+      )}
 
       {contents.error && !contents.data ? <Notice tone="error">{contents.error.message}</Notice> : null}
       {contents.loading && !contents.data ? <OLoader label="Chargement…" /> : null}
-      {contents.data && list.length === 0 ? (
+      {contents.data && list.length === 0 && linksOnly ? (
+        // Des albums sont au-dessus : « Aucun contenu » serait faux, seuls les liens manquent.
+        <Muted variant="body" testID="media-no-links">
+          {albumLabels.noLinks}
+        </Muted>
+      ) : null}
+      {contents.data && list.length === 0 && !linksOnly ? (
         <EmptyState title={L.noContents} text={accredited.length > 0 ? L.noContentsText : L.needAccreditation} />
       ) : null}
-      {contents.data && list.length === 0 && accredited.length === 0 ? (
+      {contents.data && list.length === 0 && accredited.length === 0 && !linksOnly ? (
         <Button variant="secondary" icon="explore" fullWidth onPress={() => goTab("explorer")}>
           {L.pressSeeExplorer}
         </Button>
@@ -212,20 +227,9 @@ function ContentRow({ c, onPress }: { c: MediaContentView; onPress: () => void }
 
 // --- Ajouter ------------------------------------------------------------------------------------------------------------------
 
-/** Suppression d'un envoi : un fichier déjà parti (404) est une suppression réussie. */
-async function removeUpload(upload: SentUpload): Promise<void> {
-  try {
-    await api.deleteUpload(upload.id);
-  } catch (e) {
-    if (!(e instanceof ApiRequestError && e.status === 404)) throw e;
-  }
-}
-
-/** Une panne réseau arrête la série de suppressions (les suivantes échoueraient aussi, 15 s chacune). */
-const stopsRemovals = (e: unknown) => !(e instanceof ApiRequestError) || e.isNetwork;
-
 type EventChoice = { id: string; title: string; startsAt: string };
 
+/** Lot R9e : « Ajouter » ne propose plus de galerie (elles se publient dans « Nouvel album », avec leur floutage photo par photo) : un lien seulement. */
 function AddContentSheet({
   visible,
   events,
@@ -239,136 +243,55 @@ function AddContentSheet({
 }) {
   const { t } = useTheme();
   const [eventId, setEventId] = useState<string | null>(null);
-  const [kind, setKind] = useState<"link" | "gallery">("link");
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [platform, setPlatform] = useState<MediaPlatform>("website");
-  const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [busy, setBusy] = useState(false);
-  const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Envois gardés, fermeture et nettoyage sérialisés ; suppressions en échec gardées pour être reprises (lot 59d).
-  // Une session par compte : la liste des suppressions à reprendre est celle du compte qui l'a créée (tour 2).
-  const account = cacheScope();
-  const sessions = useRef<{ account: string | null; session: UploadSession } | null>(null);
-  if (!sessions.current || sessions.current.account !== account) {
-    const store = accountRemovalStore({ accountGuard, cacheGetJson, cacheSetJson });
-    sessions.current = { account, session: createUploadSession({ remove: removeUpload, store, stopsRemovals }) };
-  }
-  const session = sessions.current.session;
-  // Retour sur le formulaire : les suppressions restées en échec (hors ligne) sont rejouées.
-  useEffect(() => {
-    if (visible) void session.retryRemovals();
-  }, [visible, session]);
 
   // Par défaut : le dernier événement commencé (on publie après coup), sinon le premier.
   const byRecent = [...events].sort((a, b) => b.startsAt.localeCompare(a.startsAt));
   const latest = byRecent.find((e) => new Date(e.startsAt).getTime() <= nowMs()) ?? byRecent[0];
   const chosen = eventId ?? latest?.id ?? null;
-  const ready =
-    chosen !== null &&
-    title.trim().length >= 2 &&
-    (kind === "link" ? Boolean(url.trim()) : photos.length > 0 && photos.every((p) => p.decided));
-  // La première photo sans décision de floutage : le formulaire laisse la place à l'éditeur du cadre (D28).
-  const undecided = kind === "gallery" ? photos.findIndex((p) => !p.decided) : -1;
-  const deciding = undecided >= 0 ? photos[undecided] : null;
-  const decide = (index: number, patch: Partial<GalleryPhoto>) =>
-    setPhotos((cur) => cur.map((p, j) => (j === index ? { ...p, ...patch, decided: true } : p)));
+  const ready = chosen !== null && title.trim().length >= 2 && Boolean(url.trim());
 
   function reset() {
     setEventId(null);
-    setKind("link");
     setTitle("");
     setUrl("");
     setPlatform("website");
-    setPhotos([]);
     setError(null);
-    setUpload(null);
-  }
-
-  async function pick() {
-    const more = (await pickPhotos(MEDIA_GALLERY_MAX_PHOTOS - photos.length)).map(
-      (photo): GalleryPhoto => ({ photo, rects: [], decided: false }),
-    );
-    setPhotos((cur) => [...cur, ...more].slice(0, MEDIA_GALLERY_MAX_PHOTOS));
   }
 
   async function publish() {
     if (!chosen) return;
     setBusy(true);
     setError(null);
-    // Toute la publication passe par la file de la session : une fermeture du formulaire attend sa fin, et une
-    // réouverture ne retrouve jamais un envoi en cours de suppression.
     try {
-      await session.run((tools) =>
-        publishContent(tools, {
-          photos: kind === "gallery" ? photos : null,
-          send: async ({ photo, rects }, i) => {
-            const form = new FormData();
-            form.append("purpose", "media_content");
-            if (rects.length) form.append("plateRects", JSON.stringify(rects));
-            if (Platform.OS === "web") {
-              const blob = await (await fetch(photo.uri)).blob();
-              form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
-            } else {
-              form.append("file", {
-                uri: photo.uri,
-                name: `photo-${i + 1}.jpg`,
-                type: "image/jpeg",
-              } as unknown as Blob);
-            }
-            const { id, key } = await api.upload(form);
-            return { id, key };
-          },
-          onProgress: (current, total) => setUpload({ current, total }),
-          onSent: () => setUpload({ current: photos.length, total: photos.length, done: true }),
-          parked: waitUploadParked,
-          create: (photoKeys) =>
-            api.createMediaContent({
-              eventId: chosen,
-              kind,
-              title: title.trim(),
-              url: kind === "link" ? normalizeUrl(url) : null,
-              platform: kind === "link" ? platform : "other",
-              photoKeys,
-            }),
-        }),
-      );
+      await api.createMediaContent({
+        eventId: chosen,
+        kind: "link",
+        title: title.trim(),
+        url: normalizeUrl(url),
+        platform,
+        photoKeys: [],
+      });
       reset();
       onDone();
     } catch (e) {
-      // Formulaire fermé pendant l'envoi : rien à afficher, le nettoyage a suivi.
-      if (!(e instanceof UploadsCancelled)) setError(errorMessage(e));
-      setUpload(null);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AppSheet
-      visible={visible}
-      onClose={() => {
-        // Formulaire fermé sans publier : les envois gardés pour une reprise sont supprimés.
-        void session.discard();
-        onClose();
-      }}
-      accessibilityLabel={L.addTitle}
-      maxHeight={0.9}
-    >
+    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.addTitle} maxHeight={0.9}>
       <Text variant="title" color={t.color.ink}>
         {L.addTitle}
       </Text>
       {events.length === 0 ? (
         <Notice testID="media-add-blocked">{L.needAccreditation}</Notice>
-      ) : deciding ? (
-        <PhotoBlurStep
-          key={deciding.photo.uri}
-          item={deciding}
-          onBlurred={(rects) => decide(undecided, { rects })}
-          onPlain={() => decide(undecided, { rects: [] })}
-          onRemove={() => setPhotos((cur) => cur.filter((_, j) => j !== undecided))}
-        />
       ) : (
         <>
           <Muted variant="label">{L.addEvent}</Muted>
@@ -379,15 +302,7 @@ function AddContentSheet({
               </Chip>
             ))}
           </ChipRow>
-          <Muted variant="label">{L.addKind}</Muted>
-          <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.addKind}>
-            <Chip accessibilityRole="radio" selected={kind === "link"} onPress={() => setKind("link")}>
-              Lien
-            </Chip>
-            <Chip accessibilityRole="radio" selected={kind === "gallery"} onPress={() => setKind("gallery")}>
-              Galerie
-            </Chip>
-          </ChipRow>
+          <Notice testID="media-add-albums-note">{albumLabels.linkOnlyNote}</Notice>
           <TextField
             label={L.addTitleField}
             help={L.addTitleHelp}
@@ -395,55 +310,27 @@ function AddContentSheet({
             onChangeText={setTitle}
             maxLength={80}
           />
-          {kind === "link" ? (
-            <>
-              <TextField
-                label={L.addUrl}
-                help={L.addUrlHelp}
-                value={url}
-                onChangeText={(v) => {
-                  setUrl(v);
-                  setPlatform(guessPlatform(v));
-                }}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                testID="media-url"
-              />
-              <Muted variant="label">{L.addPlatform}</Muted>
-              <ChipRow>
-                {mediaPlatforms.map((p) => (
-                  <Chip key={p} selected={platform === p} onPress={() => setPlatform(p)}>
-                    {mediaPlatformLabels[p]}
-                  </Chip>
-                ))}
-              </ChipRow>
-            </>
-          ) : (
-            <>
-              <Muted variant="label">
-                {`${L.addPhotos} · ${L.addPhotosCount(photos.length, MEDIA_GALLERY_MAX_PHOTOS)}`}
-              </Muted>
-              {photos.length > 0 ? (
-                <PhotoGrid
-                  photos={photos.map((p, i) => ({ key: `${p.photo.uri}-${i}`, source: { uri: p.photo.uri } }))}
-                  tileStyle={{ width: space12 * 2, height: space12 + space6, borderRadius: tokens.radius.radiusSm }}
-                  disabled={busy}
-                  onRemove={(i) => setPhotos((cur) => cur.filter((_, j) => j !== i))}
-                />
-              ) : null}
-              <Button
-                variant="plate"
-                icon="gallery"
-                disabled={busy || photos.length >= MEDIA_GALLERY_MAX_PHOTOS}
-                onPress={() => void pick()}
-                testID="media-pick"
-              >
-                {L.addPhotosPick}
-              </Button>
-            </>
-          )}
-          {upload ? <UploadProgress {...upload} /> : null}
+          <TextField
+            label={L.addUrl}
+            help={L.addUrlHelp}
+            value={url}
+            onChangeText={(v) => {
+              setUrl(v);
+              setPlatform(guessPlatform(v));
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            testID="media-url"
+          />
+          <Muted variant="label">{L.addPlatform}</Muted>
+          <ChipRow>
+            {mediaPlatforms.map((p) => (
+              <Chip key={p} selected={platform === p} onPress={() => setPlatform(p)}>
+                {mediaPlatformLabels[p]}
+              </Chip>
+            ))}
+          </ChipRow>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Button
             variant="primary"
@@ -459,93 +346,6 @@ function AddContentSheet({
         </>
       )}
     </AppSheet>
-  );
-}
-
-// --- Floutage des plaques d'une photo (D28 : proposé, jamais imposé) --------------------------------------------------------
-
-/** Une photo de galerie et la décision prise : floutée (cadres posés ou proposés par l'appareil) ou envoyée telle quelle. */
-type GalleryPhoto = { photo: PickedPhoto; rects: PlateRect[]; decided: boolean };
-
-/**
- * Étape du formulaire pour la première photo sans décision (outils du lot 51) : les cadres sont proposés par
- * l'appareil quand il le peut (ML Kit), sinon posés à la main ; « Envoyer sans flouter » passe sans blocage.
- */
-function PhotoBlurStep({
-  item,
-  onBlurred,
-  onPlain,
-  onRemove,
-}: {
-  item: GalleryPhoto;
-  onBlurred: (rects: PlateRect[]) => void;
-  onPlain: () => void;
-  onRemove: () => void;
-}) {
-  const { t } = useTheme();
-  const [rects, setRects] = useState<PlateRect[]>([]);
-  const [detecting, setDetecting] = useState(true);
-  useEffect(() => {
-    let stale = false;
-    detectPlates(item.photo.uri, item.photo.width, item.photo.height)
-      .catch(() => null)
-      .then((found) => {
-        if (!stale && found?.length) setRects(found);
-      })
-      .finally(() => {
-        if (!stale) setDetecting(false);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [item.photo.uri, item.photo.width, item.photo.height]);
-  return (
-    <>
-      <Text variant="bodyStrong" color={t.color.ink}>
-        {L.addPhotosBlurTitle}
-      </Text>
-      <Muted variant="caption">{L.addPhotosBlurHint}</Muted>
-      <PlateFrameEditor
-        source={{ uri: item.photo.uri }}
-        width={item.photo.width}
-        height={item.photo.height}
-        rects={rects}
-        editable
-        onChange={setRects}
-        badge={
-          <PhotoBadge accent={rects.length > 0}>
-            {detecting ? W.detecting : rects.length ? W.blurredCount(rects.length) : W.placeFrame}
-          </PhotoBadge>
-        }
-        testID="media-blur-editor"
-      />
-      <Button
-        variant="secondary"
-        icon="add"
-        disabled={rects.length >= MAX_PLATE_RECTS}
-        onPress={() => setRects((r) => [...r, nextPlateFrame(r)])}
-        fullWidth
-        testID="media-blur-add"
-      >
-        {W.addFrame}
-      </Button>
-      <Button
-        variant="primary"
-        icon="plate"
-        disabled={rects.length === 0 || detecting}
-        onPress={() => onBlurred(rects)}
-        fullWidth
-        testID="media-blur-confirm"
-      >
-        {L.addPhotosBlurSend}
-      </Button>
-      <Button variant="secondary" icon="send" onPress={onPlain} fullWidth testID="media-blur-plain">
-        {L.addPhotosPlainSend}
-      </Button>
-      <Button variant="plate" icon="close" onPress={onRemove} fullWidth testID="media-blur-remove">
-        {L.addPhotosRemove}
-      </Button>
-    </>
   );
 }
 

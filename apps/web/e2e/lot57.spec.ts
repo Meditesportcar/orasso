@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { DEFAULT_PLATE_FRAME } from "@orasso/shared";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import {
@@ -18,7 +19,7 @@ import {
   unique,
 } from "./helpers";
 import { sql } from "./helpers/lot48";
-import { checkerPhoto } from "./helpers/lot51";
+import { checkerPhoto, inner, regionSpread } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot 57, côté site : parité des fonctions nouvelles de la DA v2 (D20). Organisateur : réglages presse et décision d'une
@@ -364,50 +365,54 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
     await expect(page.getByTestId("media-event").first()).toBeVisible();
     await both(page, "media-explorer", theme);
 
-    // Galerie sur la Nocturne : une photo floutée (cadre posé), une envoyée sans flouter (D28 : au choix du média).
+    // Album sur Béziers Night (lot R9e : « Nouvel album » remplace la galerie du formulaire de contenu) : une photo avec un cadre de
+    // plaque, une sans ; la décision du lot est « Flouter et ajouter » (D28 : floutage proposé, jamais imposé).
+    await sql(
+      "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')",
+    );
     await page.goto("/app/media?onglet=contenus");
-    const form = page.getByTestId("media-content-form");
-    await form.getByLabel("Événement").selectOption({ label: "Nocturne de Canet" });
-    const galleryTitle = `Galerie ${unique()}`;
-    await form.getByLabel("Titre").fill(galleryTitle);
-    await form.getByText("Galerie", { exact: true }).click();
-    const picker = page.getByTestId("media-gallery-picker");
-    await picker.getByLabel("Choisir des photos").setInputFiles({
-      name: "nocturne-1.png",
-      mimeType: "image/png",
-      buffer: await checkerPhoto(),
-    });
-    await picker.getByRole("button", { name: "Poser un cadre" }).click();
-    await picker.getByTestId("media-photo-blur").click();
-    await expect(picker.getByText("Plaque floutée", { exact: true })).toBeVisible();
-    await picker.getByLabel("Choisir des photos").setInputFiles({
-      name: "nocturne-2.png",
-      mimeType: "image/png",
-      buffer: await checkerPhoto(),
-    });
-    await picker.getByTestId("media-photo-plain").click();
-    await expect(picker.getByTestId("media-gallery-sent").locator("li")).toHaveCount(2);
+    await page.getByTestId("media-new-album").click();
+    await page.waitForURL(/albums\/nouveau/);
+    await page.locator("label.alb-option", { hasText: "Béziers Night" }).locator("input").check();
+    await page.getByTestId("album-step1-continue").click();
+    await page.getByTestId("album-pick").setInputFiles([
+      { name: "nocturne-1.png", mimeType: "image/png", buffer: await checkerPhoto() },
+      { name: "nocturne-2.png", mimeType: "image/png", buffer: await checkerPhoto() },
+    ]);
+    await expect(page.getByTestId("album-tile")).toHaveCount(2);
+    await page.getByTestId("album-mark").first().click();
+    await page.getByTestId("album-blur").click();
+    await expect(page.getByTestId("album-plates")).toContainText("1 photo floutée");
     await both(page, "media-contenus-ajout", theme);
-    await form.getByRole("button", { name: "Publier" }).click();
-    await expect(page.getByTestId("media-done")).toContainText("Contenu publié");
-    // Relecture : le contenu publié a bien ses deux photos (une floutée, une envoyée telle quelle).
-    const mine = await apiCall<{ title: string; kind: string; photos: unknown[] }[]>(
-      await login("leo@orasso.local"),
-      "GET",
-      "/me/media-contents",
-    );
-    expect(mine.data.find((c) => c.title === galleryTitle)?.photos).toHaveLength(2);
-    // La fiche du média (connecté) liste ses contenus publiés, galerie comprise (deux photos).
-    const profile = await apiCall<{ profile: { id: string } | null }>(
-      await login("leo@orasso.local"),
-      "GET",
-      "/me/media-profile",
-    );
-    await page.goto(`/m/${profile.data.profile?.id}`);
-    const published = page.getByTestId("media-public-content").filter({ hasText: galleryTitle });
-    await expect(published).toBeVisible();
-    await expect(published.locator("img")).toHaveCount(2);
-    await both(page, "media-contenus", theme);
+    await page.getByTestId("album-step2-continue").click();
+    const galleryTitle = `Album ${unique()}`;
+    await page.getByTestId("album-title").fill(galleryTitle);
+    await page.getByTestId("album-publish").click();
+    await page.waitForURL(/\/albums\/[0-9a-f-]{36}/, { timeout: 60_000 });
+    const albumId = page.url().match(/\/albums\/([0-9a-f-]{36})/)?.[1] ?? "";
+    try {
+      // Relecture : l'album publié a bien ses deux photos (la façade des contenus le rend comme avant).
+      const mine = await apiCall<{ title: string; kind: string; photos: unknown[] }[]>(
+        await login("leo@orasso.local"),
+        "GET",
+        "/me/media-contents",
+      );
+      expect(mine.data.find((c) => c.title === galleryTitle)?.photos).toHaveLength(2);
+      // La fiche du média (connecté) liste ses albums publiés : celui-ci y est, il s'ouvre sur ses deux photos.
+      const profile = await apiCall<{ profile: { id: string } | null }>(
+        await login("leo@orasso.local"),
+        "GET",
+        "/me/media-profile",
+      );
+      await page.goto(`/m/${profile.data.profile?.id}`);
+      const published = page.getByTestId("media-public-album").filter({ hasText: galleryTitle });
+      await expect(published).toBeVisible();
+      await both(page, "media-contenus", theme);
+      await published.click();
+      await expect(page.getByTestId("media-gallery-photo")).toHaveCount(2);
+    } finally {
+      if (albumId) await apiCall(await login("leo@orasso.local"), "DELETE", `/me/albums/${albumId}`);
+    }
 
     await page.goto("/app/media?onglet=agenda");
     await expect(page.getByTestId("media-agenda")).toBeVisible();
@@ -540,40 +545,96 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   await page.goto(`/app/media?onglet=explorer&q=${encodeURIComponent(tag)}`);
   await expect(page.getByTestId("media-explorer-error")).toHaveCount(0);
 
-  // Galerie : « Publier » reste bloqué pendant l'envoi retardé d'une photo.
+  // Album : pendant l'envoi retardé d'une photo, on ne peut pas continuer (la série reste en cours, la progression se voit) ; une photo
+  // choisie et retirée avant l'envoi ne part jamais (lot R9e : les photos d'un album sont ajoutées dès leur envoi).
   await page.route("**/api/me/uploads", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     await route.continue();
   });
-  await page.goto("/app/media?onglet=contenus");
-  const form = page.getByTestId("media-content-form");
-  await form.getByLabel("Titre").fill(`Galerie retardée ${unique()}`);
-  await form.getByText("Galerie", { exact: true }).click();
-  const picker = page.getByTestId("media-gallery-picker");
-  const publish = page.getByTestId("media-publish");
-  await picker.getByLabel("Choisir des photos").setInputFiles({
-    name: "lente.png",
-    mimeType: "image/png",
-    buffer: await checkerPhoto(),
+  // Passe rejouable : un brouillon laissé sur Béziers Night par une passe interrompue est effacé d'abord.
+  await sql(
+    "delete from event_albums where status = 'draft' and event_id = (select id from events where slug = 'beziers-night-2026')",
+  );
+  await page.goto("/app/media/albums/nouveau");
+  await page.locator("label.alb-option", { hasText: "Béziers Night" }).locator("input").check();
+  await page.getByTestId("album-step1-continue").click();
+  const next = page.getByTestId("album-step2-continue");
+  await page.getByTestId("album-pick").setInputFiles([
+    { name: "lente.png", mimeType: "image/png", buffer: await checkerPhoto() },
+    { name: "retiree.png", mimeType: "image/png", buffer: await checkerPhoto() },
+  ]);
+  await expect(page.getByTestId("album-tile")).toHaveCount(2);
+  // Photo retirée avant l'envoi : plus qu'une tuile, aucun envoi.
+  await page.getByTestId("album-remove").last().click();
+  await expect(page.getByTestId("album-tile")).toHaveCount(1);
+  // Cadre de plaque et décision, puis « Continuer » : l'envoi retardé est en cours, le bouton est bloqué.
+  await page.getByTestId("album-mark").first().click();
+  await page.getByTestId("album-blur").click();
+  await next.click();
+  await expect(page.getByTestId("album-progress")).toBeVisible();
+  await expect(next).toBeDisabled();
+  // Envoyée et ajoutée : l'étape des détails (l'album reste en brouillon, rien n'est publié ici).
+  await expect(page.getByTestId("album-step-label")).toHaveText("Étape 3 sur 3", { timeout: 60_000 });
+  const leoCookie = await login("leo@orasso.local");
+  const draftAlbum = (
+    await apiCall<{ items: { id: string; photosCount: number; event: { slug: string } }[] }>(
+      leoCookie,
+      "GET",
+      "/me/albums?status=draft&limit=100",
+    )
+  ).data.items.find((a) => a.event.slug === "beziers-night-2026");
+  expect(draftAlbum?.photosCount).toBe(1);
+  // Aperçu flouté (exigence d'avant, par le nouveau chemin) : de retour à l'étape des photos, la vignette est **la version du serveur** (jamais
+  // l'original local) et ses pixels sont floutés dans le cadre posé ; le serveur dit « floutée ».
+  await page.getByTestId("album-line-photos").click();
+  await expect(page.getByTestId("album-step-label")).toHaveText("Étape 2 sur 3");
+  const thumb = page.getByTestId("album-tile").locator("img");
+  const served = (await thumb.getAttribute("src")) ?? "";
+  expect(served).toMatch(/\/api\/albums\/[0-9a-f-]{36}\/photos\/[0-9a-f]+\.webp$/);
+  const image = Buffer.from(await (await page.request.get(served)).body());
+  expect(await regionSpread(image, inner(DEFAULT_PLATE_FRAME))).toBeLessThan(25);
+  const rows = await sql<{ plate_state: string }>("select plate_state from event_album_photos where album_id = $1", [
+    draftAlbum?.id,
+  ]);
+  expect(rows.map((r) => r.plate_state)).toEqual(["blurred"]);
+  // « Changer » ne rouvre plus rien : la décision de cette photo est figée.
+  await expect(page.getByTestId("album-change")).toHaveCount(0);
+  // Photo retirée : l'ajout est défait côté serveur (la place du quota n'est pas en cause : l'envoi a été consommé).
+  const deleted = page.waitForResponse((r) => r.url().includes("/photos/") && r.request().method() === "DELETE");
+  await page.getByTestId("album-remove").click();
+  expect((await deleted).status()).toBe(204);
+  await expect(page.getByTestId("album-tile")).toHaveCount(0);
+  expect(
+    (
+      await sql<{ n: number }>(
+        "select count(*)::int n from event_album_photos where album_id = $1 and deleted_at is null",
+        [draftAlbum?.id],
+      )
+    )[0]?.n,
+  ).toBe(0);
+
+  // Envoi devenu caduc : l'ajout se perd (réponse coupée), la photo est retirée avant la reprise ; son envoi est supprimé côté serveur
+  // (il occupait le quota des envois en attente), comme avant par « Retirer cette photo ».
+  await page.unroute("**/api/me/uploads");
+  let cut = 0;
+  await page.route("**/api/me/albums/*/photos", async (route) => {
+    if (route.request().method() === "POST" && cut++ === 0) await route.abort();
+    else await route.continue();
   });
-  // Photo choisie, pas encore ajoutée : on ne publie pas.
-  await expect(publish).toBeDisabled();
-  await picker.getByRole("button", { name: "Poser un cadre" }).click();
-  await picker.getByTestId("media-photo-blur").click();
-  await expect(picker.getByTestId("media-photo-sending")).toBeVisible();
-  await expect(publish).toBeDisabled();
-  // Envoyée : l'aperçu montre les cadres pixellisés (image dessinée), « Publier » se libère.
-  await expect(picker.getByText("Plaque floutée", { exact: true })).toBeVisible({ timeout: 30_000 });
-  const preview = picker.getByTestId("media-gallery-sent").locator("img").first();
-  expect(await preview.getAttribute("src")).toMatch(/^data:image\/jpeg/);
-  await expect(publish).toBeEnabled();
-  // Photo retirée : son envoi est supprimé côté serveur (il occupait le quota des envois en attente).
-  const deleted = page.waitForResponse(
+  await page
+    .getByTestId("album-pick")
+    .setInputFiles({ name: "perdue.png", mimeType: "image/png", buffer: await checkerPhoto() });
+  await expect(page.getByTestId("album-tile")).toHaveCount(1);
+  await next.click();
+  await expect(page.getByTestId("album-send-error")).toBeVisible({ timeout: 30_000 });
+  await expect(next).toHaveText("Reprendre l'envoi");
+  const dropped = page.waitForResponse(
     (r) => r.url().includes("/api/me/uploads/") && r.request().method() === "DELETE",
   );
-  await picker.getByRole("button", { name: "Retirer cette photo" }).click();
-  expect((await deleted).status()).toBe(204);
-  await expect(picker.getByTestId("media-gallery-sent")).toHaveCount(0);
+  await page.getByTestId("album-remove").click();
+  expect((await dropped).status()).toBe(204);
+  await expect(page.getByTestId("album-tile")).toHaveCount(0);
+  if (draftAlbum) await apiCall(leoCookie, "DELETE", `/me/albums/${draftAlbum.id}`);
   await ctx.close();
 });
 
@@ -621,33 +682,39 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     [mediaId, nocturne.id, linkTag],
   );
   expect(links).toHaveLength(12);
-  const all = await apiCall<unknown[]>(leo, "GET", "/me/media-contents");
+  const all = await apiCall<{ kind: string }[]>(leo, "GET", "/me/media-contents");
   const total = all.data.length;
   expect(total).toBeGreaterThan(11);
+  const linkTotal = all.data.filter((c) => c.kind === "link").length;
 
   try {
     const { ctx, page } = await open(browser, "beton", "sofia@orasso.local");
-    // Galerie complète : les 8 photos sont dans la grille, la visionneuse les parcourt.
+    // Lot R9e : la galerie de 8 photos est un album (façade) ; la fiche le liste sous « Albums », l'album ouvert montre les 8 photos et la
+    // visionneuse les parcourt.
     await page.goto(`/m/${mediaId}`);
-    const card = page.getByTestId("media-public-content").filter({ hasText: galleryTitle });
-    await expect(card.getByTestId("media-gallery-photo")).toHaveCount(8);
-    await card.getByTestId("media-gallery-photo").nth(7).click();
-    await expect(card.getByTestId("media-gallery-position")).toHaveText("8 / 8");
-    await card.getByRole("button", { name: "Photo suivante" }).click();
-    await expect(card.getByTestId("media-gallery-position")).toHaveText("1 / 8");
+    await expect(page.getByTestId("media-public-albums")).toBeVisible();
+    await page.getByTestId("media-public-album").filter({ hasText: galleryTitle }).click();
+    await page.waitForURL(/\/albums\//);
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(8);
+    await page.getByTestId("media-gallery-photo").nth(7).click();
+    await expect(page.getByTestId("media-gallery-position")).toHaveText("8 / 8");
+    await page.getByRole("button", { name: "Photo suivante" }).click();
+    await expect(page.getByTestId("media-gallery-position")).toHaveText("1 / 8");
     await page.keyboard.press("Escape");
-    await expect(card.getByTestId("media-gallery-viewer")).toBeHidden();
+    await expect(page.getByTestId("media-gallery-viewer")).toBeHidden();
 
-    // Suite au curseur, un contenu par page : on franchit la 10e page sans reboucler, sans doublon.
+    // Suite au curseur, un lien par page (l'API pagine les liens seuls : `kind=link`) : chaque « Voir la suite » ajoute un lien, on franchit la 10e
+    // page sans reboucler ni doublon (exigence d'avant : un contenu de plus à chaque page).
     await page.goto(`/m/${mediaId}?taille=1`);
     await expect(page.getByTestId("media-public-content")).toHaveCount(1);
-    for (let n = 2; n <= total; n++) {
+    for (let n = 2; n <= linkTotal; n++) {
       await page.getByTestId("media-public-more").click();
       await expect(page.getByTestId("media-public-content")).toHaveCount(n);
     }
     await expect(page.getByTestId("media-public-more")).toHaveCount(0);
+    await expect(page.getByTestId("media-public-content")).toHaveCount(linkTotal);
     const titles = await page.getByTestId("media-public-content").locator("h3").allTextContents();
-    expect(new Set(titles).size).toBe(total);
+    expect(new Set(titles).size).toBe(linkTotal);
 
     // Panne : un curseur refusé par l'API n'est pas « aucun contenu » ; « Réessayer » est proposé.
     await page.goto(`/m/${mediaId}?cursor=invalide`);

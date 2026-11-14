@@ -5,6 +5,7 @@
 import { Button, CheckboxField, Chip, ChipRow, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type AccessPass,
+  albumLabels,
   type EventCard,
   eventFormatLabels,
   mediaAppLabels as L,
@@ -24,7 +25,6 @@ import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
-import { MediaGalleryPicker } from "../components/MediaGalleryPicker";
 import { Qr } from "../components/Qr";
 import { RotatingQr } from "../components/RotatingQr";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -268,22 +268,16 @@ export async function action({ request }: Route.ActionArgs) {
     return res.ok ? data({ error: null }) : fail(res);
   }
   if (intent === "content") {
-    const kind = text(form, "kind") === "gallery" ? "gallery" : "link";
-    let photoKeys: string[] = [];
-    try {
-      photoKeys = kind === "gallery" ? (JSON.parse(text(form, "photoKeys") || "[]") as string[]) : [];
-    } catch {
-      photoKeys = [];
-    }
+    // Lot R9e : ici, des liens seulement ; les photos vont dans un album (« Nouvel album »).
     const res = await api(request, "/me/media-contents", {
       method: "POST",
       json: {
         eventId: text(form, "eventId"),
-        kind,
+        kind: "link",
         title: text(form, "title"),
-        url: kind === "link" ? text(form, "url") : null,
-        platform: kind === "link" ? text(form, "platform") || "other" : "other",
-        photoKeys,
+        url: text(form, "url"),
+        platform: text(form, "platform") || "other",
+        photoKeys: [],
       },
     });
     return res.ok ? back("contenus", "contenu") : fail(res);
@@ -421,11 +415,8 @@ function AccreditationCard({
   );
 }
 
-/** Formulaire d'un contenu (lien ou galerie). « Publier » reste bloqué tant qu'une photo est en cours d'envoi. */
+/** Formulaire d'un lien (lot R9e : les photos se publient dans un album, « Nouvel album »). */
 function ContentForm({ accredited, busy }: { accredited: { id: string; title: string }[]; busy: boolean }) {
-  const [kind, setKind] = useState<"link" | "gallery">("link");
-  const [photoPending, setPhotoPending] = useState(false);
-  const blocked = kind === "gallery" && photoPending;
   return (
     <Form method="post" className="s-card s-form" data-testid="media-content-form">
       <input type="hidden" name="intent" value="content" />
@@ -435,44 +426,17 @@ function ContentForm({ accredited, busy }: { accredited: { id: string; title: st
         options={accredited.map((e) => ({ value: e.id, label: e.title }))}
       />
       <TextField label={L.addTitleField} help={L.addTitleHelp} name="title" required maxLength={80} />
-      <fieldset className="s-stack s-stack--tight">
-        <legend className="o-t-label">{L.addKind}</legend>
-        <label className="o-check">
-          <input
-            type="radio"
-            name="kind"
-            value="link"
-            checked={kind === "link"}
-            onChange={() => setKind("link")}
-            className="md-radio"
-          />{" "}
-          {L.kindOf({ kind: "link", platform: "other" })}
-        </label>
-        <label className="o-check">
-          <input
-            type="radio"
-            name="kind"
-            value="gallery"
-            checked={kind === "gallery"}
-            onChange={() => setKind("gallery")}
-            className="md-radio"
-          />{" "}
-          Galerie
-        </label>
-      </fieldset>
+      <input type="hidden" name="kind" value="link" />
       <div className="md-kind md-kind--link s-stack s-stack--tight">
-        <TextField label={L.addUrl} help={L.addUrlHelp} name="url" type="url" />
+        <TextField label={L.addUrl} help={L.addUrlHelp} name="url" type="url" required />
         <SelectField
           label={L.addPlatform}
           name="platform"
           options={mediaPlatforms.map((x) => ({ value: x, label: mediaPlatformLabels[x] }))}
         />
       </div>
-      <div className="md-kind md-kind--gallery">
-        <MediaGalleryPicker onPendingChange={setPhotoPending} />
-      </div>
       <div>
-        <Button type="submit" icon="send" loading={busy} disabled={blocked} data-testid="media-publish">
+        <Button type="submit" icon="send" loading={busy} data-testid="media-publish">
           {L.addPublish}
         </Button>
       </div>
@@ -624,6 +588,11 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
             <h2 id="md-add" className="s-h2">
               {L.addTitle}
             </h2>
+            <div>
+              <Button variant="secondary" icon="camera" href="/app/media/albums/nouveau" data-testid="media-new-album">
+                {albumLabels.newAlbum}
+              </Button>
+            </div>
             {d.accredited.length === 0 ? (
               <p className="s-notice">{L.needAccreditation}</p>
             ) : (
@@ -653,6 +622,10 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
                       <h3 className="s-h2 o-never-truncate">
                         {c.url ? (
                           <a href={c.url} target="_blank" rel="noreferrer">
+                            {c.title}
+                          </a>
+                        ) : c.kind === "gallery" ? (
+                          <a href={`/albums/${c.id}`} data-testid="media-content-album">
                             {c.title}
                           </a>
                         ) : (

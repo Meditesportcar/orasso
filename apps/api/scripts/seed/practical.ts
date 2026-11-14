@@ -6,7 +6,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { env } from "../../src/env";
 import { now } from "./helpers";
+import { homeSeedFuel, homeSeedWash } from "./home";
+import { dropSeedRows, type SourceUrls, seedableSources } from "./practical-cache";
 
 type Wash = { name: string; address: string | null; lat: number; lng: number };
 type Station = Wash & {
@@ -14,7 +17,7 @@ type Station = Wash & {
   updatedAt: string | null;
 };
 
-const wash: Wash[] = [
+export const practicalSeedWash: Wash[] = [
   { name: "Lavage Tech'Auto", address: "Avenue du Languedoc, 66000 Perpignan", lat: 42.7092, lng: 2.8827 },
   { name: "Wash 66", address: "Route de Thuir, 66000 Perpignan", lat: 42.7228, lng: 2.9264 },
   { name: "Lavage du Moulin", address: "Chemin du Moulin à Vent, 66000 Perpignan", lat: 42.6871, lng: 2.8739 },
@@ -38,7 +41,7 @@ const station = (address: string, lat: number, lng: number): Station => ({
   prices: { sp95: 1.859, sp98: 1.949, gazole: 1.789, e85: 0.799 },
   updatedAt: now.toISOString(),
 });
-const fuel: Station[] = [
+export const practicalSeedFuel: Station[] = [
   station("Rue du Vernet, 66000 Perpignan", 42.7132, 2.8791),
   station("Avenue du Général Leclerc, 66000 Perpignan", 42.6963, 2.9049),
   station("Route de Canet, 66000 Perpignan", 42.7059, 2.9313),
@@ -52,16 +55,28 @@ const fuel: Station[] = [
   station("Rue de Saint-Estève, 66240 Saint-Estève", 42.7143, 2.8372),
 ];
 
-/** Pose les deux listes (remplace celles qui existent : le seed se rejoue sans doublon). */
-export async function seedPractical() {
-  const caches: Record<string, unknown> = { "osm:66": wash, "fuel2:66": fuel };
+/**
+ * Pose les deux listes de lieux inventés, SEULEMENT pour une source remplacée par un faux service ou coupée (recettes, démonstration
+ * sans réseau). Avec les vraies sources, elle n'écrit rien et retire les lignes qu'elle a elle-même posées autrefois, pourvu que leur
+ * contenu soit exactement le sien : sinon Orasso ne lirait jamais les vraies sources (la date fraîche du seed gardait le faux cache).
+ * Rejouable : les entrées sont remplacées à chaque passage.
+ */
+export async function seedPractical(sources: SourceUrls = env) {
+  const seedable = seedableSources(sources);
+  const caches: Record<string, unknown> = {};
+  if (seedable.osm) caches["osm:66"] = practicalSeedWash;
+  if (seedable.fuel) caches["fuel2:66"] = practicalSeedFuel;
   for (const [key, data] of Object.entries(caches)) {
     await db
       .insert(t.externalCache)
       .values({ key, fetchedAt: now, data })
       .onConflictDoUpdate({ target: t.externalCache.key, set: { fetchedAt: now, data: sql`excluded.data` } });
   }
+  const dropped = [
+    ...(seedable.osm ? [] : await dropSeedRows(["osm:66", "wash:66"], [practicalSeedWash, homeSeedWash])),
+    ...(seedable.fuel ? [] : await dropSeedRows(["fuel2:66", "fuel:66"], [practicalSeedFuel, homeSeedFuel])),
+  ];
   console.log(
-    `Pratique : ${wash.length} lavages et ${fuel.length} stations-service factices dans le cache (66), aucun appel réel.`,
+    `Pratique : ${Object.keys(caches).length ? `${practicalSeedWash.length} lavages et ${practicalSeedFuel.length} stations-service factices posés pour les sources remplacées ou coupées` : "sources réelles : aucun lieu inventé posé"}${dropped.length ? `, lignes de cache inventées retirées : ${dropped.join(", ")}` : ""}.`,
   );
 }

@@ -47,6 +47,11 @@ export async function addPhoto(
         .where(and(eq(eventAlbumPhotos.albumId, album.id), eq(eventAlbumPhotos.clientId, input.clientId)));
       if (again) {
         if (again.deletedAt) throw conflict("conflict", albumLabels.photoNotFound);
+        // Une photo n’a qu’une décision de plaque, celle de son premier ajout : un rejeu qui en porte une autre est refusé (le fichier
+        // gardé ne changerait pas : l’écran annoncerait « floutée » devant une photo lisible).
+        if (again.plateState !== plateStateOf(input.plateDecision)) {
+          throw conflict("conflict", albumLabels.decisionLocked);
+        }
         return { photo: again, source: null };
       }
       await assertAccredited(tx, album.eventId, profile.id);

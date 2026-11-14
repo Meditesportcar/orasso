@@ -49,7 +49,7 @@ import { Notice } from "@/ui/Notice";
 import { PageFooterProvider } from "@/ui/pageFooter";
 import { StickyHeader, TabScreen } from "@/ui/Screens";
 import { openCasquettes } from "../casquettes/sheetStore";
-import { PageContents } from "./PageContents";
+import { PageAlbums } from "./PageAlbums";
 import { PageGest } from "./PageGest";
 import { PageMentions } from "./PageMentions";
 import { PageOffers } from "./PageOffers";
@@ -233,8 +233,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
             })
           : pageCounters("media", {
               followers: data.page.followersCount,
-              accreditations: data.page.accreditationsCount ?? null,
-              publications: pagePublicationsCount(data.page) ?? null,
+              albums: data.page.albumsCount ?? null,
+              photos: data.page.photosCount ?? null,
             });
 
   const gest = gestOf(kind, router);
@@ -342,8 +342,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
           />
         ) : tab === "services" && data.kind === "provider" ? (
           <PagePrestations provider={data.page} />
-        ) : tab === "contents" && data.kind === "media" ? (
-          <PageContents mediaId={data.page.id} owner reloadToken={reloadToken} />
+        ) : tab === "albums" && data.kind === "media" ? (
+          <PageAlbums mediaId={data.page.id} owner reloadToken={reloadToken} />
         ) : (
           <PageMentions
             reloadToken={reloadToken}

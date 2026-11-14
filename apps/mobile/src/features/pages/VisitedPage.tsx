@@ -48,7 +48,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 import { FlowScreen, StickyHeader } from "@/ui/Screens";
-import { PageContents } from "./PageContents";
+import { PageAlbums } from "./PageAlbums";
 import { PagePrestations } from "./PagePrestations";
 import { useReloadToken } from "./useReloadToken";
 
@@ -143,8 +143,8 @@ export function VisitedPage({ kind }: { kind: VisitedKind }) {
         })
       : pageCounters("media", {
           followers: p.followersCount,
-          accreditations: (p as MediaPage).accreditationsCount ?? null,
-          publications: pagePublicationsCount(p) ?? null,
+          albums: (p as MediaPage).albumsCount ?? null,
+          photos: (p as MediaPage).photosCount ?? null,
         });
   const provider = kind === "provider" ? (p as ProviderPage) : null;
   const media = kind === "media" ? (p as MediaPage) : null;
@@ -251,8 +251,8 @@ export function VisitedPage({ kind }: { kind: VisitedKind }) {
 
       {tab === "services" && provider ? (
         <PagePrestations provider={provider} />
-      ) : tab === "contents" && media ? (
-        <PageContents mediaId={media.id} owner={false} reloadToken={reloadToken} />
+      ) : tab === "albums" && media ? (
+        <PageAlbums mediaId={media.id} owner={false} reloadToken={reloadToken} />
       ) : tab === "publications" ? (
         <PagePublications
           reloadToken={reloadToken}
