@@ -143,6 +143,15 @@ export const storyPublishLabels = {
   preparing: "Préparation de la photo…",
   missingCrew: "Choisis le crew de ta story.",
   audienceLost: "Choisis à nouveau qui la voit.",
+  /** Le compte connecté n'est plus celui qui a ouvert l'écran (appli) : rien ne part, le brouillon est abandonné. */
+  accountChanged:
+    "Le compte connecté a changé pendant la rédaction : ta story n'est pas partie. Ferme cet écran, puis rouvre « Publier une story » avec ce compte.",
+  /** Le compte a changé pendant l'envoi : on ne sait pas si la story est partie (la réponse n'a pas été appliquée). */
+  accountChangedUncertain:
+    "Le compte connecté a changé pendant l'envoi : ta story a peut-être été publiée sous ton autre compte. Vérifie-le en t'y reconnectant.",
+  /** L'API a accepté la story avant le changement de compte : elle est publiée, sous le compte qui a ouvert l'écran. */
+  accountChangedPublished:
+    "Ta story a été publiée, sous le compte qui a ouvert cet écran. Le compte connecté a changé depuis : reconnecte-toi à ce compte pour la voir.",
   close: "Fermer",
   leaveTitle: "Quitter sans publier ?",
   leaveBody: "Ta photo et tes réglages ne sont pas gardés.",

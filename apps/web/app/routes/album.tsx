@@ -4,11 +4,12 @@
 // connecté (les photos viennent d'une route protégée). Média : modifier le titre, autoriser l'enregistrement, supprimer ; autre membre :
 // signaler. Aucun nom de véhicule ni pseudo en R9e.
 import { Button, Chip } from "@orasso/design-system/web";
-import { type AlbumView, albumViewerRoleOf, albumLabels as L, type Taggable } from "@orasso/shared";
+import { type AlbumView, albumViewerRoleOf, type EventPublic, albumLabels as L, type Taggable } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { AlbumCover } from "../components/albums/AlbumCover";
 import { IdentifyBanner } from "../components/albums/IdentifyBanner";
+import { OrganizerActions } from "../components/albums/OrganizerActions";
 import { TagActions } from "../components/albums/TagActions";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PhotoGallery } from "../components/PhotoGallery";
@@ -26,15 +27,25 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
-  await requireMe(request);
+  const me = await requireMe(request);
   const album = await apiOrThrow<AlbumView>(request, `/albums/${encodeURIComponent(params.id)}`);
+  // Lot R9g : l'organisateur de l'événement (une de ses structures) a les actions « Reprendre dans le journal » et « officiel ».
+  // La propriété de l'album (`mine`) et les droits d'organisateur se calculent séparément : un compte média qui est aussi
+  // organisateur de l'événement a les deux.
+  const event =
+    album.status !== "published"
+      ? null
+      : await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(album.event.slug)}`);
+  const organizer = Boolean(
+    event?.ok && me.personas?.some((p) => p.kind === "organizer" && p.id === event.data.structure.id),
+  );
   // Lot R9f : qui je suis pour identifier (le média auteur le sait ; un passionné ou un organisateur le demande à l'API). Une panne ne
   // casse pas la page : sans plateau lu, je suis un simple membre.
   const taggable =
     album.mine || album.status !== "published"
       ? null
       : await api<Taggable>(request, `/albums/${encodeURIComponent(params.id)}/taggable`);
-  return { back, album, taggable: taggable?.ok ? taggable.data : null };
+  return { back, album, organizer, taggable: taggable?.ok ? taggable.data : null };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -170,9 +181,11 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
                     )}
                   </>
                 ) : (
-                  // Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée.
+                  /* Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée. */
                   <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
                 )}
+                {/* Lot R9g : l'organisateur de l'événement reprend la photo dans son journal, ou choisit l'album « officiel » (en plus de ses droits de média, s'il l'est aussi). */}
+                {loaderData.organizer && <OrganizerActions key={`org-${photo.key}`} album={a} photo={photo} />}
               </>
             )}
           />

@@ -22,7 +22,7 @@ import { UUID_RE } from "./access";
 import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
 import { loadPageInfo } from "./authors";
 import { authorPostIds, decodeCursor, journalPostIds, pageInGoodStanding, pageOf, requireJournalEvent } from "./lists";
-import { FEED_PHOTO_NAME_RE, feedPhotoKey, feedPhotoName } from "./posts";
+import { FEED_PHOTO_NAME_RE, feedPhotoKey, feedPhotoName, loadPhotoCredits } from "./posts";
 
 /**
  * Structures vérifiées parmi `ids` : une structure en attente ou refusée n'est lisible que de ses membres
@@ -75,6 +75,9 @@ export async function loadPublicViews(ex: Executor, ids: string[], at: Date): Pr
       ),
     )
     .orderBy(asc(feedPostPhotos.position));
+  // Lot R9g (T45) : le crédit suit la photo reprise d'un album, aussi sans session. Liste blanche : la page du média et son nom ; l'album ouvert
+  // exige une session, donc `albumId` reste nul ici (« Voir l'album » n'est pas proposé à un visiteur).
+  const credits = await loadPhotoCredits(ex, photos, at);
   const attaches = await loadAttachViews(
     ex,
     ok.map((r) => ({
@@ -94,7 +97,15 @@ export async function loadPublicViews(ex: Executor, ids: string[], at: Date): Pr
     const attached = attaches.get(id);
     const own = photos
       .filter((p) => p.postId === id)
-      .map((p) => ({ url: publicPhotoUrl(id, p.storageKey), width: p.width, height: p.height }));
+      .map((p) => {
+        const credit = credits.get(p.id);
+        return {
+          url: publicPhotoUrl(id, p.storageKey),
+          width: p.width,
+          height: p.height,
+          ...(credit ? { credit: { ...credit, albumId: null } } : {}),
+        };
+      });
     const poster = !own.length && attached ? eventVisualUrl(attached.event) : null;
     if (!page || (!own.length && !poster)) return [];
     return [

@@ -13,7 +13,10 @@ import { request } from "../http";
 import { qs } from "./qs";
 
 /** Le corps de `POST /me/stories` construit par `storyBody` (`@orasso/shared`). */
-export type StoryPublishBody = ReturnType<typeof storyBody> | ReturnType<typeof storyVideoBody>;
+/** Plus `expectedUserId` : le compte qui croit publier (409 `account_changed` si la session n'est plus la sienne). */
+export type StoryPublishBody = (ReturnType<typeof storyBody> | ReturnType<typeof storyVideoBody>) & {
+  expectedUserId?: string;
+};
 
 export const storiesPublishApi = {
   createStory: (body: StoryPublishBody) =>

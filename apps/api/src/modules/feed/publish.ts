@@ -100,6 +100,67 @@ class Replayed extends Error {
   }
 }
 
+/** Une photo prête à être écrite avec sa publication : fichier déjà copié sous `private/feed/<postId>/…`. */
+export type PostPhotoRow = {
+  key: string;
+  width: number;
+  height: number;
+  blurred: boolean;
+  confirmed: boolean;
+  /** Lot R9g (T44, T45) : la reprise d'une photo d'album garde le crédit du média et sa source. */
+  creditMediaId?: string | null;
+  sourceAlbumPhotoId?: string | null;
+};
+
+/**
+ * Le fichier d'une photo, flouté au besoin (`rects` : les cadres, irréversible, aucun original gardé) et copié sous la clé de la
+ * publication, **hors transaction** (aucune écriture de fichier sous verrou). Sans cadre, le fichier est copié tel quel (`fallback` : ses
+ * dimensions) ; les cadres floutés valent décision : « aucune plaque » n'est posé que sans cadre. La clé écrite est rendue : à effacer
+ * si la transaction échoue. Lot R9g : factorisé de `create`, que `repost` (reprise d'une photo d'album) appelle sans envoi.
+ */
+export async function storePostPhoto(
+  postId: string,
+  source: Buffer,
+  rects: PlateRect[],
+  fallback: { width: number; height: number },
+): Promise<PostPhotoRow> {
+  const out = rects.length ? await blurPlateRegions(source, rects) : { data: source, info: fallback };
+  const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
+  await storage.put(key, out.data);
+  return {
+    key,
+    width: out.info.width,
+    height: out.info.height,
+    blurred: rects.length > 0,
+    confirmed: rects.length === 0,
+  };
+}
+
+/** La publication et ses photos, dans la transaction de l'appelant (lot R9g : factorisé de `create`, aucun changement de comportement). */
+export async function insertPostWithPhotos(
+  tx: Executor,
+  values: typeof feedPosts.$inferInsert & { id: string },
+  photos: readonly PostPhotoRow[],
+): Promise<void> {
+  await tx.insert(feedPosts).values(values);
+  if (photos.length) {
+    await tx.insert(feedPostPhotos).values(
+      photos.map((p, position) => ({
+        postId: values.id,
+        storageKey: p.key,
+        width: p.width,
+        height: p.height,
+        position,
+        plateBlurred: p.blurred,
+        noPlateConfirmed: p.confirmed,
+        ...(p.sourceAlbumPhotoId
+          ? { creditMediaId: p.creditMediaId ?? null, sourceAlbumPhotoId: p.sourceAlbumPhotoId }
+          : {}),
+      })),
+    );
+  }
+}
+
 export const feedPostsService = {
   /** `POST /me/feed-posts` */
   async create(v: Viewer, raw: FeedPostCreate): Promise<FeedPostView> {
@@ -276,27 +337,12 @@ export const feedPostsService = {
           throw validation("Photo introuvable : envoie-la à nouveau.");
         }
         const d = decisions[index] as (typeof decisions)[number];
-        const out = d.rects.length
-          ? await blurPlateRegions(source, d.rects)
-          : {
-              data: source,
-              info: {
-                width: (byKey.get(p.uploadKey) as { width: number }).width,
-                height: (byKey.get(p.uploadKey) as { height: number }).height,
-              },
-            };
-        const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
-        await storage.put(key, out.data);
-        written.push(key);
-        photos.push({
-          key,
-          width: out.info.width,
-          height: out.info.height,
-          blurred: d.rects.length > 0,
-          // Les cadres floutés valent décision : « aucune plaque » n'est posé que sans cadre.
-          confirmed: d.rects.length === 0,
-          uploadKey: p.uploadKey,
+        const stored = await storePostPhoto(postId, source, d.rects, {
+          width: (byKey.get(p.uploadKey) as { width: number }).width,
+          height: (byKey.get(p.uploadKey) as { height: number }).height,
         });
+        written.push(stored.key);
+        photos.push({ ...stored, uploadKey: p.uploadKey });
       }
 
       // Carte partagée : l'API rend le 4:5 elle-même (image déjà masquée : plaque floutée ou « aucune plaque »).
@@ -342,43 +388,34 @@ export const feedPostsService = {
             throw validation("Photo déjà utilisée : envoie-la à nouveau.");
           }
         }
-        await tx.insert(feedPosts).values({
-          id: postId,
-          authorId: userId,
-          caption: input.caption,
-          vehicleId,
-          eventId,
-          aspect: linkedContent ? "portrait_4_5" : input.aspect,
-          department,
-          clientId: input.clientId ?? null,
-          commercialPartnerId,
-          persona,
-          // Fiche pro : l'instant pris sous le verrou, celui-là même qui a servi à compter le mois (horloge de
-          // l'application, comme les offres) : le comptage et l'insertion ne peuvent pas tomber dans deux mois.
-          ...(proAt ? { createdAt: proAt } : {}),
-          structureId: authorship.kind === "structure" ? authorship.id : null,
-          proId: authorship.kind === "pro" ? authorship.id : null,
-          providerId: authorship.kind === "provider" ? authorship.id : null,
-          mediaId: authorship.kind === "media" ? authorship.id : null,
-          eventRole,
-          // Le lieu libre ne vaut que sans événement (sinon c'est la ville de l'événement).
-          placeLabel: eventId ? null : (input.placeLabel ?? null),
-          importantReason: input.important?.reason ?? null,
-          ...(offer ?? {}),
-        });
-        if (photos.length) {
-          await tx.insert(feedPostPhotos).values(
-            photos.map((p, position) => ({
-              postId,
-              storageKey: p.key,
-              width: p.width,
-              height: p.height,
-              position,
-              plateBlurred: p.blurred,
-              noPlateConfirmed: p.confirmed,
-            })),
-          );
-        }
+        await insertPostWithPhotos(
+          tx,
+          {
+            id: postId,
+            authorId: userId,
+            caption: input.caption,
+            vehicleId,
+            eventId,
+            aspect: linkedContent ? "portrait_4_5" : input.aspect,
+            department,
+            clientId: input.clientId ?? null,
+            commercialPartnerId,
+            persona,
+            // Fiche pro : l'instant pris sous le verrou, celui-là même qui a servi à compter le mois (horloge de
+            // l'application, comme les offres) : le comptage et l'insertion ne peuvent pas tomber dans deux mois.
+            ...(proAt ? { createdAt: proAt } : {}),
+            structureId: authorship.kind === "structure" ? authorship.id : null,
+            proId: authorship.kind === "pro" ? authorship.id : null,
+            providerId: authorship.kind === "provider" ? authorship.id : null,
+            mediaId: authorship.kind === "media" ? authorship.id : null,
+            eventRole,
+            // Le lieu libre ne vaut que sans événement (sinon c'est la ville de l'événement).
+            placeLabel: eventId ? null : (input.placeLabel ?? null),
+            importantReason: input.important?.reason ?? null,
+            ...(offer ?? {}),
+          },
+          photos,
+        );
         // Mentions (lot R8a2) : les cibles de la publication, dans sa transaction ; les personnes citées sont prévenues.
         await materializeMentions(tx, postId, { notify: true, after });
         if (input.important && event) {

@@ -6,6 +6,7 @@
 import { Button, CheckboxField, Chip, ChipRow, TextField } from "@orasso/design-system/web";
 import {
   type AccreditationForOrganizer,
+  type AlbumsList,
   applicationStatusLabels,
   type EventOrganizer,
   orgaPressLabels as L,
@@ -17,7 +18,9 @@ import {
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
+import { PhotosSection } from "../components/event/PhotosSection";
 import { TextAreaField } from "../components/Fields";
+import { useActor, withActorParam } from "../lib/actor";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { fromInput, toInput } from "../lib/datetime";
 import { formatDay, formatWhen } from "../lib/format";
@@ -35,15 +38,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Réservé à l'organisation de l'événement.", { status: 403 });
   }
   const id = encodeURIComponent(params.eventId);
-  const [event, settings, requests] = await Promise.all([
+  const [event, settings, requests, albums] = await Promise.all([
     apiOrThrow<EventOrganizer>(request, `/events/${id}`),
     apiOrThrow<PressSettingsView>(request, `/events/${id}/press-settings`),
     apiOrThrow<AccreditationForOrganizer[]>(request, `/events/${id}/accreditations`),
+    // Lot R9g : les albums de l'événement (« Photos »), avec l'album officiel.
+    api<AlbumsList>(request, `/events/${id}/albums?limit=50`),
   ]);
   return {
     event: { id: event.id, title: event.title, startsAt: event.startsAt, endsAt: event.endsAt },
     settings,
     requests,
+    albums: albums.ok ? albums.data.items : [],
+    albumsFailed: !albums.ok && albums.status !== 404,
+    albumsTotal: albums.ok ? (albums.data.total ?? albums.data.items.length) : 0,
+    albumsNext: albums.ok ? albums.data.nextCursor : null,
   };
 }
 
@@ -103,7 +112,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaPresse({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, settings: s, requests } = loaderData;
+  const actor = useActor();
+  const { event, settings: s, requests, albums, albumsFailed, albumsTotal, albumsNext } = loaderData;
   const busy = useNavigation().state !== "idle";
   const pending = requests.filter((r) => r.status === "pending");
   const decided = requests.filter((r) => r.status !== "pending");
@@ -185,7 +195,7 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
           <article key={r.id} className="orga__panel s-stack s-stack--tight" data-testid="press-request">
             <div className="s-row s-row--between">
               <h3 className="s-h2 o-never-truncate">
-                <a href={`/m/${r.media.id}`}>{r.media.name}</a>
+                <a href={withActorParam(`/m/${r.media.id}`, actor)}>{r.media.name}</a>
               </h3>
               {r.media.verified && <Chip variant="verified">{mediaAppLabels.profileVerified}</Chip>}
             </div>
@@ -232,7 +242,7 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
             data-status={r.status}
           >
             <div className="s-stack s-stack--tight">
-              <a href={`/m/${r.media.id}`} className="o-never-truncate">
+              <a href={withActorParam(`/m/${r.media.id}`, actor)} className="o-never-truncate">
                 <strong>{r.media.name}</strong>
               </a>
               {r.status === "refused" && r.refusalNote && <span className="o-t-caption">{r.refusalNote}</span>}
@@ -294,6 +304,16 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
           </article>
         ))}
       </section>
+      {/* Lot R9g : les albums des médias accrédités, l'album « officiel » à choisir (la fiche de l'événement montre la section). */}
+      <PhotosSection
+        albums={albums}
+        manager
+        countViews={false}
+        failed={albumsFailed}
+        total={albumsTotal}
+        nextCursor={albumsNext}
+        moreUrl={`/api/events/${event.id}/albums`}
+      />
     </>
   );
 }

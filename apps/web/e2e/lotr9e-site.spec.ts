@@ -104,7 +104,10 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("album-tag-credit")).toHaveText("Photos : Sud Cars");
     await expect(page.getByTestId("album-tag-official")).toHaveCount(0);
     await expect(page.getByTestId("album-event-link")).toContainText("présent au Béziers Night");
-    await expect(page.getByTestId("album-identify-slot")).toBeEmpty();
+    // R9f partie 2 remplit l'emplacement laissé par R9e : pour l'auteur de l'album, « Identifier les voitures · 0 sur 3 photos identifiées ».
+    await expect(page.getByTestId("album-identify-slot")).toBeAttached();
+    await expect(page.getByTestId("identify-banner")).toContainText("Identifier les voitures");
+    await expect(page.getByTestId("identify-banner-count")).toHaveText("0 sur 3 photos identifiées");
     await expect(page.getByTestId("media-gallery-photo")).toHaveCount(3);
     await expect(page.getByTestId("album-owner")).toBeVisible();
     await expect(page.getByTestId("album-report")).toHaveCount(0);
@@ -123,10 +126,10 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await page.goto("/app/media?onglet=contenus");
     await expect(page.getByTestId("media-content-album").filter({ hasText: title })).toBeVisible();
     const mediaId = created?.media.key.slice(2);
-    await page.goto(`/m/${mediaId}`);
+    await page.goto(`/m/${mediaId}?onglet=albums`);
     await expect(page.getByTestId("media-public-albums")).toBeVisible();
     await expect(page.getByTestId("media-public-album").filter({ hasText: title })).toBeVisible();
-    await expect(page.getByTestId("media-public-albums-count")).toContainText("albums · ");
+    await expect(page.getByTestId("media-public-albums-count")).toHaveText(/^\d+ albums? · \d+ photos?$/);
 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), puis la fiche sans gestion.
     const damien = await browser.newContext({ viewport: { width: 390, height: 900 } });
@@ -214,13 +217,14 @@ test("sans session : la fiche de l'événement montre l'album, sans rien d'ident
   const rassemblement = published.items.find((a) => a.title === "Les photos du Rassemblement Côte Vermeille");
   expect(rassemblement).toBeTruthy();
   await page.goto("/e/rassemblement-cote-vermeille-2025");
-  const section = page.getByTestId("media-contents");
+  // R9g : l'album est une carte de la section « Photos » (la mosaïque), plus une galerie dans « Médias présents ».
+  const section = page.getByTestId("event-photos");
   await expect(section).toBeVisible({ timeout: 30_000 });
   await expect(section).toContainText("Les photos du Rassemblement Côte Vermeille");
-  const photos = section.getByTestId("media-gallery-photo");
+  const photos = section.getByTestId("event-photos-cover");
   await expect(photos.first()).toBeVisible();
   // Les photos sont lisibles sans session (route publique), aucune identification de véhicule ni de pseudo.
-  const src = await photos.first().locator("img").getAttribute("src");
+  const src = await photos.first().locator("img").first().getAttribute("src");
   expect(src).toContain("/api/public/albums/");
   const res = await page.request.get(src ?? "");
   expect(res.status()).toBe(200);

@@ -2,7 +2,7 @@
 // `n-page`, vue « Un visiteur ») : l'en-tête compact, les onglets, le filtre des publications, « Mentions ». Appli et site disent
 // les mêmes mots, copiés des maquettes au caractère près ; les phrases que la maquette ne montre pas sont notées dans le journal
 // des choix (section « Lot R8g »).
-import { pluralFr } from "./plural.fr";
+import { countFr, pluralFr } from "./plural.fr";
 
 export const pagesLabels = {
   /** Nom accessible de la rangée d'onglets. */
@@ -69,6 +69,12 @@ export const pagesLabels = {
   mentionsError: "Les mentions ne se chargent pas pour le moment.",
   mentionsMore: "Voir plus",
   mentionsRetry: "Réessayer",
+  /** La Page du propriétaire : une lecture qui échoue se dit (jamais « Aucun événement » ni « 0 partenaire » à la place d'une panne). */
+  readRetry: "Réessayer",
+  eventsReadError: "Les événements ne se chargent pas pour le moment.",
+  pastReadError: "Les événements passés ne se chargent pas pour le moment.",
+  partnersReadError: "Les pros partenaires ne se chargent pas pour le moment.",
+  inviteReadError: "Le lien d'invitation ne se charge pas pour le moment.",
   mentionOpen: "Ouvrir la publication",
   mentionAuthor: (name: string) => `Voir la page de ${name}`,
   commercialTag: "Collaboration commerciale",
@@ -90,6 +96,8 @@ export const pagesLabels = {
   /** Lot R9e : les compteurs d'un média, « abonnés · albums · photos ». */
   albumsCount: (n: number) => pluralFr(n, "album", "albums"),
   photosCount: (n: number) => pluralFr(n, "photo", "photos"),
+  /** La ligne sous « Albums » : « 2 albums · 14 photos » (les nombres y sont, tour 1 de la partie 2). */
+  albumsLine: (albums: number, photos: number) => `${countFr(albums, "album")} · ${countFr(photos, "photo")}`,
   publicationsCount: (n: number) => pluralFr(n, "publication", "publications"),
   /** « Contenus » vu par un visiteur, sans rien de publié. */
   contentsEmpty: "Aucun contenu publié pour l'instant.",

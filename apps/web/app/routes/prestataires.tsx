@@ -1,13 +1,42 @@
-// Vitrine d'un prestataire vue par les connectés (lot 57, `s-vitrine`) : ce qu'une organisation regarde avant de le
-// retenir sur une mission (métier, menu, besoins sur place, zone, avis des organisateurs). `GET /providers/:id` et ses
-// avis sont réservés aux connectés (lot 46).
-import { proV2Labels as P, type ProviderPublic, type ProviderReviewsSummary } from "@orasso/shared";
+// La page d'un prestataire (`/providers/<id>`) vue par un connecté (lot 57, `s-vitrine` ; lot R9h partie 2, T54, maquette R9.3 `n-page`, vue
+// « Un visiteur »), au gabarit de la page d'une structure et de la fiche d'un pro (R8g) : le logo dans l'anneau de ses stories, le nom
+// (jamais tronqué), le type, « Suivre » (le seul bouton principal) ou « Suivi », la bio sur une ligne, « Plus » (Partager, Signaler,
+// « Modifier » pour son propriétaire), la bande de compteurs « abonnés · missions · organisateurs » ; puis « Publications » (ouvert par
+// défaut quand il y en a), « Prestations » (la vitrine d'aujourd'hui : métier, menu, besoins, zone, avis) et « Mentions · N ».
+// « Suivre » écrit l'abonnement de la casquette portée par l'adresse (`?auteur=`, T48) : vu depuis l'espace d'une casquette, c'est la page
+// qui suit (T6 et T14). `GET /providers/:id` est réservé aux connectés (lot 46).
+import {
+  authorKeyOf,
+  pagesLabels as L,
+  proV2Labels as P,
+  PAGE_TAB_PARAM,
+  type PageFollowResult,
+  type ProviderPage,
+  pageCounters,
+  pageMentionsCount,
+  pagePublicationsCount,
+  pageShownTab,
+  pageTabs,
+  profileRingState,
+  type WithPageExtras,
+} from "@orasso/shared";
+import { useEffect, useState } from "react";
 
-import { ProviderVitrine } from "../components/ProviderVitrine";
-import { ReportDialog } from "../components/ReportDialog";
-import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
-import "../styles/providers.css";
+import { ActorOnPage } from "../components/casquette/ActorOnPage";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
+import { PageFollow } from "../components/pages/PageFollow";
+import { PageHead } from "../components/pages/PageHead";
+import { PageMentions } from "../components/pages/PageMentions";
+import { PageMore } from "../components/pages/PageMore";
+import { PagePrestations } from "../components/pages/PagePrestations";
+import { PagePublications } from "../components/pages/PagePublications";
+import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
+import { ReportDialog } from "../components/ReportDialog";
+import { ShareButtons } from "../components/ShareButtons";
+import { ActorIfAny, casquetteOfParam, withoutActorParam } from "../lib/actor";
+import { apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
+import "../styles/pages.css";
+import "../styles/providers.css";
 import type { Route } from "./+types/prestataires";
 
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
@@ -18,30 +47,138 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const url = new URL(request.url);
   // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
-  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
-  await requireMe(request);
-  const id = encodeURIComponent(params.id);
-  const [provider, reviews] = await Promise.all([
-    apiOrThrow<ProviderPublic>(request, `/providers/${id}`),
-    api<ProviderReviewsSummary>(request, `/providers/${id}/reviews`),
-  ]);
+  const back = safeReturn(url.searchParams.get("retour"), "/app");
+  const me = await requireMe(request);
+  // Lot R9h (T48) : la casquette qui regarde est portée par l'adresse (`?auteur=`), revérifiée ici et par l'API.
+  const casquette = casquetteOfParam(url.searchParams.get("auteur"), me.personas);
+  const actor = casquette?.key ?? null;
+  // « En mon nom » : la même adresse sans `auteur` (onglet, retour et curseur restent).
+  const ownHref = withoutActorParam(url);
+  const provider = await apiOrThrow<WithPageExtras<ProviderPage>>(
+    request,
+    `/providers/${encodeURIComponent(params.id)}`,
+    {
+      actor,
+    },
+  );
+  const owner = me.personas.some((p) => p.kind === "provider" && p.id === provider.id);
+  const tab = pageShownTab("provider", {
+    raw: url.searchParams.get(PAGE_TAB_PARAM),
+    counts: { publications: pagePublicationsCount(provider) },
+    session: true,
+  });
   return {
     back,
+    retour: url.searchParams.get("retour") ? back : null,
     provider,
-    reviews: reviews.ok ? reviews.data : null,
+    owner,
+    actor,
+    casquette,
+    ownHref,
+    tab,
+    origin: originOf(request),
   };
 }
 
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
+  const { back, retour, provider, owner, actor, casquette, ownHref, tab, origin } = loaderData;
+  const [follow, setFollow] = useState({ following: provider.isFollowing, followers: provider.followersCount });
+  const [mentionsDelta, setMentionsDelta] = useState(0);
+  // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse servie neuve remet l'état à zéro
+  useEffect(() => {
+    setFollow({ following: provider.isFollowing, followers: provider.followersCount });
+    setMentionsDelta(0);
+  }, [provider]);
+  const path = `/providers/${provider.id}`;
+  // La casquette qui regarde reste dans l'adresse des onglets.
+  // `retour` (le ✕ de la fiche) reste aussi dans l'adresse des onglets.
+  const tabQuery = new URLSearchParams();
+  if (actor) tabQuery.set("auteur", actor);
+  if (retour) tabQuery.set("retour", retour);
+  const tabPath = tabQuery.size > 0 ? `${path}?${tabQuery}` : path;
+  const key = authorKeyOf("provider", provider.id);
+  // Pas de « Suivre » sur sa propre page : avec une casquette, c'est la clé de la casquette qui compte (la structure de Sarah peut suivre le
+  // média ou le prestataire de Sarah : deux pages distinctes) ; sans casquette, le propriétaire de la page (on ne se suit pas soi-même).
+  const selfPage = actor ? actor === key : owner;
+  const tabs = pageTabs("provider", {
+    session: true,
+    mentionsCount: mentionsShown(pageMentionsCount(provider), mentionsDelta),
+  });
+  const counters = pageCounters("provider", {
+    followers: follow.followers,
+    missions: provider.missionsCount ?? null,
+    organizers: provider.organizersCount ?? null,
+  });
   return (
-    <>
-      <FicheBar title={P.providerPage} back={loaderData.back} />
-      <div className="s-narrow s-stack" data-testid="provider-public">
-        <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
-        {/* Lot R4b, tour 2 : le signalement d'un prestataire (il était sur la fiche de l'événement, qui l'a confié au plateau). */}
-        <ReportDialog look="link" targetType="provider" targetId={loaderData.provider.id} />
+    <ActorIfAny casquette={casquette}>
+      <FicheBar title={P.providerPage} back={back} />
+      <div className="s-narrow s-stack pg-page" data-testid="provider-public">
+        {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
+        <PageHead
+          testId="provider-head"
+          name={provider.name}
+          logoUrl={null}
+          ring={profileRingState(provider.stories)}
+          storiesHref={(provider.stories?.count ?? 0) > 0 ? `/app/story/${encodeURIComponent(key)}` : undefined}
+          typeLabel={provider.typeLabel || L.typeProvider}
+          verifiedLabel={null}
+          follow={
+            selfPage ? null : (
+              <PageFollow
+                targetKey={key}
+                actor={actor}
+                actorName={casquette?.name}
+                following={follow.following}
+                onDone={(r: PageFollowResult) => setFollow({ following: r.following, followers: r.followersCount })}
+              />
+            )
+          }
+          bio={provider.description}
+          side={
+            <PageMore>
+              <div className="s-stack s-stack--tight">
+                <ShareButtons url={`${origin}${path}`} title={`${provider.name} sur Orasso`} />
+                {owner ? (
+                  <a className="s-linkbutton o-t-button" href="/app/prestataire/page" data-testid="page-edit">
+                    {L.edit}
+                  </a>
+                ) : (
+                  // Lot R4b, tour 2 : le signalement d'un prestataire (il était sur la fiche de l'événement, qui l'a confié au plateau).
+                  <ReportDialog look="link" targetType="provider" targetId={provider.id} />
+                )}
+              </div>
+            </PageMore>
+          }
+          counters={counters}
+        />
+
+        <PageTabs value={tab} items={tabs} path={tabPath} />
+
+        {tab === "services" ? (
+          <PagePrestations provider={provider} />
+        ) : tab === "publications" ? (
+          <PagePublications
+            authorKey={key}
+            name={provider.name}
+            path={tabPath}
+            withFilter={false}
+            filter="all"
+            total={pagePublicationsCount(provider) ?? null}
+            session
+            publicFirst={null}
+          />
+        ) : (
+          <PageMentions
+            pageKey={key}
+            pageName={provider.name}
+            manage={owner}
+            onHiddenChange={(d) => setMentionsDelta((v) => v + d)}
+          />
+        )}
       </div>
-    </>
+    </ActorIfAny>
   );
 }

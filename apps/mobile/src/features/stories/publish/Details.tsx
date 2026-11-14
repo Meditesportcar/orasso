@@ -11,7 +11,6 @@ import {
   STORY_PLACE_MAX,
   type StoryAudienceOption,
   type StoryAuthor,
-  storyEventSticker,
   taggableHint,
 } from "@orasso/shared";
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
@@ -27,6 +26,7 @@ import {
   audienceOptionDisabled,
   chooseAudience,
   type DetailsState,
+  eventStickerFor,
   withPlace,
 } from "./detailsModel";
 import type { StoryDraft } from "./model";
@@ -75,7 +75,7 @@ export function Details({
   const lost = audienceLost(options, details.audienceKey);
   const audience = chosen?.audience ?? "followers";
   const crewId = chosen?.crewId ?? null;
-  const sticker = storyEventSticker(visibility, audience);
+  const sticker = eventStickerFor(author, visibility, audience);
   const event = events.find((e) => e.id === details.eventId) ?? null;
   const vehicle = vehicles.find((v) => v.id === details.vehicleId) ?? null;
   const patch = (next: Partial<DetailsState>) => onDetails((d) => ({ ...d, ...next }));

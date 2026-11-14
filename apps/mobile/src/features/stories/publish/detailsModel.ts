@@ -4,9 +4,14 @@
 import {
   type CommercialDraft,
   noCommercialDraft,
+  type ProfileVisibility,
   pruneForAudience,
+  type StoryAudience,
   type StoryAudienceOption,
+  type StoryAuthor,
   type StoryTagPick,
+  storyEffectiveVisibility,
+  storyEventSticker,
 } from "@orasso/shared";
 
 export type DetailsState = {
@@ -91,3 +96,10 @@ export function chooseAudience(
     dropped: pruned.changed,
   };
 }
+
+/**
+ * L'autocollant d'événement de l'auteur : la confidentialité qui compte est celle de l'auteur (`storyEffectiveVisibility`, même règle
+ * que l'API et le site : une page de média ou de prestataire est publique quel que soit le réglage du compte de son titulaire).
+ */
+export const eventStickerFor = (author: StoryAuthor, visibility: ProfileVisibility, audience: StoryAudience) =>
+  storyEventSticker(storyEffectiveVisibility(author, visibility), audience);

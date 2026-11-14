@@ -65,6 +65,8 @@ type TabProps = {
   filter?: AuthorPostsFilter;
   /** Lot R8g : une phrase d'état vide propre à une page (le titre reste « Pas encore de publication »). */
   emptyText?: string;
+  /** Lot R9h (partie 2) : la Page du propriétaire : sa clé d'auteur ; « Publier » ouvre `/app/fil/publier?auteur=<clé>`. */
+  publishAs?: string;
 };
 
 /**
@@ -91,7 +93,10 @@ function PublicationsBody({
   privateAction,
   filter,
   emptyText,
+  publishAs,
 }: TabProps) {
+  const publishHref =
+    publishAs === undefined ? "/app/fil/publier" : `/app/fil/publier?auteur=${encodeURIComponent(publishAs)}`;
   const list = usePublications(authorKey, filter, !restrictedHint);
   const [mode, setMode] = useViewMode();
   const empty = publicationsEmptyKind({
@@ -135,8 +140,8 @@ function PublicationsBody({
         <Icon name={isMine ? "camera" : "gallery"} size={30} />
         <strong>{isMine ? L.emptyMineTitle : L.emptyOtherTitle}</strong>
         <p className="o-t-caption">{isMine ? L.emptyMineText : (emptyText ?? L.emptyOtherText(pseudo))}</p>
-        {isMine ? (
-          <Button variant="primary" icon="camera" href="/app/fil/publier" data-testid="publications-publish">
+        {isMine || publishAs !== undefined ? (
+          <Button variant="primary" icon="camera" href={publishHref} data-testid="publications-publish">
             {L.publish}
           </Button>
         ) : null}
@@ -150,11 +155,11 @@ function PublicationsBody({
         <b className="pub-head__count" data-testid="publications-count">
           {count === null ? "" : L.count(count)}
         </b>
-        {mine ? (
+        {mine || publishAs !== undefined ? (
           <Button
             variant="primary"
             icon="camera"
-            href="/app/fil/publier"
+            href={publishHref}
             className="pub-head__publish"
             data-testid="publications-publish"
           >

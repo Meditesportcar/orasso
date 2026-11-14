@@ -2,6 +2,7 @@
 // une vignette ouvre la publication seule. Les images ne se chargent que près de l'écran (`loading="lazy"` du navigateur).
 import { Icon } from "@orasso/design-system/web";
 import {
+  creditLine,
   eventJournalLabels,
   type FeedPostView,
   publicationsLabels as L,
@@ -95,6 +96,13 @@ export function PublicationsGrid({
                 <span data-testid="publication-tile-place">
                   <Icon name="place" size={12} />
                   {meta.place}
+                </span>
+              ) : null}
+              {/* Lot R9g (T45) : le crédit d'une photo reprise, en texte sous la vignette (jamais une pastille sur la photo). */}
+              {creditLine(photo?.credit) ? (
+                <span data-testid="publication-tile-credit">
+                  <Icon name="camera" size={12} />
+                  {creditLine(photo?.credit)}
                 </span>
               ) : null}
             </div>

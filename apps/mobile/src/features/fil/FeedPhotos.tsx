@@ -14,6 +14,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
+import { CreditOverlay } from "@/features/publications/CreditLine";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { FilPhotoImage } from "./FilPhotoImage";
 
@@ -106,6 +107,8 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
           ))}
         </ScrollView>
       ) : null}
+      {/* Lot R9g (T45) : le crédit d'une photo reprise d'un album, sur la photo affichée. */}
+      <CreditOverlay credit={post.photos[Math.min(index, n - 1)]?.credit} />
       {n > 1 ? (
         <View style={[styles.count, { backgroundColor: `${t.color.night}b3` }]} pointerEvents="none">
           <Text variant="caption" color={t.color.nightInk} style={styles.countText} testID="feed-post-photo-count">

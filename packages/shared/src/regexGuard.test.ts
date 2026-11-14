@@ -91,5 +91,7 @@ describe("garde-fou des expressions régulières (barre oblique inverse perdue)"
       ),
     );
     expect(report, "expression régulière à corriger (écris \\s, \\d ou \\w)").toEqual([]);
-  });
+    // Parcours de tout le dépôt (plus de 200 fichiers lus) : 9 à 18 s mesurées quand le processeur est occupé par d'autres tests, au-delà du
+    // délai par défaut de 5 s. Délai de ce seul test.
+  }, 30_000);
 });

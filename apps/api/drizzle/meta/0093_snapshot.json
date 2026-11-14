@@ -1,5 +1,5 @@
 {
-  "id": "d5466dc3-042b-4df3-94e5-da4ee3b35795",
+  "id": "6090b0f9-065c-4a8c-846a-ad26459313be",
   "prevId": "799ad8d9-31dc-442e-8538-7f9a7c3a70e7",
   "version": "7",
   "dialect": "postgresql",
@@ -7322,6 +7322,18 @@
           "notNull": true,
           "default": false
         },
+        "credit_media_id": {
+          "name": "credit_media_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_album_photo_id": {
+          "name": "source_album_photo_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7358,6 +7370,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "feed_post_photos_source_key": {
+          "name": "feed_post_photos_source_key",
+          "columns": [
+            {
+              "expression": "source_album_photo_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"feed_post_photos\".\"source_album_photo_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -7373,6 +7401,32 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "feed_post_photos_credit_media_id_media_profiles_id_fk": {
+          "name": "feed_post_photos_credit_media_id_media_profiles_id_fk",
+          "tableFrom": "feed_post_photos",
+          "tableTo": "media_profiles",
+          "columnsFrom": [
+            "credit_media_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "feed_post_photos_source_album_photo_id_event_album_photos_id_fk": {
+          "name": "feed_post_photos_source_album_photo_id_event_album_photos_id_fk",
+          "tableFrom": "feed_post_photos",
+          "tableTo": "event_album_photos",
+          "columnsFrom": [
+            "source_album_photo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7387,6 +7441,10 @@
       },
       "policies": {},
       "checkConstraints": {
+        "feed_post_photos_credit_check": {
+          "name": "feed_post_photos_credit_check",
+          "value": "\"feed_post_photos\".\"credit_media_id\" is null or \"feed_post_photos\".\"source_album_photo_id\" is not null"
+        },
         "feed_post_photos_position_check": {
           "name": "feed_post_photos_position_check",
           "value": "\"feed_post_photos\".\"position\" between 0 and 5"
@@ -10955,12 +11013,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "media_id": {
-          "name": "media_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -11029,22 +11081,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "conversations_media_idx": {
-          "name": "conversations_media_idx",
-          "columns": [
-            {
-              "expression": "media_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"conversations\".\"media_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -11087,19 +11123,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "conversations_media_id_media_profiles_id_fk": {
-          "name": "conversations_media_id_media_profiles_id_fk",
-          "tableFrom": "conversations",
-          "tableTo": "media_profiles",
-          "columnsFrom": [
-            "media_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "conversations_created_by_user_id_fk": {
           "name": "conversations_created_by_user_id_fk",
           "tableFrom": "conversations",
@@ -11126,10 +11149,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "conversations_media_check": {
-          "name": "conversations_media_check",
-          "value": "(\"conversations\".\"kind\"::text = 'media') = (\"conversations\".\"media_id\" is not null)"
-        },
         "conversations_preview_check": {
           "name": "conversations_preview_check",
           "value": "char_length(\"conversations\".\"last_message_preview\") <= 80"
@@ -23330,8 +23349,7 @@
         "organizer",
         "crew",
         "structure_staff",
-        "event_staff",
-        "media"
+        "event_staff"
       ]
     },
     "public.message_kind": {

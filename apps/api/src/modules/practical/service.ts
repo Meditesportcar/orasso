@@ -7,25 +7,32 @@
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
   departmentsAround,
+  departmentsInZoneInfo,
   distanceKm,
   homeLabels,
+  type LatLng,
   myWeatherPlaces,
   PRACTICAL_RADIUS_KM,
+  PRACTICAL_ZONE_MAX_PAGES,
   type PracticalData,
   type PracticalKind,
   type PracticalOrigin,
   type PracticalPlace,
-  placesAround,
+  type PracticalZone,
+  placesAroundInfo,
+  placesInZonePage,
   practicalPlaceId,
   practicalTexts,
   type WeatherCell,
+  zoneCenter,
+  zoneContains,
 } from "@orasso/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, eventDays, events, externalCache, profileWeatherPlaces, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { notFound } from "../../lib/errors";
+import { conflict, notFound, validation } from "../../lib/errors";
 import { EXTERNAL_BUDGET_MS, withinBudget } from "../../lib/external/cache";
 import { FUEL_MAX_STALE_MS, fuelState } from "../../lib/external/fuel";
 import { osmState, WASH_MAX_STALE_MS } from "../../lib/external/overpass";
@@ -36,7 +43,36 @@ import type { Viewer } from "../../lib/session";
 export type PracticalTarget =
   | { near: "position"; cell: WeatherCell }
   | { near: "city" }
+  | { near: "zone"; zone: PracticalZone; cursor?: string }
   | { near: "outing"; eventId?: string };
+
+/** Le curseur d'une page de zone : opaque, lié à la zone (arrondie) ; il ne porte aucune géographie de plus que la zone déjà envoyée. */
+const zoneKey = (z: PracticalZone) => `${z.south},${z.west},${z.north},${z.east}`;
+const encodeCursor = (page: number, z: PracticalZone, version: string) =>
+  Buffer.from(JSON.stringify({ p: page, z: zoneKey(z), v: version })).toString("base64url");
+/** La page demandée (0 sans curseur) ; un curseur illisible, d'une autre zone ou hors des pages permises est refusé (400). */
+function decodeCursor(cursor: string | undefined, z: PracticalZone): { page: number; version: string } {
+  if (cursor === undefined) return { page: 0, version: "" };
+  try {
+    const raw = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      p?: unknown;
+      z?: unknown;
+      v?: unknown;
+    };
+    if (
+      Number.isInteger(raw.p) &&
+      (raw.p as number) >= 1 &&
+      (raw.p as number) < PRACTICAL_ZONE_MAX_PAGES &&
+      raw.z === zoneKey(z) &&
+      typeof raw.v === "string"
+    ) {
+      return { page: raw.p as number, version: raw.v };
+    }
+  } catch {
+    // illisible : refusé plus bas
+  }
+  throw validation("Curseur invalide pour cette zone");
+}
 
 type OutingEvent = { id: string; title: string; lat: number | null; lng: number | null; startsMs: number };
 
@@ -51,6 +87,12 @@ type Attribution = { wash: string; fuel: string };
 
 export const practicalService = {
   async get(v: Viewer, target: PracticalTarget, budgetMs = EXTERNAL_BUDGET_MS): Promise<PracticalData> {
+    // Une zone de carte : pas d'origine (aucune position), les lieux DANS la zone (plus de rayon de 30 km pour ce mode).
+    if (target.near === "zone")
+      return {
+        origin: null,
+        ...(await this.placesAround(zoneCenter(target.zone), budgetMs, target.zone, target.cursor)),
+      };
     const origin = await this.origin(v, target);
     if (!origin) return { origin: null, places: [], partial: false, attribution: baseAttribution };
     return { origin, ...(await this.placesAround(origin, budgetMs)) };
@@ -70,6 +112,7 @@ export const practicalService = {
       const first = myWeatherPlaces({ saved, departments: v.profile.departments })[0];
       return first ? { kind: "city", label: first.label, lat: first.lat, lng: first.lng } : null;
     }
+    if (target.near === "zone") return null;
     const event = await this.outing(v, target.eventId);
     if (target.eventId && !event) throw notFound("Événement introuvable");
     if (!event || event.lat === null || event.lng === null) return null;
@@ -141,11 +184,24 @@ export const practicalService = {
    * répondu dans le budget et n'a rien en cache (le chargement continue pour la fois suivante).
    */
   async placesAround(
-    origin: PracticalOrigin,
+    origin: LatLng,
     budgetMs: number,
-  ): Promise<{ places: PracticalPlace[]; partial: boolean; loading?: true; attribution: Attribution }> {
-    // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches.
-    const departments = departmentsAround(origin);
+    zone?: PracticalZone,
+    cursor?: string,
+  ): Promise<{
+    places: PracticalPlace[];
+    partial: boolean;
+    loading?: true;
+    truncated?: true;
+    coveredKm?: number;
+    partialCells?: [number, number][];
+    nextCursor?: string;
+    attribution: Attribution;
+  }> {
+    // Tous les départements qui coupent la zone de 30 km (petite couronne comprise), pas seulement les deux plus proches ; en mode zone,
+    // ceux qui coupent la zone demandée (les sources ne reçoivent toujours qu'un code de département).
+    const zoneDepartments = zone ? departmentsInZoneInfo(zone) : null;
+    const departments = zoneDepartments ? zoneDepartments.codes : departmentsAround(origin);
     type Place = { name: string; address: string | null; lat: number; lng: number };
     // `null` : la source n'a pas répondu dans le budget (le chargement continue) ; le cache toléré sert alors de repli.
     const loads = departments.map(async (d) => {
@@ -208,7 +264,7 @@ export const practicalService = {
     // Tous les rapprochements se font ICI, sur les listes de tous les départements réunis (pas par département) et sur les lieux de la
     // zone seulement : deux points voisins de part et d'autre d'une limite départementale se rapprochent comme les autres.
     const near = <T extends Place>(list: readonly T[]) =>
-      list.filter((p) => distanceKm(origin, p) <= PRACTICAL_RADIUS_KM + 2);
+      list.filter((p) => (zone ? zoneContains(zone, p, 0.02, 0.03) : distanceKm(origin, p) <= PRACTICAL_RADIUS_KM + 2));
     const nearOsm = near(osm);
     const merged = mergeStations(near(gov), nearOsm.filter(isOsmFuel));
     const washes = washPlaces(nearOsm, merged.groups);
@@ -228,7 +284,28 @@ export const practicalService = {
       return fuel;
     });
     const all: PracticalPlace[] = [...washes.map((p) => place("wash", p)), ...fuels];
-    const places = placesAround(all, origin);
+    // Mode zone : la coupe (plus de 200 lieux, ou plus de 12 départements) est signalée, jamais « en moins » en silence : l'écran ne marque
+    // comme chargé que le disque couvert (0 km : rien de sûr quand des départements manquent).
+    // Mode zone : la page demandée (curseur) de la répartition par case ; le curseur est lié à CETTE zone (une autre zone le refuse).
+    const asked = zone ? decodeCursor(cursor, zone) : { page: 0, version: "" };
+    const pageIndex = asked.page;
+    const zonePage = zone ? placesInZonePage(all, zone, pageIndex) : null;
+    // Le curseur est lié à la version des données : si le cache a changé entre deux pages, l'écran repart de la première page (409).
+    if (zone && cursor !== undefined && zonePage && zonePage.version !== asked.version) {
+      throw conflict("conflict", "Les lieux de cette zone ont changé : reprends depuis le début.");
+    }
+    const inZone = zonePage
+      ? { places: zonePage.places, cut: zonePage.more, partialCells: zonePage.partialCells }
+      : null;
+    const around = inZone ? null : placesAroundInfo(all, origin);
+    const places = inZone ? inZone.places : (around?.places ?? []);
+    const cutDepartments = zoneDepartments?.cut === true;
+    // Tous les modes : plus de 200 lieux dans le rayon de 30 km (ouverture) signalent la coupe, comme en mode zone.
+    const truncated = cutDepartments || inZone?.cut === true || around?.cut === true;
+    // Zone coupée à 200 lieux : répartis par case, avec les cases incomplètes (rien de plus qu'une case de la zone envoyée). Départements
+    // coupés : rien n'est sûr (0 km, aucune case). Ouverture : le rayon du dernier lieu gardé.
+    const coveredKm = cutDepartments ? 0 : inZone ? undefined : around?.coveredKm;
+    const partialCells = !cutDepartments && inZone?.cut ? inZone.partialCells : undefined;
     // Les deux sources sont citées quand les deux ont servi une station de la réponse.
     const served = places.filter((p) => p.kind === "fuel").map((p) => sources.get(p.id));
     const usedGov = served.some((x) => x?.gov);
@@ -237,6 +314,16 @@ export const practicalService = {
       places,
       partial,
       ...(loading ? { loading: true as const } : {}),
+      ...(truncated
+        ? {
+            truncated: true as const,
+            ...(coveredKm !== undefined ? { coveredKm: Math.round(coveredKm * 100) / 100 } : {}),
+            ...(partialCells ? { partialCells } : {}),
+            ...(zone && !cutDepartments && inZone?.cut && pageIndex + 1 < PRACTICAL_ZONE_MAX_PAGES
+              ? { nextCursor: encodeCursor(pageIndex + 1, zone, zonePage?.version ?? "") }
+              : {}),
+          }
+        : {}),
       attribution: { wash: homeLabels.washAttribution, fuel: fuelAttribution(usedGov || !usedOsm, usedOsm) },
     };
   },

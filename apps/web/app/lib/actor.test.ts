@@ -3,7 +3,19 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACTOR_HEADER } from "@orasso/shared";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ActorIfAny,
+  ActorProvider,
+  actorOfParam,
+  casquetteOfParam,
+  useActor,
+  useCasquette,
+  withActorParam,
+  withoutActorParam,
+} from "./actor";
 import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
 import { api } from "./api.server";
 
@@ -103,5 +115,93 @@ describe("api (serveur, loaders) ne pose l'en-tête que sur la liste", () => {
       return new Headers(init.headers).get(ACTOR_HEADER);
     });
     expect(sent).toEqual(["p:p1", null, null]);
+  });
+});
+
+// Lot R9h, partie 2 : la page d'un prestataire ou d'un média ouverte depuis l'espace d'une casquette garde la casquette dans son adresse
+// (`?auteur=`), jamais dans un cookie ; une clé qui n'est pas au compte n'est jamais crue.
+describe("la casquette portée par l'adresse (`?auteur=`)", () => {
+  const personas = [
+    { kind: "fan", id: "u1", label: "Moi", assisted: false },
+    { kind: "organizer", id: "st1", label: "Roues Libres 66", assisted: false, logoUrl: "/logo.png" },
+    { kind: "pro", id: "pr1", label: "Garage", assisted: false },
+    { kind: "organizer", id: "st2", label: "Survolée", assisted: true },
+    { kind: "organizer", id: "st3", label: "Suspendue", assisted: false, suspended: true },
+  ] as unknown as Parameters<typeof actorOfParam>[1];
+
+  it("withActorParam : sans casquette l'adresse ne change pas ; avec, `?auteur=` ou `&auteur=` (clé encodée)", () => {
+    expect(withActorParam("/providers/p1", null)).toBe("/providers/p1");
+    expect(withActorParam("/providers/p1", "s:st1")).toBe("/providers/p1?auteur=s%3Ast1");
+    expect(withActorParam("/m/m1?onglet=albums", "s:st1")).toBe("/m/m1?onglet=albums&auteur=s%3Ast1");
+  });
+
+  it("actorOfParam : la clé d'une page tenue est reprise ; absente, `me`, inconnue, survolée ou suspendue : la personne (null)", () => {
+    expect(actorOfParam("s:st1", personas)).toBe("s:st1");
+    expect(actorOfParam("p:pr1", personas)).toBe("p:pr1");
+    expect(actorOfParam(null, personas)).toBeNull();
+    expect(actorOfParam("me", personas)).toBeNull();
+    expect(actorOfParam("s:inconnue", personas)).toBeNull();
+    expect(actorOfParam("p:st1", personas), "l'identifiant d'une autre casquette").toBeNull();
+    expect(actorOfParam("s:st2", personas), "survol d'assistance").toBeNull();
+    expect(actorOfParam("s:st3", personas), "page suspendue").toBeNull();
+    expect(actorOfParam("x:st1", personas), "préfixe inconnu").toBeNull();
+  });
+
+  it("casquetteOfParam : la clé, le nom et le logo de la casquette (pastille « Tu agis au nom de »), null sinon", () => {
+    expect(casquetteOfParam("s:st1", personas)).toEqual({
+      key: "s:st1",
+      name: "Roues Libres 66",
+      logoUrl: "/logo.png",
+    });
+    expect(casquetteOfParam("p:pr1", personas)).toEqual({ key: "p:pr1", name: "Garage", logoUrl: null });
+    expect(casquetteOfParam("s:st3", personas), "page suspendue").toBeNull();
+    expect(casquetteOfParam("s:st2", personas), "survol d'assistance").toBeNull();
+    expect(casquetteOfParam("s:autre", personas), "clé non tenue par le compte").toBeNull();
+    expect(casquetteOfParam(null, personas)).toBeNull();
+  });
+
+  it("withoutActorParam : « En mon nom » retire seulement `auteur`, le reste de l'adresse est gardé", () => {
+    expect(withoutActorParam(new URL("http://x/providers/p1?auteur=s%3Ast1"))).toBe("/providers/p1");
+    expect(withoutActorParam(new URL("http://x/m/m1?onglet=albums&auteur=s%3Ast1&retour=%2Fapp"))).toBe(
+      "/m/m1?onglet=albums&retour=%2Fapp",
+    );
+    expect(withoutActorParam(new URL("http://x/m/m1?onglet=mentions"))).toBe("/m/m1?onglet=mentions");
+  });
+});
+
+// Tour 2 de la partie 2 : `/m` et `/providers` enveloppent leur contenu dans `ActorProvider` quand l'adresse porte la casquette : tout ce qui
+// lit `useActor()` (commentaires, lectures de commentaires) part alors au nom de la page ; sans casquette, la personne.
+describe("ActorProvider autour d'une page publique portant `auteur`", () => {
+  const Probe = () => createElement("i", null, `${useActor()}|${useCasquette()?.name}`);
+  it("un enfant lit la clé et le nom de la casquette ; sans casquette, `null`", () => {
+    const withCasquette = renderToStaticMarkup(
+      createElement(ActorProvider, {
+        casquette: { key: "s:st1", name: "Roues Libres 66", logoUrl: null },
+        // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise du fournisseur
+        children: createElement(Probe),
+      }),
+    );
+    expect(withCasquette).toBe("<i>s:st1|Roues Libres 66</i>");
+    const without = renderToStaticMarkup(
+      // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise du fournisseur
+      createElement(ActorProvider, { casquette: null, children: createElement(Probe) }),
+    );
+    expect(without).toBe("<i>null|undefined</i>");
+    // `ActorIfAny` : sans casquette, le contenu reste tel quel ; avec, il lit la casquette.
+    expect(
+      renderToStaticMarkup(
+        // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise
+        createElement(ActorIfAny, { casquette: null, children: createElement(Probe) }),
+      ),
+    ).toBe("<i>null|undefined</i>");
+    expect(
+      renderToStaticMarkup(
+        createElement(ActorIfAny, {
+          casquette: { key: "m:m1", name: "Sud Cars", logoUrl: null },
+          // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise
+          children: createElement(Probe),
+        }),
+      ),
+    ).toBe("<i>m:m1|Sud Cars</i>");
   });
 });

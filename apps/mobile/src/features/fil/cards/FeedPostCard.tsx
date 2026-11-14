@@ -5,6 +5,7 @@ import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { FeedPostView } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 import { pageHrefOf } from "@/features/pages/pageLinks";
+import { CreditFoot } from "@/features/publications/CreditLine";
 import { FoldedCaption } from "@/features/publications/FoldedCaption";
 import { OfferLine, OfferTag } from "@/features/publications/OfferLine";
 import { Avatar } from "@/ui/Avatar";
@@ -73,6 +74,8 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       {post.attach ? <AttachLine attach={post.attach} /> : null}
       {post.coAuthorInvite ? <InviteStatusLine invite={post.coAuthorInvite} /> : null}
       <FeedPhotos post={post} />
+      {/* Lot R9g (T45) : « repartagée, crédit non retirable · Voir l'album » sous la photo reprise. */}
+      <CreditFoot credit={post.photos.find((p) => p.credit)?.credit} />
       {post.offer ? <OfferLine offer={post.offer} /> : null}
       {post.caption ? <FoldedCaption text={post.caption} style={styles.text} testID="feed-post-caption" /> : null}
       {post.vehicle || (post.event && !post.attach) ? (
