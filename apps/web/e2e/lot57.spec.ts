@@ -404,7 +404,7 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
         "GET",
         "/me/media-profile",
       );
-      await page.goto(`/m/${profile.data.profile?.id}`);
+      await page.goto(`/m/${profile.data.profile?.id}?onglet=albums`);
       const published = page.getByTestId("media-public-album").filter({ hasText: galleryTitle });
       await expect(published).toBeVisible();
       await both(page, "media-contenus", theme);
@@ -434,7 +434,7 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
       "GET",
       "/me/provider-profile",
     );
-    await sofia.page.goto(`/providers/${me.data.profile?.id}`);
+    await sofia.page.goto(`/providers/${me.data.profile?.id}?onglet=prestations`);
     await expect(sofia.page.getByTestId("vitrine-menu")).toBeVisible();
     await expect(sofia.page.getByTestId("vitrine-review").first()).toBeVisible();
     await both(sofia.page, "vitrine", theme);
@@ -691,7 +691,7 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     const { ctx, page } = await open(browser, "beton", "sofia@orasso.local");
     // Lot R9e : la galerie de 8 photos est un album (façade) ; la fiche le liste sous « Albums », l'album ouvert montre les 8 photos et la
     // visionneuse les parcourt.
-    await page.goto(`/m/${mediaId}`);
+    await page.goto(`/m/${mediaId}?onglet=albums`);
     await expect(page.getByTestId("media-public-albums")).toBeVisible();
     await page.getByTestId("media-public-album").filter({ hasText: galleryTitle }).click();
     await page.waitForURL(/\/albums\//);
@@ -705,7 +705,7 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
 
     // Suite au curseur, un lien par page (l'API pagine les liens seuls : `kind=link`) : chaque « Voir la suite » ajoute un lien, on franchit la 10e
     // page sans reboucler ni doublon (exigence d'avant : un contenu de plus à chaque page).
-    await page.goto(`/m/${mediaId}?taille=1`);
+    await page.goto(`/m/${mediaId}?onglet=albums&taille=1`);
     await expect(page.getByTestId("media-public-content")).toHaveCount(1);
     for (let n = 2; n <= linkTotal; n++) {
       await page.getByTestId("media-public-more").click();
@@ -717,10 +717,10 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     expect(new Set(titles).size).toBe(linkTotal);
 
     // Panne : un curseur refusé par l'API n'est pas « aucun contenu » ; « Réessayer » est proposé.
-    await page.goto(`/m/${mediaId}?cursor=invalide`);
+    await page.goto(`/m/${mediaId}?onglet=albums&cursor=invalide`);
     await expect(page.getByTestId("media-public-error")).toBeVisible();
     await expect(page.getByTestId("media-public-retry")).toHaveAttribute("href", /cursor=invalide/);
-    await page.goto(`/m/${mediaId}`);
+    await page.goto(`/m/${mediaId}?onglet=albums`);
     await expect(page.getByTestId("media-public-error")).toHaveCount(0);
     await expect(page.getByTestId("media-public-content").first()).toBeVisible();
     await ctx.close();

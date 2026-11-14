@@ -123,7 +123,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await page.goto("/app/media?onglet=contenus");
     await expect(page.getByTestId("media-content-album").filter({ hasText: title })).toBeVisible();
     const mediaId = created?.media.key.slice(2);
-    await page.goto(`/m/${mediaId}`);
+    await page.goto(`/m/${mediaId}?onglet=albums`);
     await expect(page.getByTestId("media-public-albums")).toBeVisible();
     await expect(page.getByTestId("media-public-album").filter({ hasText: title })).toBeVisible();
     await expect(page.getByTestId("media-public-albums-count")).toContainText("albums · ");
