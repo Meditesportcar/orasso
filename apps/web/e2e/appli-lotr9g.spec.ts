@@ -230,13 +230,13 @@ test("Léo, titulaire du média ET organisateur de l'événement : ses droits de
     try {
       await chooseOrganizer(page, "MéditeSportCar");
       await go(page, `/e/${SLUG}`);
-      await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await page.getByTestId("event-photos").scrollIntoViewIfNeeded();
       await page.getByTestId("event-photos-open").click();
       await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
       await page.getByTestId("album-photo").nth(1).click();
       await expect(page.getByTestId("album-viewer")).toBeVisible();
       // Titulaire : retirer la photo ; organisateur : reprendre au journal et « officiel ». Jamais « Signaler » sur ses propres photos.
-      await expect(page.getByTestId("album-viewer-remove")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("album-viewer-remove")).toBeVisible();
       await expect(page.getByTestId("album-action-repost")).toHaveText("Reprendre dans le journal de l'événement", {
         timeout: 30_000,
       });
@@ -251,27 +251,54 @@ test("Léo, titulaire du média ET organisateur de l'événement : ses droits de
   });
 });
 
-// Tour 7 : les droits du compte (co-organisateur) ne suffisent pas, la casquette active compte : en casquette passionné, aucune action d'organisateur.
-test("Léo, co-organisateur de l'événement mais en casquette passionné : aucune action d'organisateur dans la visionneuse", async ({
+// Tour 7 : le média auteur de l'album, même co-organisateur, en casquette passionné : le rôle R9f (`media`) lui donne « Identifier une voiture »
+// et « Retirer la photo », rien d'autre. Cette recette seule ne prouve PAS que le rôle `organizer` (droits du compte) n'ouvre plus la reprise ni
+// « officiel » : Léo est ici `media`, que l'ancien code ne servait déjà pas ; la preuve est la recette suivante (Damien, rôle `organizer`).
+test("Léo, le média seul, co-organisateur mais en casquette passionné : « Identifier une voiture » et le retrait, aucune action d'organisateur", async ({
   browser,
 }) => {
   await withLeoAsCoOrganizer(async () => {
     const { ctx, page } = await open(browser, LEO);
     try {
       await go(page, `/e/${SLUG}`);
-      await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await page.getByTestId("event-photos").scrollIntoViewIfNeeded();
       await page.getByTestId("event-photos-open").click();
       await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
       await page.getByTestId("album-photo").nth(1).click();
       await expect(page.getByTestId("album-viewer")).toBeVisible();
-      await expect(page.getByTestId("album-viewer-remove")).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("album-action-tag-identify")).toHaveCount(1, { timeout: 30_000 });
+      await expect(page.getByTestId("album-viewer-remove")).toBeVisible();
+      await expect(page.getByTestId("album-action-tag-identify")).toHaveCount(1);
       await expect(page.getByTestId("album-action-repost")).toHaveCount(0);
       await expect(page.getByTestId("album-action-official")).toHaveCount(0);
     } finally {
       await ctx.close();
     }
   });
+});
+
+// Tour 8 (preuve du point 1 du tour 7) : Damien, responsable de la structure mais PAS auteur de l'album, en casquette passionné (sans choisir
+// celle de l'organisateur). L'API lui rend le rôle `organizer` quelle que soit la casquette (`tag-visibility.ts`) : l'ancien code lui ouvrait la
+// reprise et « officiel » sur ce seul rôle. On attend la réponse `/taggable` (le rôle est arrivé) avant de compter les actions.
+test("Damien, responsable de la structure en casquette passionné : le rôle organisateur est arrivé, « Identifier une voiture » seul, ni reprise ni « officiel »", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    await go(page, `/e/${SLUG}`);
+    await page.getByTestId("event-photos").scrollIntoViewIfNeeded();
+    // La réponse est attendue avant d'ouvrir l'album (l'écran l'interroge dès que l'album est lu).
+    const taggable = page.waitForResponse((r) => /\/albums\/[^/]+\/taggable(\?|$)/.test(r.url()) && r.ok());
+    await page.getByTestId("event-photos-open").click();
+    await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+    expect(((await (await taggable).json()) as { role: string }).role).toBe("organizer");
+    await page.getByTestId("album-photo").nth(1).click();
+    await expect(page.getByTestId("album-viewer")).toBeVisible();
+    await expect(page.getByTestId("album-action-tag-identify")).toHaveCount(1);
+    await expect(page.getByTestId("album-action-repost")).toHaveCount(0);
+    await expect(page.getByTestId("album-action-official")).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
 });
 
 test("la liste des albums tombe en panne : « Réessayer » (pas de section qui disparaît), puis la liste se lit", async ({
