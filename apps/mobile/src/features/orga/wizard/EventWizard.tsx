@@ -14,6 +14,7 @@ import {
   afterNeedWrites,
   afterZoneWrites,
   type CategoryOption,
+  decideClick,
   draftStart,
   type EventDraft,
   type EventFormat,
@@ -42,10 +43,12 @@ import {
   refusalMessage,
   sameDraft,
   serverDraft,
+  settleWait,
   type VehicleMake,
   vendorTypeLabels,
   voteOrgaLabels,
   wizardV2Labels as W,
+  type WaitedAction,
   type WizardMemo,
   withArrivalsInHours,
   withCopyOpening,
@@ -194,6 +197,13 @@ export function EventWizard({
   const needsFailed = needsState === "failed";
   // Enregistrer sur le serveur : ouverture faite et missions chargées avec succès (tour 3 : pas pendant un rechargement).
   const canSave = loaded && needsState === "ok";
+  // R9-assistant (parité avec le site, D20) : un clic donné avant la fin de l'ouverture ou pendant le chargement des
+  // missions est mis en attente (`waiting`), puis exécuté un rendu plus tard (`due`, la saisie restaurée est alors à
+  // jour). Panne de lecture, changement d'étape ou sortie l'annulent ; un seul clic à la fois.
+  const [waiting, setWaiting] = useState<WaitedAction | null>(null);
+  const [due, setDue] = useState<WaitedAction | null>(null);
+  const queued = waiting ?? due;
+  const clickState = needsFailed ? "failed" : canSave ? "ok" : "loading";
   // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
   const needsTurn = useRef(0);
   const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null | undefined> => {
@@ -492,12 +502,17 @@ export function EventWizard({
     });
   }
 
-  async function go(delta: 1 | -1) {
+  /** `resumed` : le clic vient de l'attente (il ne se compte pas lui-même comme un second clic). */
+  async function go(delta: 1 | -1, resumed = false) {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
     setError(null);
     setNotice(null);
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
+    const click = decideClick(clickState, resumed ? null : queued, true);
+    if (click === "ignore") return;
+    if (click === "wait") return setWaiting("next");
+    if (click === "refuse") return setError(W.needsFailed);
     let sent = d;
     const problem = eventStepProblem(step, sent);
     if (problem) return setError(problem);
@@ -546,9 +561,16 @@ export function EventWizard({
   }
 
   /** Fin de l'assistant : Publier, Brouillon, Aperçu (brouillon) ou « Enregistrer les modifications » (publié). */
-  async function finish(mode: "draft" | "publish" | "preview" | "save") {
+  async function finish(mode: "draft" | "publish" | "preview" | "save", resumed = false) {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
+    const click = decideClick(clickState, resumed ? null : queued, true);
+    if (click === "ignore") return;
+    if (click === "wait") {
+      setError(null);
+      return setWaiting(mode);
+    }
+    if (click === "refuse") return setError(W.needsFailed);
     const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
     setBusy(true);
     setError(null);
@@ -602,6 +624,28 @@ export function EventWizard({
     }
   }
 
+  // Le clic en attente part dès que l'ouverture et les missions sont prêtes (ou tombe si leur lecture a échoué).
+  const runWaited = useRef<(action: WaitedAction) => void>(() => undefined);
+  runWaited.current = (action) => void (action === "next" ? go(1, true) : finish(action, true));
+  useEffect(() => {
+    const out = settleWait(waiting, clickState);
+    if (out === "run") {
+      setDue(waiting);
+      setWaiting(null);
+    } else if (out === "fail") {
+      setWaiting(null);
+      setError(W.needsFailed);
+    }
+  }, [waiting, clickState]);
+  useEffect(() => {
+    if (!due) return;
+    setDue(null);
+    runWaited.current(due);
+  }, [due]);
+  // Quitter l'étape annule le clic en attente.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement d'étape l'annule.
+  useEffect(() => setWaiting(null), [index]);
+
   const ctx: StepContext = {
     d,
     set,
@@ -638,33 +682,35 @@ export function EventWizard({
           <View style={styles.end}>
             <Button
               icon="send"
-              loading={halted}
-              disabled={halted || !canSave || !canPublish}
+              loading={halted || queued === "publish"}
+              disabled={halted || needsFailed || !canPublish || (queued !== null && queued !== "publish")}
               onPress={() => void finish("publish")}
               testID="wizard-publish"
             >
-              {W.publish}
+              {queued === "publish" ? W.needsWaiting : W.publish}
             </Button>
             <View style={styles.actions}>
               <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
               <Button
                 variant="secondary"
                 icon="calendar"
-                disabled={halted || !canSave}
+                loading={queued === "draft"}
+                disabled={halted || needsFailed || (queued !== null && queued !== "draft")}
                 onPress={() => void finish("draft")}
                 style={styles.grow}
                 testID="wizard-save"
               >
-                {W.draft}
+                {queued === "draft" ? W.needsWaiting : W.draft}
               </Button>
               <Button
                 variant="secondary"
                 icon="eye"
-                disabled={halted || !canSave}
+                loading={queued === "preview"}
+                disabled={halted || needsFailed || (queued !== null && queued !== "preview")}
                 onPress={() => void finish("preview")}
                 testID="wizard-preview"
               >
-                {W.preview}
+                {queued === "preview" ? W.needsWaiting : W.preview}
               </Button>
             </View>
           </View>
@@ -680,24 +726,24 @@ export function EventWizard({
             {last ? (
               <Button
                 icon="check"
-                loading={halted}
-                disabled={halted || !canSave}
+                loading={halted || queued === "save"}
+                disabled={halted || needsFailed || queued === "save"}
                 onPress={() => void finish("save")}
                 style={styles.grow}
                 testID="wizard-save"
               >
-                {L.saveChanges}
+                {queued === "save" ? W.needsWaiting : L.saveChanges}
               </Button>
             ) : (
               <Button
                 icon="next"
-                loading={halted}
-                disabled={halted || !canSave}
+                loading={halted || queued === "next"}
+                disabled={halted || needsFailed || queued === "next"}
                 onPress={() => void go(1)}
                 style={styles.grow}
                 testID="wizard-next"
               >
-                {W.continue}
+                {queued === "next" ? W.needsWaiting : W.continue}
               </Button>
             )}
           </View>

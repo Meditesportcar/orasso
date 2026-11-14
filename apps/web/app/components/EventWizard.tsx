@@ -14,6 +14,7 @@ import {
   afterZoneWrites,
   type CategoryOption,
   createdNeedDiffers,
+  decideClick,
   draftStart,
   type EventDraft,
   type EventNeedView,
@@ -50,11 +51,13 @@ import {
   sameDraft,
   serializeWizardMemo,
   serverDraft,
+  settleWait,
   storedStepIndex,
   type VehicleMake,
   vendorTypeLabels,
   voteOrgaLabels,
   wizardV2Labels as W,
+  type WaitedAction,
   type WizardMemo,
   withArrivalsInHours,
   withCopyOpening,
@@ -72,7 +75,6 @@ import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
-import { decideClick, settleWait, type WaitedAction } from "../lib/wizardNeedsWait";
 import { RecipientsBanner } from "./event/NotifySignup";
 import { ArrivalsStep } from "./wizard/ArrivalsStep";
 import { CriteriaStep } from "./wizard/CriteriaStep";

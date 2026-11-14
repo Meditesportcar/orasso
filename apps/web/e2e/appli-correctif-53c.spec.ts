@@ -76,7 +76,8 @@ test("appli : missions chargées après une saisie, aucune supprimée ; sans ell
   const { ctx, page } = await open(browser);
   await signInOrganizer(page);
 
-  // `GET /needs` retenue : le titre est changé avant qu'elle arrive ; « Continuer » attend les missions.
+  // `GET /needs` retenue : le titre est changé avant qu'elle arrive ; le clic sur « Continuer » est mis en attente
+  // (R9-assistant, décision de Damien du 14/11/2026, option B : il n'est plus bloqué) et part à l'arrivée des missions.
   let release: () => void = () => undefined;
   const held = new Promise<void>((r) => {
     release = r;
@@ -89,11 +90,13 @@ test("appli : missions chargées après une saisie, aucune supprimée ; sans ell
   await expect(v(page, "wizard-step")).toContainText("Type", { timeout: 30_000 });
   const title = `Appli renommé ${unique()}`;
   await v(page, "wizard-title").fill(title);
-  await expect(v(page, "wizard-next")).toBeDisabled();
-  release();
-  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
-  await expect(v(page, "wizard-title")).toHaveValue(title);
   await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-next")).toContainText("Chargement…");
+  await expect(v(page, "wizard-next")).toBeDisabled();
+  await expect(v(page, "wizard-step")).toContainText("Type");
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
+  release();
+  // Sans nouveau clic : le temps 2 s'ouvre, le titre saisi est enregistré et les deux missions sont gardées.
   await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect(await needs()).toHaveLength(2);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
@@ -351,13 +354,15 @@ test("appli : « Recharger les missions » ne débloque l'enregistrement qu'apr�
   await expect(v(page, "wizard-needs-failed")).toBeVisible({ timeout: 30_000 });
   mode = "hold";
   await page.getByRole("button", { name: "Recharger les missions" }).click();
-  // Réponse retenue : rien ne s'enregistre encore, à aucun moment.
+  // Réponse retenue : le clic est mis en attente (R9-assistant), rien ne s'enregistre ni n'avance, à aucun moment.
+  await v(page, "wizard-next").click();
   for (let i = 0; i < 6; i++) {
-    expect(await v(page, "wizard-next").isEnabled()).toBe(false);
+    await expect(v(page, "wizard-next")).toContainText("Chargement…");
+    await expect(v(page, "wizard-step")).toContainText("Type");
     await page.waitForTimeout(300);
   }
   mode = "pass";
   release();
-  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
+  await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   await ctx.close();
 });
