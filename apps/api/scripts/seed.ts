@@ -39,7 +39,7 @@ import { seedInvitations } from "./seed/invitations";
 import { seedLiveEvent } from "./seed/live-event";
 import { seedMedia } from "./seed/media";
 import { seedMemories } from "./seed/memories";
-import { seedMessaging } from "./seed/messaging";
+import { seedMediaConversation, seedMessaging } from "./seed/messaging";
 import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
@@ -213,6 +213,8 @@ async function main() {
   await seedStructureActivity();
   // Lot R9e : les galeries d'avant reprises en albums, un album publié (Sud Cars, 12 photos) et un brouillon de 3 photos.
   await seedAlbums();
+  // Lot R9i : la conversation de page Kenji_66 ↔ « Sud Cars » (après les albums : la page et l'identification existent).
+  await seedMediaConversation();
 }
 
 try {

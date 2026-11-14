@@ -1,7 +1,7 @@
 // Lot 18 : messagerie de démonstration. Conversation Kenji ↔ Léa (amis, le dernier message de Léa non lu par Kenji),
 // demande de contact de Nina à Kenji en attente, conversation de Julie avec MéditeSportCar à laquelle Damien
 // (propriétaire) répond au nom de la structure. Idempotent (clés uniques des conversations et des demandes).
-import { directKey, organizerKey } from "@orasso/shared";
+import { directKey, mediaKey, organizerKey } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -14,7 +14,7 @@ type Line = { from: string; body: string; asStructure?: boolean };
 /** Conversation et ses messages (une minute d'écart), seulement si elle n'existe pas encore. */
 async function conversation(
   key: string,
-  values: { kind: "direct" | "organizer"; structureId?: string; createdBy: string },
+  values: { kind: "direct" | "organizer" | "media"; structureId?: string; mediaId?: string; createdBy: string },
   members: { userId: string; role: "member" | "admin" }[],
   lines: Line[],
   readUpTo: Record<string, number>,
@@ -120,4 +120,33 @@ export async function seedMessaging() {
     { [julie.userId]: 2, [damien.userId]: 1 },
   );
   console.log("Messagerie : Kenji ↔ Léa, demande de contact de Nina à Kenji, Julie ↔ MéditeSportCar (Damien répond).");
+}
+
+/**
+ * Lot R9i : la conversation de page Kenji_66 ↔ « Sud Cars » (Kenji est identifié par son pseudo sur l'album de la Côte Vermeille). Posée
+ * après les albums (la page et l'album doivent exister). Kenji a tout lu ; la page (Leo_SudCars) a lu le message de Kenji. Rien pour
+ * Damien_66 (les recettes ouvrent sa conversation) ni pour Lea_11 (identification retirée : refus). Idempotent (clé unique).
+ */
+export async function seedMediaConversation() {
+  const kenji = await byPseudo("Kenji_66");
+  const [leo] = await db.select({ id: t.user.id }).from(t.user).where(eq(t.user.email, "leo@orasso.local"));
+  const media = leo ? await db.query.mediaProfiles.findFirst({ where: eq(t.mediaProfiles.userId, leo.id) }) : null;
+  if (!kenji || !leo || !media) {
+    console.log("Messagerie : page « Sud Cars » ou Kenji_66 absents, conversation de page non ajoutée.");
+    return;
+  }
+  await conversation(
+    mediaKey(media.id, kenji.userId),
+    { kind: "media", mediaId: media.id, createdBy: kenji.userId },
+    [
+      { userId: kenji.userId, role: "member" },
+      { userId: leo.id, role: "member" },
+    ],
+    [
+      { from: kenji.userId, body: "Bonjour, je peux avoir la photo du port en grand ?" },
+      { from: leo.id, body: "Oui, je te l'envoie ce soir." },
+    ],
+    { [kenji.userId]: 1, [leo.id]: 1 },
+  );
+  console.log("Messagerie : Kenji_66 ↔ la page « Sud Cars » (conversation de page).");
 }

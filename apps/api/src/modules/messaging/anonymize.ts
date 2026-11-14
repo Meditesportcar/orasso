@@ -6,6 +6,7 @@ import {
   contactRequests,
   conversationParticipants,
   conversations,
+  mediaProfiles,
   messages,
   notifications,
   uploads,
@@ -21,6 +22,8 @@ import { refreshPreview } from "./core";
  * - ses demandes de contact, envoyées et reçues ;
  * - ses participations : retirées ; ses conversations à deux et avec une structure sont fermées (lisibles par l'autre) ;
  * - les notifications des autres qui le citent (message reçu, demande de contact : pseudo, photo, lien) ;
+ * - lot R9i : la conversation d'une page de média est fermée quand l'un de ses deux comptes disparaît ; pour un titulaire,
+ *   toutes celles de ses pages, et les notifications « message reçu » qu'elles ont envoyées à leurs correspondants ;
  * - l'aperçu des conversations touchées est recalculé (il pouvait reprendre son dernier message).
  */
 export async function anonymizeMessagingForDeletedAccount(tx: Tx, userId: string): Promise<string[]> {
@@ -69,7 +72,8 @@ export async function anonymizeMessagingForDeletedAccount(tx: Tx, userId: string
           inArray(conversations.id, closable),
           isNull(conversations.closedAt),
           // Conversation à deux, ou avec une structure dont il était la personne (pas un organisateur).
-          sql`(${conversations.kind} = 'direct' or (${conversations.kind} = 'organizer' and ${conversations.directKey} like ${`structure:%:${userId}`}))`,
+          // Lot R9i : une conversation de page est fermée dès que l'un de ses deux comptes disparaît.
+          sql`(${conversations.kind} in ('direct', 'media') or (${conversations.kind} = 'organizer' and ${conversations.directKey} like ${`structure:%:${userId}`}))`,
         ),
       );
   }
@@ -81,6 +85,40 @@ export async function anonymizeMessagingForDeletedAccount(tx: Tx, userId: string
         sql`${notifications.data} -> 'actor' ->> 'userId' = ${userId}`,
       ),
     );
-  for (const id of new Set([...own.map((m) => m.conversationId), ...closable])) await refreshPreview(tx, id);
+  // Lot R9i, T60 : titulaire d'une page (pages comptées sans filtre sur `deleted_at` : la messagerie passe avant le média).
+  // Toutes les conversations de ses pages sont fermées, même sans ligne de participant pour lui, et les notifications
+  // « message reçu » de ces conversations (chez les personnes qui lui écrivaient) sont supprimées : leur acteur est la
+  // page, la purge par compte ci-dessus ne les voit pas.
+  const pages = await tx.select({ id: mediaProfiles.id }).from(mediaProfiles).where(eq(mediaProfiles.userId, userId));
+  const pageConversations = pages.length
+    ? (
+        await tx
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(
+            inArray(
+              conversations.mediaId,
+              pages.map((p) => p.id),
+            ),
+          )
+      ).map((r) => r.id)
+    : [];
+  if (pageConversations.length) {
+    await tx
+      .update(conversations)
+      .set({ closedAt: at })
+      .where(and(inArray(conversations.id, pageConversations), isNull(conversations.closedAt)));
+    await tx
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.type, "message_received"),
+          inArray(sql`${notifications.data} ->> 'conversationId'`, pageConversations),
+        ),
+      );
+  }
+  for (const id of new Set([...own.map((m) => m.conversationId), ...closable, ...pageConversations])) {
+    await refreshPreview(tx, id);
+  }
   return keys;
 }
