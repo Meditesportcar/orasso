@@ -40,7 +40,7 @@ describe("affiche sans photo", () => {
     const png = await render(input("swiss", null), "post", 360);
     const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
     let mustard = 0;
-    for (let y = 0; y < 170; y++) {
+    for (let y = 0; y < 250; y++) {
       const i = (y * info.width + 5) * info.channels;
       if ((data[i] ?? 0) > 200 && (data[i + 1] ?? 0) > 150 && (data[i + 2] ?? 255) < 80) mustard++;
     }
