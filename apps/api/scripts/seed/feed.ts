@@ -240,6 +240,18 @@ async function seedOrassoFeed() {
     );
   }
   if (!orasso) {
+    // Un compte réel (hors graine) porte déjà ce pseudo : l'unicité du pseudo ferait échouer la création à moitié (utilisateur sans
+    // profil). La graine ne le voit pas, ne le touche pas, n'écrit rien à son nom et saute le compte officiel.
+    const taken = await db.query.profiles.findFirst({
+      where: sql`lower(${t.profiles.pseudo}) = ${ORASSO.toLowerCase()}`,
+      columns: { userId: true },
+    });
+    if (taken) {
+      console.log(
+        `Fil : le pseudo « ${ORASSO} » est pris par un compte réel, compte officiel et publications d'Orasso sautés.`,
+      );
+      return;
+    }
     const person = await createAccount(
       await hashPassword(randomBytes(24).toString("hex")),
       { pseudo: ORASSO, email: "orasso@orasso.local", departments: ["66"] },

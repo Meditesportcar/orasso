@@ -36,6 +36,7 @@ import {
   reports,
   structureFollows,
   uploads,
+  user,
   userFollows,
   vehiclePhotos,
   vehicles,
@@ -1601,13 +1602,28 @@ describe("compte officiel et pseudos réservés (tour 2)", () => {
     );
   });
 
-  it("le seed refuse de rattacher le statut officiel à un compte ordinaire nommé « Orasso »", async () => {
+  it("le seed refuse de rattacher le statut officiel à un compte de la graine ordinaire nommé « Orasso »", async () => {
     const fake = await person("Faux_Seed");
+    await db.update(user).set({ email: "faux-seed@orasso.local" }).where(eq(user.id, fake.id));
     await db.update(profiles).set({ pseudo: "Orasso" }).where(eq(profiles.userId, fake.id));
     const { seedFeed } = await import("../../../scripts/seed/feed");
     await expect(seedFeed()).rejects.toThrow(/compte ordinaire/);
     const [after] = await db.select().from(profiles).where(eq(profiles.userId, fake.id));
     expect(after?.official).toBe(false);
+  });
+
+  it("le seed ne voit pas, ne touche pas et ne plante pas sur un compte réel nommé « Orasso »", async () => {
+    const real = await person("Vrai_Compte");
+    await db.update(profiles).set({ pseudo: "Orasso" }).where(eq(profiles.userId, real.id));
+    const usersBefore = (await db.select({ id: user.id }).from(user)).length;
+    const { seedFeed } = await import("../../../scripts/seed/feed");
+    await expect(seedFeed()).resolves.toBeUndefined();
+    const [after] = await db.select().from(profiles).where(eq(profiles.userId, real.id));
+    expect(after?.official).toBe(false);
+    expect(after?.bio ?? null).toBe(null);
+    // Rien n'est écrit : ni compte à moitié créé, ni publication.
+    expect((await db.select({ id: user.id }).from(user)).length).toBe(usersBefore);
+    expect(await db.query.feedPosts.findFirst({ where: eq(feedPosts.authorId, real.id) })).toBeUndefined();
   });
 });
 
