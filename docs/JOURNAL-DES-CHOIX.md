@@ -6865,3 +6865,10 @@ Cause réelle de la remarque de Damien : sur le serveur de dev, le cache de « P
 4. **Une boîte de page séparée** si un média reçoit beaucoup de messages : aujourd'hui tout arrive dans les Messages de son titulaire.
 5. **Aucun blocage dans la messagerie** (ni entre comptes ni avec une structure) : une page importunée n'a que la sourdine et le signalement.
 6. **Constat** : la conversation `organizer` sert au passionné le pseudo de l'organisateur qui répond (auteur, « Lu par », push : « <Structure> · par <pseudo> », voulu au lot 18). À confirmer au regard de R9a ; non touché ici.
+
+### Lot R9i, partie 1, tour 1 (14/11/2026) : corrections de la relecture d'Opus
+- **La page n'écrit jamais la première, aussi côté API** : `mediaRules.writeBlock` renvoie `closed` au titulaire tant que la conversation n'a aucun message (`lastMessageAt` nul), même s'il connaît l'identifiant. Test : le titulaire reçoit 403 et `canWrite: false`, puis répond dès que la personne a écrit.
+- **`canOpenWithMedia`** reprend toutes les conditions de `albumVisibleSql` (événement publié et pas sur invitation, accréditation du média, page non supprimée, album publié) sauf l'état du compte du titulaire. Test : accréditation retombée, événement annulé, événement sur invitation : 403.
+- **Page supprimée** : `ConversationView.page` est `null` (plus de lien « Voir la page » ni sur le site ni dans l'appli) ; le titre reste « Média supprimé ». Choix : `null` plutôt qu'un champ `deleted` de plus, pour garder la liste blanche de `page` (cinq clés).
+- **Canari** : une vraie image envoyée par le titulaire est lue par la personne (message, adresse, octets et en-têtes du fichier servi) et le refus 429 de l'ouverture est balayé.
+- **Recettes** : l'échelle de police ×1,3 de l'appli passe par `localStorage["orasso.recette.echellePolice"]` (comme `appli-lotr6police.spec.ts`) et est mesurée ; ajout de Damien_66 (ouverture par l'API puis l'écran), du retour chez Kenji côté appli, de « Lu par Sud Cars » (`read-by`) côté site.

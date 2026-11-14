@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R9i, côté appli (version web de recette, `APP_URL`) : la conversation de page d'un média. Kenji_66 voit « Sud Cars » (ligne,
@@ -23,16 +23,17 @@ async function shot(page: Page, name: string) {
 
 async function openApp(browser: Browser, theme: Theme, email: string, fontScale = 1) {
   const ctx = await browser.newContext({ viewport: { width: 384, height: 844 }, baseURL: APP });
-  const page = await ctx.newPage();
-  await page.goto("/");
-  await page.evaluate(
-    ([th, scale]) => {
+  // Comme `appli-lotr6police.spec.ts` : l'échelle de police de la recette est lue dans le stockage local par l'appli.
+  await ctx.addInitScript(
+    ([t, f]) => {
       localStorage.setItem("orasso.onboarded", "1");
-      localStorage.setItem("orasso.theme", th as string);
-      document.documentElement.style.fontSize = `${Number(scale) * 100}%`;
+      localStorage.setItem("orasso.theme", t);
+      if (f > 1) localStorage.setItem("orasso.recette.echellePolice", String(f));
+      else localStorage.removeItem("orasso.recette.echellePolice");
     },
-    [theme, fontScale],
+    [theme, fontScale] as const,
   );
+  const page = await ctx.newPage();
   await page.goto("/auth");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
@@ -94,14 +95,50 @@ for (const theme of ["beton", "sable"] as const) {
     await owner.page.getByTestId("message-send").click();
     await expect(owner.page.getByTestId("messages").getByText(answer)).toBeVisible();
     await shot(owner.page, `conversation-titulaire-${theme}-384`);
+    const size = (p: Page) =>
+      p
+        .getByTestId("reply-as")
+        .getByText("Tu réponds en tant que Sud Cars")
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+    const normal = await size(owner.page);
     await owner.ctx.close();
 
-    // Police ×1,3 : la ligne « Tu réponds en tant que » et le bouton tiennent.
+    // Retour chez Kenji : la réponse est signée « Sud Cars », le titre est celui de la page.
+    const back = await openApp(browser, theme, "kenji@orasso.local");
+    await back.page.goto("/messages");
+    await back.page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
+    await expect(back.page.getByText("Sud Cars", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(back.page.getByTestId("messages").getByText(answer)).toBeVisible();
+    await expect(back.page.getByText("Sud Cars", { exact: true }).nth(1)).toBeVisible();
+    expect(await back.page.content()).not.toContain(OWNER);
+    await back.ctx.close();
+
+    // Damien_66 : l'ouverture par un appel d'API dans sa session, puis l'écran.
+    const kenjiCookie = await login("kenji@orasso.local");
+    const damienCookie = await login("damien@orasso.local");
+    const mine = await apiCall<{ items: { id: string; kind: string }[] }>(kenjiCookie, "GET", "/me/conversations");
+    const first = mine.data.items.find((c) => c.kind === "media");
+    const detail = await apiCall<{ page: { id: string } }>(kenjiCookie, "GET", `/conversations/${first?.id}`);
+    const opened = await apiCall<{ id: string }>(damienCookie, "POST", `/media/${detail.data.page.id}/conversation`);
+    expect(opened.status).toBeLessThan(300);
+    const damien = await openApp(browser, theme, "damien@orasso.local");
+    await damien.page.goto(`/messages/${opened.data.id}`);
+    await expect(damien.page.getByText("Sud Cars", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(damien.page.getByTestId("view-page")).toBeVisible();
+    await shot(damien.page, `conversation-damien-${theme}-384`);
+    await damien.ctx.close();
+
+    // Police ×1,3 (échelle posée par la recette, vérifiée) : la ligne « Tu réponds en tant que » et le bouton tiennent.
     const big = await openApp(browser, theme, "leo@orasso.local", 1.3);
     await big.page.goto("/messages");
     await big.page.getByTestId("conversation-row").filter({ hasText: "Kenji_66" }).click();
     await expect(big.page.getByTestId("reply-as")).toBeVisible({ timeout: 30_000 });
+    expect(await size(big.page)).toBeGreaterThan(normal * 1.25);
     await expect(big.page.getByTestId("message-send")).toBeVisible();
+    for (const id of ["reply-as", "message-send"]) {
+      const box = await big.page.getByTestId(id).boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= 384).toBe(true);
+    }
     await shot(big.page, `conversation-titulaire-${theme}-384-x1_3`);
     await big.ctx.close();
   });

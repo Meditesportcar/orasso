@@ -10,9 +10,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { quietHours, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { albumPhotoTags, conversations, eventAlbums, messages } from "../../db/schema";
+import { albumPhotoTags, conversations, eventAlbums, events, messages } from "../../db/schema";
 import { realtime } from "../../lib/realtime";
-import { paris, softDeleteMedia } from "../albums/albums-test-helpers";
+import { paris, setAccreditation, softDeleteMedia } from "../albums/albums-test-helpers";
 import { type Ref, tagScenario } from "../albums/tags-test-helpers";
 
 afterAll(async () => {
@@ -163,7 +163,39 @@ describe("ouvrir la conversation d'une page (T58)", () => {
   });
 });
 
+describe("les conditions de « Tes photos » (sauf le titulaire)", () => {
+  it("accréditation retombée, événement annulé, événement sur invitation : 403 ; l'état du titulaire n'y change rien", async () => {
+    await tagCar(s.kenji, 0, "kenji");
+    const accreditation = (await db.query.applications.findFirst({
+      where: (a, { and: all, eq: is }) => all(is(a.eventId, s.event.id), is(a.kind, "media")),
+    })) as { id: string };
+    await setAccreditation(accreditation.id, "pending");
+    expect((await openPage(s.kenji)).status).toBe(403);
+    await setAccreditation(accreditation.id, "accepted");
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, s.event.id));
+    expect((await openPage(s.kenji)).status).toBe(403);
+    await db.update(events).set({ status: "published", admission: "invite_only" }).where(eq(events.id, s.event.id));
+    expect((await openPage(s.kenji)).status).toBe(403);
+    await db.update(events).set({ admission: "open" }).where(eq(events.id, s.event.id));
+    expect((await openPage(s.kenji)).status).toBe(201);
+  });
+});
+
 describe("qui lit et qui écrit (T56)", () => {
+  it("la page n'écrit jamais la première, même en connaissant l'identifiant ; elle répond dès que la personne a écrit", async () => {
+    await tagCar(s.dam, 0, "dam");
+    const { id } = (await openPage(s.dam)).json as { id: string };
+    const view = await req(s.leo, "GET", `/conversations/${id}`);
+    expect(view.status).toBe(200);
+    expect(view.json).toMatchObject({ canWrite: false, writeBlocked: "closed" });
+    expect((await send(s.leo, id, "Coucou, c'est la page")).status).toBe(403);
+    expect(await db.select().from(messages).where(eq(messages.conversationId, id))).toHaveLength(0);
+    expect((await send(s.dam, id, "Bonjour")).status).toBe(201);
+    clock.advance(1000);
+    expect((await req(s.leo, "GET", `/conversations/${id}`)).json.canWrite).toBe(true);
+    expect((await send(s.leo, id, "Je te réponds")).status).toBe(201);
+  });
+
   async function opened() {
     await tagCar(s.dam, 0, "dam");
     const { id } = (await openPage(s.dam)).json as { id: string };

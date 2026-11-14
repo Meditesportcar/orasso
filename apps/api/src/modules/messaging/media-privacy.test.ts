@@ -4,6 +4,7 @@
 // titulaire suspendu), migration (CHECK dans les deux sens), compatibilité de l'APK en ligne (`direct` et `organizer` inchangés).
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
+import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 
 import {
@@ -323,12 +324,49 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
     realtime.unsubscribeAll(ownerSocket);
   });
 
-  it("l'image envoyée par la page : son adresse ne dit rien du titulaire", async () => {
+  it("une vraie image envoyée par la page : le message lu par la personne, son adresse et le fichier servi ne disent rien du titulaire ; le refus 429 non plus", async () => {
     await tagKenji();
     const { id } = (await req(s.kenji, "POST", `/media/${s.leoMedia}/conversation`)).json as { id: string };
     await send(s.kenji, id, "Salut");
-    const image = `/api/conversations/${id}/images/${randomUUID()}.webp`;
-    expect(leaks(image)).toEqual([]);
+    clock.advance(1000);
+    const png = await sharp({ create: { width: 24, height: 24, channels: 3, background: { r: 200, g: 30, b: 30 } } })
+      .png()
+      .toBuffer();
+    const form = new FormData();
+    form.append("purpose", "message");
+    form.append("file", new File([new Uint8Array(png)], "photo.png", { type: "image/png" }));
+    const up = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: s.leo.cookie },
+      body: form,
+    });
+    expect(up.status).toBe(201);
+    const { key } = (await up.json()) as { key: string };
+    const sentImage = await req(s.leo, "POST", `/conversations/${id}/messages`, {
+      clientId: randomUUID(),
+      imageKey: key,
+    });
+    expect(sentImage.status).toBe(201);
+    const page = await req(s.kenji, "GET", `/conversations/${id}/messages`);
+    const message = page.json.items.find((m: { image: unknown }) => m.image) as {
+      image: { url: string };
+      sender: unknown;
+    };
+    expect(message.sender).toEqual({ userId: `m:${s.leoMedia}`, pseudo: "Sud Cars", avatarUrl: expect.any(String) });
+    expect(leaks(page.json)).toEqual([]);
+    expect(leaks(message.image.url)).toEqual([]);
+    const file = await app.request(message.image.url, {
+      headers: { origin: ORIGIN, cookie: s.kenji.cookie },
+    });
+    expect(file.status).toBe(200);
+    const bytes = Buffer.from(await file.arrayBuffer()).toString("latin1");
+    expect(leaks(bytes)).toEqual([]);
+    expect(leaks([...file.headers.entries()])).toEqual([]);
+    // Le refus 429 de l'ouverture (60 par heure) : son corps ne dit rien du titulaire.
+    let last = { status: 0, json: null as unknown };
+    for (let i = 0; i < 61; i++) last = await req(s.lazy, "POST", `/media/${s.leoMedia}/conversation`);
+    expect(last.status).toBe(429);
+    expect(leaks(last.json)).toEqual([]);
   });
 });
 
@@ -378,7 +416,8 @@ describe("fin de vie (T60)", () => {
 
     const view = await req(s.kenji, "GET", `/conversations/${id}`);
     expect(view.json).toMatchObject({ title: "Média supprimé", canWrite: false, writeBlocked: "closed" });
-    expect(view.json.page).toMatchObject({ name: "Média supprimé", logoUrl: null, mine: false });
+    // Page supprimée : plus de `page` (donc plus de lien « Voir la page »), le titre dit « Média supprimé ».
+    expect(view.json.page).toBeNull();
     expect((await send(s.kenji, id, "Y a quelqu'un ?")).status).toBe(403);
     // Le canari rejoué après la suppression : aucune sortie ne sert l'ancien pseudo, ni l'identifiant.
     const after = [

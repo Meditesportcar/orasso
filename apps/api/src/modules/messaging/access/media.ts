@@ -6,9 +6,10 @@
 import { authorKeyOf, parseMediaKey } from "@orasso/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { albumPhotoTags, eventAlbumPhotos, eventAlbums, mediaProfiles, profiles } from "../../../db/schema";
+import { albumPhotoTags, eventAlbumPhotos, eventAlbums, events, mediaProfiles, profiles } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
+import { albumAccreditedSql } from "../../albums/view";
 import type { ConversationRow, KindRules, Mask, Reader } from "./types";
 
 /** La page d'une conversation (même supprimée : son nom et son logo sont alors ceux que l'anonymisation a laissés). */
@@ -48,8 +49,9 @@ async function ownerOf(ex: Executor, conversation: ConversationRow) {
 
 /**
  * Une personne peut ouvrir la conversation d'une page quand elle y est identifiée (sa voiture ou son pseudo) sur une
- * photo d'un album **publié** et non supprimé de ce média : le besoin de « Tes photos ». Aucun état du titulaire n'entre
- * dans la décision (suspendu, banni : la page reste publique, un refus dirait l'état d'un compte).
+ * photo d'un album de ce média visible comme dans « Tes photos » : toutes les conditions de `albumVisibleSql` (album publié et
+ * non supprimé, événement publié et pas sur invitation, accréditation du média, page non supprimée) **sauf** l'état du
+ * compte du titulaire (suspendu, banni : la page reste publique, un refus dirait l'état d'un compte).
  */
 export async function canOpenWithMedia(ex: Executor, userId: string, mediaId: string): Promise<boolean> {
   const [row] = await ex
@@ -57,6 +59,8 @@ export async function canOpenWithMedia(ex: Executor, userId: string, mediaId: st
     .from(albumPhotoTags)
     .innerJoin(eventAlbumPhotos, eq(eventAlbumPhotos.id, albumPhotoTags.photoId))
     .innerJoin(eventAlbums, eq(eventAlbums.id, eventAlbumPhotos.albumId))
+    .innerJoin(events, eq(events.id, eventAlbums.eventId))
+    .innerJoin(mediaProfiles, eq(mediaProfiles.id, eventAlbums.mediaProfileId))
     .where(
       and(
         eq(albumPhotoTags.userId, userId),
@@ -65,6 +69,11 @@ export async function canOpenWithMedia(ex: Executor, userId: string, mediaId: st
         eq(eventAlbums.mediaProfileId, mediaId),
         eq(eventAlbums.status, "published"),
         sql`${eventAlbums.deletedAt} is null`,
+        // Les conditions de `albumVisibleSql` (« Tes photos »), sauf l'état du compte du titulaire.
+        isNull(mediaProfiles.deletedAt),
+        eq(events.status, "published"),
+        sql`${events.admission} <> 'invite_only'`,
+        albumAccreditedSql,
       ),
     )
     .limit(1);
@@ -83,9 +92,11 @@ export const mediaRules: KindRules = {
     return out;
   },
 
-  async writeBlock(ex, conversation) {
+  async writeBlock(ex, conversation, viewer) {
     const owner = await ownerOf(ex, conversation);
     if (!owner) return "closed";
+    // La page n'écrit jamais la première (T58) : même en connaissant l'identifiant, tant que la personne n'a rien écrit.
+    if (viewer.userId === owner.userId && !conversation.lastMessageAt) return "closed";
     const fanId = fanIdOf(conversation);
     if (!fanId || !(await personOf(ex, fanId))) return "account_deleted";
     return null;
@@ -96,7 +107,8 @@ export const mediaRules: KindRules = {
     const logoUrl = storage.url(page?.logoKey ?? null);
     const name = page?.name ?? "Média supprimé";
     const pageView = (mine: boolean) =>
-      page ? { key: authorKeyOf("media", page.id), id: page.id, name, logoUrl, mine } : null;
+      // Page supprimée : plus de lien « Voir la page » (`page` nul) ; le titre dit « Média supprimé ».
+      page && !page.deletedAt ? { key: authorKeyOf("media", page.id), id: page.id, name, logoUrl, mine } : null;
     const fanId = fanIdOf(conversation);
     if (viewer.userId === fanId) {
       return {

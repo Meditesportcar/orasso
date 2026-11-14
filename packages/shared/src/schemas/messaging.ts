@@ -120,7 +120,7 @@ export type ConversationView = ConversationSummary & {
   otherUser: MessagePerson | null;
   /**
    * Lot R9i : la page d'un média d'une conversation `media` (`key` = clé d'auteur `m:<id>`, `mine` : je suis son titulaire),
-   * `null` pour les autres sortes. Jamais le compte qui tient la page.
+   * `null` pour les autres sortes et pour une page supprimée (plus de lien). Jamais le compte qui tient la page.
    */
   page: { key: string; id: string; name: string; logoUrl: string | null; mine: boolean } | null;
 };

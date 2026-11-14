@@ -48,6 +48,7 @@ for (const theme of ["beton", "sable"] as const) {
       // La réponse de la page est signée « Sud Cars », lue par « Sud Cars ».
       await expect(page.getByTestId("messages")).toContainText("Oui, je te l'envoie ce soir.");
       await expect(page.getByTestId("messages")).toContainText("Sud Cars");
+      await expect(page.getByTestId("read-by")).toHaveText("Lu par Sud Cars");
       const link = page.getByTestId("view-page");
       await expect(link).toHaveText("Voir la page");
       await expect(link).toHaveAttribute("href", /^\/m\/[0-9a-f-]{36}$/);
@@ -138,4 +139,25 @@ test("Lea_11 (identification retirée) : l'ouverture est refusée avec le libell
   expect(refused.status).toBe(403);
   expect(refused.data.error.message).toBe("Tu peux écrire à un média quand il t'a identifié sur un de ses albums.");
   expect(JSON.stringify(refused.data)).not.toContain(OWNER);
+});
+
+test("Damien_66 (identifié par sa voiture) : ouverture par un appel d'API dans sa session, puis l'écran", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const kenji = await login("kenji@orasso.local");
+  const damien = await login("damien@orasso.local");
+  const list = await apiCall<{ items: { id: string; kind: string }[] }>(kenji, "GET", "/me/conversations");
+  const media = list.data.items.find((c) => c.kind === "media");
+  const view = await apiCall<{ page: { id: string } }>(kenji, "GET", `/conversations/${media?.id}`);
+  const opened = await apiCall<{ id: string }>(damien, "POST", `/media/${view.data.page.id}/conversation`);
+  expect(opened.status).toBeLessThan(300);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, `/app/messages/${opened.data.id}`);
+  await page.goto(`/app/messages/${opened.data.id}`);
+  await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
+  await expect(page.getByTestId("view-page")).toBeVisible();
+  expect(await page.content()).not.toContain(OWNER);
+  await ctx.close();
 });
