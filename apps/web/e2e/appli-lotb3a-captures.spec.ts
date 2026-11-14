@@ -1,0 +1,123 @@
+import { mkdirSync } from "node:fs";
+import { type Browser, expect, type Page, test } from "@playwright/test";
+import { SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
+
+// Lot B3a, points 1 et 3 (appli) : le titre d'une ligne d'événement ne se coupe jamais en plein mot, et le compteur « 0 / 2000 »
+// d'une conversation n'est pas chevauché par « Envoyer », à 384 px (Pixel 10 Pro XL), police ×1 et ×1,3, Béton et Sable.
+// Lancer avec APP_URL (version compilée, scripts/appli-compilee.mjs) ; CAPTURES=1 pour les captures (CAPTURES_DIR).
+const APP = process.env.APP_URL;
+test.skip(!APP, "Lancer avec APP_URL");
+test.use({ actionTimeout: 30_000 });
+test.describe.configure({ mode: "default" });
+
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-b3a-captures/appli`;
+const SHOTS = Boolean(process.env.CAPTURES);
+if (SHOTS) mkdirSync(DIR, { recursive: true });
+
+async function open(browser: Browser, opts: { scale: number; theme: "beton" | "sable" }) {
+  const ctx = await browser.newContext({ viewport: { width: 384, height: 900 }, baseURL: APP });
+  await ctx.route(/(openfreemap|openstreetmap)\.org/, (route) => route.abort());
+  await ctx.addInitScript(
+    ([t, s]) => {
+      localStorage.setItem("orasso.onboarded", "1");
+      localStorage.setItem("orasso.theme", String(t));
+      if (Number(s) > 1) localStorage.setItem("orasso.recette.echellePolice", String(s));
+    },
+    [opts.theme, opts.scale],
+  );
+  const page = await ctx.newPage();
+  await page.goto("/auth");
+  const skip = page.getByTestId("opening-skip");
+  if (await skip.isVisible().catch(() => false))
+    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+  await page.getByLabel("E-mail").fill("damien@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil/, { timeout: 60_000 });
+  await page
+    .getByTestId("whatsnew-dismiss")
+    .click({ timeout: 4_000 })
+    .catch(() => undefined);
+  return { ctx, page };
+}
+
+/** Va à une adresse de l'appli (rechargement complet) et passe l'ouverture animée qui rejoue à chaque chargement. */
+async function visit(page: Page, path: string) {
+  await page.goto(path);
+  const skip = page.getByTestId("opening-skip");
+  if (await skip.isVisible().catch(() => false))
+    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+}
+
+const shot = async (page: Page, name: string) => {
+  if (!SHOTS) return;
+  await page.waitForLoadState("networkidle").catch(() => undefined);
+  await page.waitForTimeout(1_200);
+  await page.screenshot({ path: `${DIR}/${name}.png` });
+};
+
+/** Les mots d'un texte posés sur deux lignes (coupés en plein mot) dans les éléments choisis. */
+async function splitWords(page: Page, selector: string): Promise<string[]> {
+  return page.evaluate((sel) => {
+    const out: string[] = [];
+    for (const el of document.querySelectorAll(sel)) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent ?? "";
+        for (const m of text.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, m.index ?? 0);
+          range.setEnd(node, (m.index ?? 0) + m[0].length);
+          if (new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size > 1) out.push(m[0]);
+        }
+      }
+    }
+    return out;
+  }, selector);
+}
+
+const MATRIX = [
+  { theme: "beton", scale: 1, tag: "beton-384" },
+  { theme: "beton", scale: 1.3, tag: "beton-384-x13" },
+  { theme: "sable", scale: 1.3, tag: "sable-384-x13" },
+] as const;
+
+for (const m of MATRIX) {
+  test(`ligne d'événement (${m.tag}) : « Rassemblement du Lydia » ne se coupe pas en plein mot`, async ({
+    browser,
+  }) => {
+    const { ctx, page } = await open(browser, m);
+    await visit(page, "/o/roues-libres-66?onglet=evenements");
+    const rows = page.getByTestId("event-row");
+    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    const lydia = rows.filter({ hasText: "Rassemblement du Lydia" }).first();
+    await expect(lydia).toBeVisible();
+    await lydia.scrollIntoViewIfNeeded();
+    await shot(page, `appli-eventrow-${m.tag}`);
+    expect(await splitWords(page, '[data-testid="event-row"]')).toEqual([]);
+    await ctx.close();
+  });
+
+  test(`conversation (${m.tag}) : le compteur « 0 / 2000 » n'est pas chevauché par « Envoyer »`, async ({
+    browser,
+  }) => {
+    const { ctx, page } = await open(browser, m);
+    await visit(page, "/messages");
+    const row = page.getByTestId("conversation-row").first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.click();
+    await expect(page.getByTestId("message-send")).toBeVisible({ timeout: 30_000 });
+    const counter = page.locator('[aria-label$="caractères"]').first();
+    await expect(counter).toBeVisible();
+    await shot(page, `appli-conversation-${m.tag}`);
+    const c = await counter.boundingBox();
+    const b = await page.getByTestId("message-send").boundingBox();
+    if (!c || !b) throw new Error("boîtes absentes");
+    const overlap = c.x < b.x + b.width && c.x + c.width > b.x && c.y < b.y + b.height && c.y + c.height > b.y;
+    expect(overlap, `compteur ${JSON.stringify(c)} contre « Envoyer » ${JSON.stringify(b)}`).toBe(false);
+    await ctx.close();
+  });
+}

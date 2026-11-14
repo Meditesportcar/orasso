@@ -55,3 +55,40 @@ for (const theme of ["beton", "sable"] as const) {
     });
   }
 }
+
+/** Les mots d'un texte qui sont posés sur deux lignes (coupés en plein mot) dans les éléments choisis. */
+async function splitWords(page: Page, selector: string): Promise<string[]> {
+  return page.evaluate((sel) => {
+    const out: string[] = [];
+    for (const el of document.querySelectorAll(sel)) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent ?? "";
+        for (const m of text.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, m.index ?? 0);
+          range.setEnd(node, (m.index ?? 0) + m[0].length);
+          const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+          if (tops.size > 1) out.push(m[0]);
+        }
+      }
+    }
+    return out;
+  }, selector);
+}
+
+// Point 1 (côté site) : les titres d'événement ne se coupent jamais en plein mot, à 384 px et au zoom 130 % (~296 px).
+for (const width of [384, 296]) {
+  test(`titres d'événement à ${width} px : aucun mot coupé, aucun défilement horizontal`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/evenements");
+    await expect(page.getByTestId("event-tile").first()).toBeVisible();
+    await shot(page, `evenements-${width}`);
+    expect(await splitWords(page, ".w-card__title, .w-card__minimal-title")).toEqual([]);
+    await page.goto("/e/rassemblement-du-lydia");
+    await expect(page.locator("h1").first()).toBeVisible();
+    await shot(page, `fiche-lydia-${width}`);
+    expect(await splitWords(page, "h1, h2")).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  });
+}
