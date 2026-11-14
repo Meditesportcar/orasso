@@ -474,6 +474,79 @@ describe("409 : l'invalidation vise toute couverture qui chevauche la zone du cu
     expect(s.failed).toBe(false);
   });
 
+  it("le disque d'ouverture est retiré au 409 lui-même : la relecture de la page 0 échoue, la case grossie n'est plus couverte", async () => {
+    // G (lat 48,8-48,9 ; lng 2,8-2,9) : 30 lieux, complète dans le disque d'ouverture et à la page 0 ; D (lng 3,1-3,2) : 300 lieux.
+    const cell = (tag: string, i: number, j: number, n: number) =>
+      Array.from({ length: n }, (_, k) =>
+        place(`${tag}${i}_${j}-${k}`, i / 10 + 0.002 + (k % 40) * 0.0024, j / 10 + 0.002 + Math.floor(k / 40) * 0.012),
+      );
+    const viewOfCell = (i: number, j: number) => ({
+      south: i / 10 + 0.01,
+      west: j / 10 + 0.01,
+      north: i / 10 + 0.09,
+      east: j / 10 + 0.09,
+    });
+    const D = cell("d", 488, 31, 300);
+    let data = [...cell("g", 488, 28, 30), ...D];
+    let failNext = false;
+    const inner = serveFrom(() => data);
+    const read = vi.fn().mockImplementation(async (zone: PracticalZone, cursor?: string) => {
+      if (failNext) throw Object.assign(new Error("503"), { status: 503 });
+      try {
+        return await inner(zone, cursor);
+      } catch (e) {
+        failNext = true; // le 409 est suivi d'une panne : la page 0 n'est pas relue
+        throw e;
+      }
+    });
+    const z = make(read);
+    z.ingest({
+      origin: { kind: "city", label: "X", lat: 48.85, lng: 2.6 },
+      places: data.filter((p) => p.id.startsWith("g")),
+      partial: false,
+      attribution: att,
+    });
+    z.setView({ south: 48.84, west: 3.04, north: 48.86, east: 3.06 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    const g = viewOfCell(488, 28);
+    z.setView(g);
+    expect(viewCovered(z.getState().cover, g)).toBe(true); // G complète à la page 0 et dans le disque
+    data = [...cell("g", 488, 28, 250), ...D]; // G grossit entre deux pages
+    z.setView(viewOfCell(488, 31));
+    expect(z.searchHere()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read.mock.calls.map((c) => c[1]?.slice(0, 2))).toEqual([undefined, "1:", undefined]);
+    z.setView(g);
+    expect(viewCovered(z.getState().cover, g)).toBe(false);
+    expect(zoneNeedsSearch(z.getState())).toBe(true);
+  });
+
+  it("un disque d'ouverture qui a reçu des exceptions n'est plus « déjà connu » : une ouverture complète relue le remet couvert", async () => {
+    let data = cellPlaces("A", 1, 2, 30);
+    const read = serveFrom(() => data);
+    const z = make(read);
+    const opening = (places: PracticalPlace[]): PracticalData => ({
+      origin: { kind: "city", label: "X", lat: 48.85, lng: 2.3 },
+      places,
+      partial: false,
+      attribution: att,
+    });
+    z.ingest(opening(data));
+    const g = { south: 48.81, west: 2.61, north: 48.89, east: 2.69 };
+    z.setView(g);
+    expect(viewCovered(z.getState().cover, g)).toBe(true);
+    // Une zone coupée marque G incomplète : le filet retire G du disque plus ancien.
+    data = grown("B");
+    z.setView({ south: 48.84, west: 2.84, north: 48.86, east: 2.86 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(viewCovered(z.getState().cover, g)).toBe(false);
+    // La même ouverture, complète, relue ensuite (nouvel objet) : le disque redevient une couverture de G.
+    z.ingest(opening(cellPlaces("C", 1, 2, 30)));
+    expect(viewCovered(z.getState().cover, g)).toBe(true);
+  });
+
   it("variante disque d'ouverture : un disque complet qui couvre la case ne la déclare plus chargée après le 409", async () => {
     // Le disque d'ouverture de 30 km autour de (48,85 ; 2,3) couvre la case G (lat 48,8-48,9 ; lng 2,6-2,7) avec 30 lieux ; H est hors du disque.
     let data = cellPlaces("A", 1, 2, 30);
@@ -506,5 +579,55 @@ describe("409 : l'invalidation vise toute couverture qui chevauche la zone du cu
     const s = z.getState();
     expect(viewCovered(s.cover, g)).toBe(false);
     expect(zoneNeedsSearch(s)).toBe(true);
+  });
+});
+
+describe("409 : un lieu sur le bord partagé de deux rectangles reste garanti par le rectangle voisin gardé", () => {
+  it("la zone du curseur est invalidée, le rectangle voisin garde sa couverture et le lieu du bord reste en mémoire", async () => {
+    // Zone A : lng 2,0 à 2,7 (complète, un lieu P exactement sur le bord est) ; zone B : lng 2,7 à 3,4, voisine, paginée et coupée.
+    const zoneData = (places: PracticalPlace[], extra: Partial<PracticalData> = {}): PracticalData => ({
+      origin: null,
+      places,
+      partial: false,
+      attribution: att,
+      ...extra,
+    });
+    const edge = place("edge", 48.85, 2.7);
+    const pageOne = Array.from({ length: 200 }, (_, k) =>
+      place(`b${k}`, 48.81 + (k % 20) * 0.003, 3.01 + Math.floor(k / 20) * 0.003),
+    );
+    let release: (() => void) | null = null;
+    const read = vi.fn().mockImplementation(async (zone: PracticalZone, cursor?: string): Promise<PracticalData> => {
+      if (cursor) {
+        await new Promise<void>((r) => (release = r));
+        throw Object.assign(new Error("409"), { status: 409 });
+      }
+      if (zone.west < 2.5) return zoneData([edge]);
+      return zoneData([edge, ...pageOne.slice(1)], { truncated: true, partialCells: [[488, 30]], nextCursor: "1:v" });
+    });
+    const z = make(read);
+    z.setView({ south: 48.84, west: 2.34, north: 48.86, east: 2.36 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    z.setView({ south: 48.84, west: 3.04, north: 48.86, east: 3.06 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    const zoneA = read.mock.calls[0]?.[0] as PracticalZone;
+    const zoneB = read.mock.calls[1]?.[0] as PracticalZone;
+    expect(zoneA.east).toBe(2.7); // bord partagé
+    expect(zoneB.west).toBe(2.7);
+    expect(z.getState().places.has("edge")).toBe(true);
+    // La page suivante (case incomplète de B) part ; la vue s'en va ; le 409 arrive après.
+    z.setView({ south: 48.81, west: 3.01, north: 48.89, east: 3.09 });
+    expect(z.searchHere()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    z.setView({ south: 47.0, west: 1.0, north: 47.05, east: 1.05 });
+    (release as (() => void) | null)?.();
+    await vi.advanceTimersByTimeAsync(0);
+    // Le lieu du bord est toujours garanti par la zone A : il reste en mémoire, et la zone A reste chargée.
+    const s = z.getState();
+    expect(s.places.has("edge")).toBe(true);
+    expect(coverContains(s.cover, edge)).toBe(true);
+    expect(read).toHaveBeenCalledTimes(3);
   });
 });

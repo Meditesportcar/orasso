@@ -285,12 +285,17 @@ export function createPracticalZone(deps: ZoneDeps) {
         // Les données ont changé entre deux pages : tout ce que l'ancienne version garantissait sur cette zone est invalidé, que la vue soit
         // encore dans la zone ou non. TOUTE couverture qui touche la zone du curseur est retirée, rectangle (même d'une autre recherche) ou
         // disque d'ouverture : une case qui a grossi ne reste jamais « chargée » sur l'ancien état. Les lieux d'une lecture d'ouverture restent
-        // en mémoire sans couverture (une relecture de plus est acceptable) ; ceux que garantissait un rectangle de la zone sortent.
+        // en mémoire sans couverture (une relecture de plus est acceptable) ; ceux que garantissait un rectangle de la zone sortent, sauf si une couverture restante (rectangle voisin au bord partagé) les garantit encore.
         const rects = state.cover.filter((c) => c.t === "rect" && coverTouches(c, zone));
         const cover = state.cover.filter((c) => !coverTouches(c, zone));
         const places = new Map(
           [...state.places].filter(
-            ([, p]) => !zoneContains(zone, p) || (!coverContains(rects, p) && coverContains(state.cover, p)),
+            ([, p]) =>
+              !zoneContains(zone, p) ||
+              // Un lieu qu'une couverture RESTANTE garantit encore reste (un bord partagé avec un rectangle voisin : `zonesOverlap` est ouvert,
+              // `zoneContains` fermé) ; sinon il reste seulement si seul un disque d'ouverture le garantissait.
+              coverContains(cover, p) ||
+              (!coverContains(rects, p) && coverContains(state.cover, p)),
           ),
         );
         seriesIds = new Set();
