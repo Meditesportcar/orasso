@@ -4,21 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AFTER_RELOAD_PARAM,
-  applyConfirmation,
   createConfirmer,
-  freshConfirmation,
+  deriveConfirmation,
   isAfterReload,
   isForeign,
   ME_TIMEOUT_MS,
+  type MeKnowledge,
   type MeResult,
   mayReload,
   nextAnnounced,
-  nextConfirmation,
+  recordMe,
   reloadAutomatically,
   reloadManually,
   type SessionConfirmation,
   setStalledOf,
-  trackConfirmation,
+  unknownMe,
 } from "./sessionReload";
 
 function stubWindow(opts: { storage: boolean; search?: string; hash?: string }) {
@@ -182,74 +182,86 @@ describe("isForeign", () => {
   });
 });
 
-// Partie B1, tour 8 : la confirmation du compte après un rechargement (`useSessionConfirmation` = un état local + ce vérificateur ;
-// sans environnement DOM dans ce paquet, on teste le vérificateur lui-même, que le crochet appelle tel quel).
+// Partie B1, tours 8 à 11 : la confirmation du compte. Tour 11 : un seul modèle, le dernier compte rendu par `/me` (`MeKnowledge.me`) ;
+// l'état se déduit (`deriveConfirmation`) et un changement d'`owner` ou d'`afterReload` ne remet jamais « ok » de lui-même. Le paquet web
+// n'a pas d'environnement DOM : `useSessionConfirmation` n'est qu'un état `MeKnowledge`, ce vérificateur et ces fonctions pures.
 
 const me = (id: string): MeResult => ({ ok: true, data: { user: { id } } });
 
-/** Un état local comme `useState` : `apply` lui passe la fonction de transition. */
-function localState(initial: SessionConfirmation) {
-  const box = { state: initial };
+/** Un état local comme `useState` : `apply` lui passe la réponse de `/me`. */
+function localKnowledge() {
+  const box = { k: unknownMe() };
   return {
     box,
-    apply: (next: (was: SessionConfirmation) => SessionConfirmation) => {
-      box.state = next(box.state);
+    apply: (res: MeResult) => {
+      box.k = recordMe(box.k, res);
     },
   };
 }
+const confirmation = (k: MeKnowledge, owner: string, afterReload: boolean): SessionConfirmation =>
+  deriveConfirmation(k, owner, afterReload);
 
-describe("confirmation du compte après un rechargement", () => {
-  it("la page rechargée démarre « checking » (le crochet l'initialise ainsi), le compte confirmé la passe « ok »", async () => {
-    const { box, apply } = localState("checking");
-    await createConfirmer(async () => me("A"))("A", apply);
-    expect(box.state).toBe("ok");
+describe("confirmation du compte (dernier compte rendu par /me)", () => {
+  it("inconnu : « checking » avec la marque, « ok » sans (premier rendu serveur)", () => {
+    expect(confirmation(unknownMe(), "A", true)).toBe("checking");
+    expect(confirmation(unknownMe(), "A", false)).toBe("ok");
   });
 
-  it("/me dit un autre compte : « mismatch » (la page se recharge, comptée)", async () => {
-    const { box, apply } = localState("checking");
-    await createConfirmer(async () => me("C"))("B", apply);
-    expect(box.state).toBe("mismatch");
-    // La décision de la page : étrangère, donc rechargement automatique compté.
-    expect(isForeign({ owner: "B", layoutUserId: "B", announced: undefined, confirmed: box.state })).toBe(true);
+  it("le compte confirmé la passe « ok » ; un autre compte : « mismatch » (la page se recharge, comptée)", async () => {
+    const ok = localKnowledge();
+    await createConfirmer(async () => me("A"))(ok.apply);
+    expect(confirmation(ok.box.k, "A", true)).toBe("ok");
+    const other = localKnowledge();
+    await createConfirmer(async () => me("C"))(other.apply);
+    expect(confirmation(other.box.k, "B", true)).toBe("mismatch");
+    expect(
+      isForeign({
+        owner: "B",
+        layoutUserId: "B",
+        announced: undefined,
+        confirmed: confirmation(other.box.k, "B", true),
+      }),
+    ).toBe(true);
   });
 
   it("401 (plus de session) : « mismatch »", async () => {
-    const { box, apply } = localState("checking");
-    await createConfirmer(async () => ({ ok: false, status: 401 }))("B", apply);
-    expect(box.state).toBe("mismatch");
+    const { box, apply } = localKnowledge();
+    await createConfirmer(async () => ({ ok: false, status: 401 }))(apply);
+    expect(confirmation(box.k, "B", true)).toBe("mismatch");
+    expect(confirmation(box.k, "B", false)).toBe("mismatch");
   });
 
-  it("panne réseau ou délai (status 0) et erreur serveur : « failed » (« Recharger la page »)", async () => {
+  it("panne réseau ou délai (status 0) et erreur serveur sans compte connu : « failed » (« Recharger la page »)", async () => {
     for (const status of [0, 500, 503]) {
-      const { box, apply } = localState("checking");
-      await createConfirmer(async () => ({ ok: false, status }))("A", apply);
-      expect(box.state, `status ${status}`).toBe("failed");
+      const { box, apply } = localKnowledge();
+      await createConfirmer(async () => ({ ok: false, status }))(apply);
+      expect(confirmation(box.k, "A", true), `status ${status}`).toBe("failed");
     }
   });
 
-  it("une revérification silencieuse qui échoue ne masque pas une page déjà confirmée", async () => {
-    const { box, apply } = localState("ok");
-    await createConfirmer(async () => ({ ok: false, status: 0 }))("A", apply);
-    expect(box.state).toBe("ok");
+  it("une revérification qui échoue ne change pas un compte déjà connu (ok comme mismatch)", async () => {
+    for (const [known, expected] of [
+      ["A", "ok"],
+      ["C", "mismatch"],
+    ] as const) {
+      const { box, apply } = localKnowledge();
+      await createConfirmer(async () => me(known))(apply);
+      await createConfirmer(async () => ({ ok: false, status: 0 }))(apply);
+      expect(confirmation(box.k, "A", false)).toBe(expected);
+    }
   });
 
   it("la réponse d'une vérification plus ancienne que la dernière est ignorée (seq)", async () => {
-    const { box, apply } = localState("checking");
+    const { box, apply } = localKnowledge();
     const resolvers: Array<(r: MeResult) => void> = [];
     const verify = createConfirmer(() => new Promise<MeResult>((resolve) => resolvers.push(resolve)));
-    const first = verify("A", apply);
-    const second = verify("A", apply);
-    // La seconde répond d'abord (« ok ») ; la première, tardive, dit un autre compte : elle ne doit rien changer.
+    const first = verify(apply);
+    const second = verify(apply);
     (resolvers[1] as (r: MeResult) => void)(me("A"));
     await second;
     (resolvers[0] as (r: MeResult) => void)(me("C"));
     await first;
-    expect(box.state).toBe("ok");
-  });
-
-  it("nextConfirmation : un compte différent après « ok » repasse « mismatch »", () => {
-    expect(nextConfirmation("ok", me("C"), "A")).toBe("mismatch");
-    expect(nextConfirmation("failed", me("A"), "A")).toBe("ok");
+    expect(confirmation(box.k, "A", true)).toBe("ok");
   });
 
   it("le délai de /me est de 10 s", () => {
@@ -257,39 +269,45 @@ describe("confirmation du compte après un rechargement", () => {
   });
 });
 
-// Partie B1, tour 9 : la confirmation liée au propriétaire confirmé, et le verrou de rechargement levé à la restauration / au blocage.
-
-describe("confirmation liée au propriétaire (instance gardée montée)", () => {
-  it("un autre owner redemande une confirmation tout de suite : « checking », jamais le « ok » de l'ancien", async () => {
-    // Instance montée sur A, confirmée.
-    let tracked = freshConfirmation("A", false);
-    expect(tracked.state).toBe("ok");
-    // Un nouveau résultat « pending » (afterReload) pour B arrive sans remontage : au rendu, « checking » (donc aucune navigation).
-    tracked = trackConfirmation(tracked, "B", true);
-    expect(tracked.state).toBe("checking");
-    // /me est retenu : la page reste « checking » (la navigation n'a lieu que pour « ok »).
+describe("un changement d'owner ou d'afterReload ne remet jamais « ok » (tour 11)", () => {
+  it("(a) session changée, chargeur retardé, /me retenu : jamais « ok » avant la réponse", async () => {
+    // Page rechargée (marque) pour B : inconnu → « checking » ; /me retenu → toujours « checking », donc aucune navigation.
+    const { box, apply } = localKnowledge();
+    expect(confirmation(box.k, "B", true)).toBe("checking");
     let release: (r: MeResult) => void = () => {};
-    const verify = createConfirmer(() => new Promise<MeResult>((resolve) => (release = resolve)));
-    const done = verify("B", (next) => {
-      tracked = applyConfirmation(tracked, "B", next);
-    });
-    expect(tracked.state).toBe("checking");
-    // La réponse arrive : « ok ».
-    release(me("B"));
+    const done = createConfirmer(() => new Promise<MeResult>((resolve) => (release = resolve)))(apply);
+    // Le résultat du chargeur change (autre owner), toujours rien de connu : jamais « ok ».
+    expect(confirmation(box.k, "B2", true)).toBe("checking");
+    release(me("B2"));
     await done;
-    expect(tracked.state).toBe("ok");
+    expect(confirmation(box.k, "B2", true)).toBe("ok");
   });
 
-  it("afterReload qui passe à vrai pour le même compte redemande aussi une confirmation ; rien ne change sinon", () => {
-    const ok = freshConfirmation("A", false);
-    expect(trackConfirmation(ok, "A", false)).toBe(ok);
-    expect(trackConfirmation(ok, "A", true).state).toBe("checking");
+  it("(b) scénario de Codex : /me dit C pendant que la navigation charge B, puis le résultat sans la marque arrive : « mismatch »", async () => {
+    const { box, apply } = localKnowledge();
+    await createConfirmer(async () => me("C"))(apply);
+    // Page « pending » de B : mismatch. La navigation charge les données de B ; le résultat arrive SANS la marque (afterReload faux).
+    expect(confirmation(box.k, "B", true)).toBe("mismatch");
+    const after = confirmation(box.k, "B", false);
+    expect(after).toBe("mismatch");
+    expect(isForeign({ owner: "B", layoutUserId: "B", announced: undefined, confirmed: after })).toBe(true);
+    // Une revérification qui échoue ne l'efface pas non plus.
+    await createConfirmer(async () => ({ ok: false, status: 0 }))(apply);
+    expect(confirmation(box.k, "B", false)).toBe("mismatch");
   });
 
-  it("la réponse d'une vérification faite pour l'ancien compte est ignorée", () => {
-    const now = trackConfirmation(freshConfirmation("A", false), "B", true);
-    expect(applyConfirmation(now, "A", () => "ok")).toBe(now);
-    expect(applyConfirmation(now, "B", () => "ok").state).toBe("ok");
+  it("l'owner qui change compare à nouveau avec le dernier compte connu", async () => {
+    const { box, apply } = localKnowledge();
+    await createConfirmer(async () => me("A"))(apply);
+    expect(confirmation(box.k, "A", false)).toBe("ok");
+    expect(confirmation(box.k, "B", false)).toBe("mismatch");
+    expect(confirmation(box.k, "B", true)).toBe("mismatch");
+  });
+
+  it("« failed » ne devient pas « ok » tant que la marque est là", async () => {
+    const { box, apply } = localKnowledge();
+    await createConfirmer(async () => ({ ok: false, status: 0 }))(apply);
+    expect(confirmation(box.k, "A", true)).toBe("failed");
   });
 });
 
@@ -356,7 +374,7 @@ describe("verrou global de rechargement", () => {
   });
 });
 
-describe("restauration pendant un rechargement, et bouton lié au compte (tour 10)", () => {
+describe("restauration pendant un rechargement, et bouton (tours 10 et 11)", () => {
   it("resetReloadLock dit si un rechargement était en cours", async () => {
     vi.resetModules();
     stubWindow({ storage: true });
@@ -371,27 +389,24 @@ describe("restauration pendant un rechargement, et bouton lié au compte (tour 1
     vi.resetModules();
     const { replaced } = stubWindow({ storage: true });
     const mod = await import("./sessionReload");
-    // « Mise à jour… » : discordance, rechargement lancé.
-    let tracked = mod.freshConfirmation("A", false);
-    tracked = mod.applyConfirmation(tracked, "A", () => "mismatch");
+    // « Mise à jour… » : discordance connue, rechargement lancé.
+    let k = mod.recordMe(mod.unknownMe(), me("C"));
     mod.reloadAutomatically("crew");
     expect(replaced).toHaveLength(1);
-    // Retour puis Avant : pageshow persisté. Le crochet applique exactement ceci.
-    tracked = mod.setStalledOf(tracked, mod.resetReloadLock());
-    tracked = mod.applyConfirmation(tracked, "A", (was) => mod.nextConfirmation(was, me("C"), "A"));
-    expect(tracked.state).toBe("mismatch");
-    expect(tracked.stalled).toBe(true);
+    // Ce que fait le crochet sur un `pageshow` persisté (l'événement réel est dans la recette lotfin-e-site, tour 11).
+    k = mod.setStalledOf(k, mod.resetReloadLock());
+    k = mod.recordMe(k, me("C"));
+    expect(mod.deriveConfirmation(k, "A", false)).toBe("mismatch");
+    expect(k.stalled).toBe(true);
     expect(replaced).toHaveLength(1);
     // Une restauration sans rechargement en cours ne montre pas le bouton.
-    expect(mod.setStalledOf(tracked, mod.resetReloadLock()).stalled).toBe(false);
+    expect(mod.setStalledOf(k, mod.resetReloadLock()).stalled).toBe(false);
   });
 
-  it("le bouton retombe quand le compte ou l'origine de la page change (même recalage que la confirmation)", () => {
-    const slow = setStalledOf(freshConfirmation("A", false), true);
+  it("setStalledOf ne change rien quand la valeur est déjà celle-là", () => {
+    const slow = setStalledOf(unknownMe(), true);
     expect(slow.stalled).toBe(true);
-    expect(trackConfirmation(slow, "A", false)).toBe(slow);
-    expect(trackConfirmation(slow, "B", false).stalled).toBe(false);
-    expect(trackConfirmation(slow, "A", true).stalled).toBe(false);
     expect(setStalledOf(slow, true)).toBe(slow);
+    expect(slow.me).toBeUndefined();
   });
 });

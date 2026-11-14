@@ -653,6 +653,44 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await ctx.close();
   });
 
+  test("tour 11 : page restaurée (vrai pageshow persisté) pendant un rechargement : « Mise à jour… » reste et le bouton s'ajoute dessous", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a);
+    const paul = await cookiesOf(browser, crew.paul.email);
+    // Pendant la navigation retenue, la page ne répond plus aux appels du test : elle se signale par la console, et un vrai
+    // événement `pageshow` persisté part de la fenêtre 3 s plus tard (le délai de « Recharger la page » est de 15 s).
+    const events: string[] = [];
+    a.on("console", (m) => {
+      if (m.text().startsWith("b1seen:")) events.push(m.text().slice(7));
+    });
+    await a.evaluate(() => {
+      const seen = new Set<string>();
+      const look = () => {
+        for (const id of ["crew-refreshing", "crew-refresh-slow"]) {
+          if (!seen.has(id) && document.querySelector(`[data-testid="${id}"]`)) {
+            seen.add(id);
+            console.log(`b1seen:${id}`);
+          }
+        }
+      };
+      new MutationObserver(look).observe(document, { childList: true, subtree: true });
+      setTimeout(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })), 3_000);
+    });
+    hold.arm();
+    await swapCookies(ctx, paul);
+    await announceForbidding(a, crew.paul.id, INVITATION);
+    await hold.arrived;
+    // « Mise à jour… » d'abord, sans bouton ; puis, à la restauration, le bouton s'ajoute dessous sans que « Mise à jour… » parte.
+    await expect.poll(() => events, { timeout: 30_000 }).toEqual(["crew-refreshing", "crew-refresh-slow"]);
+    hold.release();
+    await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+    await expect(a.getByTestId("crew-refresh-slow")).toHaveCount(0);
+    await ctx.close();
+  });
+
   test("A → B → C rapprochés : la réponse préparée sous B, rendue sous C : jamais les données de B, la page finit sous C", async ({
     browser,
   }) => {

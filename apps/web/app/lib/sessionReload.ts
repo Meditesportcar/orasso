@@ -133,95 +133,83 @@ export type MeResult = { ok: true; data: { user: { id: string } } } | { ok: fals
 const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
 
 /**
- * L'état suivant d'après la réponse de `/me` : le compte est celui des données (« ok »), un autre ou plus de session (401 :
- * « mismatch »), ou la vérification n'a pas pu se faire (réseau, délai, serveur) : une vérification attendue (« checking », « failed »)
- * reste en échec ; une revérification silencieuse ne change rien.
+ * Ce que ce document sait de la session courante (tour 11 : un seul modèle, sans optimisme aux transitions). `me` est le dernier
+ * compte rendu par `/me` : `undefined` tant qu'aucune réponse, `null` s'il n'y a plus de session (401), sinon l'identifiant. La
+ * confirmation se DÉDUIT de `me` et de `owner` (`deriveConfirmation`) : un changement d'`owner` ou d'`afterReload` ne remet jamais
+ * « ok » de lui-même, seule la comparaison avec `me` décide.
  */
-export function nextConfirmation(was: SessionConfirmation, res: MeResult, owner: string): SessionConfirmation {
-  if (res.ok) return res.data.user.id === owner ? "ok" : "mismatch";
-  if (res.status === 401) return "mismatch";
-  return was === "checking" || was === "failed" ? "failed" : was;
-}
-
-/**
- * L'état de confirmation LIÉ au compte et à l'origine de la page qu'il a confirmés : une instance gardée montée qui reçoit un autre
- * `owner` (ou un nouveau résultat « après un rechargement ») ne garde jamais le « ok » de l'ancien.
- */
-export type TrackedConfirmation = {
-  owner: string;
-  afterReload: boolean;
-  state: SessionConfirmation;
+export type MeKnowledge = {
+  me: string | null | undefined;
+  /** `/me` n'a pas pu répondre (réseau, délai, serveur) alors qu'aucun compte n'est encore connu. */
+  failed: boolean;
   /** Le rechargement est lent ou a été interrompu : le bouton « Recharger la page » s'ajoute sous « Mise à jour… ». */
   stalled: boolean;
 };
 
-export const freshConfirmation = (owner: string, afterReload: boolean): TrackedConfirmation => ({
-  owner,
-  afterReload,
-  state: afterReload ? "checking" : "ok",
-  stalled: false,
-});
+export const unknownMe = (): MeKnowledge => ({ me: undefined, failed: false, stalled: false });
 
-/** Le bouton « Recharger la page » apparaît (ou disparaît) ; sans effet sur une confirmation qui ne suit plus ce compte. */
-export const setStalledOf = (prev: TrackedConfirmation, stalled: boolean): TrackedConfirmation =>
+/** Une réponse de `/me` : le compte rendu remplace le précédent ; une panne ne change pas un compte déjà connu. */
+export function recordMe(prev: MeKnowledge, res: MeResult): MeKnowledge {
+  if (res.ok) return { ...prev, me: res.data.user.id, failed: false };
+  if (res.status === 401) return { ...prev, me: null, failed: false };
+  return prev.me === undefined && !prev.failed ? { ...prev, failed: true } : prev;
+}
+
+/**
+ * La confirmation déduite : compte connu → « ok » s'il est `owner`, sinon « mismatch » (une autre session, ou plus de session) ;
+ * inconnu → « ok » sans la marque (premier rendu serveur : même cookie que les données), « checking » avec la marque, « failed »
+ * si `/me` n'a pas pu répondre.
+ */
+export function deriveConfirmation(k: MeKnowledge, owner: string, afterReload: boolean): SessionConfirmation {
+  if (k.me !== undefined) return k.me === owner ? "ok" : "mismatch";
+  if (!afterReload) return "ok";
+  return k.failed ? "failed" : "checking";
+}
+
+/** Le bouton « Recharger la page » apparaît (ou disparaît). */
+export const setStalledOf = (prev: MeKnowledge, stalled: boolean): MeKnowledge =>
   prev.stalled === stalled ? prev : { ...prev, stalled };
-
-/** Au rendu : si `owner` ou `afterReload` a changé, une nouvelle confirmation est demandée (« checking » tout de suite, pas dans un effet). */
-export const trackConfirmation = (
-  prev: TrackedConfirmation,
-  owner: string,
-  afterReload: boolean,
-): TrackedConfirmation =>
-  prev.owner === owner && prev.afterReload === afterReload ? prev : freshConfirmation(owner, afterReload);
-
-/** Applique une transition ; la réponse d'une vérification faite pour un autre compte que celui suivi est ignorée. */
-export const applyConfirmation = (
-  prev: TrackedConfirmation,
-  forOwner: string,
-  next: (was: SessionConfirmation) => SessionConfirmation,
-): TrackedConfirmation => (prev.owner === forOwner ? { ...prev, state: next(prev.state) } : prev);
 
 /** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
 export function createConfirmer(read: () => Promise<MeResult>) {
   let seq = 0;
-  return async (
-    owner: string,
-    apply: (next: (was: SessionConfirmation) => SessionConfirmation) => void,
-  ): Promise<void> => {
+  return async (apply: (res: MeResult) => void): Promise<void> => {
     const mine = ++seq;
     const res = await read();
     if (mine !== seq) return;
-    apply((was) => nextConfirmation(was, res, owner));
+    apply(res);
   };
 }
 
 /**
  * `owner` : le compte qui a chargé les données de la page. `afterReload` : la page vient d'un rechargement automatique (le chargeur
- * lit `isAfterReload`) : elle démarre « checking » et le reste jusqu'à ce que `/me` confirme `owner`.
+ * lit `isAfterReload`) : elle est « checking » tant que `/me` n'a rien dit. `stalled` : voir `MeKnowledge`.
  */
 export function useSessionConfirmation(
   owner: string,
   afterReload: boolean,
 ): { confirmed: SessionConfirmation; stalled: boolean } {
-  const [tracked, setTracked] = useState<TrackedConfirmation>(() => freshConfirmation(owner, afterReload));
-  // Réajusté au rendu (modèle React « état dérivé »), avant tout effet : « checking » dès que le compte ou l'origine change.
-  const current = trackConfirmation(tracked, owner, afterReload);
-  if (current !== tracked) setTracked(current);
+  const [known, setKnown] = useState<MeKnowledge>(unknownMe);
+  // Le bouton ne survit pas à un autre compte ni à une autre origine de la page : remis à faux au rendu (le compte connu, lui, reste).
+  const [seen, setSeen] = useState({ owner, afterReload });
+  const changed = seen.owner !== owner || seen.afterReload !== afterReload;
+  if (changed) {
+    setSeen({ owner, afterReload });
+    setKnown((prev) => setStalledOf(prev, false));
+  }
   const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
   if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
   const verify = useCallback(
-    () =>
-      (confirmer.current as ReturnType<typeof createConfirmer>)(owner, (next) =>
-        setTracked((prev) => applyConfirmation(prev, owner, next)),
-      ),
-    [owner],
+    () => (confirmer.current as ReturnType<typeof createConfirmer>)((res) => setKnown((prev) => recordMe(prev, res))),
+    [],
   );
   const first = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `owner` relance la vérification (un autre résultat du chargeur)
   useEffect(() => {
     const wasFirst = first.current;
     first.current = false;
     if (!wasFirst || afterReload) void verify();
-  }, [verify, afterReload]);
+  }, [verify, afterReload, owner]);
   useEffect(() => {
     let hiddenBefore = document.visibilityState === "hidden";
     let blurred = false;
@@ -248,7 +236,7 @@ export function useSessionConfirmation(
         // Document restauré : son verrou de rechargement et son éventuel échec datent d'avant.
         // Un rechargement était en cours : on ne sait pas s'il aboutira, donc le bouton (la page ne change pas, rien ne relance).
         const wasReloading = resetReloadLock();
-        setTracked((prev) => setStalledOf(prev, wasReloading));
+        setKnown((prev) => setStalledOf(prev, wasReloading));
         void verify();
       }
     };
@@ -256,7 +244,7 @@ export function useSessionConfirmation(
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
-    const offStalled = onReloadStalled(() => setTracked((prev) => setStalledOf(prev, true)));
+    const offStalled = onReloadStalled(() => setKnown((prev) => setStalledOf(prev, true)));
     return () => {
       offStalled();
       document.removeEventListener("visibilitychange", onVisibility);
@@ -265,7 +253,7 @@ export function useSessionConfirmation(
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [verify]);
-  return { confirmed: current.state, stalled: current.stalled };
+  return { confirmed: deriveConfirmation(known, owner, afterReload), stalled: known.stalled && !changed };
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */
