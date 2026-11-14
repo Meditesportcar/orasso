@@ -54,7 +54,8 @@ export function AlbumPhotoViewer({
   }, [index]);
   const photos = album.photos;
   const current = index === null ? null : (photos[Math.min(at, photos.length - 1)] ?? null);
-  const registered = organizer && role !== "organizer" ? [...actionsFor(role), ...actionsFor("organizer")] : actionsFor(role);
+  const registered =
+    organizer && role !== "organizer" ? [...actionsFor(role), ...actionsFor("organizer")] : actionsFor(role);
   return (
     <Modal
       visible={index !== null}

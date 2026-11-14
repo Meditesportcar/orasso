@@ -92,10 +92,15 @@ export function PhotosSection({
     if (!cursor || !moreUrl || loadingMore) return;
     setLoadingMore(true);
     setMoreFailed(false);
-    const res = await fetch(`${moreUrl}${moreUrl.includes("?") ? "&" : "?"}limit=50&cursor=${encodeURIComponent(cursor)}`, {
-      credentials: "same-origin",
-    }).catch(() => null);
-    const page = res?.ok ? ((await res.json().catch(() => null)) as { items: AlbumSummary[]; nextCursor: string | null } | null) : null;
+    const res = await fetch(
+      `${moreUrl}${moreUrl.includes("?") ? "&" : "?"}limit=50&cursor=${encodeURIComponent(cursor)}`,
+      {
+        credentials: "same-origin",
+      },
+    ).catch(() => null);
+    const page = res?.ok
+      ? ((await res.json().catch(() => null)) as { items: AlbumSummary[]; nextCursor: string | null } | null)
+      : null;
     if (page) setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], cursor: page.nextCursor }));
     else setMoreFailed(true);
     setLoadingMore(false);
