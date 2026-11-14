@@ -221,9 +221,12 @@ for (const theme of ["beton", "sable"] as const) {
         }),
       );
       await row.click();
-      await expect(page.getByTestId("photo-sheet-error")).toContainText("Tu peux écrire à un média");
+      // Tour 3 : un seul enchaînement par écran, la feuille se ferme au clic ; le refus se dit dans la page.
+      await expect(page.getByTestId("photo-sheet")).toHaveCount(0);
+      await expect(page.getByTestId("my-photos-error")).toContainText("Tu peux écrire à un média");
       expect(page.url()).not.toMatch(/\/messages\//);
       await page.unroute("**/api/media/*/conversation");
+      await page.getByTestId("my-photo-more").first().click();
       await page.getByTestId("photo-sheet-contact").click();
       await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
       expect(page.url()).toBe(conversationUrl);
