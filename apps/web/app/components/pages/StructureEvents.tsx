@@ -184,6 +184,8 @@ export function StructureEvents({
             ))}
           </div>
         )}
+        {/* Une relecture de la page en panne : la liste gardée reste, la panne se dit à part (« Voir plus » reste utilisable). */}
+        {up.readFailed ? <ReadError text={L.eventsReadError} testId="structure-upcoming-reread-error" /> : null}
         <MoreEvents
           next={up.next}
           failed={up.failed}
@@ -220,6 +222,7 @@ export function StructureEvents({
               <EventTile key={event.id} event={event} showStructure={false} />
             ))}
           </div>
+          {old.readFailed ? <ReadError text={L.pastReadError} testId="structure-past-reread-error" /> : null}
           <MoreEvents
             next={old.next}
             failed={old.failed}

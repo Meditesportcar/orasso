@@ -2,7 +2,15 @@
 // pour un tableau relu à l'identique.
 import { describe, expect, it, vi } from "vitest";
 
-import { type EventsPageResult, EventsPager, type EventsPagerState, eventsPagerKey, mergeEvents } from "./eventsPager";
+import {
+  type EventsPageResult,
+  EventsPager,
+  type EventsPagerState,
+  eventsPagerKey,
+  type KeptFirstPage,
+  keepFirstPage,
+  mergeEvents,
+} from "./eventsPager";
 
 type E = { id: string };
 const ev = (...ids: string[]): E[] => ids.map((id) => ({ id }));
@@ -310,5 +318,70 @@ describe("événements d'une Page : « Voir plus »", () => {
     await pager.more();
     pager.sync(eventsPagerKey("s2", "past", "x9"), "c1");
     expect(pager.current.extra).toEqual([]);
+  });
+
+  // Lot B2b, tour 3 : ce que le crochet du site montre (première page gardée + pages ajoutées), sans React.
+  describe("écran : une relecture de la page en panne garde la liste", () => {
+    function screen(
+      pages: Record<string, { items: E[]; next: string | null }>,
+      firstItems: E[],
+      firstNext: string | null,
+    ) {
+      const key = eventsPagerKey("s1", "upcoming", null);
+      let kept: KeptFirstPage<E> | null = null;
+      const pager = new EventsPager<E>(chain(pages), () => undefined, key, firstNext);
+      const show = (first: E[] | null, next: string | null) => {
+        const view = keepFirstPage(kept, key, first, next);
+        kept = view.kept;
+        const cur = pager.current;
+        return {
+          ids: view.items === null ? null : mergeEvents(view.items, cur.extra).map((e) => e.id),
+          next: view.items === null ? null : cur.pages === 0 ? view.next : cur.next,
+          readFailed: view.readFailed,
+        };
+      };
+      return { pager, key, show, firstItems, firstNext };
+    }
+    const pages = (): Record<string, { items: E[]; next: string | null }> => ({
+      c1: { items: ev("c", "d"), next: "c2" },
+      c2: { items: ev("e"), next: null },
+    });
+
+    it("chargement, « Voir plus », relecture en 503 : la liste reste affichée et la panne se dit ; reprise : liste à jour", async () => {
+      const server = pages();
+      const { pager, key, show } = screen(server, ev("a", "b"), "c1");
+      expect(show(ev("a", "b"), "c1")).toEqual({ ids: ["a", "b"], next: "c1", readFailed: false });
+      await pager.more();
+      await pager.more();
+      expect(show(ev("a", "b"), "c1")).toMatchObject({ ids: ["a", "b", "c", "d", "e"], next: null });
+      // Le chargeur relit la page et l'API répond 503 : `first` est nul.
+      pager.onRead(key, null, false);
+      expect(show(null, null)).toEqual({ ids: ["a", "b", "c", "d", "e"], next: null, readFailed: true });
+      // Reprise : un événement de la 2e page est annulé, la liste est à jour.
+      server.c1 = { items: ev("c"), next: "c2" };
+      pager.onRead(key, "c1", true);
+      await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+      expect(show(ev("a", "b"), "c1")).toEqual({ ids: ["a", "b", "c", "e"], next: null, readFailed: false });
+    });
+
+    it("« Voir plus » reste utilisable pendant la panne et son résultat est visible", async () => {
+      const { pager, key, show } = screen(pages(), ev("a", "b"), "c1");
+      show(ev("a", "b"), "c1");
+      await pager.more();
+      pager.onRead(key, null, false);
+      expect(show(null, null)).toMatchObject({ ids: ["a", "b", "c", "d"], next: "c2", readFailed: true });
+      await pager.more();
+      expect(show(null, null)).toMatchObject({ ids: ["a", "b", "c", "d", "e"], next: null, readFailed: true });
+    });
+
+    it("une première lecture en panne (rien de gardé pour cette clé) ne montre rien : la panne remplace la liste", () => {
+      const { show } = screen(pages(), ev("a"), null);
+      expect(show(null, null)).toEqual({ ids: null, next: null, readFailed: false });
+    });
+
+    it("une autre clé ne reprend pas la première page gardée d'une autre liste", () => {
+      const kept: KeptFirstPage<E> = { key: "autre", items: ev("x"), next: null };
+      expect(keepFirstPage(kept, "s1|upcoming|", null, null)).toMatchObject({ items: null, readFailed: false });
+    });
   });
 });

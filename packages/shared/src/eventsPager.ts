@@ -170,3 +170,26 @@ export function structureEventsPath(
     cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
   }`;
 }
+
+/** La dernière première page lue avec succès, pour une clé (structure, liste, curseur de départ). */
+export type KeptFirstPage<T> = { key: string; items: T[]; next: string | null };
+
+/**
+ * Lot B2b, tour 3 : ce que l'écran montre comme première page. Une lecture réussie est gardée ; une relecture en panne
+ * (`first` nul) pour la **même clé** garde la dernière première page lue (la liste affichée, avec les pages ajoutées, ne
+ * disparaît pas) et dit la panne à part (`readFailed`) ; une **première** lecture en panne (rien de gardé pour cette clé)
+ * ne montre rien : l'écran dit la panne à la place de la liste, comme avant.
+ */
+export function keepFirstPage<T>(
+  kept: KeptFirstPage<T> | null,
+  key: string,
+  first: T[] | null,
+  firstNext: string | null,
+): { kept: KeptFirstPage<T> | null; items: T[] | null; next: string | null; readFailed: boolean } {
+  if (first !== null) {
+    const now = { key, items: first, next: firstNext };
+    return { kept: now, items: first, next: firstNext, readFailed: false };
+  }
+  if (kept && kept.key === key) return { kept, items: kept.items, next: kept.next, readFailed: true };
+  return { kept: null, items: null, next: null, readFailed: false };
+}

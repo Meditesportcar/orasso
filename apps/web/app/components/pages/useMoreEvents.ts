@@ -9,6 +9,8 @@ import {
   type EventsPagerState,
   eventsPagerKey,
   freshEventsPagerState,
+  type KeptFirstPage,
+  keepFirstPage,
   mergeEvents,
   structureEventsPath,
 } from "@orasso/shared";
@@ -44,6 +46,10 @@ export function useMoreEvents(
   start: string | null,
 ) {
   const key = eventsPagerKey(structureId, scope, start);
+  // La dernière première page lue pour cette clé : une relecture en panne ne fait pas disparaître la liste (tour 3).
+  const kept = useRef<KeptFirstPage<EventCard> | null>(null);
+  const view = keepFirstPage(kept.current, key, first, firstNext);
+  kept.current = view.kept;
   const where = useRef({ structureId, scope });
   where.current = { structureId, scope };
   const [state, setState] = useState<EventsPagerState<EventCard>>(() =>
@@ -66,10 +72,12 @@ export function useMoreEvents(
   // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
   useEffect(() => pager.onRead(key, firstNext, first !== null), [first, key]);
   // Avant que l'effet ne passe : la clé neuve montre déjà la liste neuve, jamais l'ancienne suite sur la nouvelle base.
-  const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
+  const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, view.next);
   return {
-    items: first === null ? null : mergeEvents(first, cur.extra),
-    next: cur.pages === 0 ? firstNext : cur.next,
+    items: view.items === null ? null : mergeEvents(view.items, cur.extra),
+    // La suite, la panne de la relecture (dite à part, la liste reste) : cohérentes avec ce qui est affiché.
+    next: view.items === null ? null : cur.pages === 0 ? view.next : cur.next,
+    readFailed: view.readFailed,
     failed: cur.failed,
     busy: cur.busy,
     more: () => pager.more(),
