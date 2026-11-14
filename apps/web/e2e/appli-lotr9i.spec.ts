@@ -60,13 +60,15 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(row).toContainText("Média");
     await shot(page, `liste-personne-${theme}-384`);
     await row.click();
-    await expect(page.getByText("Oui, je te l'envoie ce soir.")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("messages").getByText("Oui, je te l'envoie ce soir.")).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByTestId("view-page")).toBeVisible();
     await expect(page.getByTestId("read-by")).toContainText("Lu par Sud Cars");
     const note = `Merci, bien reçu (${theme})`;
     await page.getByTestId("message-body").fill(note);
     await page.getByTestId("message-send").click();
-    await expect(page.getByText(note)).toBeVisible();
+    await expect(page.getByTestId("messages").getByText(note)).toBeVisible();
     await shot(page, `conversation-personne-${theme}-384`);
     await page.getByTestId("view-page").click();
     await page.waitForURL(/\/m\/[0-9a-f-]{36}/, { timeout: 30_000 });
@@ -86,11 +88,11 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(owner.page.getByTestId("reply-as")).toContainText(
       "Kenji_66 voit le nom et le logo de ta page, jamais ton compte personnel.",
     );
-    await expect(owner.page.getByText(note)).toBeVisible();
+    await expect(owner.page.getByTestId("messages").getByText(note)).toBeVisible();
     const answer = `Avec plaisir (${theme})`;
     await owner.page.getByTestId("message-body").fill(answer);
     await owner.page.getByTestId("message-send").click();
-    await expect(owner.page.getByText(answer)).toBeVisible();
+    await expect(owner.page.getByTestId("messages").getByText(answer)).toBeVisible();
     await shot(owner.page, `conversation-titulaire-${theme}-384`);
     await owner.ctx.close();
 

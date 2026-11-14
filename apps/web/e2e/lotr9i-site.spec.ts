@@ -53,8 +53,15 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(link).toHaveAttribute("href", /^\/m\/[0-9a-f-]{36}$/);
       await expect(page.locator('a[href^="/u/"]')).toHaveCount(0);
       const note = `Merci, bien reçu (${theme} ${viewport.width})`;
+      // Le formulaire est hydraté (sinon la saisie est perdue à l'hydratation).
+      await page.waitForLoadState("networkidle");
       await page.locator("#message-body").fill(note);
-      await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+      await Promise.all([
+        page.waitForResponse(
+          (r) => /\/conversations\/[^/]+\/messages$/.test(r.url()) && r.request().method() === "POST",
+        ),
+        page.getByRole("button", { name: "Envoyer", exact: true }).click(),
+      ]);
       await expect(page.getByTestId("messages")).toContainText(note);
       await shot(page, `conversation-personne-${theme}-${viewport.width}`);
       // Le rendu serveur : la page et son HTML initial ne disent rien du titulaire.
@@ -84,8 +91,14 @@ for (const theme of ["beton", "sable"] as const) {
       );
       await expect(page2.getByTestId("messages")).toContainText(note);
       const answer = `Avec plaisir (${theme} ${viewport.width})`;
+      await page2.waitForLoadState("networkidle");
       await page2.locator("#message-body").fill(answer);
-      await page2.getByRole("button", { name: "Envoyer", exact: true }).click();
+      await Promise.all([
+        page2.waitForResponse(
+          (r) => /\/conversations\/[^/]+\/messages$/.test(r.url()) && r.request().method() === "POST",
+        ),
+        page2.getByRole("button", { name: "Envoyer", exact: true }).click(),
+      ]);
       await expect(page2.getByTestId("messages")).toContainText(answer);
       await shot(page2, `conversation-titulaire-${theme}-${viewport.width}`);
       await ctx2.close();
@@ -108,13 +121,13 @@ test("Lea_11 (identification retirée) : l'ouverture est refusée avec le libell
   const lea = await login("lea@orasso.local");
   const kenji = await login("kenji@orasso.local");
   const me = await apiCall<{ personas: { kind: string; id: string }[] }>(kenji, "GET", "/me");
-  const list = await apiCall<{ items: { id: string; page: { id: string } | null }[] }>(
+  const list = await apiCall<{ items: { id: string; kind: string; page: { id: string } | null }[] }>(
     kenji,
     "GET",
     "/me/conversations",
   );
   expect(me.status).toBe(200);
-  const conv = list.data.items[0];
+  const conv = list.data.items.find((c) => c.kind === "media");
   expect(conv).toBeDefined();
   const view = await apiCall<{ page: { id: string } }>(kenji, "GET", `/conversations/${conv?.id}`);
   const refused = await apiCall<{ error: { message: string } }>(
