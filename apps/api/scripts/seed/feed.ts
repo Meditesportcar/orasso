@@ -11,7 +11,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type FeedAspect, feedLabels, OFFICIAL_PSEUDO } from "@orasso/shared";
 import { hashPassword } from "better-auth/crypto";
-import { and, eq, gt, like, lt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, like, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -20,6 +20,7 @@ import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { createAccount, DAY, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
+import { isSeedAccount, isSeedEvent, type SeedPost, seedPostId } from "./seed-scope";
 
 const SIZE: Record<FeedAspect, { width: number; height: number }> = {
   portrait_4_5: { width: 1080, height: 1350 },
@@ -42,7 +43,9 @@ async function monogram(): Promise<Buffer> {
 }
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 type Planned = {
   author: string;
@@ -200,8 +203,31 @@ export async function seedFeed() {
   await seedCoauthors();
 }
 
-/** Légendes des publications que ce seed pose (compte Orasso, Kenji_66, Marc_66) : les autres scripts ne visent que celles-là, jamais une publication réelle. */
-export const SEED_PLAN_CAPTIONS: string[] = PLAN.map((p) => p.caption);
+/** Publications du plan que ce seed pose (compte Orasso, Kenji_66, Marc_66), avec leur identifiant fixe : les autres scripts ne visent que celles-là. */
+export const SEED_PLAN_POSTS: SeedPost[] = PLAN.map((p) => ({
+  id: seedPostId(`plan:${p.author}:${p.caption}`),
+  author: p.author,
+  caption: p.caption,
+}));
+
+/** Les trois publications de Roues Libres 66 (Sarah_66) rattachées au Lydia : identifiants fixes, dans l'ordre de `seedPublications`. */
+export const LYDIA_ORGA_POSTS: SeedPost[] = [
+  {
+    id: seedPostId(`lydia:Sarah_66:${"Le plateau JDM prend forme au pied du Lydia : passez nous voir."}`),
+    author: "Sarah_66",
+    caption: "Le plateau JDM prend forme au pied du Lydia : passez nous voir.",
+  },
+  {
+    id: seedPostId(`lydia:Sarah_66:${"Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond."}`),
+    author: "Sarah_66",
+    caption: "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.",
+  },
+  {
+    id: seedPostId(`lydia:Sarah_66:${"L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h."}`),
+    author: "Sarah_66",
+    caption: "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.",
+  },
+];
 
 async function seedOrassoFeed() {
   await migrateLegacyFeedKeys();
@@ -249,7 +275,7 @@ async function seedOrassoFeed() {
       .resize(size.width, size.height, { fit: "cover", position: "attention" })
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
-    const postId = randomUUID();
+    const postId = SEED_PLAN_POSTS[index]?.id ?? randomUUID();
     const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
     await storage.put(key, out.data);
     const createdAt = new Date(at - plan.hoursAgo * HOUR);
@@ -307,6 +333,64 @@ export async function storeFeedPhoto(postId: string, index: number, position = 0
   return true;
 }
 
+/**
+ * Une publication de la graine rattachée à un événement, indépendamment idempotente (lot R9-fix, tour 5) :
+ *  - identifiant fixe, SANS l'identifiant de l'édition : il survit au renouvellement du Lydia ;
+ *  - rattachée à l'événement courant si elle existe déjà non supprimée (la suppression de l'ancienne édition vide `event_id`) ;
+ *  - créée seulement si aucune ligne n'a cet identifiant (supprimée comprise : jamais recréée) ET si l'auteur n'a pas déjà, sur
+ *    cet événement, une publication de même légende (ancienne base : pas de doublon, l'ancienne ligne n'est pas touchée) ;
+ *  - `onConflictDoNothing` ; la photo n'est posée que si la ligne vient d'être insérée (sinon la ligne est retirée).
+ */
+export async function ensureSeedPost(
+  id: string,
+  values: typeof t.feedPosts.$inferInsert & { eventId: string; caption: string; authorId: string },
+  photoIndex: number | null,
+): Promise<boolean> {
+  await db
+    .update(t.feedPosts)
+    .set({ eventId: values.eventId })
+    .where(
+      and(
+        eq(t.feedPosts.id, id),
+        isNull(t.feedPosts.deletedAt),
+        sql`${t.feedPosts.eventId} is distinct from ${values.eventId}`,
+      ),
+    );
+  const existing = await db.query.feedPosts.findFirst({
+    where: or(
+      eq(t.feedPosts.id, id),
+      and(
+        eq(t.feedPosts.authorId, values.authorId),
+        eq(t.feedPosts.caption, values.caption),
+        eq(t.feedPosts.eventId, values.eventId),
+      ),
+    ),
+  });
+  if (existing) return false;
+  const inserted = await db
+    .insert(t.feedPosts)
+    .values({ ...values, id })
+    .onConflictDoNothing()
+    .returning({ id: t.feedPosts.id });
+  if (inserted.length === 0) return false;
+  if (photoIndex !== null && !(await storeFeedPhoto(id, photoIndex))) {
+    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+    console.log(`Publications rattachées : photos du seed absentes, « ${values.caption.slice(0, 30)}… » non ajoutée.`);
+    return false;
+  }
+  return true;
+}
+
+/** Un compte de la graine, actif (ni supprimé, ni banni, ni suspendu). */
+const activeSeedProfile = async (pseudo: string) => {
+  const p = await byPseudo(pseudo);
+  if (!p || p.deletedAt || p.bannedAt) return null;
+  return p.suspendedUntil && p.suspendedUntil > new Date() ? null : p;
+};
+
+export const BRASA_POST_CAPTION = "Les grillades sont prêtes : bocatas et brochettes, juste à côté de la rangée JDM.";
+export const KENJI_PRESENT_CAPTION = "Belle journée sur le plateau, merci aux organisateurs.";
+
 export async function seedPublications() {
   const lydia = await db.query.events.findFirst({ where: eq(t.events.slug, LYDIA_SLUG) });
   const structure = await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") });
@@ -314,57 +398,58 @@ export async function seedPublications() {
     console.log("Publications rattachées : Lydia ou Roues Libres 66 absents, rien ajouté.");
     return;
   }
-  const already = await db.query.feedPosts.findFirst({
-    where: and(eq(t.feedPosts.structureId, structure.id), eq(t.feedPosts.eventId, lydia.id)),
-  });
-  if (already) {
-    console.log("Publications rattachées déjà présentes.");
-    return;
-  }
+  // Plus de sortie anticipée « déjà présentes » : chaque publication se suffit à elle-même (voir `ensureSeedPost`).
   const at = Date.now();
-  const sarah = await byPseudo("Sarah_66");
-  if (!sarah) throw new Error("Compte Sarah_66 absent");
-  const orga = (
-    id: string,
-    caption: string,
-    hoursAgo: number,
-    extra: Partial<typeof t.feedPosts.$inferInsert> = {},
-  ) => {
-    const createdAt = new Date(at - hoursAgo * HOUR);
-    return db.insert(t.feedPosts).values({
-      id,
-      authorId: sarah.userId,
-      persona: "organizer",
-      structureId: structure.id,
-      eventId: lydia.id,
-      eventRole: "organizer",
-      caption,
-      department: "66",
-      createdAt,
-      updatedAt: createdAt,
-      ...extra,
+  const sarah = await activeSeedProfile("Sarah_66");
+  let made = 0;
+  if (!sarah) {
+    console.log("Publications rattachées : Sarah_66 absente ou suspendue, publications de Roues Libres 66 sautées.");
+  } else {
+    const orga = async (
+      post: SeedPost | undefined,
+      hoursAgo: number,
+      photoIndex: number | null,
+      extra: Partial<typeof t.feedPosts.$inferInsert> = {},
+    ) => {
+      if (!post) return;
+      const createdAt = new Date(at - hoursAgo * HOUR);
+      const done = await ensureSeedPost(
+        post.id,
+        {
+          ...extra,
+          authorId: sarah.userId,
+          persona: "organizer",
+          structureId: structure.id,
+          eventId: lydia.id,
+          eventRole: "organizer",
+          caption: post.caption,
+          department: "66",
+          createdAt,
+          updatedAt: createdAt,
+        },
+        photoIndex,
+      );
+      if (done) made++;
+    };
+    // Avec une photo, puis sans (l'affiche de l'événement fait le visuel : une référence, jamais une copie), puis « Info
+    // importante » déjà envoyée (motif Horaires ; aucune notification réelle n'est écrite).
+    await orga(LYDIA_ORGA_POSTS[0], 3, 3);
+    await orga(LYDIA_ORGA_POSTS[1], 8, null);
+    await orga(LYDIA_ORGA_POSTS[2], 26, null, {
+      importantReason: "schedule",
+      importantSentAt: new Date(at - 26 * HOUR),
     });
-  };
-
-  // Avec une photo.
-  const withPhoto = randomUUID();
-  await orga(withPhoto, "Le plateau JDM prend forme au pied du Lydia : passez nous voir.", 3);
-  if (!(await storeFeedPhoto(withPhoto, 3))) {
-    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, withPhoto));
-    console.log("Publications rattachées : photos du seed absentes, rien ajouté.");
-    return;
   }
-  // Sans photo : l'affiche de l'événement fait le visuel (une référence, jamais une copie).
-  await orga(randomUUID(), "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.", 8);
-  // « Info importante » : déjà envoyée (motif Horaires). Seed : aucune notification réelle n'est écrite.
-  await orga(randomUUID(), "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.", 26, {
-    importantReason: "schedule",
-    importantSentAt: new Date(at - 26 * HOUR),
-  });
 
-  // La Brasa, prestataire retenu au Lydia.
-  const brasa = await db.query.providerProfiles.findFirst({ where: eq(t.providerProfiles.name, "La Brasa") });
-  if (brasa) {
+  // La Brasa, prestataire retenu au Lydia : candidature retenue ET publication sur le Lydia courant (la candidature part avec
+  // l'ancien événement par cascade). Seulement si la page et son titulaire sont de la graine et actifs.
+  const sofia = await activeSeedProfile("Sofia_66");
+  const brasa = sofia
+    ? await db.query.providerProfiles.findFirst({
+        where: and(eq(t.providerProfiles.userId, sofia.userId), isNull(t.providerProfiles.deletedAt)),
+      })
+    : null;
+  if (sofia && brasa) {
     const kept = await db.query.applications.findFirst({
       where: and(
         eq(t.applications.eventId, lydia.id),
@@ -384,25 +469,27 @@ export async function seedPublications() {
         decidedAt: new Date(at),
       });
     }
-    const id = randomUUID();
     const createdAt = new Date(at - 5 * HOUR);
-    await db.insert(t.feedPosts).values({
-      id,
-      authorId: brasa.userId,
-      persona: "provider",
-      providerId: brasa.id,
-      eventId: lydia.id,
-      eventRole: "on_site",
-      caption: "Les grillades sont prêtes : bocatas et brochettes, juste à côté de la rangée JDM.",
-      department: "66",
-      createdAt,
-      updatedAt: createdAt,
-    });
-    if (!(await storeFeedPhoto(id, 5))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+    const added = await ensureSeedPost(
+      seedPostId(`lydia:Sofia_66:${BRASA_POST_CAPTION}`),
+      {
+        authorId: brasa.userId,
+        persona: "provider",
+        providerId: brasa.id,
+        eventId: lydia.id,
+        eventRole: "on_site",
+        caption: BRASA_POST_CAPTION,
+        department: "66",
+        createdAt,
+        updatedAt: createdAt,
+      },
+      5,
+    );
+    if (added) made++;
   }
 
   // Kenji_66 « était au » un événement fini depuis moins de 30 jours, présence validée.
-  const kenji = await byPseudo("Kenji_66");
+  const kenji = await activeSeedProfile("Kenji_66");
   if (kenji) {
     const recent = await db
       .select()
@@ -411,6 +498,8 @@ export async function seedPublications() {
         and(
           eq(t.events.status, "published"),
           sql`${t.events.admission} <> 'invite_only'`,
+          // Seulement un événement de la graine : jamais une présence fabriquée sur un événement réel.
+          isSeedEvent("events"),
           lt(t.events.endsAt, new Date(at)),
           gt(t.events.endsAt, new Date(at - 30 * DAY)),
         ),
@@ -426,35 +515,49 @@ export async function seedPublications() {
     );
     const finished = recent.find((e) => proven.has(e.id)) ?? recent[0];
     if (finished) {
-      if (!proven.has(finished.id)) {
-        await db
-          .insert(t.eventPresences)
-          .values({
-            eventId: finished.id,
-            userId: kenji.userId,
-            validatedAt: new Date(finished.endsAt.getTime() - HOUR),
-          })
-          .onConflictDoNothing();
-      }
-      const id = randomUUID();
       const createdAt = new Date(at - 9 * HOUR);
-      await db.insert(t.feedPosts).values({
-        id,
-        authorId: kenji.userId,
-        persona: "fan",
-        eventId: finished.id,
-        eventRole: "attendee",
-        caption: "Belle journée sur le plateau, merci aux organisateurs.",
-        department: "66",
-        createdAt,
-        updatedAt: createdAt,
+      // Identifiant fixe dérivé du slug de l'événement de la graine : la publication ne se déplace pas d'un événement à l'autre avec le
+      // temps, et aucun doublon auteur + légende sur un autre événement (ancienne base).
+      const presentId = seedPostId(`present:Kenji_66:${finished.slug}:${KENJI_PRESENT_CAPTION}`);
+      const elsewhere = await db.query.feedPosts.findFirst({
+        where: and(eq(t.feedPosts.authorId, kenji.userId), eq(t.feedPosts.caption, KENJI_PRESENT_CAPTION)),
       });
-      if (!(await storeFeedPhoto(id, 7))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+      let added = false;
+      if (!(elsewhere && elsewhere.id !== presentId)) {
+        // Aucune présence sans publication : la présence n'est écrite qu'après le contrôle ci-dessus.
+        if (!proven.has(finished.id)) {
+          await db
+            .insert(t.eventPresences)
+            .values({
+              eventId: finished.id,
+              userId: kenji.userId,
+              validatedAt: new Date(finished.endsAt.getTime() - HOUR),
+            })
+            .onConflictDoNothing();
+        }
+        added = await ensureSeedPost(
+          presentId,
+          {
+            authorId: kenji.userId,
+            persona: "fan",
+            eventId: finished.id,
+            eventRole: "attendee",
+            caption: KENJI_PRESENT_CAPTION,
+            department: "66",
+            createdAt,
+            updatedAt: createdAt,
+          },
+          7,
+        );
+      }
+      if (added) made++;
     } else {
       console.log("Publications rattachées : aucun événement fini depuis moins de 30 jours pour Kenji_66.");
     }
   }
-  console.log("Publications rattachées : Roues Libres 66 (3), La Brasa, Kenji_66 ajoutées.");
+  console.log(
+    `Publications rattachées : ${made} ajoutée(s) (Roues Libres 66, La Brasa, Kenji_66), les autres déjà présentes.`,
+  );
 }
 
 // --- Collaboration : publications co-signées (vague R8, lot R8o) -------------------------------------------------------------
