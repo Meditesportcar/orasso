@@ -20,7 +20,7 @@ import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { createAccount, DAY, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
-import { isSeedAccount, type SeedPost, seedPostId } from "./seed-scope";
+import { isSeedAccount, isSeedEvent, type SeedPost, seedPostId } from "./seed-scope";
 
 const SIZE: Record<FeedAspect, { width: number; height: number }> = {
   portrait_4_5: { width: 1080, height: 1350 },
@@ -498,6 +498,8 @@ export async function seedPublications() {
         and(
           eq(t.events.status, "published"),
           sql`${t.events.admission} <> 'invite_only'`,
+          // Seulement un événement de la graine : jamais une présence fabriquée sur un événement réel.
+          isSeedEvent("events"),
           lt(t.events.endsAt, new Date(at)),
           gt(t.events.endsAt, new Date(at - 30 * DAY)),
         ),
@@ -524,20 +526,29 @@ export async function seedPublications() {
           .onConflictDoNothing();
       }
       const createdAt = new Date(at - 9 * HOUR);
-      const added = await ensureSeedPost(
-        seedPostId(`lydia:Kenji_66:${KENJI_PRESENT_CAPTION}`),
-        {
-          authorId: kenji.userId,
-          persona: "fan",
-          eventId: finished.id,
-          eventRole: "attendee",
-          caption: KENJI_PRESENT_CAPTION,
-          department: "66",
-          createdAt,
-          updatedAt: createdAt,
-        },
-        7,
-      );
+      // Identifiant fixe dérivé du slug de l'événement de la graine : la publication ne se déplace pas d'un événement à l'autre avec le
+      // temps, et aucun doublon auteur + légende sur un autre événement (ancienne base).
+      const presentId = seedPostId(`present:Kenji_66:${finished.slug}:${KENJI_PRESENT_CAPTION}`);
+      const elsewhere = await db.query.feedPosts.findFirst({
+        where: and(eq(t.feedPosts.authorId, kenji.userId), eq(t.feedPosts.caption, KENJI_PRESENT_CAPTION)),
+      });
+      const added =
+        elsewhere && elsewhere.id !== presentId
+          ? false
+          : await ensureSeedPost(
+              presentId,
+              {
+                authorId: kenji.userId,
+                persona: "fan",
+                eventId: finished.id,
+                eventRole: "attendee",
+                caption: KENJI_PRESENT_CAPTION,
+                department: "66",
+                createdAt,
+                updatedAt: createdAt,
+              },
+              7,
+            );
       if (added) made++;
     } else {
       console.log("Publications rattachées : aucun événement fini depuis moins de 30 jours pour Kenji_66.");

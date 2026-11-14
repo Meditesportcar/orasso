@@ -13,6 +13,7 @@ import * as t from "../../src/db/schema";
 import { resetDb } from "../../test/helpers";
 import { BRASA_POST_CAPTION, KENJI_PRESENT_CAPTION, LYDIA_ORGA_POSTS } from "./feed";
 import { JULIE_CAPTION, MARC_CAPTION } from "./feed-mentions";
+import { OUTING_CAPTION } from "./feed-seen";
 import { createAccount } from "./helpers";
 
 const API = fileURLToPath(new URL("../..", import.meta.url));
@@ -183,6 +184,7 @@ describe("rejeu de la graine après une activité réelle", () => {
     ["Sofia_66", BRASA_POST_CAPTION],
     ["Julie_66", JULIE_CAPTION],
     ["Marc_66", MARC_CAPTION],
+    ["Sarah_66", OUTING_CAPTION],
   ];
   const OUTING = "Le programme de la journée est en ligne%";
   /** Nombre de lignes non supprimées d'un auteur avec une légende (aucun doublon : au plus une). */
@@ -224,7 +226,7 @@ describe("rejeu de la graine après une activité réelle", () => {
     expect(await db.select().from(t.feedPosts).where(inArray(t.feedPosts.id, ids))).toHaveLength(3);
     for (const [pseudo, caption] of lydiaKeys) expect(await rows(pseudo, caption), `${pseudo} avant`).toHaveLength(1);
     const outingBefore = await db.select().from(t.feedPosts).where(like(t.feedPosts.caption, OUTING));
-    expect(outingBefore.length).toBeLessThanOrEqual(1);
+    expect(outingBefore).toHaveLength(1);
     // Une des trois publications de Roues Libres 66 est supprimée par Sarah_66 : elle ne revient jamais.
     await db
       .update(t.feedPosts)
@@ -257,7 +259,9 @@ describe("rejeu de la graine après une activité réelle", () => {
       .select()
       .from(t.feedPosts)
       .where(and(like(t.feedPosts.caption, OUTING), isNull(t.feedPosts.deletedAt)));
-    expect(outing.length).toBeLessThanOrEqual(1);
+    expect(outing).toHaveLength(1);
+    const kenjiEvent = kenjiBefore[0]?.eventId;
+    expect(kenjiBefore, 'Kenji "était au" avant le 2e renouvellement').toHaveLength(1);
 
     // Deuxième renouvellement : aucun doublon (par auteur et légende), la publication supprimée ne revient toujours pas.
     const second = await renew();
@@ -269,7 +273,10 @@ describe("rejeu de la graine après une activité réelle", () => {
       for (const p of found) expect(p.eventId).toBe(second?.id);
     }
     expect(await brasaKept(second?.id ?? "")).toHaveLength(1);
-    expect(await rows("Kenji_66", KENJI_PRESENT_CAPTION)).toHaveLength(kenjiBefore.length);
+    const kenjiAfter = await rows("Kenji_66", KENJI_PRESENT_CAPTION);
+    expect(kenjiAfter).toHaveLength(1);
+    // La publication de Kenji ne se déplace pas d'un événement à l'autre.
+    expect(kenjiAfter[0]?.eventId).toBe(kenjiEvent);
     expect(
       (
         await db
@@ -277,7 +284,14 @@ describe("rejeu de la graine après une activité réelle", () => {
           .from(t.feedPosts)
           .where(and(like(t.feedPosts.caption, OUTING), isNull(t.feedPosts.deletedAt)))
       ).length,
-    ).toBe(outing.length);
+    ).toBe(1);
+    // La publication supprimée reste physiquement présente (jamais recréée, jamais purgée).
+    const gone = await db
+      .select()
+      .from(t.feedPosts)
+      .where(eq(t.feedPosts.id, ids[2] ?? ""));
+    expect(gone).toHaveLength(1);
+    expect(gone[0]?.deletedAt).not.toBeNull();
   }, 900_000);
 
   it("renouvellement : propriétaire hors graine ou structure supprimée, rien n'est supprimé", async () => {
@@ -324,5 +338,109 @@ describe("rejeu de la graine après une activité réelle", () => {
       .from(t.feedPosts)
       .where(like(t.feedPosts.caption, "Le programme de la journée est en ligne%"));
     expect(outing.filter((p) => p.authorId === sarah.userId)).toEqual([]);
+  }, 900_000);
+
+  it("Julie_66 et Marc_66 à identifiant aléatoire (ancienne base) : au renouvellement, exactement une publication chacune sur le Lydia courant, mention masquée présente", async () => {
+    const lydia = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    const julie = await profile("Julie_66");
+    const marc = await profile("Marc_66");
+    // Ancienne base : les publications fixes sont remplacées par des copies à identifiant aléatoire sur le Lydia.
+    await db.delete(t.feedPosts).where(inArray(t.feedPosts.caption, [JULIE_CAPTION, MARC_CAPTION]));
+    await realPost({
+      authorId: julie.userId,
+      caption: JULIE_CAPTION,
+      eventId: lydia?.id,
+      eventRole: "attendee",
+      createdAt: new Date(),
+    });
+    await realPost({
+      authorId: marc.userId,
+      caption: MARC_CAPTION,
+      eventId: lydia?.id,
+      eventRole: "attendee",
+      createdAt: new Date(),
+    });
+    const fresh = await renew();
+    for (const [pseudo, caption] of [
+      ["Julie_66", JULIE_CAPTION],
+      ["Marc_66", MARC_CAPTION],
+    ] as const) {
+      const found = await rows(pseudo, caption);
+      const onFresh = found.filter((p) => p.eventId === fresh?.id);
+      expect(onFresh, `${pseudo} sur le Lydia courant`).toHaveLength(1);
+    }
+    const julieOnFresh = (await rows("Julie_66", JULIE_CAPTION)).find((p) => p.eventId === fresh?.id);
+    const mentions = await db
+      .select()
+      .from(t.feedPostMentions)
+      .where(eq(t.feedPostMentions.postId, julieOnFresh?.id ?? ""));
+    expect(mentions.filter((m) => m.hiddenAt !== null)).toHaveLength(1);
+  }, 900_000);
+
+  it("« Pour ta sortie » : Roues Libres 66 suspendue et Lydia terminé : la publication ne bouge pas vers une autre sortie", async () => {
+    const before = (await db.select().from(t.feedPosts).where(like(t.feedPosts.caption, OUTING)))[0];
+    expect(before?.eventId).not.toBeNull();
+    await db.update(t.structures).set({ verification: "suspended" }).where(eq(t.structures.slug, "roues-libres-66"));
+    await db
+      .update(t.events)
+      .set({ endsAt: new Date(Date.now() - 3_600_000) })
+      .where(eq(t.events.slug, "rassemblement-du-lydia"));
+    seed();
+    const after = (await db.select().from(t.feedPosts).where(like(t.feedPosts.caption, OUTING)))[0];
+    expect(after?.id).toBe(before?.id);
+    expect(after?.eventId).toBe(before?.eventId);
+    expect(after?.deletedAt).toBeNull();
+  }, 900_000);
+
+  it("Kenji « était au » : jamais sur un événement réel récent (pas de présence fabriquée, la publication ne bouge pas)", async () => {
+    const kenji = await profile("Kenji_66");
+    const [post] = await rows("Kenji_66", KENJI_PRESENT_CAPTION);
+    expect(post?.eventId).toBeTruthy();
+    const eventId = post?.eventId ?? "";
+    // Cet événement devient « réel » (slug hors graine) ; la publication de démonstration et la présence sont retirées.
+    await db.update(t.events).set({ slug: "evenement-reel-recent" }).where(eq(t.events.id, eventId));
+    await db.delete(t.feedPosts).where(eq(t.feedPosts.id, post?.id ?? ""));
+    await db
+      .delete(t.eventPresences)
+      .where(and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)));
+    seed();
+    expect(
+      await db.query.eventPresences.findFirst({
+        where: and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, kenji.userId)),
+      }),
+    ).toBeUndefined();
+    expect(
+      await db.query.feedPosts.findFirst({
+        where: and(
+          eq(t.feedPosts.eventId, eventId),
+          eq(t.feedPosts.authorId, kenji.userId),
+          like(t.feedPosts.caption, KENJI_PRESENT_CAPTION),
+        ),
+      }),
+    ).toBeUndefined();
+  }, 900_000);
+
+  it("voiture de Damien_66 supprimée : l'ancien Lydia est gardé, la graine va au bout", async () => {
+    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    const damien = await profile("Damien_66");
+    await db.update(t.vehicles).set({ status: "sold" }).where(eq(t.vehicles.ownerId, damien.userId));
+    await db
+      .update(t.events)
+      .set({ endsAt: new Date(Date.now() + 3_600_000) })
+      .where(eq(t.events.slug, "rassemblement-du-lydia"));
+    const out = seed();
+    expect((await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") }))?.id).toBe(old?.id);
+    expect(out).toContain("Messagerie : Kenji_66");
+  }, 900_000);
+
+  it("événement du Lydia qui n'est pas celui de la graine (créateur réel) : rien n'est supprimé", async () => {
+    const old = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+    await db
+      .update(t.events)
+      .set({ createdBy: null, endsAt: new Date(Date.now() + 3_600_000) })
+      .where(eq(t.events.slug, "rassemblement-du-lydia"));
+    const out = seed();
+    expect((await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") }))?.id).toBe(old?.id);
+    expect(out).toContain("Messagerie : Kenji_66");
   }, 900_000);
 });

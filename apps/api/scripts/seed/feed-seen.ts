@@ -15,9 +15,9 @@ import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { LYDIA_ORGA_POSTS, SEED_PLAN_POSTS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
-import { isSeedAccount, isSeedPost, SEED_EVENT_SLUGS, seedPostId } from "./seed-scope";
+import { isSeedAccount, isSeedPost, seedPostId } from "./seed-scope";
 
-const OUTING_CAPTION = "Le programme de la journée est en ligne : retrouvez-nous dès l'ouverture des portes.";
+export const OUTING_CAPTION = "Le programme de la journée est en ligne : retrouvez-nous dès l'ouverture des portes.";
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({
@@ -146,10 +146,9 @@ export async function seedFeedSeen() {
         coalesce(e.poster_post_key, e.poster_key, e.poster_photo_key) as poster
       from events e
       where e.status = 'published' and e.ends_at > now()
-        and e.slug in (${sql.join(
-          SEED_EVENT_SLUGS.map((slug) => sql`${slug}`),
-          sql`, `,
-        )})
+        and e.slug = 'rassemblement-du-lydia'
+        and exists (select 1 from structures s where s.id = e.structure_id and s.slug = 'roues-libres-66'
+          and s.deleted_at is null and s.verification <> 'suspended')
         and (exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${damien.userId}
               and a.kind = 'vehicle' and a.status = 'accepted')
           or exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${damien.userId} and k.status = 'valid'))
@@ -158,76 +157,89 @@ export async function seedFeedSeen() {
   const event = outing.rows[0];
   let journal = "aucune sortie à venir pour Damien_66";
   if (event) {
-    // Identifiant fixe sans l'identifiant de l'événement : rattachée à l'événement courant si elle existe (renouvellement), jamais
-    // recréée si elle a été supprimée, pas de doublon d'une ancienne publication de même légende sur cet événement.
-    const outingId = seedPostId(`outing:${OUTING_CAPTION}`);
-    await db
-      .update(t.feedPosts)
-      .set({ eventId: event.id })
-      .where(
-        and(
-          eq(t.feedPosts.id, outingId),
-          isNull(t.feedPosts.deletedAt),
-          sql`${t.feedPosts.eventId} is distinct from ${event.id}::uuid`,
-        ),
-      );
-    const already = await db.query.feedPosts.findFirst({
-      where: or(
-        eq(t.feedPosts.id, outingId),
-        and(eq(t.feedPosts.eventId, event.id), eq(t.feedPosts.caption, OUTING_CAPTION)),
+    // Éligibilité contrôlée AVANT toute mutation : propriétaire de la structure de la graine, actif, compte de la graine, profil actif ;
+    // l'événement est le Lydia (slug et structure de la graine), jamais une autre sortie de Damien_66. Sinon rien ne bouge.
+    const owner = await db.query.structureMembers.findFirst({
+      where: and(
+        eq(t.structureMembers.structureId, event.structure_id),
+        eq(t.structureMembers.role, "owner"),
+        eq(t.structureMembers.status, "active"),
+        isSeedAccount(t.structureMembers.userId),
       ),
     });
-    if (already) journal = "déjà présente";
-    else {
-      const owner = await db.query.structureMembers.findFirst({
-        where: and(
-          eq(t.structureMembers.structureId, event.structure_id),
-          eq(t.structureMembers.role, "owner"),
-          eq(t.structureMembers.status, "active"),
-          // Jamais au nom d'un organisateur réel : événement de la graine ET propriétaire de la graine, sinon rien.
-          isSeedAccount(t.structureMembers.userId),
+    const ownerProfile = owner
+      ? await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) })
+      : null;
+    const ownerActive =
+      Boolean(ownerProfile) &&
+      !ownerProfile?.bannedAt &&
+      !ownerProfile?.deletedAt &&
+      !(ownerProfile?.suspendedUntil && ownerProfile.suspendedUntil > new Date());
+    const structure = await db.query.structures.findFirst({ where: eq(t.structures.id, event.structure_id) });
+    if (!owner || !ownerActive || !structure) {
+      journal = "propriétaire ou structure inéligibles, rien";
+    } else {
+      // Identifiant fixe sans l'identifiant de l'événement : rattachée à l'événement courant si elle existe (renouvellement), jamais
+      // recréée si elle a été supprimée, pas de doublon d'une ancienne publication de même légende sur cet événement.
+      const outingId = seedPostId(`outing:${OUTING_CAPTION}`);
+      await db
+        .update(t.feedPosts)
+        .set({ eventId: event.id })
+        .where(
+          and(
+            eq(t.feedPosts.id, outingId),
+            isNull(t.feedPosts.deletedAt),
+            sql`${t.feedPosts.eventId} is distinct from ${event.id}::uuid`,
+          ),
+        );
+      const already = await db.query.feedPosts.findFirst({
+        where: or(
+          eq(t.feedPosts.id, outingId),
+          and(eq(t.feedPosts.eventId, event.id), eq(t.feedPosts.caption, OUTING_CAPTION)),
         ),
       });
-      const structure = await db.query.structures.findFirst({ where: eq(t.structures.id, event.structure_id) });
-      const photo = await reviewedNoPlateCar(4);
-      if (owner && structure && (photo || event.poster)) {
-        const createdAt = new Date(at - 5 * HOUR);
-        const id = outingId;
-        const inserted = await db
-          .insert(t.feedPosts)
-          .values({
-            id,
-            authorId: owner.userId,
-            persona: "organizer",
-            structureId: structure.id,
-            eventId: event.id,
-            eventRole: "organizer",
-            caption: OUTING_CAPTION,
-            department: structure.department ?? "66",
-            createdAt,
-            updatedAt: createdAt,
-          })
-          .onConflictDoNothing()
-          .returning({ id: t.feedPosts.id });
-        // Une photo du seed (aucune plaque lisible) ; sans elle, l'affiche de l'événement fait le visuel.
-        if (photo && inserted.length > 0) {
-          const out = await sharp(photo.data)
-            .resize(1080, 1350, { fit: "cover", position: "attention" })
-            .webp({ quality: 80 })
-            .toBuffer({ resolveWithObject: true });
-          const key = feedPhotoKey(id, randomBytes(16).toString("hex"));
-          await storage.put(key, out.data);
-          await db.insert(t.feedPostPhotos).values({
-            postId: id,
-            storageKey: key,
-            width: out.info.width,
-            height: out.info.height,
-            position: 0,
-            plateBlurred: false,
-            noPlateConfirmed: true,
-          });
+      if (already) journal = "déjà présente";
+      else {
+        const photo = await reviewedNoPlateCar(4);
+        if (owner && structure && (photo || event.poster)) {
+          const createdAt = new Date(at - 5 * HOUR);
+          const id = outingId;
+          const inserted = await db
+            .insert(t.feedPosts)
+            .values({
+              id,
+              authorId: owner.userId,
+              persona: "organizer",
+              structureId: structure.id,
+              eventId: event.id,
+              eventRole: "organizer",
+              caption: OUTING_CAPTION,
+              department: structure.department ?? "66",
+              createdAt,
+              updatedAt: createdAt,
+            })
+            .onConflictDoNothing()
+            .returning({ id: t.feedPosts.id });
+          // Une photo du seed (aucune plaque lisible) ; sans elle, l'affiche de l'événement fait le visuel.
+          if (photo && inserted.length > 0) {
+            const out = await sharp(photo.data)
+              .resize(1080, 1350, { fit: "cover", position: "attention" })
+              .webp({ quality: 80 })
+              .toBuffer({ resolveWithObject: true });
+            const key = feedPhotoKey(id, randomBytes(16).toString("hex"));
+            await storage.put(key, out.data);
+            await db.insert(t.feedPostPhotos).values({
+              postId: id,
+              storageKey: key,
+              width: out.info.width,
+              height: out.info.height,
+              position: 0,
+              plateBlurred: false,
+              noPlateConfirmed: true,
+            });
+          }
+          journal = "ajoutée";
         }
-        journal = "ajoutée";
       }
     }
   }

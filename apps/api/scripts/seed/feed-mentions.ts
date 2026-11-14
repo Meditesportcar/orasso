@@ -2,17 +2,12 @@
 // Rassemblement du Lydia (Roues Libres 66) ; les mentions de La Brasa (« Sur place ») et de Kenji_66 (« Passionnés ») sont
 // matérialisées par la reprise (`backfillMentions`, sans notification) ; une mention masquée (Julie_66, masquée sur la
 // fiche du Lydia par Sarah_66) ; une publication d'un compte privé (Marc_66) rattachée au Lydia, qui n'apparaît nulle part.
-import { randomBytes } from "node:crypto";
-import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
-import sharp from "sharp";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
-import { storage } from "../../src/lib/storage";
 import { backfillMentions } from "../../src/modules/feed/mentions";
-import { feedPhotoKey } from "../../src/modules/feed/posts";
-import { LYDIA_ORGA_POSTS } from "./feed";
+import { ensureSeedPost, LYDIA_ORGA_POSTS } from "./feed";
 import { HOUR } from "./helpers";
-import { reviewedNoPlateCar } from "./photos";
 import { isSeedAccount, isSeedPost, seedPostId } from "./seed-scope";
 
 const LYDIA_SLUG = "rassemblement-du-lydia";
@@ -23,28 +18,6 @@ const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({
     where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
   });
-
-async function photoFor(postId: string, index: number): Promise<boolean> {
-  const photo = await reviewedNoPlateCar(index);
-  if (!photo) return false;
-  const out = await sharp(photo.data)
-    .resize(1080, 1350, { fit: "cover", position: "attention" })
-    .webp({ quality: 80 })
-    .toBuffer({ resolveWithObject: true });
-  const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
-  await storage.put(key, out.data);
-  await db.insert(t.feedPostPhotos).values({
-    postId,
-    storageKey: key,
-    width: out.info.width,
-    height: out.info.height,
-    position: 0,
-    plateBlurred: false,
-    // Photo du seed regardée : aucune plaque lisible (décision vraie, pas un contournement).
-    noPlateConfirmed: true,
-  });
-  return true;
-}
 
 export async function seedFeedMentions() {
   const lydia = await db.query.events.findFirst({ where: eq(t.events.slug, LYDIA_SLUG) });
@@ -64,36 +37,23 @@ export async function seedFeedMentions() {
   ] as const) {
     const person = await byPseudo(pseudo);
     if (!person) continue;
-    // Identifiant fixe : la publication de la graine se retrouve par lui, jamais par sa légende (une vraie publication de même légende
-    // n'est pas à elle). Renouvellement du Lydia : elle est rattachée à la nouvelle édition, jamais recréée.
-    const id = seedPostId(`mention:${pseudo}:${caption}`);
-    await db
-      .update(t.feedPosts)
-      .set({ eventId: lydia.id })
-      .where(
-        and(
-          eq(t.feedPosts.id, id),
-          isNull(t.feedPosts.deletedAt),
-          sql`${t.feedPosts.eventId} is distinct from ${lydia.id}`,
-        ),
-      );
-    const already = await db.query.feedPosts.findFirst({
-      where: or(eq(t.feedPosts.id, id), and(eq(t.feedPosts.authorId, person.userId), eq(t.feedPosts.caption, caption))),
-    });
-    if (already) continue;
+    // Identifiant fixe, rattachement au Lydia courant, jamais recréée si supprimée, pas de doublon auteur + légende sur le Lydia
+    // courant (ancienne base) : voir `ensureSeedPost` (`feed.ts`).
     const createdAt = new Date(at - hoursAgo * HOUR);
-    await db.insert(t.feedPosts).values({
-      id,
-      authorId: person.userId,
-      persona: "fan",
-      eventId: lydia.id,
-      eventRole: "attendee",
-      caption,
-      department: "66",
-      createdAt,
-      updatedAt: createdAt,
-    });
-    if (!(await photoFor(id, photoIndex))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
+    await ensureSeedPost(
+      seedPostId(`mention:${pseudo}:${caption}`),
+      {
+        authorId: person.userId,
+        persona: "fan",
+        eventId: lydia.id,
+        eventRole: "attendee",
+        caption,
+        department: "66",
+        createdAt,
+        updatedAt: createdAt,
+      },
+      photoIndex,
+    );
   }
 
   // Les mentions de toutes les publications rattachées, citées ou signées « collaboration » (reprise : sans notification).

@@ -267,6 +267,24 @@ async function themedVotes(
   return n;
 }
 
+/** Damien_66 peut-il avoir une voiture inscrite (sans rien écrire) : voiture montrable, ou voiture active non certifiée + photo relue. */
+async function carUsable(userId: string): Promise<boolean> {
+  if (await showableCar(userId)) return true;
+  const [car] = await db
+    .select({ id: t.vehicles.id })
+    .from(t.vehicles)
+    .where(
+      and(
+        eq(t.vehicles.ownerId, userId),
+        eq(t.vehicles.status, "active"),
+        eq(t.vehicles.vehicleType, "car"),
+        sql`${t.vehicles.pendingTransferId} is null and ${t.vehicles.certifiedAt} is null`,
+      ),
+    )
+    .limit(1);
+  return Boolean(car) && Boolean(await reviewedNoPlateCar(0));
+}
+
 /**
  * Ce qu'il faut pour créer (ou recréer) le Lydia : la structure (Roues Libres 66, sinon MéditeSportCar) ni supprimée ni suspendue, son
  * propriétaire actif, de la graine, ni banni ni suspendu, et Damien_66 (compte de la graine). Contrôlé AVANT toute suppression :
@@ -291,12 +309,35 @@ async function liveParticipants() {
   const orga = await viewer(profile.pseudo, "totp");
   const damien = await viewer("Damien_66");
   if (!orga || !damien || damien.profile.bannedAt) return null;
+  if (!(await carUsable(damien.user.id))) {
+    console.log("En direct : Damien_66 n'a pas de voiture utilisable, rien supprimé ni créé.");
+    return null;
+  }
   return { structure, orga, damien };
 }
 
 export async function seedLiveEvent() {
   const real = new Date();
-  const existing = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
+  const sameSlug = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
+  // Preuve d'origine : slug de la graine ET structure de la graine ET créateur de la graine ; sinon l'événement n'est pas à elle
+  // (jamais supprimé, jamais complété) et la graine s'arrête là pour cette étape.
+  const [seedOwned] = sameSlug
+    ? await db
+        .select({ id: t.events.id })
+        .from(t.events)
+        .where(
+          and(
+            eq(t.events.id, sameSlug.id),
+            isSeedAccount(t.events.createdBy),
+            sql`${t.events.structureId} in (select s.id from structures s where s.slug in ('roues-libres-66', 'meditesportcar'))`,
+          ),
+        )
+    : [];
+  if (sameSlug && !seedOwned) {
+    console.log("En direct : un événement de ce nom existe mais n'est pas celui de la graine, rien supprimé ni créé.");
+    return;
+  }
+  const existing = sameSlug;
   if (existing) {
     // Gardé s'il reste au moins un jour : un déploiement le dernier jour le recrée, pour qu'il soit encore en cours le
     // lendemain (décision du coordinateur, 08/11).
@@ -612,7 +653,10 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
   }
   await applyAs(damien, null, parisAt(-9, 8, 42));
   const damienApp = people.get(damien.profile.pseudo);
-  if (!damienApp) throw new Error("En direct : candidature de Damien_66 impossible");
+  if (!damienApp) {
+    console.log("En direct : candidature de Damien_66 impossible, suite sautée.");
+    return;
+  }
 
   at(parisAt(-7, 20, 30));
   const decide = (appId: string, decision: "accept" | "waitlist", zone: string | null) =>
