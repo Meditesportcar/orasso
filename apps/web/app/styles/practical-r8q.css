@@ -253,3 +253,258 @@
     width: 100%;
   }
 }
+
+/* Petit lot de fin F : la recherche et la carte qui suit la zone (option C « Hybride », maquette du 13/11). Jetons seulement. */
+.pq-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-field);
+  color: var(--ink-muted);
+}
+.pq-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  min-height: 38px;
+}
+.pq-field input:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 4px;
+}
+.pq-field__x {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pq-sg {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.pq-sg__h {
+  margin: 0;
+  color: var(--ink-muted);
+}
+.pq-sg__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.pq-sg__row span {
+  display: grid;
+  min-width: 0;
+}
+.pq-sg__empty {
+  display: grid;
+  gap: 4px;
+}
+.pq-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink);
+}
+.pq-credit {
+  margin: var(--space-2) 0 0;
+}
+
+/* Sur la carte : la plaque du compteur (en haut à gauche), « Recentrer » (en haut à droite), le bouton de zone et la carte du lieu (en bas). */
+.pq-plaque {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 70px);
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  pointer-events: none;
+}
+.pq-recenter {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pq-bottom {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+.pq-bottom > * {
+  pointer-events: auto;
+}
+.pq-bottom .pq-selected {
+  position: static;
+}
+.pq-zonebtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  justify-self: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bar);
+  color: var(--bar-ink);
+  cursor: pointer;
+}
+.pq-zonebtn:disabled {
+  cursor: progress;
+}
+.pq-zonebtn:focus-visible,
+.pq-recenter:focus-visible,
+.pq-field__x:focus-visible,
+.pq-sg__row:focus-visible,
+.pq-grp:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.pq-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+}
+.pq-event {
+  /* L'épingle de la ville cherchée prend la forme de celle de l'événement. */
+  position: relative;
+}
+.pq-grp {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 17px;
+  background: var(--map-road);
+  color: var(--map-land);
+  box-shadow: var(--shadow-card);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* La feuille « 2 lieux ici » : au bas de la page, au-dessus de tout. */
+.pq-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  gap: var(--space-2);
+  max-height: 70vh;
+  overflow: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-poster);
+}
+.pq-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* 900 px et plus (vue 1280 px de la maquette) : la liste à gauche, la carte à droite, côte à côte. */
+@media (min-width: 900px) {
+  .pq-page.pq-page--wide {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .pq-page--wide .pq-side {
+    display: grid;
+    gap: var(--space-3);
+    align-content: start;
+    min-width: 0;
+  }
+  .pq-page--wide .pq-main {
+    position: sticky;
+    top: var(--space-4);
+    min-width: 0;
+  }
+  .pq-page--wide .pq-map {
+    height: min(720px, 78vh);
+  }
+  .pq-sheet {
+    left: auto;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    width: 380px;
+    border-radius: var(--radius-lg);
+  }
+}
+
+.pq-zonewrap {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.pq-zonenote {
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+}

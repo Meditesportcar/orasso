@@ -71,6 +71,8 @@ export * from "./positionStore";
 export * from "./poster";
 export * from "./practical";
 export * from "./practicalRetry";
+export * from "./practicalZone";
+export * from "./practicalZoneController";
 export * from "./presence";
 export * from "./pro";
 export * from "./proOffers";

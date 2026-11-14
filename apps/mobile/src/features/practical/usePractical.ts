@@ -134,7 +134,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       shownFor.current = ticket.who;
       fetchedAt.current = Date.now();
       setState({ data, loading: false, offline: false, failed: false });
-      outcome = data.partial ? "partial" : "complete";
+      outcome = data.loading ? "loading" : data.partial ? "partial" : "complete";
     } catch (error) {
       if (!valid()) {
         reading.current = false;
@@ -161,6 +161,8 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
     waitTimer.cancel();
     reading.current = false;
     cycle.settled(outcome);
+    // Petit lot de fin F : un chargement (`loading`) qui épuise ses relectures bornées : « Réessayer » est proposé.
+    if (cycle.exhausted()) setState((s) => ({ ...s, failed: true }));
   }, [enabled, near, eventId, waitTimer, cycle]);
   latest.current = load;
 

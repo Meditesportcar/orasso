@@ -53,7 +53,7 @@ const calendar = createPositionCalendar({
   visible: () => AppState.currentState === "active",
   refresh: async (): Promise<PositionOutcome> => {
     const result = await store.refresh(true);
-    if (result.status !== "failed") return "ok";
+    if (result.status !== "failed") return store.view().at?.data.loading === true ? "loading" : "ok";
     if (result.error instanceof ApiRequestError) return practicalFailureOutcome(result.error.status);
     if (result.error instanceof PositionTimeoutError) return "transient";
     if (Sentry.getClient()) Sentry.captureException(result.error, { tags: { area: "practical-position" } });
