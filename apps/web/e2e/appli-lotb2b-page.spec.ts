@@ -13,10 +13,17 @@ test.use({ actionTimeout: 30_000 });
 const EMAIL = "sarah@orasso.local";
 const SLUG = "roues-libres-66";
 
+/**
+ * L'animation d'ouverture n'est jouée qu'à certaines ouvertures : on lui laisse 3 s pour se montrer ; présente, on la passe, absente
+ * (le cas attendu des ouvertures suivantes), on continue ; dans les deux cas elle doit être partie dans les 8 s.
+ */
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
-  if (await skip.isVisible().catch(() => false))
-    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  const shown = await skip.waitFor({ state: "visible", timeout: 3_000 }).then(
+    () => true,
+    () => false,
+  );
+  if (shown) await skip.click({ position: { x: 40, y: 600 } });
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
@@ -36,7 +43,48 @@ async function open(browser: Browser) {
   return { ctx, page };
 }
 
-test("la page d'une structure : « Voir plus » au-delà de 50 à venir et 12 passés, panne de la première lecture et de la suite dites", async ({
+/** La suite de la recette sur une liste d'événements ouverte par `openList` : pannes dites, « Voir plus », passés, aucun doublon. */
+async function scenario(page: Page, who: string, openList: () => Promise<void>) {
+  const rows = () => page.getByTestId("structure-events").getByTestId("event-row").count();
+
+  // 1. Panne de la première lecture : dite, avec « Réessayer », jamais « Aucun événement ».
+  await page.route("**/api/events?*structureId=*", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await openList();
+  await expect(page.getByTestId("structure-upcoming-error")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("structure-upcoming-error-retry")).toBeVisible();
+  await expect(page.getByText("Aucun événement à venir")).toHaveCount(0);
+  await page.unroute("**/api/events?*structureId=*");
+  // Les passés ont échoué aussi : leur panne se dit, avec sa reprise.
+  await expect(page.getByTestId("structure-past-error")).toBeVisible();
+  await page.getByTestId("structure-past-error-retry").click();
+  await page.getByTestId("structure-upcoming-error-retry").click();
+  await expect(page.getByTestId("structure-upcoming-more")).toBeVisible({ timeout: 30_000 });
+  // Les passés se lisent à part : on attend qu'ils soient là.
+  await expect.poll(rows, { timeout: 30_000 }).toBeGreaterThanOrEqual(62);
+  const first = await rows();
+
+  // 2. Panne de « Voir plus » : dite, la liste reste, « Réessayer » relit la suite.
+  await page.route("**/api/events?*cursor=*", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await page.getByTestId("structure-upcoming-more").click();
+  await expect(page.getByTestId("structure-upcoming-more-error")).toBeVisible({ timeout: 30_000 });
+  expect(await rows(), `${who} : la liste affichée ne bouge pas`).toBe(first);
+  await page.unroute("**/api/events?*cursor=*");
+  await page.getByTestId("structure-upcoming-more-retry").click();
+  await expect(page.getByTestId("structure-upcoming-more")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("structure-upcoming-more-error")).toHaveCount(0);
+  expect(await rows(), `${who} : la suite s'ajoute`).toBeGreaterThan(first);
+
+  // 3. Les passés : « Voir plus » puis plus de bouton, aucune carte en double.
+  await page.getByTestId("structure-past-more").click();
+  await expect(page.getByTestId("structure-past-more")).toHaveCount(0, { timeout: 30_000 });
+  const hrefs = await page
+    .getByTestId("structure-events")
+    .getByTestId("event-row")
+    .evaluateAll((els) => els.map((e) => e.textContent));
+  expect(new Set(hrefs).size, `${who} : aucune carte en double`).toBe(hrefs.length);
+}
+
+test("la page d'une structure (publique puis du propriétaire) : « Voir plus » au-delà de 50 à venir et 12 passés, panne de la première lecture et de la suite dites", async ({
   browser,
 }) => {
   test.setTimeout(600_000);
@@ -82,45 +130,19 @@ test("la page d'une structure : « Voir plus » au-delà de 50 à venir et 12 pa
         [id, k + 1],
       );
     }
-    const rows = () => page.getByTestId("structure-events").getByTestId("event-row").count();
-    const url = `/o/${SLUG}?onglet=evenements`;
-
-    // 1. Panne de la première lecture : dite, avec « Réessayer », jamais « Aucun événement ».
-    await page.route("**/api/events?*structureId=*", (route) => route.fulfill({ status: 503, body: "{}" }));
-    await page.goto(url);
-    await afterOpening(page);
-    await expect(page.getByTestId("structure-upcoming-error")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("structure-upcoming-error-retry")).toBeVisible();
-    await expect(page.getByText("Aucun événement à venir")).toHaveCount(0);
-    await page.unroute("**/api/events?*structureId=*");
-    // Les passés ont échoué aussi : leur panne se dit, avec sa reprise.
-    await expect(page.getByTestId("structure-past-error")).toBeVisible();
-    await page.getByTestId("structure-past-error-retry").click();
-    await page.getByTestId("structure-upcoming-error-retry").click();
-    await expect(page.getByTestId("structure-upcoming-more")).toBeVisible({ timeout: 30_000 });
-    // Les passés se lisent à part : on attend qu'ils soient là.
-    await expect.poll(rows, { timeout: 30_000 }).toBeGreaterThanOrEqual(62);
-    const first = await rows();
-
-    // 2. Panne de « Voir plus » : dite, la liste reste, « Réessayer » relit la suite.
-    await page.route("**/api/events?*cursor=*", (route) => route.fulfill({ status: 503, body: "{}" }));
-    await page.getByTestId("structure-upcoming-more").click();
-    await expect(page.getByTestId("structure-upcoming-more-error")).toBeVisible({ timeout: 30_000 });
-    expect(await rows(), "la liste affichée ne bouge pas").toBe(first);
-    await page.unroute("**/api/events?*cursor=*");
-    await page.getByTestId("structure-upcoming-more-retry").click();
-    await expect(page.getByTestId("structure-upcoming-more")).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByTestId("structure-upcoming-more-error")).toHaveCount(0);
-    expect(await rows(), "la suite s'ajoute").toBeGreaterThan(first);
-
-    // 3. Les passés : « Voir plus » puis plus de bouton, aucune carte en double.
-    await page.getByTestId("structure-past-more").click();
-    await expect(page.getByTestId("structure-past-more")).toHaveCount(0, { timeout: 30_000 });
-    const hrefs = await page
-      .getByTestId("structure-events")
-      .getByTestId("event-row")
-      .evaluateAll((els) => els.map((e) => e.textContent));
-    expect(new Set(hrefs).size, "aucune carte en double").toBe(hrefs.length);
+    // La page publique de la structure, puis la Page du propriétaire (casquette de la structure) : mêmes règles.
+    await scenario(page, "public", async () => {
+      await page.goto(`/o/${SLUG}?onglet=evenements`);
+      await afterOpening(page);
+    });
+    await scenario(page, "propriétaire", async () => {
+      await page.goto("/moi");
+      await afterOpening(page);
+      await page.getByTestId("casquette-organizer").filter({ hasText: "Roues Libres 66" }).first().click();
+      await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
+      await page.goto("/page?onglet=evenements");
+      await afterOpening(page);
+    });
   } finally {
     try {
       if (created.length) {
