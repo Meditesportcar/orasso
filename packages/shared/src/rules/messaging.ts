@@ -31,6 +31,23 @@ export function organizerKey(structureId: string, userId: string): string {
   return `structure:${structureId}:${userId}`;
 }
 
+/** Clé unique d'une conversation entre une personne et la page d'un média (lot R9i) : `media:<mediaId>:<userId>`. */
+export function mediaKey(mediaId: string, userId: string): string {
+  return `media:${mediaId}:${userId}`;
+}
+
+/**
+ * Relit la clé d'une conversation de page : l'identifiant d'une page est un UUID (sans « : »), le reste est
+ * l'identifiant du compte (découpe sur le deuxième « : » seulement). `null` pour toute autre clé.
+ */
+export function parseMediaKey(key: string | null | undefined): { mediaId: string; userId: string } | null {
+  if (!key?.startsWith("media:")) return null;
+  const rest = key.slice("media:".length);
+  const cut = rest.indexOf(":");
+  if (cut <= 0 || cut === rest.length - 1) return null;
+  return { mediaId: rest.slice(0, cut), userId: rest.slice(cut + 1) };
+}
+
 /** Texte raccourci sur une limite de mot, avec des points de suspension. */
 export function shorten(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();

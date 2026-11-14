@@ -12,6 +12,14 @@ export const messagingLabels = {
   tagCrew: "Crew",
   tagStaff: "Staff",
   tagStoryReply: "Réponse à ta story",
+  /** Lot R9i : la conversation de page d'un média (étiquette de la liste, côté titulaire comme côté passionné). */
+  tagMedia: "Média",
+  /** Lot R9i : le titulaire répond au nom de sa page ; le passionné ne voit jamais son compte. */
+  replyAs: (name: string) => `Tu réponds en tant que ${name}`,
+  replyAsHint: (pseudo: string) => `${pseudo} voit le nom et le logo de ta page, jamais ton compte personnel.`,
+  viewPage: "Voir la page",
+  mediaNotTagged: "Tu peux écrire à un média quand il t'a identifié sur un de ses albums.",
+  mediaOwnPage: "C'est ta page.",
   requests: "Demandes",
   noConversations:
     "Aucune conversation pour l'instant. Écris à quelqu'un qui te suit depuis son profil, ou contacte un organisateur.",

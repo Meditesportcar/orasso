@@ -11,6 +11,9 @@ describe("conversationTag (lot R7c2)", () => {
     expect(conversationTag({ kind: "story_reply", side: "member" })).toBe("Réponse à ta story");
     expect(conversationTag({ kind: "direct", side: "member" })).toBeNull();
   });
+  it("une conversation de page (lot R9i) porte « Média » des deux côtés", () => {
+    expect(conversationTag({ kind: "media", side: "member" })).toBe("Média");
+  });
   it("côté structure, la personne en face est un participant : pas d'étiquette Organisateur", () => {
     expect(conversationTag({ kind: "organizer", side: "structure" })).toBeNull();
   });

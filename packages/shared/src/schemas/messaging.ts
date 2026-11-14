@@ -118,6 +118,11 @@ export type ConversationView = ConversationSummary & {
   structure: { id: string; slug: string; name: string; logoUrl: string | null } | null;
   /** La personne en face (conversation à deux, ou côté structure) : lien vers son profil. */
   otherUser: MessagePerson | null;
+  /**
+   * Lot R9i : la page d'un média d'une conversation `media` (`key` = clé d'auteur `m:<id>`, `mine` : je suis son titulaire),
+   * `null` pour les autres sortes. Jamais le compte qui tient la page.
+   */
+  page: { key: string; id: string; name: string; logoUrl: string | null; mine: boolean } | null;
 };
 
 export type ConversationPage = { items: ConversationSummary[]; nextCursor: string | null };
