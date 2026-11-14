@@ -15,7 +15,14 @@ import {
   crewTabLabels as T,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { data, redirect, type ShouldRevalidateFunctionArgs, useRouteLoaderData } from "react-router";
+import {
+  data,
+  redirect,
+  type ShouldRevalidateFunctionArgs,
+  useLocation,
+  useNavigate,
+  useRouteLoaderData,
+} from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
@@ -25,6 +32,7 @@ import { crewLastCookie, crewLastOf, pickCrew } from "../lib/crew-last.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
 import { listenSession } from "../lib/sessionChannel";
 import {
+  AFTER_RELOAD_PARAM,
   isAfterReload,
   isForeign,
   nextAnnounced,
@@ -69,11 +77,16 @@ export function shouldRevalidate({
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
+  // Page née d'un rechargement automatique : le chargeur ne lit RIEN de privé (la session a pu changer pendant la lecture : rien de
+  // l'ancien compte ne doit rester dans le HTML ni dans les données sérialisées). La page confirme le compte par `/me`
+  // (`useSessionConfirmation`), puis navigue sans la marque : le chargeur relit pour le compte courant.
+  if (isAfterReload(new URL(request.url))) {
+    return { mode: "pending" as const, userId: me.user.id, afterReload: true as const };
+  }
   const mine = await api<MyCrew[]>(request, "/me/crews");
+  if (!mine.ok)
+    return { mode: "error" as const, message: mine.error.message, userId: me.user.id, afterReload: false as const };
   const url = new URL(request.url);
-  // Page née d'un rechargement automatique : elle reste neutre tant que `/me` n'a pas confirmé le compte (`useSessionConfirmation`).
-  const afterReload = isAfterReload(url);
-  if (!mine.ok) return { mode: "error" as const, message: mine.error.message, userId: me.user.id, afterReload };
   if (mine.data.length === 0) {
     const asked = await api<CrewInboxRequest[]>(request, "/me/crew-requests");
     // La recherche se montre sur place (comme l'appli) : deux lettres au moins, pas d'annuaire.
@@ -85,7 +98,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       mode: "none" as const,
       userId: me.user.id,
-      afterReload,
+      afterReload: false as const,
       invitations: asked.ok ? asked.data.filter((r) => r.kind === "invitation") : [],
       q,
       searching,
@@ -113,7 +126,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       ? undefined
       : { "Set-Cookie": crewLastCookie(request, me.user.id, current.slug) };
   return data(
-    { mode: "crew" as const, crews: mine.data, crew, members, pending, userId: me.user.id, tab, afterReload },
+    {
+      mode: "crew" as const,
+      crews: mine.data,
+      crew,
+      members,
+      pending,
+      userId: me.user.id,
+      tab,
+      afterReload: false as const,
+    },
     { headers },
   );
 }
@@ -175,6 +197,18 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
   // l'onglet, du focus et sur `pageshow`.
   const confirmed = useSessionConfirmation(owner, loaderData.afterReload);
   const foreign = isForeign({ owner, layoutUserId: layout?.userId, announced, confirmed });
+  // Page « pending » (née d'un rechargement) dont le compte est confirmé : on navigue sans la marque, ce qui relit le chargeur pour
+  // le compte courant et retire la marque de l'adresse.
+  const navigate = useNavigate();
+  const { pathname, search } = useLocation();
+  const pending = loaderData.mode === "pending";
+  useEffect(() => {
+    if (!pending || confirmed !== "ok" || foreign) return;
+    const params = new URLSearchParams(search);
+    params.delete(AFTER_RELOAD_PARAM);
+    const rest = params.toString();
+    void navigate(`${pathname}${rest ? `?${rest}` : ""}`, { replace: true });
+  }, [pending, confirmed, foreign, pathname, search, navigate]);
   const [gaveUp, setGaveUp] = useState(false);
   useEffect(() => {
     if (!foreign) {
@@ -196,7 +230,7 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
       </div>
     );
   }
-  if (foreign || confirmed === "checking") {
+  if (foreign || confirmed === "checking" || loaderData.mode === "pending") {
     return (
       <p className="s-muted" role="status" data-testid="crew-refreshing">
         {L.refreshing}
