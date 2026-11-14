@@ -49,6 +49,10 @@ export const albumTagLabels = {
   isNotifiedDeclined: (name: string) => `${name} en est prévenu ; l'identification disparaît`,
   report: "Signaler",
   awkwardOrPlate: "Photo gênante ou plaque lisible",
+  // « Contacter » (lot R9i, partie 2) : l'en-tête et la feuille d'une photo (maquette R9, `page-r9.js` 419 et 445).
+  contact: "Contacter",
+  contactName: (name: string) => `Contacter ${name}`,
+  messageAboutPhoto: "Un message à propos de cette photo",
   seeMyPhotos: "Voir mes photos",
   notMentions: "Ces photos ne deviennent pas tes publications : ce sont des mentions de ta voiture, à part.",
   // La voiture, la sortie, le souvenir.

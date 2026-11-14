@@ -13,12 +13,43 @@ const OWNER = "Leo_SudCars";
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 30_000 });
 
+/** Garde la lecture de chaque réponse /api/ ; `done()` les attend toutes (aucune n'est perdue en route), puis contrôle l'absence du pseudo du titulaire. */
+function watchApi(page: Page) {
+  const reads: Promise<string>[] = [];
+  page.on("response", (res) => {
+    if (!res.url().includes("/api/")) return;
+    // Un flux (SSE) ne se termine jamais : seulement les réponses à corps fini ; chaque lecture est bornée (15 s).
+    if (res.headers()["content-type"]?.includes("event-stream")) return;
+    reads.push(
+      Promise.race([
+        res.text().catch(() => ""),
+        new Promise<string>((resolve) => setTimeout(() => resolve(""), 15_000)),
+      ]),
+    );
+  });
+  return {
+    async done() {
+      const texts = await Promise.all(reads);
+      expect(texts.length).toBeGreaterThan(0);
+      expect(texts.filter((t) => t.includes(OWNER))).toEqual([]);
+    },
+  };
+}
+
 type Theme = "beton" | "sable";
 
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
   await page.waitForTimeout(1_000);
   await page.screenshot({ path: `${DIR}/${name}.png` });
+}
+
+// Un chargement complet rejoue l'ouverture animée : on la passe avant de photographier ou de cliquer.
+async function afterOpening(page: Page) {
+  const skip = page.getByTestId("opening-skip");
+  if (await skip.isVisible().catch(() => false))
+    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
 async function openApp(browser: Browser, theme: Theme, email: string, fontScale = 1) {
@@ -46,19 +77,13 @@ for (const theme of ["beton", "sable"] as const) {
   test(`conversation de page, côté personne puis côté titulaire (${theme})`, async ({ browser }) => {
     test.setTimeout(300_000);
     const { ctx, page } = await openApp(browser, theme, "kenji@orasso.local");
-    const seen: string[] = [];
-    page.on("response", async (res) => {
-      if (!res.url().includes("/api/")) return;
-      try {
-        seen.push(await res.text());
-      } catch {
-        // Réponse sans corps lisible.
-      }
-    });
+    const api = watchApi(page);
     await page.goto("/messages");
     const row = page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" });
     await expect(row).toBeVisible({ timeout: 30_000 });
     await expect(row).toContainText("Média");
+    // Le logo de la page (pas seulement son nom) : l'avatar de la ligne porte l'adresse du logo (l'écran d'une conversation n'a pas d'avatar).
+    await expect(row.locator('image[href*="sud-cars-logo"]')).toBeVisible();
     await shot(page, `liste-personne-${theme}-384`);
     await row.click();
     await expect(page.getByTestId("messages").getByText("Oui, je te l'envoie ce soir.")).toBeVisible({
@@ -73,7 +98,7 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `conversation-personne-${theme}-384`);
     await page.getByTestId("view-page").click();
     await page.waitForURL(/\/m\/[0-9a-f-]{36}/, { timeout: 30_000 });
-    expect(seen.filter((t) => t.includes(OWNER))).toEqual([]);
+    await api.done();
     expect(await page.content()).not.toContain(OWNER);
     await ctx.close();
 
@@ -86,6 +111,7 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(owner.page, `liste-titulaire-${theme}-384`);
     await row2.click();
     await expect(owner.page.getByTestId("reply-as")).toContainText("Tu réponds en tant que Sud Cars");
+    await expect(owner.page.getByTestId("reply-as").locator('image[href*="sud-cars-logo"]')).toBeVisible();
     await expect(owner.page.getByTestId("reply-as")).toContainText(
       "Kenji_66 voit le nom et le logo de ta page, jamais ton compte personnel.",
     );
@@ -105,6 +131,7 @@ for (const theme of ["beton", "sable"] as const) {
 
     // Retour chez Kenji : la réponse est signée « Sud Cars », le titre est celui de la page.
     const back = await openApp(browser, theme, "kenji@orasso.local");
+    const backApi = watchApi(back.page);
     await back.page.goto("/messages");
     await back.page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
     await expect(back.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
@@ -113,6 +140,7 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(back.page.getByTestId("messages").getByText(answer)).toBeVisible();
     await expect(back.page.getByTestId("messages").getByText("Sud Cars", { exact: true }).first()).toBeVisible();
     expect(await back.page.content()).not.toContain(OWNER);
+    await backApi.done();
     await back.ctx.close();
 
     // Damien_66 : l'ouverture par un appel d'API dans sa session, puis l'écran.
@@ -124,11 +152,14 @@ for (const theme of ["beton", "sable"] as const) {
     const opened = await apiCall<{ id: string }>(damienCookie, "POST", `/media/${detail.data.page.id}/conversation`);
     expect(opened.status).toBeLessThan(300);
     const damien = await openApp(browser, theme, "damien@orasso.local");
+    const damienApi = watchApi(damien.page);
     await damien.page.goto(`/messages/${opened.data.id}`);
     await expect(damien.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
       timeout: 30_000,
     });
     await expect(damien.page.getByTestId("view-page")).toBeVisible();
+    expect(await damien.page.content()).not.toContain(OWNER);
+    await damienApi.done();
     await shot(damien.page, `conversation-damien-${theme}-384`);
     await damien.ctx.close();
 
@@ -146,4 +177,74 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(big.page, `conversation-titulaire-${theme}-384-x1_3`);
     await big.ctx.close();
   });
+}
+
+// Partie 2 : « Tes photos » de Kenji_66 (identifié par son pseudo) → « Contacter » → la conversation de la page ; puis la feuille
+// d'une photo → « Contacter Sud Cars » → la même conversation. Le pseudo du titulaire n'apparaît dans aucune réponse ni dans le DOM.
+for (const theme of ["beton", "sable"] as const) {
+  for (const scale of [1, 1.3]) {
+    test(`« Tes photos » : « Contacter » ouvre la conversation de la page (${theme}, police ×${scale})`, async ({
+      browser,
+    }) => {
+      test.setTimeout(240_000);
+      const kenjiCookie = await login("kenji@orasso.local");
+      const tags = await apiCall<{ items: { albumId: string }[] }>(kenjiCookie, "GET", "/me/album-tags");
+      const albumId = tags.data.items[0]?.albumId as string;
+      expect(albumId).toBeTruthy();
+      const { ctx, page } = await openApp(browser, theme, "kenji@orasso.local", scale);
+      const api = watchApi(page);
+      const tag = scale === 1 ? "" : "-x1_3";
+      await page.goto(`/album/${albumId}/mes-photos`);
+      await afterOpening(page);
+      const contact = page.getByTestId("my-photos-contact");
+      await expect(contact).toBeVisible({ timeout: 30_000 });
+      await expect(contact).toContainText("Contacter");
+      // Le bouton tient dans la largeur, à côté du nom du média (qui ne se tronque pas).
+      const box = await contact.boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= 384).toBe(true);
+      await expect(page.getByTestId("my-photos-media")).toHaveText("Sud Cars");
+      await shot(page, `tes-photos-contacter-${theme}-384${tag}`);
+      await contact.click();
+      await page.waitForURL(/\/messages\/[0-9a-f-]{36}/, { timeout: 30_000 });
+      const conversationUrl = page.url();
+      await expect(page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("view-page")).toBeVisible();
+      if (scale === 1) await shot(page, `conversation-depuis-tes-photos-${theme}-384`);
+
+      // La feuille « … » d'une photo : la rangée mène à la même conversation. Un refus de l'API (403) est dit, sans rien du titulaire.
+      await page.goto(`/album/${albumId}/mes-photos`);
+      await afterOpening(page);
+      await page.getByTestId("my-photo-more").first().click();
+      const row = page.getByTestId("photo-sheet-contact");
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      await expect(row).toContainText("Contacter Sud Cars");
+      await expect(row).toContainText("Un message à propos de cette photo");
+      await shot(page, `feuille-contacter-${theme}-384${tag}`);
+      await page.route("**/api/media/*/conversation", (route) =>
+        route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "forbidden",
+              message: "Tu peux écrire à un média quand il t'a identifié sur un de ses albums.",
+            },
+          }),
+        }),
+      );
+      await row.click();
+      await expect(page.getByTestId("my-photos-error")).toContainText("Tu peux écrire à un média", { timeout: 30_000 });
+      expect(page.url()).not.toMatch(/\/messages\//);
+      await page.unroute("**/api/media/*/conversation");
+      await page.getByTestId("my-photo-more").first().click();
+      await page.getByTestId("photo-sheet-contact").click();
+      await page.waitForURL(/\/messages\/[0-9a-f-]{36}/, { timeout: 30_000 });
+      expect(page.url()).toBe(conversationUrl);
+      await api.done();
+      expect(await page.content()).not.toContain(OWNER);
+      await ctx.close();
+    });
+  }
 }

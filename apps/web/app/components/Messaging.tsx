@@ -1,8 +1,16 @@
-import { Button } from "@orasso/design-system/web";
-import { type ConversationSummary, conversationTag, messagingLabels } from "@orasso/shared";
-import { useEffect, useState } from "react";
-import { Form, useActionData, useNavigation } from "react-router";
+import { Button, Icon } from "@orasso/design-system/web";
+import {
+  albumTagLabels,
+  type ConversationSummary,
+  conversationTag,
+  messagingLabels,
+  type OpenConversationResult,
+  parseAuthorKey,
+} from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
+import { Form, useActionData, useNavigate, useNavigation } from "react-router";
 
+import { apiFetch } from "../lib/api.client";
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
@@ -97,6 +105,70 @@ export function ContactOrganizer({
         </p>
       )}
     </Form>
+  );
+}
+
+/**
+ * « Contacter <média> » depuis « Tes photos » (lot R9i, partie 2) : ouvre ou rouvre la conversation de la page du média, montrée
+ * sous son nom et son logo (jamais le compte qui la tient). `header` : le bouton de l'en-tête ; `row` : la rangée de la feuille
+ * d'une photo. Le refus de l'API (403, 404) est dit par le libellé de l'API, rendu par l'écran (`onError`).
+ */
+export function ContactMedia({
+  mediaKey,
+  name,
+  variant,
+  onError,
+}: {
+  mediaKey: string;
+  name: string;
+  variant: "header" | "row";
+  onError: (message: string | null) => void;
+}) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const running = useRef(false);
+  const open = async () => {
+    const id = parseAuthorKey(mediaKey)?.id;
+    if (!id || running.current) return;
+    running.current = true;
+    setBusy(true);
+    onError(null);
+    const res = await apiFetch<OpenConversationResult>(`/media/${encodeURIComponent(id)}/conversation`, {
+      method: "POST",
+    });
+    running.current = false;
+    setBusy(false);
+    if (!res.ok) return onError(res.error.message);
+    navigate(`/app/messages/${res.data.id}`);
+  };
+  if (variant === "row") {
+    return (
+      <button
+        type="button"
+        className="myp-sheet__row"
+        disabled={busy}
+        onClick={() => void open()}
+        data-testid="photo-sheet-contact"
+      >
+        <Icon name="chat" size={20} />
+        <span>
+          <strong>{albumTagLabels.contactName(name)}</strong>
+          <span className="o-t-caption s-muted">{albumTagLabels.messageAboutPhoto}</span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      icon="chat"
+      loading={busy}
+      onClick={() => void open()}
+      data-testid="my-photos-contact"
+    >
+      {albumTagLabels.contact}
+    </Button>
   );
 }
 

@@ -12,6 +12,29 @@ const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r9i-captures/apres/recett
 const OWNER = "Leo_SudCars";
 test.use({ actionTimeout: 30_000 });
 
+/** Garde la lecture de chaque réponse /api/ ; `done()` les attend toutes (aucune n'est perdue en route), puis contrôle l'absence du pseudo du titulaire. */
+function watchApi(page: Page) {
+  const reads: Promise<string>[] = [];
+  page.on("response", (res) => {
+    if (!res.url().includes("/api/")) return;
+    // Un flux (SSE) ne se termine jamais : seulement les réponses à corps fini ; chaque lecture est bornée (15 s).
+    if (res.headers()["content-type"]?.includes("event-stream")) return;
+    reads.push(
+      Promise.race([
+        res.text().catch(() => ""),
+        new Promise<string>((resolve) => setTimeout(() => resolve(""), 15_000)),
+      ]),
+    );
+  });
+  return {
+    async done() {
+      const texts = await Promise.all(reads);
+      expect(texts.length).toBeGreaterThan(0);
+      expect(texts.filter((t) => t.includes(OWNER))).toEqual([]);
+    },
+  };
+}
+
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
   await page.waitForTimeout(500);
@@ -27,15 +50,7 @@ for (const theme of ["beton", "sable"] as const) {
       // --- Kenji_66 (la personne identifiée).
       const ctx = await browser.newContext({ viewport });
       const page = await ctx.newPage();
-      const seen: string[] = [];
-      page.on("response", async (res) => {
-        if (!res.url().includes("/api/")) return;
-        try {
-          seen.push(await res.text());
-        } catch {
-          // Réponse sans corps lisible (redirection, flux).
-        }
-      });
+      const api = watchApi(page);
       await setTheme(page, theme);
       await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/messages");
       await page.goto("/app/messages");
@@ -71,8 +86,7 @@ for (const theme of ["beton", "sable"] as const) {
       const url = page.url();
       const ssr = await ctx.request.get(url);
       expect(await ssr.text()).not.toContain(OWNER);
-      expect(seen.filter((t) => t.includes(OWNER))).toEqual([]);
-      expect(seen.length).toBeGreaterThan(0);
+      await api.done();
       await ctx.close();
 
       // --- Leo_SudCars (le titulaire, sans second facteur).
@@ -107,12 +121,14 @@ for (const theme of ["beton", "sable"] as const) {
       // --- Retour chez Kenji : la réponse est signée « Sud Cars ».
       const ctx3 = await browser.newContext({ viewport });
       const page3 = await ctx3.newPage();
+      const api3 = watchApi(page3);
       await setTheme(page3, theme);
       await loginInBrowser(page3, "kenji@orasso.local", undefined, "/app/messages");
       await page3.goto("/app/messages");
       await page3.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
       await expect(page3.getByTestId("messages")).toContainText(answer);
       expect(await page3.content()).not.toContain(OWNER);
+      await api3.done();
       await ctx3.close();
     });
   }
@@ -154,10 +170,75 @@ test("Damien_66 (identifié par sa voiture) : ouverture par un appel d'API dans 
   expect(opened.status).toBeLessThan(300);
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
+  const api = watchApi(page);
   await loginInBrowser(page, "damien@orasso.local", undefined, `/app/messages/${opened.data.id}`);
   await page.goto(`/app/messages/${opened.data.id}`);
   await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
   await expect(page.getByTestId("view-page")).toBeVisible();
   expect(await page.content()).not.toContain(OWNER);
+  await api.done();
   await ctx.close();
 });
+
+// Partie 2 : « Tes photos » de Kenji_66 → « Contacter » → la conversation de la page ; puis la feuille d'une photo → « Contacter
+// Sud Cars » → la même conversation. Le pseudo du titulaire n'apparaît ni dans une réponse /api/ ni dans le DOM.
+for (const theme of ["beton", "sable"] as const) {
+  for (const viewport of [MOBILE, { width: 1280, height: 800 }] as const) {
+    test(`« Tes photos » : « Contacter » ouvre la conversation de la page (${theme}, ${viewport.width} px)`, async ({
+      browser,
+    }) => {
+      test.setTimeout(180_000);
+      const kenjiCookie = await login("kenji@orasso.local");
+      const tags = await apiCall<{ items: { albumId: string }[] }>(kenjiCookie, "GET", "/me/album-tags");
+      const albumId = tags.data.items[0]?.albumId as string;
+      expect(albumId).toBeTruthy();
+      const ctx = await browser.newContext({ viewport });
+      const page = await ctx.newPage();
+      const api = watchApi(page);
+      await setTheme(page, theme);
+      await loginInBrowser(page, "kenji@orasso.local", undefined, `/app/albums/${albumId}/mes-photos`);
+      const contact = page.getByTestId("my-photos-contact");
+      await expect(contact).toBeVisible();
+      await expect(contact).toContainText("Contacter");
+      await page.waitForLoadState("networkidle");
+      await shot(page, `tes-photos-contacter-${theme}-${viewport.width}`);
+      await contact.click();
+      await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
+      const conversationUrl = page.url();
+      await expect(page.getByTestId("conversation").getByRole("heading", { name: "Sud Cars" })).toBeVisible();
+      await expect(page.getByTestId("view-page")).toBeVisible();
+      await expect(page.locator('img[src*="sud-cars-logo"]').filter({ visible: true }).first()).toBeVisible();
+
+      await page.goto(`/app/albums/${albumId}/mes-photos`);
+      await page.waitForLoadState("networkidle");
+      await page.getByTestId("my-photo-more").first().click();
+      const row = page.getByTestId("photo-sheet-contact");
+      await expect(row).toBeVisible();
+      await expect(row).toContainText("Contacter Sud Cars");
+      await expect(row).toContainText("Un message à propos de cette photo");
+      await shot(page, `feuille-contacter-${theme}-${viewport.width}`);
+      await page.route("**/api/media/*/conversation", (route) =>
+        route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "forbidden",
+              message: "Tu peux écrire à un média quand il t'a identifié sur un de ses albums.",
+            },
+          }),
+        }),
+      );
+      await row.click();
+      await expect(page.getByTestId("photo-sheet-error")).toContainText("Tu peux écrire à un média");
+      expect(page.url()).not.toMatch(/\/messages\//);
+      await page.unroute("**/api/media/*/conversation");
+      await page.getByTestId("photo-sheet-contact").click();
+      await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
+      expect(page.url()).toBe(conversationUrl);
+      await api.done();
+      expect(await page.content()).not.toContain(OWNER);
+      await ctx.close();
+    });
+  }
+}

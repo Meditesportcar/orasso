@@ -5,6 +5,7 @@ import { directKey, mediaKey, organizerKey } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { fakePhoto } from "./helpers";
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
@@ -134,6 +135,12 @@ export async function seedMediaConversation() {
   if (!kenji || !leo || !media) {
     console.log("Messagerie : page « Sud Cars » ou Kenji_66 absents, conversation de page non ajoutée.");
     return;
+  }
+  // Un logo à la page (la recette vérifie que la conversation le montre, pas seulement le nom).
+  if (!media.logoKey) {
+    const logoKey = "seed/media/sud-cars-logo.webp";
+    await fakePhoto(logoKey, "#c9a227");
+    await db.update(t.mediaProfiles).set({ logoKey }).where(eq(t.mediaProfiles.id, media.id));
   }
   await conversation(
     mediaKey(media.id, kenji.userId),

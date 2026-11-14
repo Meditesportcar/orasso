@@ -151,6 +151,7 @@ describe("ouvrir la conversation d'une page (T58)", () => {
 
   it("un titulaire suspendu ou banni ne change rien à l'ouverture (aucun refus ne dit l'état d'un compte)", async () => {
     await tagCar(s.dam, 0, "dam");
+    await tagCar(s.kenji, 1, "kenji");
     await db.execute(
       (await import("drizzle-orm"))
         .sql`update profiles set suspended_until = now() + interval '30 days' where user_id = ${s.leo.id}`,
@@ -159,6 +160,8 @@ describe("ouvrir la conversation d'une page (T58)", () => {
     await db.execute(
       (await import("drizzle-orm")).sql`update profiles set banned_at = now() where user_id = ${s.leo.id}`,
     );
+    // Banni avant la première ouverture de Kenji : `canOpenWithMedia` est exercée (pas seulement la conversation déjà ouverte).
+    expect((await openPage(s.kenji)).status).toBe(201);
     expect((await openPage(s.dam)).status).toBe(200);
   });
 });

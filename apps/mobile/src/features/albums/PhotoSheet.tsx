@@ -20,6 +20,7 @@ export function PhotoSheet({
   onClose,
   onRemove,
   onReport,
+  onContact,
 }: {
   /** La photo dont la feuille est ouverte ; `null` : fermée. */
   photo: MyPhoto | null;
@@ -29,6 +30,7 @@ export function PhotoSheet({
   onClose: () => void;
   onRemove: (photo: MyPhoto) => void;
   onReport: (photo: MyPhoto) => void;
+  onContact: () => void;
 }) {
   const self = photo?.taggedBy === "me";
   const by = photo?.taggedBy === "organizer" ? L.screens.organizerName : mediaName;
@@ -53,6 +55,14 @@ export function PhotoSheet({
             testID={self ? "photo-sheet-withdraw" : "photo-sheet-not-mine"}
           />
           <Row
+            icon="chat"
+            title={L.contactName(mediaName)}
+            sub={L.messageAboutPhoto}
+            disabled={busy}
+            onPress={onContact}
+            testID="photo-sheet-contact"
+          />
+          <Row
             icon="flag"
             title={L.report}
             sub={L.awkwardOrPlate}
@@ -74,7 +84,7 @@ function Row({
   onPress,
   testID,
 }: {
-  icon: "close" | "flag";
+  icon: "close" | "chat" | "flag";
   title: string;
   sub: string;
   disabled: boolean;

@@ -22,6 +22,7 @@ import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-r
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
 import { latchStale } from "../../lib/sessionGuard";
+import { ContactMedia } from "../Messaging";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
@@ -176,6 +177,7 @@ export function MyPhotos({
             {headline}
           </span>
         </span>
+        <ContactMedia mediaKey={view.media.key} name={view.media.name} variant="header" onError={setError} />
       </div>
       {note && (
         <p className="s-notice" role="status" data-testid="my-photos-note">
@@ -311,6 +313,7 @@ export function MyPhotos({
                 </span>
               </span>
             </button>
+            <ContactMedia mediaKey={view.media.key} name={view.media.name} variant="row" onError={setError} />
             <div className="myp-sheet__row" data-testid="photo-sheet-report">
               <ReportDialog
                 targetType="album_photo"

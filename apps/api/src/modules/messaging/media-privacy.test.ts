@@ -21,6 +21,7 @@ import { db, pool } from "../../db/client";
 import { conversations, emailOutbox, mediaProfiles, messages, notifications, profiles } from "../../db/schema";
 import { push } from "../../lib/push";
 import { type RealtimeSocket, realtime } from "../../lib/realtime";
+import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
 import { paris } from "../albums/albums-test-helpers";
 import { type Ref, tagScenario } from "../albums/tags-test-helpers";
@@ -32,6 +33,7 @@ afterAll(async () => {
 
 const ORIGIN = process.env.PUBLIC_URL ?? "http://localhost:5173";
 const LOGO_KEY = "media/logo-sud-cars.webp";
+const LOGO_URL = storage.url(LOGO_KEY);
 let ref: Ref;
 let s: Awaited<ReturnType<typeof tagScenario>>;
 let clock: ReturnType<typeof useClock>;
@@ -237,7 +239,7 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
       canWrite: true,
       writeBlocked: null,
     });
-    expect(view.json.avatarUrl).toContain(LOGO_KEY);
+    expect(view.json.avatarUrl).toBe(LOGO_URL);
     expect(Object.keys(view.json.page).sort()).toEqual(["id", "key", "logoUrl", "mine", "name"]);
     expect(view.json.page).toMatchObject({ key: `m:${s.leoMedia}`, id: s.leoMedia, name: "Sud Cars", mine: false });
     const messageKeys = [
@@ -271,7 +273,7 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
         expect(m.sender).toEqual({
           userId: `m:${s.leoMedia}`,
           pseudo: "Sud Cars",
-          avatarUrl: expect.stringContaining(LOGO_KEY),
+          avatarUrl: LOGO_URL,
         });
       }
     }
@@ -290,7 +292,7 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
     expect(toKenji[0]?.data.actor).toEqual({
       userId: `m:${s.leoMedia}`,
       pseudo: "Sud Cars",
-      avatarUrl: expect.stringContaining(LOGO_KEY),
+      avatarUrl: LOGO_URL,
     });
     // Notification : même forme.
     expect(received_[0]).toMatchObject({ title: "Sud Cars", body: "Oui, je te l'envoie ce soir." });
@@ -320,6 +322,19 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
       `${s.kenji.pseudo}: Bonjour, je peux avoir la photo du port en grand ?`.replace(": ", " : "),
     );
     expect(toLeo[0]?.data.actor).toMatchObject({ userId: s.kenji.id, pseudo: s.kenji.pseudo });
+
+    // « message.deleted » : le titulaire supprime un de ses messages ; la personne reçoit l'événement, sans rien du titulaire.
+    clock.advance(1000);
+    const doomed = await send(s.leo, id, "Message à retirer.");
+    expect(doomed.status).toBe(201);
+    const before = received.length;
+    expect((await req(s.leo, "DELETE", `/messages/${doomed.json.id}`)).status).toBe(204);
+    const deleted = received.slice(before).filter((d) => d.includes("message.deleted"));
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]).toContain(doomed.json.id as string);
+    expect(leaks(deleted)).toEqual([]);
+    const afterDelete = await req(s.kenji, "GET", `/conversations/${id}/messages`);
+    expect(leaks(afterDelete.json)).toEqual([]);
     realtime.unsubscribeAll(socket);
     realtime.unsubscribeAll(ownerSocket);
   });
@@ -352,7 +367,7 @@ describe("le canari : rien du titulaire n'arrive jusqu'à la personne qui écrit
       image: { url: string };
       sender: unknown;
     };
-    expect(message.sender).toEqual({ userId: `m:${s.leoMedia}`, pseudo: "Sud Cars", avatarUrl: expect.any(String) });
+    expect(message.sender).toEqual({ userId: `m:${s.leoMedia}`, pseudo: "Sud Cars", avatarUrl: LOGO_URL });
     expect(leaks(page.json)).toEqual([]);
     expect(leaks(message.image.url)).toEqual([]);
     const file = await app.request(message.image.url, {
@@ -504,40 +519,87 @@ describe("migration et APK en ligne", () => {
     expect((kinds.rows as { k: string }[]).map((r) => r.k)).toContain("media");
   });
 
-  it("`direct` et `organizer` : `GET /conversations/:id` champ à champ comme avant, plus `page: null` ; la boîte de la structure compte comme avant", async () => {
+  it("`direct` et `organizer` : `GET /conversations/:id` champ à champ comme avant (valeurs attendues), plus `page: null` ; les non-lus avant et après lecture", async () => {
     const damien = await signUp("Damien_R9i", { twoFactor: true });
     const structure = await createStructure(damien.id);
+    const keys = [
+      "avatarUrl",
+      "canWrite",
+      "closedAt",
+      "id",
+      "kind",
+      "lastMessage",
+      "otherUser",
+      "page",
+      "participants",
+      "side",
+      "storyThumbUrl",
+      "structure",
+      "subtitle",
+      "title",
+      "unreadCount",
+      "writeBlocked",
+    ].sort();
+
+    // Une vraie conversation directe (deux personnes qui se suivent, ouverture par `POST /conversations/direct`).
+    for (const [a, b] of [
+      [s.kenji, s.dam],
+      [s.dam, s.kenji],
+    ] as const) {
+      expect((await req(a, "POST", `/users/${b.pseudo}/follow`)).json).toEqual({ mine: "accepted" });
+    }
+    const direct = await req(s.dam, "POST", "/conversations/direct", { userId: s.kenji.id });
+    expect(direct.status).toBe(201);
+    expect((await send(s.dam, direct.json.id, "Salut Kenji")).status).toBe(201);
     const org = await req(s.kenji, "POST", `/structures/${structure.id}/conversation`);
     expect(org.status).toBe(201);
-    await send(s.kenji, org.json.id, "Bonjour l'équipe");
-    const direct = await req(s.dam, "POST", "/contact-requests", { pseudo: s.kenji.pseudo, message: "Salut" });
-    expect(direct.status).toBeLessThan(300);
-    const view = await req(s.kenji, "GET", `/conversations/${org.json.id}`);
-    expect(view.json.page).toBeNull();
-    expect(view.json.kind).toBe("organizer");
-    expect(Object.keys(view.json).sort()).toEqual(
-      [
-        "avatarUrl",
-        "canWrite",
-        "closedAt",
-        "id",
-        "kind",
-        "lastMessage",
-        "otherUser",
-        "page",
-        "participants",
-        "side",
-        "storyThumbUrl",
-        "structure",
-        "subtitle",
-        "title",
-        "unreadCount",
-        "writeBlocked",
-      ].sort(),
-    );
-    // La conversation d'organisateur compte toujours « chez la structure », pas dans les non-lus de la personne (inchangé).
-    await send(damien, org.json.id, "Bonjour Kenji");
-    const own = await req(s.kenji, "GET", "/me/inbox/summary");
-    expect(own.status).toBe(200);
+    expect((await send(s.kenji, org.json.id, "Bonjour l'équipe")).status).toBe(201);
+    expect((await send(damien, org.json.id, "Bonjour Kenji")).status).toBe(201);
+
+    // Avant la lecture : Kenji a un message non lu dans chacune.
+    const dView = await req(s.kenji, "GET", `/conversations/${direct.json.id}`);
+    expect(Object.keys(dView.json).sort()).toEqual(keys);
+    expect(dView.json).toMatchObject({
+      id: direct.json.id,
+      kind: "direct",
+      side: "member",
+      page: null,
+      structure: null,
+      title: s.dam.pseudo,
+      canWrite: true,
+      writeBlocked: null,
+      closedAt: null,
+      unreadCount: 1,
+    });
+    expect(dView.json.otherUser).toMatchObject({ userId: s.dam.id, pseudo: s.dam.pseudo });
+    const oView = await req(s.kenji, "GET", `/conversations/${org.json.id}`);
+    expect(Object.keys(oView.json).sort()).toEqual(keys);
+    expect(oView.json).toMatchObject({
+      id: org.json.id,
+      kind: "organizer",
+      side: "member",
+      page: null,
+      canWrite: true,
+      writeBlocked: null,
+      closedAt: null,
+      unreadCount: 1,
+    });
+    expect(oView.json.structure).toMatchObject({ id: structure.id });
+    const summaryBefore = (await req(s.kenji, "GET", "/me/inbox/summary")).json.unreadMessages as number;
+    expect(summaryBefore).toBe(2);
+    // La boîte de la structure : Damien a répondu (rien à lire) ; un nouveau message de Kenji y compte pour un.
+    expect((await send(s.kenji, org.json.id, "Encore une question")).status).toBe(201);
+    expect(
+      (await req(damien, "GET", "/me/conversations")).json.items.find((c: { id: string }) => c.id === org.json.id),
+    ).toMatchObject({ side: "structure", unreadCount: 1 });
+
+    // Après la lecture de chacune : zéro.
+    for (const conv of [direct.json.id, org.json.id]) {
+      const last = (await req(s.kenji, "GET", `/conversations/${conv}/messages`)).json.items[0].id as string;
+      expect((await req(s.kenji, "POST", `/conversations/${conv}/read`, { messageId: last })).status).toBe(200);
+    }
+    expect((await req(s.kenji, "GET", `/conversations/${direct.json.id}`)).json.unreadCount).toBe(0);
+    expect((await req(s.kenji, "GET", `/conversations/${org.json.id}`)).json.unreadCount).toBe(0);
+    expect((await req(s.kenji, "GET", "/me/inbox/summary")).json.unreadMessages).toBe(0);
   });
 });

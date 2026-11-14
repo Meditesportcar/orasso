@@ -239,9 +239,9 @@ test("Léo identifie la voiture de Damien, Damien reçoit « Tes photos », en s
   await expect(dam.page.getByTestId("photo-sheet-not-mine")).toContainText(
     "Sud Cars en est prévenu ; l'identification disparaît",
   );
-  // Plus de « Contacter » : la conversation de page du média est un lot à part (elle ne doit pas révéler le compte derrière la page).
-  await expect(dam.page.getByTestId("photo-sheet-contact")).toHaveCount(0);
-  await expect(dam.page.getByTestId("my-photos-contact")).toHaveCount(0);
+  // « Contacter » (lot R9i, partie 2) : la conversation de page du média, sous le nom et le logo de la page (une rangée de plus).
+  await expect(dam.page.getByTestId("photo-sheet-contact")).toContainText("Contacter Sud Cars");
+  await expect(dam.page.getByTestId("my-photos-contact")).toBeVisible();
   await shot(dam.page, "damien-feuille-pas-ma-voiture-beton");
   await dam.page.getByTestId("photo-sheet-not-mine").click();
   await expect(dam.page.getByTestId("my-photo")).toHaveCount(n - 1, { timeout: 30_000 });
