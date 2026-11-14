@@ -10,8 +10,10 @@ import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import { backfillMentions } from "../../src/modules/feed/mentions";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
+import { LYDIA_ORGA_POSTS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
+import { isSeedPost } from "./seed-scope";
 
 const LYDIA_SLUG = "rassemblement-du-lydia";
 const JULIE_CAPTION = "J'y serai avec la Clio : à samedi au pied du Lydia !";
@@ -115,7 +117,7 @@ export async function seedFeedMentions() {
   if (!pinned) {
     const candidate = await db.execute<{ id: string }>(sql`select p.id from feed_posts p
       where p.persona = 'organizer' and p.structure_id = ${structure.id} and p.event_id = ${lydia.id}
-        and p.event_role = 'organizer' and p.deleted_at is null
+        and p.event_role = 'organizer' and p.deleted_at is null and ${isSeedPost(LYDIA_ORGA_POSTS, "p")}
         and exists (select 1 from feed_post_photos ph where ph.post_id = p.id)
       order by p.created_at desc limit 1`);
     const id = candidate.rows[0]?.id;

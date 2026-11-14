@@ -20,6 +20,7 @@ import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { createAccount, DAY, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
+import { type SeedPost, seedPostId } from "./seed-scope";
 
 const SIZE: Record<FeedAspect, { width: number; height: number }> = {
   portrait_4_5: { width: 1080, height: 1350 },
@@ -200,8 +201,31 @@ export async function seedFeed() {
   await seedCoauthors();
 }
 
-/** Légendes des publications que ce seed pose (compte Orasso, Kenji_66, Marc_66) : les autres scripts ne visent que celles-là, jamais une publication réelle. */
-export const SEED_PLAN_CAPTIONS: string[] = PLAN.map((p) => p.caption);
+/** Publications du plan que ce seed pose (compte Orasso, Kenji_66, Marc_66), avec leur identifiant fixe : les autres scripts ne visent que celles-là. */
+export const SEED_PLAN_POSTS: SeedPost[] = PLAN.map((p, i) => ({
+  id: seedPostId(`plan:${i}`),
+  author: p.author,
+  caption: p.caption,
+}));
+
+/** Les trois publications de Roues Libres 66 (Sarah_66) rattachées au Lydia : identifiants fixes, dans l'ordre de `seedPublications`. */
+export const LYDIA_ORGA_POSTS: SeedPost[] = [
+  {
+    id: seedPostId("lydia:0"),
+    author: "Sarah_66",
+    caption: "Le plateau JDM prend forme au pied du Lydia : passez nous voir.",
+  },
+  {
+    id: seedPostId("lydia:1"),
+    author: "Sarah_66",
+    caption: "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.",
+  },
+  {
+    id: seedPostId("lydia:2"),
+    author: "Sarah_66",
+    caption: "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.",
+  },
+];
 
 async function seedOrassoFeed() {
   await migrateLegacyFeedKeys();
@@ -249,7 +273,7 @@ async function seedOrassoFeed() {
       .resize(size.width, size.height, { fit: "cover", position: "attention" })
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
-    const postId = randomUUID();
+    const postId = SEED_PLAN_POSTS[index]?.id ?? randomUUID();
     const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
     await storage.put(key, out.data);
     const createdAt = new Date(at - plan.hoursAgo * HOUR);
@@ -347,17 +371,17 @@ export async function seedPublications() {
   };
 
   // Avec une photo.
-  const withPhoto = randomUUID();
-  await orga(withPhoto, "Le plateau JDM prend forme au pied du Lydia : passez nous voir.", 3);
+  const withPhoto = LYDIA_ORGA_POSTS[0]?.id ?? randomUUID();
+  await orga(withPhoto, LYDIA_ORGA_POSTS[0]?.caption ?? "", 3);
   if (!(await storeFeedPhoto(withPhoto, 3))) {
     await db.delete(t.feedPosts).where(eq(t.feedPosts.id, withPhoto));
     console.log("Publications rattachées : photos du seed absentes, rien ajouté.");
     return;
   }
   // Sans photo : l'affiche de l'événement fait le visuel (une référence, jamais une copie).
-  await orga(randomUUID(), "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.", 8);
+  await orga(LYDIA_ORGA_POSTS[1]?.id ?? randomUUID(), LYDIA_ORGA_POSTS[1]?.caption ?? "", 8);
   // « Info importante » : déjà envoyée (motif Horaires). Seed : aucune notification réelle n'est écrite.
-  await orga(randomUUID(), "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.", 26, {
+  await orga(LYDIA_ORGA_POSTS[2]?.id ?? randomUUID(), LYDIA_ORGA_POSTS[2]?.caption ?? "", 26, {
     importantReason: "schedule",
     importantSentAt: new Date(at - 26 * HOUR),
   });

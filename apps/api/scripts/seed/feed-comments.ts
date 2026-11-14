@@ -6,11 +6,18 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { SEED_PLAN_POSTS } from "./feed";
 import { HOUR, now } from "./helpers";
+import { isSeedPost, type SeedPost } from "./seed-scope";
 
-/** Les deux publications de Kenji_66 posées par `feed.ts` (même légende). */
-export const KENJI_RECENT_CAPTION = "Retour de la sortie du Roussillon Drift.";
-const OLDER_CAPTION = "Sur le plateau ce week-end.";
+/** Les deux publications de Kenji_66 du plan de `feed.ts` (identifiant fixe, ou légende et auteur pour une base posée avant `SEED_ADOPT_BEFORE`). */
+const planPost = (caption: string): SeedPost => {
+  const found = SEED_PLAN_POSTS.find((p) => p.author === "Kenji_66" && p.caption === caption);
+  if (!found) throw new Error(`Publication du plan absente : ${caption}`);
+  return found;
+};
+export const KENJI_RECENT_POST = planPost("Retour de la sortie du Roussillon Drift.");
+const OLDER_POST = planPost("Sur le plateau ce week-end.");
 
 const byPseudo = (pseudo: string) =>
   db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
@@ -31,16 +38,16 @@ export async function seedFeedComments() {
     return;
   }
   // Les publications du seed (légende du plan de `feed.ts`), jamais « la dernière » de Kenji_66 : une vraie publication n'est pas touchée.
-  const own = (caption: string) =>
-    db.query.feedPosts.findFirst({
-      where: and(
-        eq(t.feedPosts.authorId, kenji.userId),
-        eq(t.feedPosts.caption, caption),
-        isNull(t.feedPosts.deletedAt),
-      ),
-    });
-  const recent = await own(KENJI_RECENT_CAPTION);
-  const older = await own(OLDER_CAPTION);
+  const own = async (item: SeedPost) =>
+    (
+      await db
+        .select()
+        .from(t.feedPosts)
+        .where(and(eq(t.feedPosts.authorId, kenji.userId), isNull(t.feedPosts.deletedAt), isSeedPost([item])))
+        .limit(1)
+    )[0];
+  const recent = await own(KENJI_RECENT_POST);
+  const older = await own(OLDER_POST);
   if (!recent) return;
   const [existing] = await db
     .select({ id: t.feedPostComments.id })

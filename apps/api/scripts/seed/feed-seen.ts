@@ -6,15 +6,16 @@
 //   organisatrice : « Pour ta sortie de samedi ».
 // Rejouable : les lignes existantes ne sont jamais doublées (clés uniques, légende repérée).
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
-import { SEED_PLAN_CAPTIONS } from "./feed";
+import { LYDIA_ORGA_POSTS, SEED_PLAN_POSTS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
+import { isSeedAccount, isSeedPost } from "./seed-scope";
 
 const OUTING_CAPTION = "Le programme de la journée est en ligne : retrouvez-nous dès l'ouverture des portes.";
 
@@ -40,11 +41,9 @@ export async function seedFeedSeen() {
         sql`${t.profiles.deletedAt} is null and ${t.profiles.bannedAt} is null and ${t.profiles.visibility} = 'public'`,
         sql`${t.feedPosts.authorId} <> ${damien.userId}`,
         sql`exists (select 1 from feed_post_photos ph where ph.post_id = ${t.feedPosts.id})`,
-        // Seulement les publications du seed (légendes du plan, journal du Lydia de Roues Libres 66) : jamais une publication réelle.
-        or(
-          inArray(t.feedPosts.caption, SEED_PLAN_CAPTIONS),
-          sql`(${t.feedPosts.structureId}, ${t.feedPosts.eventId}) in (select s.id, e.id from structures s, events e where s.slug = 'roues-libres-66' and e.slug = 'rassemblement-du-lydia')`,
-        ),
+        // Seulement les publications du seed (plan de `feed.ts` et journal du Lydia de Roues Libres 66 : identifiants fixes), jamais une
+        // publication réelle, même de légende identique.
+        isSeedPost([...SEED_PLAN_POSTS, ...LYDIA_ORGA_POSTS]),
       ),
     )
     .orderBy(desc(t.feedPosts.createdAt));
@@ -69,12 +68,36 @@ export async function seedFeedSeen() {
         sql`${t.profiles.deletedAt} is null and ${t.profiles.bannedAt} is null`,
         sql`${t.profiles.userId} <> ${damien.userId}`,
         eq(t.profiles.official, false),
+        // Comptes de la graine seulement : un vrai compte ne reçoit jamais de flamme qu'il n'a pas donnée.
+        isSeedAccount("profiles.user_id"),
       ),
     )
     .orderBy(t.profiles.pseudo)
     .limit(8);
+  // Le rail n'est posé qu'une fois : s'il y a déjà une flamme d'un compte de la graine sur ces publications, rien n'est refait.
+  const railDone =
+    hot.length > 0 &&
+    fans.length > 0 &&
+    (
+      await db
+        .select({ id: t.feedPostReactions.postId })
+        .from(t.feedPostReactions)
+        .where(
+          and(
+            inArray(
+              t.feedPostReactions.postId,
+              candidates.map((c) => c.id),
+            ),
+            inArray(
+              t.feedPostReactions.userId,
+              fans.map((f) => f.id),
+            ),
+          ),
+        )
+        .limit(1)
+    ).length > 0;
   let flamed = 0;
-  for (const [index, post] of hot.entries()) {
+  for (const [index, post] of railDone ? [] : hot.entries()) {
     const wanted = Math.min(fans.length, 6 - (index % 4));
     const who = fans.filter((f) => f.id !== post.authorId).slice(0, wanted);
     if (who.length < 3) continue;
