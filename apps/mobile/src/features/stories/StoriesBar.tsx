@@ -4,7 +4,16 @@
 // vu. Le nom dessous ne se coupe jamais (`WordSafeText`). Défilement horizontal. Relue au retour sur l'écran (`useApi`) et
 // quand `story.ready` arrive sur le canal `user:{id}`. Aucune règle de visibilité ici : l'API a déjà filtré. Une panne n'est
 // jamais une barre vide : « Réessayer ». Rien n'est gardé dans le trousseau (vie privée).
-import { AvatarRing, Icon, OrgLogo, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
+import {
+  AvatarRing,
+  archivoAt,
+  Icon,
+  OrgLogo,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import { barDisplay, storyViewerLabels as L, mineRingState } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
@@ -184,7 +193,7 @@ const styles = StyleSheet.create({
   wrap: { marginHorizontal: -space4 },
   row: { flexDirection: "row", gap: space3, paddingHorizontal: space4, paddingVertical: 2, alignItems: "flex-start" },
   item: { width: ITEM_W, alignItems: "center", gap: 5 },
-  name: { textAlign: "center", fontFamily: "Archivo-Bold", lineHeight: 13, maxWidth: ITEM_W },
+  name: { textAlign: "center", fontFamily: archivoAt(100, 700), lineHeight: 13, maxWidth: ITEM_W },
   afterLive: { marginTop: 4 },
   add: {
     width: 64,
