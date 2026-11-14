@@ -145,7 +145,8 @@ export const ME_TIMEOUT_MS = 10_000;
 /** Ce que la vérification doit savoir de la réponse de `/me` (le résultat de `apiFetch` convient). */
 export type MeResult = { ok: true; data: { user: { id: string } } } | { ok: false; status: number };
 
-const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
+/** Lit `/me` (exporté pour le test : le délai de 10 s est une règle). */
+export const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
 
 /**
  * Ce que ce document sait de la session courante (tour 11 : un seul modèle, sans optimisme aux transitions). `me` est le dernier

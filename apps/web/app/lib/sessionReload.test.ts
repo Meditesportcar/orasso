@@ -2,10 +2,12 @@
 // (3e rechargement en moins de 20 s refusé), repli sans stockage, un seul comptage par rechargement lancé, décision « autre compte ».
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apiFetch } from "./api.client";
 import {
   AFTER_RELOAD_PARAM,
   createConfirmer,
   deriveConfirmation,
+  fetchMe,
   isAfterReload,
   isForeign,
   ME_TIMEOUT_MS,
@@ -19,6 +21,9 @@ import {
   type SessionConfirmation,
   unknownMe,
 } from "./sessionReload";
+
+// `/me` : le module `api.client` est remplacé (il fait un vrai `fetch`) ; chaque test lit ses appels.
+vi.mock("./api.client", () => ({ apiFetch: vi.fn() }));
 
 function stubWindow(opts: { storage: boolean; search?: string; hash?: string }) {
   const replaced: string[] = [];
@@ -266,6 +271,26 @@ describe("confirmation du compte (dernier compte rendu par /me)", () => {
   it("le délai de /me est de 10 s", () => {
     expect(ME_TIMEOUT_MS).toBe(10_000);
   });
+
+  it("la vérification lit /me avec un délai de 10 s (sans lui, « Mise à jour… » à vie) et rend la réponse telle quelle", async () => {
+    const reply = me("A");
+    vi.mocked(apiFetch).mockClear();
+    vi.mocked(apiFetch).mockResolvedValueOnce(reply as never);
+    expect(await fetchMe()).toBe(reply);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(apiFetch).toHaveBeenCalledWith("/me", { timeoutMs: 10_000 });
+  });
+
+  it("un /me abandonné au délai (status 0) donne « failed » avec la marque, jamais « checking » à vie", async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: false,
+      status: 0,
+      error: { code: "internal", message: "x" },
+    } as never);
+    const { box, apply } = localKnowledge();
+    await createConfirmer(fetchMe)(apply);
+    expect(confirmation(box.k, "A", true)).toBe("failed");
+  });
 });
 
 describe("un changement d'owner ou d'afterReload ne remet jamais « ok » (tour 11)", () => {
@@ -363,8 +388,12 @@ describe("verrou global de rechargement", () => {
       const stalled = vi.fn();
       const off = mod.onReloadStalled(stalled);
       mod.reloadAutomatically("crew");
+      // Le minuteur de blocage est armé : un seul minuteur en attente.
+      expect(vi.getTimerCount()).toBe(1);
       mod.resetReloadLock();
-      // Tour 12 : la restauration pose elle-même le fait (une notification) ; le minuteur annulé n'en ajoute pas une seconde.
+      // Tour 12 : la restauration pose elle-même le fait (une notification) ; le minuteur est annulé (aucun en attente : sans
+      // `clearStall()` il resterait un minuteur, ce que le seul décompte des notifications ne voyait pas).
+      expect(vi.getTimerCount()).toBe(0);
       expect(stalled).toHaveBeenCalledTimes(1);
       vi.advanceTimersByTime(mod.RELOAD_STALL_MS * 2);
       expect(stalled).toHaveBeenCalledTimes(1);
