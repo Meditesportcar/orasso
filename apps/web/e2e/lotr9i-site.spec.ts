@@ -357,6 +357,11 @@ test("« Contacter » : un rechargement de la même page à la réponse n'empêc
     await heldData;
     await route.continue();
   });
+  // Les chargeurs de la conversation : aucune requête ne doit partir tant que la navigation vers la même adresse n'est pas revenue au repos.
+  const conversationData: string[] = [];
+  page.on("request", (r) => {
+    if (/\/messages\/[0-9a-f-]{36}\.data/.test(r.url())) conversationData.push(r.url());
+  });
   // Sans attendre la fin de la navigation (retenue) : l'appel ne doit pas bloquer la page de recette.
   await page.evaluate(() => {
     const router = (window as unknown as { __reactRouterDataRouter: { navigate(to: string): Promise<void> } })
@@ -378,6 +383,7 @@ test("« Contacter » : un rechargement de la même page à la réponse n'empêc
   // La réponse de « Contacter » est traitée pendant le chargement retenu ; on lui laisse le temps d'arriver, puis rien ne doit être parti.
   await page.waitForTimeout(1_500);
   expect(page.url()).not.toMatch(/\/messages\//);
+  expect(conversationData, "rien ne part vers la conversation avant le retour au repos").toEqual([]);
   releaseData();
   await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await ctx.close();
