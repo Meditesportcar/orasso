@@ -1198,11 +1198,23 @@ test.describe("B2a : une publication de story qui ne répond pas", () => {
     const first = (await storiesOf(author, author.id))[0];
     // Le composeur est toujours là, le brouillon intact : on réessaie ici, avec la même clé.
     await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    const secondResponse = a.waitForResponse(
+      (r) => /\/api\/me\/stories$/.test(r.url()) && r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
     await a.getByTestId("story-publish-send").click();
-    await expect.poll(() => posts, { timeout: 30_000 }).toBe(2);
+    const replay = await secondResponse;
+    expect(replay.status()).toBe(201);
+    const replayed = (await replay.json()) as { id: string; replayed?: boolean; audience?: string };
     expect(keys[1]).toBe(keys[0]);
     expect(keys[0]?.length ?? 0).toBeGreaterThan(0);
-    await expect(a.getByTestId("story-error")).toHaveCount(0, { timeout: 30_000 });
+    // Le nouvel essai ABOUTIT : l'écran de réussite d'une reprise, la même story, le vrai public rendu par l'API.
+    await expect(a.getByTestId("story-done")).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByTestId("story-done")).toContainText("Ta story est déjà partie");
+    expect(posts).toBe(2);
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.audience).toBeTruthy();
+    expect(replayed.id).toBe(first?.id);
     const stories = await storiesOf(author, author.id);
     expect(stories.map((x) => x.id)).toEqual([first?.id]);
     await ctx.close();
