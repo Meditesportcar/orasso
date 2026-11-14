@@ -334,11 +334,12 @@ test("Casquette périmée : retour à « Moi » avec l'avis, et une page suspend
   }
 });
 
-test("Les adresses « Page » existent (la partie 2 en fait la Page du propriétaire)", async ({ browser }) => {
+test("Les adresses « Page » ouvrent la Page du propriétaire (partie 2)", async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   await open(page, "damien@orasso.local", "/orga/meditesportcar/page");
-  await expect(page).toHaveURL(`${WEB}/orga/meditesportcar/structure`);
+  await expect(page).toHaveURL(`${WEB}/orga/meditesportcar/page`);
+  await expect(page.getByTestId("owner-page")).toBeVisible();
   await ctx.close();
 });

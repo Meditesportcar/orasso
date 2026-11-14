@@ -131,6 +131,8 @@ test("tour 2 : plateau de pros seulement, signalement d'un prestataire, fenêtre
   await expect(page.getByTestId("lineup-pros").getByRole("button", { name: "Signaler" })).toBeVisible();
   await page.getByTestId("lineup-pros").getByTestId("lineup-pro").click();
   await expect(page.getByTestId("provider-public")).toBeVisible();
+  // Lot R9h partie 2 : « Signaler » est dans le menu « Plus » de la page du prestataire (gabarit R8g).
+  await page.getByTestId("provider-public").getByTestId("page-more").locator("summary").click();
   const report = page.getByTestId("provider-public").getByRole("button", { name: "Signaler" });
   // Lot R8r : le clic n'a d'effet qu'une fois la page hydratée (serveur de développement lent, 3 échecs sur 3 en suite) : on le
   // répète jusqu'à l'ouverture de la fenêtre.
