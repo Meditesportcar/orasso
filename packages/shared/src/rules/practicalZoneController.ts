@@ -202,6 +202,9 @@ export function createPracticalZone(deps: ZoneDeps) {
     if (!zone || reading || !alive) return;
     clearResume();
     const cursor = cursorUsed;
+    // Les couvertures présentes au départ de la lecture : celles qui apparaissent pendant qu'elle est en vol (une ouverture plus récente) sont plus
+    // récentes que sa réponse, qui ne peut pas retirer ce qu'elles garantissent.
+    const before = new Set(state.cover);
     reading = true;
     const gen = generation;
     const token = cycle.begin();
@@ -230,7 +233,13 @@ export function createPracticalZone(deps: ZoneDeps) {
         const next: ReturnType<typeof store> = lost
           ? { ...store(() => false, data.places, []), restart: true }
           : store(
-              (p) => coverContains(covered, p) && !seriesIds.has(p.id),
+              (p) =>
+                coverContains(covered, p) &&
+                !seriesIds.has(p.id) &&
+                !coverContains(
+                  state.cover.filter((c) => !before.has(c)),
+                  p,
+                ),
               data.places,
               covered,
               cursor !== undefined ? zone : undefined,
