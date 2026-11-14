@@ -519,3 +519,51 @@ test("liste non vide, puis actualisation en 404 (événement devenu invisible) :
     await ctx.close();
   }
 });
+
+test("liste non vide, 404, puis panne (500), puis lecture réussie : les albums n'ont pas réapparu pendant la panne", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    let mode: "ok" | "404" | "500" = "ok";
+    await page.route(`**/api/events/by-slug/${SLUG}/albums*`, (route) =>
+      mode === "404"
+        ? route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code: "not_found", message: "Événement introuvable" } }),
+          })
+        : mode === "500"
+          ? route.fulfill({
+              status: 500,
+              contentType: "application/json",
+              body: JSON.stringify({ error: { code: "internal", message: "Erreur" } }),
+            })
+          : route.continue(),
+    );
+    const refresh = async () => {
+      // Aller au plateau puis revenir : la fiche est relue au retour.
+      await page.getByTestId("lineup-block").getByText("Voir le plateau", { exact: false }).first().click();
+      await page.waitForURL(/plateau/, { timeout: 30_000 });
+      await page.goBack();
+      await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
+    };
+    await go(page, `/e/${SLUG}`);
+    await expect(page.getByTestId("lineup-block")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    mode = "404";
+    await refresh();
+    await expect(page.getByTestId("event-photos")).toHaveCount(0, { timeout: 30_000 });
+    mode = "500";
+    await refresh();
+    // La panne n'est pas un 404 : l'erreur s'affiche, mais les albums refusés par l'API ne reviennent pas.
+    await expect(page.getByTestId("event-photos-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(0);
+    mode = "ok";
+    await refresh();
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-error")).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});

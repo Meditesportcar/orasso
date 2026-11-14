@@ -96,6 +96,8 @@ it.each(Object.entries(revocations))(
     } finally {
       // Toujours relâcher la reprise (même si l'attente échoue) : sinon elle garde ses verrous et bloque le test suivant et la fermeture du pool.
       gate.release();
+      // Et attendre les deux appels (sans masquer l'erreur d'origine) : aucun appel ne reste pendant après un échec.
+      await Promise.allSettled([pending, revoking]);
     }
     const [reposted, revoked] = await Promise.all([pending, revoking]);
     expect(reposted.status, reposted.text).toBe(201);

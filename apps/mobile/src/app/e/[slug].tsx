@@ -725,11 +725,13 @@ export default function EventPage() {
       {/* Lot R9g : « Photos », les albums des médias accrédités (l'officiel en tête) ; rien sans album publié. */}
       {!cancelled ? (
         <PhotosSection
+          key={e.slug}
           slug={e.slug}
           signedIn={status === "in"}
           ownStructure={ownStructure}
           refreshKey={journalTick}
-          reveal={section === "photos" && lineupDone && scrolledFor.current !== slug}
+          // Instance réutilisée A → B : `useApi` garde la fiche A pendant que B charge ; le défilement ne vaut que pour la fiche demandée.
+          reveal={section === "photos" && e.slug === slug && lineupDone && scrolledFor.current !== slug}
           scrollRef={pageScroll}
           onRevealed={revealed}
         />

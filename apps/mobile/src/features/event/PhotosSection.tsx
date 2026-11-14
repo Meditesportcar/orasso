@@ -68,6 +68,19 @@ export function PhotosSection({
     setMoreFailed(null);
     setLoadingMore(false);
   }, [list.data, slug, signedIn, refreshKey]);
+  // Un 404 (événement devenu privé, non publié…) : l'API refuse ces albums, on les **oublie** (première page et pages suivantes). `useApi` garde
+  // la dernière valeur et remplace seulement l'erreur : sans cela, une actualisation suivante hors ligne ou en 500 les ferait réapparaître.
+  // Des albums ne reviennent qu'après une lecture réussie.
+  const gone = list.error?.status === 404;
+  const { setData: forgetList } = list;
+  useEffect(() => {
+    if (!gone) return;
+    generation.current += 1;
+    forgetList(null);
+    setMore(null);
+    setMoreFailed(null);
+    setLoadingMore(false);
+  }, [gone, forgetList]);
   const seen = new Set<string>();
   const albums = albumsOrder([...(list.data?.items ?? []), ...(more?.items ?? [])]).filter((a) => {
     if (seen.has(a.id)) return false;
