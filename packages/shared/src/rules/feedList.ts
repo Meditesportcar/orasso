@@ -561,3 +561,38 @@ export function slidesToLoad(index: number, count: number, near: boolean): numbe
 /** Une carte (position `top` et hauteur à l'écran) est « près de l'écran » à moins de `margin` px de la fenêtre (haut ou bas). */
 export const isNearViewport = (top: number, height: number, viewport: number, margin = viewport): boolean =>
   top + height > -margin && top < viewport + margin;
+
+// --- La ligne de raison d'une carte (lot B3b) ----------------------------------------------------------------------------
+
+const PARIS = "Europe/Paris";
+const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: PARIS });
+
+/**
+ * Le moment d'un événement pour la ligne d'une carte : « en cours » (commencé), « aujourd'hui », « demain », sinon le jour
+ * (« 16 novembre »), à Paris.
+ */
+export function feedEventMoment(startsAt: string | Date, now: Date): string {
+  const start = new Date(startsAt);
+  if (start.getTime() <= now.getTime()) return "en cours";
+  const today = dayKey(now);
+  if (dayKey(start) === today) return "aujourd'hui";
+  if (dayKey(start) === dayKey(new Date(now.getTime() + 86_400_000))) return "demain";
+  return start.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: PARIS });
+}
+
+/** Un événement qui commence dans les 48 h (ou a commencé) : la date de sa carte est l'instant du parcours (« carte chaude »), pas un moment de publication. */
+const HOT_MS = 48 * 3_600_000;
+
+/**
+ * La petite ligne d'une carte : la raison, puis l'ancienneté. Une carte d'événement « chaude » (l'API la date à l'instant du
+ * parcours pour la faire monter) ne dit pas « à l'instant » : elle dit quand a lieu l'événement.
+ */
+export function feedReasonLine(card: FeedCard, now: Date): string {
+  if (card.kind === "event_recommended") {
+    const event = (card.payload as { event?: { startsAt?: string } }).event;
+    if (event?.startsAt && new Date(event.startsAt).getTime() - now.getTime() <= HOT_MS) {
+      return `${card.reason.label} · ${feedEventMoment(event.startsAt, now)}`;
+    }
+  }
+  return `${card.reason.label} · ${feedAgo(card.at, now)}`;
+}

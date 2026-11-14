@@ -12,7 +12,9 @@ import {
   FEED_KINDS_DRAWN,
   feedAgo,
   feedCropPlan,
+  feedEventMoment,
   feedPostBody,
+  feedReasonLine,
   feedRetryAction,
   firstUndecidedPhoto,
   framesPlaced,
@@ -373,5 +375,55 @@ describe("la carte Sponsorisé jamais avant la 4e place (lot R7k2, tour 2)", () 
   it("retire toutes les cartes d'un emplacement refusé, pas les autres", () => {
     const l = [post("a"), ad("s1", "pl1"), post("b"), ad("s2", "pl1"), ad("s3", "pl2")];
     expect(ids(withoutPlacement(l, "pl1"))).toEqual(["a", "b", "s3"]);
+  });
+});
+
+describe("ligne de raison d'une carte d'événement (lot B3b)", () => {
+  // Lundi 16 novembre 2026, 11 h à Paris.
+  const now = new Date("2026-11-16T10:00:00Z");
+  const eventCard = (
+    startsAt: string,
+    at: string,
+    code: "following_structure" | "recommended_event" = "following_structure",
+  ) =>
+    ({
+      id: "event_recommended:e1",
+      kind: "event_recommended",
+      reason: {
+        code,
+        label: code === "following_structure" ? "Événement d'un abonnement" : "Événement recommandé",
+      },
+      at,
+      seen: false,
+      payload: { event: { startsAt } },
+    }) as unknown as FeedCard;
+
+  it("le moment de l'événement, à Paris", () => {
+    expect(feedEventMoment("2026-11-16T09:00:00Z", now)).toBe("en cours");
+    expect(feedEventMoment("2026-11-16T18:00:00Z", now)).toBe("aujourd'hui");
+    // 23 h 30 à Paris le soir même : toujours aujourd'hui (et non le lendemain en UTC).
+    expect(feedEventMoment("2026-11-16T22:30:00Z", now)).toBe("aujourd'hui");
+    expect(feedEventMoment("2026-11-17T08:00:00Z", now)).toBe("demain");
+    expect(feedEventMoment("2026-11-18T08:00:00Z", now)).toBe("18 novembre");
+  });
+  it("carte chaude : jamais « à l'instant », le moment de l'événement", () => {
+    expect(feedReasonLine(eventCard("2026-11-17T08:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · demain",
+    );
+    expect(feedReasonLine(eventCard("2026-11-16T18:00:00Z", now.toISOString(), "recommended_event"), now)).toBe(
+      "Événement recommandé · aujourd'hui",
+    );
+    expect(feedReasonLine(eventCard("2026-11-18T09:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · 18 novembre",
+    );
+  });
+  it("événement lointain : l'ancienneté de la carte, comme avant", () => {
+    expect(feedReasonLine(eventCard("2026-12-10T09:00:00Z", "2026-11-14T10:00:00Z"), now)).toBe(
+      `Événement d'un abonnement · ${feedAgo("2026-11-14T10:00:00Z", now)}`,
+    );
+  });
+  it("les autres cartes gardent leur ancienneté", () => {
+    const post = { ...eventCard("2026-11-17T08:00:00Z", "2026-11-16T07:00:00Z"), kind: "feed_post" } as FeedCard;
+    expect(feedReasonLine(post, now)).toBe(`Événement d'un abonnement · ${feedAgo("2026-11-16T07:00:00Z", now)}`);
   });
 });

@@ -1,7 +1,7 @@
 // Pièces des cartes du Fil : le rond d'un organisateur ou d'un pro (logo, ou initiales), le trophée d'un résultat, la
 // ligne de repères (raison + temps), la raison d'une personne.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedCard, feedAgo } from "@orasso/shared";
+import { type FeedCard, feedReasonLine } from "@orasso/shared";
 import { Image, StyleSheet, View } from "react-native";
 
 import { now } from "@/lib/clock";
@@ -46,7 +46,7 @@ export function TrophyHead({ size = 38 }: { size?: number }) {
 }
 
 /** La petite ligne d'une carte : la raison, puis « · il y a 3 h ». */
-export const reasonLine = (card: FeedCard): string => `${card.reason.label} · ${feedAgo(card.at, now())}`;
+export const reasonLine = (card: FeedCard): string => feedReasonLine(card, now());
 
 const styles = StyleSheet.create({
   logo: {

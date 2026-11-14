@@ -114,6 +114,12 @@ describe("raison affichée", () => {
     expect(feedReasonLabel("your_styles")).toBe("Dans tes styles");
     expect(feedReasonLabel("recommended_event")).toBe("Événement recommandé");
     expect(feedReasonLabel("following_structure")).toBe("Nouveauté d'un abonnement");
+    // Lot B3b : un événement d'une page suivie n'est pas une « nouveauté » ; une publication ou un pro, si.
+    expect(feedReasonLabel("following_structure", null, undefined, "event_recommended")).toBe(
+      "Événement d'un abonnement",
+    );
+    expect(feedReasonLabel("following_structure", null, undefined, "feed_post")).toBe("Nouveauté d'un abonnement");
+    expect(feedReasonLabel("following_pro", null, undefined, "pro")).toBe("Nouveauté d'un abonnement");
   });
 });
 

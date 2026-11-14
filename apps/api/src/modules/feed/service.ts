@@ -249,7 +249,10 @@ function toCard(c: LoadedCard, ctx: FeedViewerContext, seen: boolean, ref: Date)
   return {
     id: c.id,
     kind: c.kind,
-    reason: { code, label: feedReasonLabel(code, c.authorPseudo, startsAt ? { startsAt, now: ref } : undefined) },
+    reason: {
+      code,
+      label: feedReasonLabel(code, c.authorPseudo, startsAt ? { startsAt, now: ref } : undefined, c.kind),
+    },
     at: c.at.toISOString(),
     payload: c.payload,
     seen,

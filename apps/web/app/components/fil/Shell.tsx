@@ -1,7 +1,7 @@
 // La coque d'une carte du Fil sur le site (maquette R7.6 `.r7c`) : en-tête (rond, titre, raison, « ⋯ »), contenu, actions.
 import "../../styles/pro-offers.css";
 import { Icon } from "@orasso/design-system/web";
-import { type FeedCard, type FeedCardKind, feedAgo, feedScreenLabels as L } from "@orasso/shared";
+import { type FeedCard, type FeedCardKind, feedReasonLine, feedScreenLabels as L } from "@orasso/shared";
 import { Link } from "react-router";
 
 export type CardProps<K extends FeedCardKind = FeedCardKind> = {
@@ -14,7 +14,7 @@ export type CardProps<K extends FeedCardKind = FeedCardKind> = {
   userId?: string;
 };
 
-export const reasonLine = (card: FeedCard) => `${card.reason.label} · ${feedAgo(card.at, new Date())}`;
+export const reasonLine = (card: FeedCard) => feedReasonLine(card, new Date());
 
 export function OrgLogo({ url, name }: { url: string | null; name: string }) {
   const initials = name

@@ -15,17 +15,22 @@ export function feedMyOutingLabel(startsAt: Date, now: Date): string {
   return `Pour ta sortie de ${startsAt.toLocaleDateString("fr-FR", { weekday: "long", timeZone: tz })}`;
 }
 
+/** La raison d'une carte d'événement d'une page suivie (lot B3b). */
+export const feedEventOfFollowLabel = "Événement d'un abonnement";
+
 /** « Pourquoi je vois ça » : la ligne sous la carte. `pseudo` ou `name` complètent les liens directs. */
 export function feedReasonLabel(
   code: FeedReasonCode,
   who?: string | null,
   outing?: { startsAt: Date; now: Date },
+  kind?: FeedCardKind,
 ): string {
   switch (code) {
     case "following_author":
       return who ? `Tu suis ${who}` : "Tu suis cette personne";
     case "following_structure":
-      return "Nouveauté d'un abonnement";
+      // Lot B3b : un événement n'est pas une « nouveauté » (il peut être publié depuis longtemps) ; son moment s'écrit à côté (`feedReasonLine`).
+      return kind === "event_recommended" ? feedEventOfFollowLabel : "Nouveauté d'un abonnement";
     case "following_pro":
       return "Nouveauté d'un abonnement";
     case "crew_mate":

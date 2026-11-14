@@ -417,6 +417,9 @@ describe("filtres, diversité, « moins de ce genre »", () => {
     expect(kinds(res.items).has("event_recommended")).toBe(false);
     await db.insert(structureFollows).values({ structureId: structure.id, userId: viewer.id, source: "manual" });
     expect(kinds((await fil(viewer, "?filter=following")).items).has("event_recommended")).toBe(true);
+    // Lot B3b : la carte d'un événement d'une page suivie dit « Événement d'un abonnement », pas « Nouveauté ».
+    const eventCard = (await fil(viewer, "?filter=following")).items.find((c) => c.kind === "event_recommended");
+    expect(eventCard?.reason).toEqual({ code: "following_structure", label: "Événement d'un abonnement" });
     // « Pour toi » les garde aussi
     expect(postIdsOf((await fil(viewer)).items)).toContain(mine);
   });
