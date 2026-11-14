@@ -64,10 +64,12 @@ export async function loader({ request, params }: Route.LoaderArgs): Promise<Own
       }),
       filter: explicitPageFilter(url.searchParams.get(PAGE_FILTER_PARAM)),
       eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
-      upcoming: upcoming.ok ? upcoming.data.items : [],
-      past: past.ok ? past.data.items : [],
-      partners: partners.ok ? partners.data : [],
+      // Une lecture qui échoue reste `null` : l'écran dit la panne avec « Réessayer », jamais une liste vide ni un « 0 ».
+      upcoming: upcoming.ok ? upcoming.data.items : null,
+      past: past.ok ? past.data.items : null,
+      partners: partners.ok ? partners.data : null,
       inviteToken: full.ok ? full.data.inviteToken : null,
+      inviteFailed: !full.ok,
     };
   }
   if (path.startsWith("/pro/")) {

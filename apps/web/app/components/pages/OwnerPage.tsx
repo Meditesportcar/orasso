@@ -53,10 +53,12 @@ export type OwnerData =
       slug: string;
       filter: AuthorPostsFilter;
       eventsComplete: boolean;
-      upcoming: EventCard[];
-      past: EventCard[];
-      partners: ProCard[];
+      /** `null` : la lecture a échoué (jamais une liste vide à la place d'une panne). */
+      upcoming: EventCard[] | null;
+      past: EventCard[] | null;
+      partners: ProCard[] | null;
       inviteToken: string | null;
+      inviteFailed: boolean;
     })
   | (Common & { kind: "pro"; page: WithPageExtras<ProPublic>; slug: string })
   | (Common & { kind: "provider"; page: WithPageExtras<ProviderPage> })
@@ -185,8 +187,8 @@ export function OwnerPage({ data }: { data: OwnerData }) {
     data.kind === "organizer"
       ? pageCounters("structure", {
           followers: data.page.followersCount,
-          events: data.eventsComplete ? data.upcoming.length + data.past.length : null,
-          partners: data.partners.length,
+          events: data.eventsComplete && data.upcoming && data.past ? data.upcoming.length + data.past.length : null,
+          partners: data.partners ? data.partners.length : null,
         })
       : data.kind === "pro"
         ? pageCounters("pro", {
@@ -245,6 +247,7 @@ export function OwnerPage({ data }: { data: OwnerData }) {
           past={data.past}
           partners={data.partners}
           inviteToken={data.inviteToken}
+          inviteFailed={data.inviteFailed}
           origin={data.origin}
         />
       ) : tab === "publications" ? (

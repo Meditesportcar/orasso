@@ -20,7 +20,13 @@ async function shot(page: Page, name: string) {
   const wanted = (await page.context().cookies()).find((c) => c.name === "orasso-theme")?.value;
   if (wanted === "sable" || wanted === "beton")
     await expect(page.locator("html")).toHaveAttribute("data-theme", wanted);
-  await page.waitForTimeout(500);
+  // Un état observable, pas un délai : réseau au repos, polices et images décodées, deux images peintes (la capture voit le contenu final).
+  await page.waitForLoadState("networkidle");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => undefined))));
+    await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  });
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: false });
 }
 
@@ -587,5 +593,62 @@ test("les onglets des pages publiques et des Pages du propriétaire tiennent à 
   await tabsFit(page);
   await open(page, "sarah@orasso.local", "/orga/roues-libres-66/page");
   await tabsFit(page);
+  await ctx.close();
+});
+
+test("Deux casquettes du même compte : la fiche pro suit sa vitrine de prestataire (au nom de la fiche) puis s'en désabonne ; la vitrine ne se suit pas elle-même", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const email = "garage@orasso.local";
+  const provider = await personaOf(email, "provider");
+  const pro = await personaOf(email, "pro");
+  const proKey = `p:${pro.id}`;
+  const ownKey = `v:${provider.id}`;
+  // Précondition : la fiche pro ne suit pas la vitrine (l'état d'avant est rendu à la fin).
+  const wasFollowing = (await providerAs(email, provider.id, proKey)).isFollowing;
+  await setFollowing(email, ownKey, false, proKey);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  try {
+    await open(page, email, `/providers/${provider.id}?auteur=${encodeURIComponent(proKey)}&onglet=prestations`);
+    // La fiche pro n'est pas la page visitée : « Suivre » est là, au nom de la fiche.
+    const button = page.getByTestId("follow-button");
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    await button.click();
+    await expect(button).toHaveText(`Suivi en tant que ${pro.label}`);
+    expect((await providerAs(email, provider.id, proKey)).isFollowing, "la fiche pro suit la vitrine").toBe(true);
+    // Se désabonner, au nom de la fiche aussi.
+    await button.click();
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    expect((await providerAs(email, provider.id, proKey)).isFollowing).toBe(false);
+    // La vitrine ne se suit pas elle-même (casquette = la page) ; sans casquette, le propriétaire non plus.
+    await page.goto(`/providers/${provider.id}?auteur=${encodeURIComponent(ownKey)}&onglet=prestations`);
+    await expect(page.getByTestId("page-actor")).toBeVisible();
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+    await page.goto(`/providers/${provider.id}?onglet=prestations`);
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+  } finally {
+    if (wasFollowing) await setFollowing(email, ownKey, true, proKey);
+    await ctx.close();
+  }
+});
+
+test("Les onglets d'une page publique gardent `retour` : le ✕ ramène à l'écran d'origine", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const brasa = await personaOf("sofia@orasso.local", "provider");
+  const sudCars = await personaOf("leo@orasso.local", "media");
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const back = "/app/sorties";
+  const retour = encodeURIComponent(back);
+  for (const path of [`/providers/${brasa.id}`, `/m/${sudCars.id}`]) {
+    await open(page, "damien@orasso.local", `${path}?onglet=prestations&retour=${retour}`);
+    await page.getByTestId("page-tab-mentions").click();
+    await page.waitForURL((u) => u.searchParams.get("onglet") === "mentions");
+    expect(new URL(page.url()).searchParams.get("retour"), `${path} : retour gardé par l'onglet`).toBe(back);
+    await page.getByRole("link", { name: "Fermer" }).click();
+    await page.waitForURL((u) => u.pathname === back);
+  }
   await ctx.close();
 });

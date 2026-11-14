@@ -138,8 +138,15 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   }, [m]);
   const path = `/m/${m.id}`;
   // La casquette qui regarde reste dans l'adresse des onglets.
-  const tabPath = actor ? `${path}?auteur=${encodeURIComponent(actor)}` : path;
+  // `retour` (le ✕ de la fiche) reste aussi dans l'adresse des onglets.
+  const tabQuery = new URLSearchParams();
+  if (actor) tabQuery.set("auteur", actor);
+  if (retour) tabQuery.set("retour", retour);
+  const tabPath = tabQuery.size > 0 ? `${path}?${tabQuery}` : path;
   const key = authorKeyOf("media", m.id);
+  // Pas de « Suivre » sur sa propre page : avec une casquette, c'est la clé de la casquette qui compte (la structure de Sarah peut suivre le
+  // média ou le prestataire de Sarah : deux pages distinctes) ; sans casquette, le propriétaire de la page (on ne se suit pas soi-même).
+  const selfPage = actor ? actor === key : owner;
   const tabs = pageTabs("media", {
     session: true,
     mentionsCount: mentionsShown(pageMentionsCount(m), mentionsDelta),
@@ -163,7 +170,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
           typeLabel={pagesLabels.typeMedia}
           verifiedLabel={m.verified ? pagesLabels.verifiedMedia : null}
           follow={
-            owner ? null : (
+            selfPage ? null : (
               <PageFollow
                 targetKey={key}
                 actor={actor}

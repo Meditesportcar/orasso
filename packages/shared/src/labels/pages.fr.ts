@@ -69,6 +69,12 @@ export const pagesLabels = {
   mentionsError: "Les mentions ne se chargent pas pour le moment.",
   mentionsMore: "Voir plus",
   mentionsRetry: "Réessayer",
+  /** La Page du propriétaire : une lecture qui échoue se dit (jamais « Aucun événement » ni « 0 partenaire » à la place d'une panne). */
+  readRetry: "Réessayer",
+  eventsReadError: "Les événements ne se chargent pas pour le moment.",
+  pastReadError: "Les événements passés ne se chargent pas pour le moment.",
+  partnersReadError: "Les pros partenaires ne se chargent pas pour le moment.",
+  inviteReadError: "Le lien d'invitation ne se charge pas pour le moment.",
   mentionOpen: "Ouvrir la publication",
   mentionAuthor: (name: string) => `Voir la page de ${name}`,
   commercialTag: "Collaboration commerciale",

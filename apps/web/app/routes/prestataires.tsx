@@ -69,11 +69,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     counts: { publications: pagePublicationsCount(provider) },
     session: true,
   });
-  return { back, provider, owner, actor, casquette, ownHref, tab, origin: originOf(request) };
+  return {
+    back,
+    retour: url.searchParams.get("retour") ? back : null,
+    provider,
+    owner,
+    actor,
+    casquette,
+    ownHref,
+    tab,
+    origin: originOf(request),
+  };
 }
 
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
-  const { back, provider, owner, actor, casquette, ownHref, tab, origin } = loaderData;
+  const { back, retour, provider, owner, actor, casquette, ownHref, tab, origin } = loaderData;
   const [follow, setFollow] = useState({ following: provider.isFollowing, followers: provider.followersCount });
   const [mentionsDelta, setMentionsDelta] = useState(0);
   // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
@@ -84,8 +94,15 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
   }, [provider]);
   const path = `/providers/${provider.id}`;
   // La casquette qui regarde reste dans l'adresse des onglets.
-  const tabPath = actor ? `${path}?auteur=${encodeURIComponent(actor)}` : path;
+  // `retour` (le ✕ de la fiche) reste aussi dans l'adresse des onglets.
+  const tabQuery = new URLSearchParams();
+  if (actor) tabQuery.set("auteur", actor);
+  if (retour) tabQuery.set("retour", retour);
+  const tabPath = tabQuery.size > 0 ? `${path}?${tabQuery}` : path;
   const key = authorKeyOf("provider", provider.id);
+  // Pas de « Suivre » sur sa propre page : avec une casquette, c'est la clé de la casquette qui compte (la structure de Sarah peut suivre le
+  // média ou le prestataire de Sarah : deux pages distinctes) ; sans casquette, le propriétaire de la page (on ne se suit pas soi-même).
+  const selfPage = actor ? actor === key : owner;
   const tabs = pageTabs("provider", {
     session: true,
     mentionsCount: mentionsShown(pageMentionsCount(provider), mentionsDelta),
@@ -109,7 +126,7 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
           typeLabel={provider.typeLabel || L.typeProvider}
           verifiedLabel={null}
           follow={
-            owner ? null : (
+            selfPage ? null : (
               <PageFollow
                 targetKey={key}
                 actor={actor}

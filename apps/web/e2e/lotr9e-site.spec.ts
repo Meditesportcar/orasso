@@ -104,7 +104,10 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await expect(page.getByTestId("album-tag-credit")).toHaveText("Photos : Sud Cars");
     await expect(page.getByTestId("album-tag-official")).toHaveCount(0);
     await expect(page.getByTestId("album-event-link")).toContainText("présent au Béziers Night");
-    await expect(page.getByTestId("album-identify-slot")).toBeEmpty();
+    // R9f partie 2 remplit l'emplacement laissé par R9e : pour l'auteur de l'album, « Identifier les voitures · 0 sur 3 photos identifiées ».
+    await expect(page.getByTestId("album-identify-slot")).toBeAttached();
+    await expect(page.getByTestId("identify-banner")).toContainText("Identifier les voitures");
+    await expect(page.getByTestId("identify-banner-count")).toHaveText("0 sur 3 photos identifiées");
     await expect(page.getByTestId("media-gallery-photo")).toHaveCount(3);
     await expect(page.getByTestId("album-owner")).toBeVisible();
     await expect(page.getByTestId("album-report")).toHaveCount(0);
