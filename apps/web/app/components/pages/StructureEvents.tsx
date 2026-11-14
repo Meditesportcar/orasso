@@ -48,6 +48,28 @@ function ReadError({ text, testId }: { text: string; testId: string }) {
   );
 }
 
+/** La même page sans le curseur de départ d'une liste (« Revoir depuis le début »). */
+function fromStartHref(location: { pathname: string; search: string }, param: string): string {
+  const params = new URLSearchParams(location.search);
+  params.delete(param);
+  const query = params.toString();
+  return `${location.pathname}${query ? `?${query}` : ""}`;
+}
+
+/** Une liste partie d'un curseur (sans JavaScript) et vide : pas « Aucun événement », mais le retour au début. */
+function FromStart({ href, testId }: { href: string; testId: string }) {
+  return (
+    <div className="s-stack s-stack--tight" data-testid={testId}>
+      <p className="s-notice">{L.eventsFromStartText}</p>
+      <div>
+        <Button variant="secondary" icon="undo" href={href} data-testid={`${testId}-link`}>
+          {L.eventsFromStart}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Le lien de « Voir plus » sans JavaScript : la même page, lue à partir du curseur de la suite. */
 function moreHref(location: { pathname: string; search: string }, param: string, next: string | null): string {
   const params = new URLSearchParams(location.search);
@@ -148,6 +170,11 @@ export function StructureEvents({
         </h2>
         {upcoming === null ? (
           <ReadError text={L.eventsReadError} testId="structure-events-error" />
+        ) : upcoming.length === 0 && params.get(EVENTS_CURSOR_PARAM.upcoming) ? (
+          <FromStart
+            href={fromStartHref(location, EVENTS_CURSOR_PARAM.upcoming)}
+            testId="structure-upcoming-from-start"
+          />
         ) : upcoming.length === 0 ? (
           <p className="s-notice">Aucun événement à venir pour l'instant. Suis la structure pour être prévenu.</p>
         ) : (
@@ -175,6 +202,13 @@ export function StructureEvents({
             Événements passés
           </h2>
           <ReadError text={L.pastReadError} testId="structure-past-error" />
+        </section>
+      ) : past.length === 0 && params.get(EVENTS_CURSOR_PARAM.past) ? (
+        <section className="s-stack" aria-labelledby="so-past">
+          <h2 id="so-past" className="s-h2 s-head">
+            Événements passés
+          </h2>
+          <FromStart href={fromStartHref(location, EVENTS_CURSOR_PARAM.past)} testId="structure-past-from-start" />
         </section>
       ) : past.length > 0 ? (
         <section className="s-stack" aria-labelledby="so-past">

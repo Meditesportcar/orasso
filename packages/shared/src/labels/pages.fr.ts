@@ -74,6 +74,9 @@ export const pagesLabels = {
   eventsReadError: "Les événements ne se chargent pas pour le moment.",
   pastReadError: "Les événements passés ne se chargent pas pour le moment.",
   eventsMore: "Voir plus d'événements",
+  /** Sans JavaScript, la liste partie d'un curseur est vide : retour au début de la liste. */
+  eventsFromStart: "Revoir depuis le début",
+  eventsFromStartText: "Cette suite est vide : la liste a changé depuis.",
   pastMore: "Voir plus d'événements passés",
   partnersReadError: "Les pros partenaires ne se chargent pas pour le moment.",
   inviteReadError: "Le lien d'invitation ne se charge pas pour le moment.",

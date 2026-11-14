@@ -98,11 +98,12 @@ beforeEach(() => {
 });
 
 /** L'onglet « Événements » rendu comme le site le rend, avec ce que le chargeur a lu. */
-async function render(data: Awaited<ReturnType<typeof loadPage>>): Promise<string> {
+async function render(data: Awaited<ReturnType<typeof loadPage>>, search = ""): Promise<string> {
   const { OwnerPage } = await import("../components/pages/OwnerPage");
-  const router = createMemoryRouter([
-    { path: "/", element: createElement(OwnerPage, { data: data as Parameters<typeof OwnerPage>[0]["data"] }) },
-  ]);
+  const router = createMemoryRouter(
+    [{ path: "/", element: createElement(OwnerPage, { data: data as Parameters<typeof OwnerPage>[0]["data"] }) }],
+    { initialEntries: [`/${search}`] },
+  );
   return renderToStaticMarkup(createElement(RouterProvider, { router }));
 }
 
@@ -202,5 +203,18 @@ describe("chargeur de la Page d'une structure", () => {
     expect(asked).toContain("/events?structureId=st-1&limit=50&cursor=SUITE-A-VENIR");
     expect(asked).toContain("/events?structureId=st-1&scope=past&limit=12&cursor=SUITE-PASSES");
     expect(next.eventsComplete).toBe(false);
+  });
+
+  it("sans JavaScript : une liste partie d'un curseur et vide propose « Revoir depuis le début », jamais « Aucun événement »", async () => {
+    const query = "?onglet=evenements&a-venir=PERIME&passes=PERIME";
+    const html = await render((await loadPage(query)) as never, query);
+    expect(html).toContain('data-testid="structure-upcoming-from-start-link"');
+    expect(html).toContain('data-testid="structure-past-from-start-link"');
+    expect(html).toContain("Revoir depuis le début");
+    expect(html).not.toContain("Aucun événement à venir");
+    // Le lien retire le curseur de sa liste (et garde le reste).
+    expect(html).toMatch(
+      /href="[^"]*onglet=evenements&amp;passes=PERIME"[^>]*data-testid="structure-upcoming-from-start-link"/,
+    );
   });
 });
