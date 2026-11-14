@@ -303,6 +303,60 @@ test("clic en attente puis sortie par un lien ordinaire (hors du gel) : rien n'e
   await ctx.close();
 });
 
+// Lot B3a : un clic de lien qui ne quitte pas la page (Ctrl/Cmd/Maj/Alt, `href="#"`) n'annule pas l'attente ; quand l'action part,
+// le focus revient au bouton cliqué (il tombait sur la page).
+test("clic en attente : un lien `href=\"#\"` ou un clic avec Ctrl/Maj sur un lien n'annule pas l'attente ; l'action part, focus rendu à « Continuer »", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Modif ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const kept = `Lien ${unique()}`;
+  await page.getByLabel("Titre").fill(kept);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  await page.evaluate((href) => {
+    for (const [name, target] of [
+      ["zz-vide", "#"],
+      ["zz-page", href],
+    ] as const) {
+      const a = document.createElement("a");
+      a.id = name;
+      a.href = target;
+      a.textContent = name;
+      document.body.append(a);
+    }
+  }, `/orga/meditesportcar/e/${id}`);
+  // Lien sans destination, puis clic avec Maj (nouvelle fenêtre) et Ctrl (nouvel onglet) : la page reste et l'attente aussi.
+  await page.locator("#zz-vide").click();
+  await page.locator("#zz-page").click({ modifiers: ["Shift"], noWaitAfter: true });
+  await page.locator("#zz-page").click({ modifiers: ["Control"], noWaitAfter: true });
+  for (const other of ctx.pages()) if (other !== page) await other.close();
+  await expect(page.getByTestId("wizard-wait-cancel")).toBeVisible();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  expect(page.url()).toContain("/modifier");
+  // Le focus est resté sur le dernier lien cliqué : on le pose sur la page (comme après un clic ailleurs), l'action part ensuite.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  release();
+  // Le clic en attente part : étape suivante, titre enregistré, focus rendu au bouton cliqué.
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(kept);
+  await expect(page.getByTestId("wizard-next")).toBeFocused();
+  await ctx.close();
+});
+
 test("saisie gardée + clic pendant le chargement : la saisie reprise est montrée, rien n'est enregistré, l'assistant n'avance pas", async ({
   browser,
 }) => {

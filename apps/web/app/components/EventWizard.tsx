@@ -396,17 +396,18 @@ export function EventWizard(props: Props) {
     setWaiting(null);
     setDue(null);
   };
+  // `busy` : une action qui part désactive les boutons le temps de l'enregistrement ; le focus est rendu à sa fin.
   useEffect(() => {
     if (queued !== null) {
       hadQueued.current = true;
       document.querySelector<HTMLElement>('[data-testid="wizard-wait-cancel"]')?.focus();
-    } else if (hadQueued.current) {
+    } else if (hadQueued.current && !busy) {
       hadQueued.current = false;
       // Le focus n'est rendu que s'il est tombé sur la page : un champ ou un lien choisi entre-temps le garde.
       const active = document.activeElement;
       if ((!active || active === document.body) && clickedEl.current?.isConnected) clickedEl.current.focus();
     }
-  }, [queued]);
+  }, [queued, busy]);
   // Tour 5 : un lien ordinaire (✕ de l'en-tête, liens du site) est hors de la zone figée et `beforeunload` n'est pas fiable
   // partout : pendant l'attente, tout clic sur un lien annule l'attente AVANT que la navigation parte (phase de capture).
   useEffect(() => {
