@@ -30,7 +30,7 @@ export default function MesPhotos({ loaderData }: Route.ComponentProps) {
   }
   return (
     <MyPhotos
-      key={loaderData.albumId}
+      key={`${loaderData.myUserId}:${loaderData.albumId}`}
       view={loaderData.view}
       albumId={loaderData.albumId}
       myUserId={loaderData.myUserId}

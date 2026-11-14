@@ -7,8 +7,10 @@ import {
   appendTaggablePage,
   createOperationGate,
   createTaggablePicker,
+  liveStoryAt,
   mentionsSummary,
   myPhotoTaggedBy,
+  nextLiveStoryExpiry,
   reviewButtonsOf,
   showPeopleTab,
   taggedByText,
@@ -187,7 +189,7 @@ describe("createTaggablePicker (liste + « Voir plus »)", () => {
     expect(ctrl.startMore()).toBeNull();
   });
 
-  it("pages en ordre inverse : seule la dernière page démarrée s'applique, une seule à la fois", () => {
+  it("une page à la fois, pages suivies (curseur de la dernière réponse) ; réouverture pendant une page : page jetée", () => {
     const ctrl = createTaggablePicker();
     ctrl.applyList(ctrl.startList(), { q: "ab" }, taggable(0, 3, 3));
     const first = ctrl.startMore();
@@ -228,6 +230,59 @@ describe("createTaggablePicker (liste + « Voir plus »)", () => {
     expect(ctrl.state().data).toBeNull();
     const after = ctrl.startList();
     expect(ctrl.applyList(after, {}, taggable(1, 1, null))?.data?.vehicles).toHaveLength(1);
+  });
+});
+
+describe("createTaggablePicker : échec d'une page et invalidation", () => {
+  const t = (from: number, next: number | null) =>
+    ({
+      role: "media",
+      vehicles: [{ vehicleId: `v${from}`, label: "V" }],
+      people: [],
+      categories: [],
+      fallback: false,
+      nextCursor: next,
+    }) as never as Taggable;
+  it("failMore remet loadingMore à faux : « Voir plus » est de nouveau possible, avec le même curseur", () => {
+    const ctrl = createTaggablePicker();
+    ctrl.applyList(ctrl.startList(), {}, t(0, 1));
+    const first = ctrl.startMore();
+    expect(ctrl.state().loadingMore).toBe(true);
+    const failed = ctrl.failMore(first?.live as () => boolean);
+    expect(failed?.loadingMore).toBe(false);
+    expect(failed?.canMore).toBe(true);
+    expect(ctrl.startMore()?.cursor).toBe(1);
+  });
+  it("invalidate : les réponses en route (liste et page) sont jetées, l'état déjà lu est gardé", () => {
+    const ctrl = createTaggablePicker();
+    ctrl.applyList(ctrl.startList(), {}, t(0, 1));
+    const page = ctrl.startMore();
+    const list = ctrl.startList();
+    ctrl.invalidate();
+    expect(ctrl.applyList(list, {}, t(9, null))).toBeNull();
+    expect(ctrl.applyMore(page?.live as () => boolean, t(1, null))).toBeNull();
+    expect(ctrl.state().data?.vehicles[0]?.vehicleId).toBe("v0");
+  });
+});
+
+describe("liveStoryAt / nextLiveStoryExpiry (« Déjà en story » expire)", () => {
+  const live = (iso: string) => ({ audience: "public" as const, expiresAt: iso });
+  it("en ligne tant que l'expiration n'est pas passée, plus ensuite", () => {
+    const l = live("2026-11-14T10:00:00Z");
+    expect(liveStoryAt(l, Date.parse("2026-11-14T09:59:59Z"))).toBe(l);
+    expect(liveStoryAt(l, Date.parse("2026-11-14T10:00:00Z"))).toBeNull();
+    expect(liveStoryAt(null, 0)).toBeNull();
+  });
+  it("le prochain instant d'expiration est celui de la première story encore en ligne", () => {
+    const now = Date.parse("2026-11-14T09:00:00Z");
+    const photos = [
+      { liveStory: live("2026-11-14T08:00:00Z") },
+      { liveStory: live("2026-11-14T12:00:00Z") },
+      { liveStory: live("2026-11-14T10:00:00Z") },
+      { liveStory: null },
+    ];
+    expect(nextLiveStoryExpiry(photos, now)).toBe(Date.parse("2026-11-14T10:00:00Z"));
+    expect(nextLiveStoryExpiry([{ liveStory: null }], now)).toBeNull();
   });
 });
 

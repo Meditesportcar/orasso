@@ -6688,6 +6688,13 @@ Aucune dépendance native. Aucune migration. Une route d'API ajoutée (« Contac
 - **Plateau : un contrôleur partagé** `createTaggablePicker` (`packages/shared`, remplace `createPagedReads` du tour 3) utilisé par les deux `TagPicker` : il applique les réponses, décide de « Voir plus » et de son état. La page suivante se lit avec les paramètres et le curseur de la lecture qui a produit le résultat montré ; « Voir plus » est masqué tant que la lecture d'un autre filtre a échoué.
 - Le test du tour 3 (liste fraîche réaffectée à la main, `toHaveLength(5)`) est remplacé par des tests du contrôleur : « Coupé » puis « Voir plus », pages en ordre inverse, échec de liste puis « Voir plus », fermeture puis réouverture.
 
+#### Lot R9f, partie 2, tour 5 (14/11/2026) : corrections des relectures Codex (tours 2 à 4) et Opus (tour 4)
+- **Site, « Tes photos » et le compte** : un nouveau `loaded` (revalidation, autre compte) périme toute relecture en route et efface la liste relue ; clé du composant `${myUserId}:${albumId}` (un autre compte remonte l'écran, la réponse tardive de l'ancien tombe sur un composant démonté). Dans l'appli, `useApi.reload` porte déjà la garde de compte et l'ordre des lectures : la relecture après retrait en profite, rien à ajouter.
+- **Relecture en échec après un retrait** : plus de faux état vide. Site et appli affichent l'erreur avec « Réessayer » ; les retraits ne sont levés qu'après une lecture réussie (une photo à deux identifications ne reste pas masquée à tort). Recette du site : DELETE réussi puis GET en panne.
+- **« Déjà en story » expire** : `liveStoryAt` (`expiresAt` comparé à l'heure du rendu), rendu et relecture programmés à la première expiration, rendu au retour au premier plan.
+- **404 de relecture** : le site ne ramène à l'album que si aucune navigation n'est en cours et si l'adresse est restée la même depuis le départ de la relecture.
+- **Plateau** : après l'échec de la lecture d'un autre filtre, la grille de l'ancien filtre est masquée tant que l'erreur est posée, avec « Réessayer » (appli et site). Tests du contrôleur : `failMore`, `invalidate`, test des pages renommé selon ce qu'il vérifie.
+
 #### À revoir avec Damien (lot R9f, partie 2)
 - **Contacter un média** : voir « À faire » ci-dessus (conversation de page).
 - **La liste des identifiés dans une feuille** et non sous la photo : la visionneuse de R9e/R9g est partagée ; à l'aligner sur la maquette à la fusion de R9g si Damien y tient.

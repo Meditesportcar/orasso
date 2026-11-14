@@ -218,3 +218,25 @@ export function reviewButtonsOf(
     label: list.length > 1 ? albumTagLabels.screens.reviewAlbum(m.mediaName, i + 1) : albumTagLabels.reviewMyPhotos,
   }));
 }
+
+/** « Déjà en story » : ma story de cette photo n'est « en ligne » que tant que son expiration n'est pas passée (heure courante au rendu). */
+export function liveStoryAt<T extends { expiresAt: string }>(live: T | null | undefined, nowMs: number): T | null {
+  if (!live) return null;
+  const end = Date.parse(live.expiresAt);
+  return Number.isFinite(end) && end > nowMs ? live : null;
+}
+
+/** Le prochain instant où une story en ligne de la liste expire (ms depuis l'époque), pour programmer le rendu ; `null` si aucune. */
+export function nextLiveStoryExpiry(
+  photos: readonly { liveStory: { expiresAt: string } | null }[],
+  nowMs: number,
+): number | null {
+  let next: number | null = null;
+  for (const p of photos) {
+    const live = liveStoryAt(p.liveStory, nowMs);
+    if (!live) continue;
+    const end = Date.parse(live.expiresAt);
+    if (next === null || end < next) next = end;
+  }
+  return next;
+}

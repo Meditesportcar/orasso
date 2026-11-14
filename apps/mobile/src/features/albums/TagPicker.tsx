@@ -9,6 +9,7 @@ import {
   type AlbumTagCreate,
   createTaggablePicker,
   albumTagLabels as L,
+  proV2Labels,
   showPeopleTab,
   type TaggablePerson,
   type TaggableVehicle,
@@ -60,6 +61,8 @@ export function TagPicker({
   const q = useDebounced(text.trim());
   const canSearchPeople = q.length >= ALBUM_TAG_SEARCH_MIN;
   // La logique liste + pages (résultat montré, « Voir plus », lectures périmées) est partagée avec le site.
+  // « Réessayer » après l'échec de la lecture d'un filtre : relit le même filtre.
+  const [retry, setRetry] = useState(0);
   const picker = useRef(createTaggablePicker());
   const [view, setView] = useState(picker.current.state());
   const { data, loadError, listLoading, loadingMore } = view;
@@ -77,6 +80,7 @@ export function TagPicker({
     setBusy(null);
   }, [visible]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` relance la lecture (« Réessayer »)
   useEffect(() => {
     if (!visible) return;
     // Une génération par lecture : toute page encore en route (recherche, puce, album, réouverture) devient périmée.
@@ -94,7 +98,7 @@ export function TagPicker({
         if (next) setView(next);
       });
     return () => picker.current.invalidate();
-  }, [visible, albumId, q, category]);
+  }, [visible, albumId, q, category, retry]);
 
   useEffect(() => {
     if (!peopleTab && tab === "people") setTab("cars");
@@ -188,13 +192,20 @@ export function TagPicker({
           </Chip>
         </ChipRow>
       ) : null}
-      {loadError ? <Notice tone="error">{loadError}</Notice> : null}
+      {loadError ? (
+        <>
+          <Notice tone="error">{loadError}</Notice>
+          <Button variant="secondary" icon="undo" onPress={() => setRetry((n) => n + 1)} testID="tag-picker-retry">
+            {proV2Labels.retry}
+          </Button>
+        </>
+      ) : null}
       {error ? (
         <Notice tone="error" testID="tag-picker-error">
           {error}
         </Notice>
       ) : null}
-      {data && tab === "cars" ? (
+      {data && !loadError && tab === "cars" ? (
         data.vehicles.length === 0 ? (
           <Muted variant="body" testID="tag-picker-empty">
             {L.screens.noMatch}
@@ -235,7 +246,7 @@ export function TagPicker({
           </>
         )
       ) : null}
-      {data && tab === "people" ? (
+      {data && !loadError && tab === "people" ? (
         data.people.length === 0 ? (
           <Muted variant="body" testID="tag-picker-no-person">
             {L.screens.noPerson}

@@ -196,3 +196,38 @@ test("390 px : « Tes photos » et le plateau tiennent sans défilement horizont
   await shot(page, "damien-album-390");
   await ctx.close();
 });
+
+test("retrait réussi puis relecture en échec : l'erreur et « Réessayer », pas un faux état vide ; la relecture réussie réconcilie", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const s = await scenario();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, DAMIEN, undefined, `/app/albums/${s.albumId}/mes-photos`);
+  await expect(page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
+  const before = await page.getByTestId("my-photo").count();
+  // La relecture qui suit le retrait tombe en panne (le chargement initial et le DELETE passent).
+  let fail = true;
+  await page.route(`**/api/me/albums/${s.albumId}/my-photos`, (route) =>
+    fail
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "boom", message: "Panne de relecture" } }),
+        })
+      : route.continue(),
+  );
+  page.on("dialog", (d) => void d.accept());
+  await page.getByTestId("my-photo-more").first().click();
+  await page.getByTestId("photo-sheet-not-mine").click();
+  await expect(page.getByTestId("load-error")).toContainText("Panne de relecture", { timeout: 30_000 });
+  await expect(page.getByTestId("load-error-retry")).toBeVisible();
+  // Jamais le texte « aucune photo » à la place de l'erreur.
+  await expect(page.getByText("Aucune photo", { exact: false })).toHaveCount(0);
+  fail = false;
+  await page.getByTestId("load-error-retry").click();
+  await expect(page.getByTestId("load-error")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("my-photo")).toHaveCount(before - 1, { timeout: 30_000 });
+  await ctx.close();
+});

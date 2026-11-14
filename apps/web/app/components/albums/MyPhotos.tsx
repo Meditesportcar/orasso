@@ -8,12 +8,15 @@ import {
   albumLabels,
   createOperationGate,
   albumTagLabels as L,
+  liveStoryAt,
   type MyPhoto,
   type MyPhotosView,
   myPhotoTaggedBy,
+  nextLiveStoryExpiry,
+  proV2Labels,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useRevalidator } from "react-router";
+import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
@@ -29,15 +32,20 @@ export function MyPhotos({
   albumId: string;
   myUserId: string;
 }) {
+  // Relectures ordonnées : seule la dernière lancée s'applique (une réponse plus ancienne n'écrase ni la liste fraîche ni les retraits).
+  const reads = useRef(createOperationGate());
   // La liste lue par la relecture d'après un retrait prime sur celle du chargement de la page, jusqu'au prochain chargement.
   const [fresh, setFresh] = useState<MyPhotosView | null>(null);
   const view = fresh ?? loaded;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: un nouveau chargement de la page (`loaded`) remplace la liste relue
-  useEffect(() => setFresh(null), [loaded]);
+  // Un nouveau chargement de la page (`loaded` : revalidation, autre compte) remplace la liste relue et périme toute relecture en route.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seulement au nouveau `loaded`
+  useEffect(() => {
+    reads.current.invalidate();
+    setFresh(null);
+    setReadError(null);
+  }, [loaded]);
   // Page quittée (retour, autre lien) pendant la relecture : ni navigation ni mise à jour.
   const alive = useRef(true);
-  // Relectures ordonnées : seule la dernière lancée s'applique (une réponse plus ancienne n'écrase ni la liste fraîche ni les retraits).
-  const reads = useRef(createOperationGate());
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -46,6 +54,16 @@ export function MyPhotos({
   }, []);
   const revalidator = useRevalidator();
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const location = useLocation();
+  // La page de départ d'une relecture : une 404 ne ramène à l'album que si l'utilisateur n'est pas parti ailleurs entre-temps.
+  const here = useRef({ key: location.key, idle: navigation.state === "idle" });
+  here.current = { key: location.key, idle: navigation.state === "idle" };
+  // La relecture après un retrait a échoué (panne, pas une 404) : l'écran le dit, avec « Réessayer » ; les retraits ne sont réconciliés
+  // qu'après une lecture réussie.
+  const [readError, setReadError] = useState<string | null>(null);
+  // L'heure au rendu : « Déjà en story » cesse à l'expiration de la story (rendu programmé, et au retour au premier plan).
+  const [now, setNow] = useState(() => Date.now());
   const [sheet, setSheet] = useState<MyPhoto | null>(null);
   const [story, setStory] = useState<MyPhoto | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -58,6 +76,43 @@ export function MyPhotos({
   const count = photos.length;
   const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `reread` ne dépend que de refs et de l'album ; `now` relance la programmation
+  useEffect(() => {
+    const next = nextLiveStoryExpiry(view.photos, Date.now());
+    if (next === null) return;
+    const wait = Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1);
+    const id = setTimeout(() => {
+      setNow(Date.now());
+      void reread(true);
+    }, wait);
+    const onShow = () => {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [view, now]);
+
+  /** Relit `my-photos` (une seule lecture, ordonnée) ; `silent` : sans message d'erreur (relecture de routine). */
+  async function reread(silent = false) {
+    const latest = reads.current.start();
+    const startKey = here.current.key;
+    const next = await apiFetch<MyPhotosView>(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
+    if (!alive.current || !latest()) return;
+    if (next.ok) {
+      setFresh(next.data);
+      setRemoved(new Set());
+      setReadError(null);
+    } else if (next.status === 404) {
+      // Plus aucune identification à mon nom : retour à l'album, sauf si l'utilisateur est déjà parti ailleurs (ou une page se charge).
+      if (here.current.idle && here.current.key === startKey) navigate(`/albums/${albumId}`);
+    } else if (!silent) {
+      setReadError(next.error.message);
+    }
+  }
+
   async function remove(photo: MyPhoto) {
     setBusy(true);
     setError(null);
@@ -67,16 +122,8 @@ export function MyPhotos({
     setSheet(null);
     setNote(L.screens.removed);
     setRemoved((cur) => new Set([...cur, photo.tagId]));
-    // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album ; sinon la liste est relue.
-    // Une seule lecture de `my-photos` : la relecture elle-même (pas de lecture puis `revalidate`) ; page quittée entre-temps : rien.
-    const latest = reads.current.start();
-    const next = await apiFetch(`/me/albums/${encodeURIComponent(albumId)}/my-photos`);
-    if (!alive.current || !latest()) return;
-    if (!next.ok && next.status === 404) navigate(`/albums/${albumId}`);
-    else if (next.ok) {
-      setFresh(next.data as MyPhotosView);
-      setRemoved(new Set());
-    }
+    // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album.
+    await reread();
   }
 
   return (
@@ -102,7 +149,21 @@ export function MyPhotos({
           {error}
         </p>
       )}
-      {count === 0 && <p className="s-muted">{L.screens.myPhotosEmpty}</p>}
+      {readError && (
+        <div role="alert" className="s-stack" data-testid="load-error">
+          <p className="s-error">{readError}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            icon="undo"
+            onClick={() => void reread()}
+            data-testid="load-error-retry"
+          >
+            {proV2Labels.retry}
+          </Button>
+        </div>
+      )}
+      {count === 0 && !readError && <p className="s-muted">{L.screens.myPhotosEmpty}</p>}
       <ul className="myp-list">
         {photos.map((p, i) => (
           <li key={p.id} className="myp-row" data-testid="my-photo">
@@ -115,10 +176,10 @@ export function MyPhotos({
                 {myPhotoTaggedBy(p.taggedBy, view.media.name)}
               </span>
               <span className="myp-row__actions">
-                {p.liveStory ? (
+                {liveStoryAt(p.liveStory, now) ? (
                   // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
                   <span className="o-t-caption act-go" data-testid="my-photo-story-live">
-                    {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory.audience))}
+                    {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory?.audience ?? "public"))}
                   </span>
                 ) : (
                   <Button

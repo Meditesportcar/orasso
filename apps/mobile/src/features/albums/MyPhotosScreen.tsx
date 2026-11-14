@@ -4,10 +4,18 @@
 // (retirer mon identification, ce n'est pas ma voiture, signaler). **Aucun bouton principal** sur cet écran. Ces photos ne
 // deviennent pas mes publications.
 import { Button, Chip, ChipRow, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { albumLabels, createOperationGate, albumTagLabels as L, type MyPhoto, myPhotoTaggedBy } from "@orasso/shared";
+import {
+  albumLabels,
+  createOperationGate,
+  albumTagLabels as L,
+  liveStoryAt,
+  type MyPhoto,
+  myPhotoTaggedBy,
+  nextLiveStoryExpiry,
+} from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 
 import { openReport } from "@/features/ReportSheet";
 import { SmallButton } from "@/features/sorties/bits";
@@ -79,6 +87,32 @@ export function MyPhotosScreen({ id }: { id: string }) {
     }
   }, [view.error, focused]);
   const photos = (v?.photos ?? []).filter((p) => !removed.has(p.tagId));
+  // L'heure au rendu : « Déjà en story » cesse à l'expiration de la story (rendu et relecture programmés, rendu au retour au premier plan).
+  const [now, setNow] = useState(() => Date.now());
+  const reloadRef = useRef(view.reload);
+  reloadRef.current = view.reload;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `now` relance la programmation après chaque échéance
+  useEffect(() => {
+    const next = nextLiveStoryExpiry(v?.photos ?? [], Date.now());
+    if (next === null) return;
+    const id = setTimeout(
+      () => {
+        setNow(Date.now());
+        void reloadRef.current();
+      },
+      Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1),
+    );
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") setNow(Date.now());
+    });
+    return () => {
+      clearTimeout(id);
+      sub.remove();
+    };
+  }, [v, now]);
+  // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
+  // les retraits ne sont levés qu'après une lecture réussie.
+  const reconcileError = removed.size > 0 && view.error && view.error.status !== 404 ? view.error : null;
 
   async function remove(photo: MyPhoto) {
     setSheetBusy(true);
@@ -96,6 +130,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
     setSheetBusy(false);
     // La relecture passe par `useApi` (garde de compte, ordre des lectures, écran monté) : 404 = on quitte (effet ci-dessus) ; sinon la
     // photo reste (avec son autre identification) et la liste est celle du serveur.
+    await reconcile();
+  }
+  async function reconcile() {
     exitWanted.current = true;
     const next = await view.reload();
     if (next && alive.current) {
@@ -161,6 +198,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
       {view.loading && !v ? <Waiting blocks={[80, 90, 90]} label="Chargement…" /> : null}
       {/* 404 : plus aucune identification à mon nom dans cet album (la dernière vient d'être retirée) : pas une erreur de chargement. */}
       {view.error && !v && view.error.status === 404 ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
+      {reconcileError ? <LoadError message={reconcileError.message} onRetry={() => void reconcile()} /> : null}
       {view.error && !v && view.error.status !== 404 ? (
         <LoadError message={view.error.message} onRetry={() => void view.reload()} />
       ) : null}
@@ -186,7 +224,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
               {error}
             </Notice>
           ) : null}
-          {count === 0 ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
+          {count === 0 && !reconcileError ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
           {photos.map((p, i) => (
             <View
               key={p.id}
@@ -204,10 +242,10 @@ export function MyPhotosScreen({ id }: { id: string }) {
                   {myPhotoTaggedBy(p.taggedBy, v.media.name)}
                 </Text>
                 <View style={styles.actions}>
-                  {p.liveStory ? (
+                  {liveStoryAt(p.liveStory, now) ? (
                     // Déjà en story : l'écran le dit, sans formulaire de public ni de légende (rien à régler).
                     <Text variant="caption" color={t.color.accentText} testID="my-photo-story-live">
-                      {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory.audience))}
+                      {L.screens.storyAlready(L.screens.storyAudienceName(p.liveStory?.audience ?? "public"))}
                     </Text>
                   ) : (
                     <SmallButton
