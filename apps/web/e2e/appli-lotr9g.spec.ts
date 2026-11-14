@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
@@ -183,4 +184,175 @@ test("Léo (le média) : aucune action d'organisateur ; police ×1,3 : la sectio
   await expect(page.getByTestId("album-action-repost")).toHaveCount(0);
   await expect(page.getByTestId("album-action-official")).toHaveCount(0);
   await ctx.close();
+});
+
+// --- Tour 2 : le cumul média + organisateur, la panne de lecture, la vue comptée, le lien profond ---------------------------------
+
+/** Léo (titulaire du média Sud Cars) devient aussi co-organisateur de la structure de l'événement, le temps d'une recette. */
+async function withLeoAsCoOrganizer<T>(run: () => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `insert into structure_members (structure_id, user_id, role, status, joined_at)
+         select e.structure_id, u.id, 'co_organizer', 'active', now()
+           from events e, "user" u where e.slug = $1 and u.email = $2
+         on conflict (structure_id, user_id) do update set role = 'co_organizer', status = 'active'`,
+      [SLUG, LEO],
+    );
+    return await run();
+  } finally {
+    await client.query(
+      `delete from structure_members where user_id = (select id from "user" where email = $2)
+         and structure_id = (select structure_id from events where slug = $1)`,
+      [SLUG, LEO],
+    );
+    await client.end();
+  }
+}
+
+test("Léo, titulaire du média ET organisateur de l'événement : ses droits de titulaire et ceux de l'organisateur", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  await withLeoAsCoOrganizer(async () => {
+    const { ctx, page } = await open(browser, LEO);
+    try {
+      await chooseOrganizer(page, "MéditeSportCar");
+      await go(page, `/e/${SLUG}`);
+      await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await page.getByTestId("event-photos-open").click();
+      await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("album-photo").nth(1).click();
+      await expect(page.getByTestId("album-viewer")).toBeVisible();
+      // Titulaire : retirer la photo ; organisateur : reprendre au journal et « officiel ». Jamais « Signaler » sur ses propres photos.
+      await expect(page.getByTestId("album-viewer-remove")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("album-action-repost")).toHaveText("Reprendre dans le journal de l'événement", {
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("album-action-official")).toBeVisible();
+      await expect(page.getByTestId("album-viewer-report")).toHaveCount(0);
+      await shot(page, "visionneuse-cumul-media-organisateur");
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+test("la liste des albums tombe en panne : « Réessayer » (pas de section qui disparaît), puis la liste se lit", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    let down = true;
+    await page.route(`**/api/events/by-slug/${SLUG}/albums*`, (route) =>
+      down
+        ? route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code: "internal", message: "Erreur du serveur" } }),
+          })
+        : route.continue(),
+    );
+    await go(page, `/e/${SLUG}`);
+    await expect(page.getByTestId("event-photos-error")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-error")).toContainText("Les albums n'ont pas pu être chargés.");
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(0);
+    await shot(page, "fiche-photos-panne");
+    down = false;
+    await page.getByTestId("event-photos-error").getByText("Réessayer").click();
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-error")).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("la liste suit le retour sur la fiche (actualisation) et la vue est comptée à l'ouverture d'un album depuis la fiche", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    let reads = 0;
+    page.on("request", (r) => {
+      if (r.method() === "GET" && new RegExp(`/api/events/by-slug/${SLUG}/albums`).test(r.url())) reads += 1;
+    });
+    await go(page, `/e/${SLUG}`);
+    await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    const before = reads;
+    const view = page.waitForRequest(
+      (r) => r.method() === "POST" && /\/api\/media-contents\/[0-9a-f-]{36}\/view/.test(r.url()),
+      {
+        timeout: 30_000,
+      },
+    );
+    await page.getByTestId("event-photos-open").click();
+    await view;
+    await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+    await page.goBack();
+    await expect(page.getByTestId("event-photos")).toBeVisible({ timeout: 30_000 });
+    // Le retour sur la fiche relit la liste (comme le journal et la fiche).
+    await expect.poll(() => reads, { timeout: 30_000 }).toBeGreaterThan(before);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("lien profond « Photos » : la section est posée en haut de la page, dans le repère du contenu", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    await go(page, `/e/${SLUG}?section=photos`);
+    const section = page.getByTestId("event-photos");
+    await expect(section).toBeVisible({ timeout: 30_000 });
+    // Le temps de se stabiliser (blocs du dessus qui se chargent), puis une seule fois au bon endroit.
+    await expect
+      .poll(async () => (await section.boundingBox())?.y ?? Number.NaN, { timeout: 30_000 })
+      .toBeLessThan(160);
+    const box = await section.boundingBox();
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(-4);
+    await shot(page, "fiche-lien-profond-photos");
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute le 51e", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `insert into event_albums (event_id, media_profile_id, author_id, title, status, published_at, photos_count)
+         select a.event_id, a.media_profile_id, a.author_id, 'Extra ' || g, 'published',
+                a.published_at - (g || ' minutes')::interval, 0
+           from event_albums a, generate_series(1, 50) g
+          where a.event_id = (select id from events where slug = $1) and a.official_at is not null`,
+      [SLUG],
+    );
+    const { ctx, page } = await open(browser, DAMIEN);
+    try {
+      await go(page, `/e/${SLUG}`);
+      await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await expect(page.getByTestId("event-photos-title")).toContainText("51 albums", { timeout: 30_000 });
+      await expect(page.getByTestId("event-photos-album-title")).toHaveCount(50);
+      await page.getByTestId("event-photos-more-albums").scrollIntoViewIfNeeded();
+      await page.getByTestId("event-photos-more-albums").click();
+      await expect(page.getByTestId("event-photos-album-title")).toHaveCount(51, { timeout: 30_000 });
+      await expect(page.getByTestId("event-photos-more-albums")).toHaveCount(0);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await client.query(
+      "delete from event_albums where title like 'Extra %' and event_id = (select id from events where slug = $1)",
+      [SLUG],
+    );
+    await client.end();
+  }
 });

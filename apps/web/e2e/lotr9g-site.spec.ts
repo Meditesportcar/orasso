@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, loginInBrowser } from "./helpers";
 
 // Lot R9g (section « Photos » de la fiche, album « officiel », reprise d'une photo dans le journal), côté site (API et site lancés sur la
@@ -121,3 +122,102 @@ async function apiEventId(cookie: string) {
   const event = await apiCall<{ id: string }>(cookie, "GET", `/events/by-slug/${SLUG}`);
   return event.data.id;
 }
+
+// --- Tour 2 : cumul média + organisateur, vue comptée, plus de 50 albums -------------------------------------------------------------
+
+/** Exécute `run` avec, au besoin, des lignes ajoutées à la base seedée ; `cleanup` les retire toujours. */
+async function withDb<T>(setup: string[], cleanup: string[], params: unknown[], run: () => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    for (const sql of setup) await client.query(sql, params);
+    return await run();
+  } finally {
+    for (const sql of cleanup) await client.query(sql, params);
+    await client.end();
+  }
+}
+
+test("Léo, titulaire du média ET co-organisateur : retirer la photo, reprendre au journal et « officiel » ensemble", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const cookie = await login(DAMIEN);
+  const album = await albumOfEvent(cookie);
+  await withDb(
+    [
+      `insert into structure_members (structure_id, user_id, role, status, joined_at)
+         select e.structure_id, u.id, 'co_organizer', 'active', now()
+           from events e, "user" u where e.slug = $1 and u.email = $2
+         on conflict (structure_id, user_id) do update set role = 'co_organizer', status = 'active'`,
+    ],
+    [
+      `delete from structure_members where user_id = (select id from "user" where email = $2)
+         and structure_id = (select structure_id from events where slug = $1)`,
+    ],
+    [SLUG, LEO],
+    async () => {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const page = await ctx.newPage();
+      try {
+        await loginInBrowser(page, LEO, undefined, `/albums/${album.id}`);
+        await page.waitForLoadState("networkidle");
+        await page.getByTestId("media-gallery-photo").first().click();
+        await expect(page.getByTestId("album-photo-remove")).toBeVisible();
+        await expect(page.getByTestId("album-organizer-actions")).toBeVisible();
+        await expect(page.getByTestId("album-repost-open")).toHaveText("Reprendre dans le journal de l'événement");
+      } finally {
+        await ctx.close();
+      }
+    },
+  );
+});
+
+test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async ({ page }) => {
+  const views: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/api\/media-contents\/.+\/view/.test(r.url())) views.push(r.url());
+  });
+  await page.goto(`/e/${SLUG}`);
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("event-photos-open").click();
+  await expect(page.getByTestId("album-open"))
+    .toBeVisible({ timeout: 30_000 })
+    .catch(() => undefined);
+  await page.waitForTimeout(1_500);
+  expect(views).toEqual([]);
+});
+
+test("avec une session, la vue est comptée à l'ouverture depuis la fiche", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loginInBrowser(page, DAMIEN, undefined, `/e/${SLUG}`);
+  await page.waitForLoadState("networkidle");
+  const view = page.waitForRequest((r) => r.method() === "POST" && /\/api\/media-contents\/.+\/view/.test(r.url()), {
+    timeout: 30_000,
+  });
+  await page.getByTestId("event-photos-open").click();
+  await view;
+});
+
+test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute le 51e", async ({ page }) => {
+  test.setTimeout(180_000);
+  await withDb(
+    [
+      `insert into event_albums (event_id, media_profile_id, author_id, title, status, published_at, photos_count)
+         select a.event_id, a.media_profile_id, a.author_id, 'Extra ' || g, 'published',
+                a.published_at - (g || ' minutes')::interval, 0
+           from event_albums a, generate_series(1, 50) g
+          where a.event_id = (select id from events where slug = $1) and a.official_at is not null`,
+    ],
+    [`delete from event_albums where title like 'Extra %' and event_id = (select id from events where slug = $1)`],
+    [SLUG],
+    async () => {
+      await page.goto(`/e/${SLUG}`);
+      await expect(page.getByTestId("event-photos-count")).toHaveText("51 albums");
+      await expect(page.getByTestId("event-photos-album")).toHaveCount(50);
+      await page.getByTestId("event-photos-more-albums").click();
+      await expect(page.getByTestId("event-photos-album")).toHaveCount(51, { timeout: 30_000 });
+      await expect(page.getByTestId("event-photos-more-albums")).toHaveCount(0);
+    },
+  );
+});
