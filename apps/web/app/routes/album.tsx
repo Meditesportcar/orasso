@@ -4,10 +4,12 @@
 // connecté (les photos viennent d'une route protégée). Média : modifier le titre, autoriser l'enregistrement, supprimer ; autre membre :
 // signaler. Aucun nom de véhicule ni pseudo en R9e.
 import { Button, Chip } from "@orasso/design-system/web";
-import { type AlbumView, albumLabels as L } from "@orasso/shared";
+import { type AlbumView, albumViewerRoleOf, albumLabels as L, type Taggable } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { AlbumCover } from "../components/albums/AlbumCover";
+import { IdentifyBanner } from "../components/albums/IdentifyBanner";
+import { TagActions } from "../components/albums/TagActions";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
@@ -26,7 +28,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   await requireMe(request);
   const album = await apiOrThrow<AlbumView>(request, `/albums/${encodeURIComponent(params.id)}`);
-  return { back, album };
+  // Lot R9f : qui je suis pour identifier (le média auteur le sait ; un passionné ou un organisateur le demande à l'API). Une panne ne
+  // casse pas la page : sans plateau lu, je suis un simple membre.
+  const taggable =
+    album.mine || album.status !== "published"
+      ? null
+      : await api<Taggable>(request, `/albums/${encodeURIComponent(params.id)}/taggable`);
+  return { back, album, taggable: taggable?.ok ? taggable.data : null };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -64,6 +72,9 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
   // Les retraits de photo disent leur `intent` et leur `photoId` : l'erreur ne s'affiche que sous la photo concernée.
   const actionData = rawAction as { error: string | null; intent?: string; photoId?: string } | undefined;
   const a = loaderData.album;
+  const role = albumViewerRoleOf({ mine: a.mine, taggable: loaderData.taggable });
+  const firstUntagged = a.photos.findIndex((p) => !(p.tags && p.tags.length > 0));
+  const hasMine = a.photos.some((p) => p.tags?.some((tag) => tag.mine));
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   const photos = a.photos.map((p) => ({ key: p.id, url: p.url }));
@@ -100,8 +111,14 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
         <a className="alb-at o-t-caption" href={`/e/${a.event.slug}`} data-testid="album-event-link">
           {L.presentAt(a.event.title)}
         </a>
-        {/* Emplacement de R9f : « Identifier les voitures » (pas de contenu en R9e). */}
-        <div data-testid="album-identify-slot" />
+        <IdentifyBanner
+          albumId={a.id}
+          identified={a.tagsCount ?? 0}
+          total={a.photos.length}
+          firstUntagged={firstUntagged}
+          canIdentify={role === "media" || role === "organizer"}
+          hasMine={hasMine}
+        />
         {a.mine && a.status === "draft" && (
           <Button icon="next" href={`/app/media/albums/nouveau?album=${a.id}`} data-testid="album-resume">
             {L.resume}
@@ -118,42 +135,46 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
             credit={L.creditLine(a.media.name)}
             // Les actions de la photo **affichée** : « Signaler » vise celle-ci (jamais la première), « Retirer » pour le titulaire.
             // R9f et R9g y posent les leurs.
-            actions={(photo) =>
-              a.mine ? (
-                <>
-                  {/* Même confirmation que l'appli : retirer une photo d'un album publié l'enlève pour tout le monde. */}
-                  <Form
-                    method="post"
-                    data-testid="album-photo-remove-form"
-                    onSubmit={(e) => {
-                      if (!window.confirm(`${L.photoRemove}\n${L.photoRemoveConfirm}`)) e.preventDefault();
-                    }}
-                  >
-                    <input type="hidden" name="intent" value="photo-delete" />
-                    <input type="hidden" name="photoId" value={photo.key} />
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      icon="trash"
-                      disabled={busy}
-                      data-testid="album-photo-remove"
+            actions={(photo) => (
+              <>
+                {/* Lot R9f : les identifications de la photo affichée (une clé par photo : la feuille repart à zéro). */}
+                <TagActions key={`tags-${photo.key}`} album={a} photoId={photo.key} role={role} />
+                {a.mine ? (
+                  <>
+                    {/* Même confirmation que l'appli : retirer une photo d'un album publié l'enlève pour tout le monde. */}
+                    <Form
+                      method="post"
+                      data-testid="album-photo-remove-form"
+                      onSubmit={(e) => {
+                        if (!window.confirm(`${L.photoRemove}\n${L.photoRemoveConfirm}`)) e.preventDefault();
+                      }}
                     >
-                      {L.photoRemove}
-                    </Button>
-                  </Form>
-                  {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
-                  {/* Seulement pour la photo affichée : l'erreur d'un retrait refusé ne suit pas les autres photos. */}
-                  {actionData?.error && actionData.intent === "photo-delete" && actionData.photoId === photo.key && (
-                    <p role="alert" className="s-error" data-testid="album-photo-remove-error">
-                      {actionData.error}
-                    </p>
-                  )}
-                </>
-              ) : (
-                // Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée.
-                <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
-              )
-            }
+                      <input type="hidden" name="intent" value="photo-delete" />
+                      <input type="hidden" name="photoId" value={photo.key} />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        icon="trash"
+                        disabled={busy}
+                        data-testid="album-photo-remove"
+                      >
+                        {L.photoRemove}
+                      </Button>
+                    </Form>
+                    {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
+                    {/* Seulement pour la photo affichée : l'erreur d'un retrait refusé ne suit pas les autres photos. */}
+                    {actionData?.error && actionData.intent === "photo-delete" && actionData.photoId === photo.key && (
+                      <p role="alert" className="s-error" data-testid="album-photo-remove-error">
+                        {actionData.error}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  // Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée.
+                  <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
+                )}
+              </>
+            )}
           />
         )}
         {actionData?.error && actionData.intent !== "photo-delete" && (

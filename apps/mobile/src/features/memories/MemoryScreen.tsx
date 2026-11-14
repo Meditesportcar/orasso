@@ -6,6 +6,7 @@ import { formatDayDate, localDate, type MemoryDetail, memoryLabels } from "@oras
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { MemoryAlbumLine } from "@/features/albums/MemoryAlbumLine";
 import { Stamp } from "@/features/passport/Stamp";
 import { MemoryShareButton } from "@/features/share/MemoryShareButton";
 import { api } from "@/lib/api";
@@ -109,6 +110,8 @@ function MemoryBody({ m }: { m: MemoryDetail }) {
         </View>
         <Stamp stamp={m.stamp} size={96} paper={c.surface} testID="memory-stamp" />
       </View>
+
+      <MemoryAlbumLine memory={m} tone="plain" testID="memory-album" />
 
       <View style={[styles.actions, stacked && styles.actionsStacked]} testID="memory-actions">
         {m.recapAvailable ? (

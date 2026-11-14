@@ -6,6 +6,7 @@ import { type HomeMemory, type MemoryItem, memoryLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { MemoryAlbumLine } from "@/features/albums/MemoryAlbumLine";
 import { MemoryPhoto } from "@/features/memories/MemoryPhoto";
 import { useTitleFit } from "@/features/memories/useTitleFit";
 import { MemoryShareButton } from "@/features/share/MemoryShareButton";
@@ -55,6 +56,7 @@ function MemoryPoster({ m }: { m: MemoryItem }) {
             {memoryLabels.plateauLine(m.car.label, m.car.rank, m.car.total)}
           </Text>
         ) : null}
+        <MemoryAlbumLine memory={m} testID="home-memory-album" />
         <View style={[styles.actions, stacked && styles.actionsStacked]} testID="home-memory-actions">
           {/* Place du bouton « En story » (lot R7f4) : il passe en premier, ce composant ne rend rien d'ici là. */}
           <MemoryShareButton memory={m} />

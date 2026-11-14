@@ -64,7 +64,7 @@ const calendar = createPositionCalendar({
   visible: () => typeof document === "undefined" || document.visibilityState === "visible",
   refresh: async (): Promise<PositionOutcome> => {
     const result = await store.refresh(true);
-    if (result.status !== "failed") return "ok";
+    if (result.status !== "failed") return store.view().at?.data.loading === true ? "loading" : "ok";
     if (result.error instanceof PositionRequestError) return practicalFailureOutcome(result.error.status);
     return result.error instanceof PositionTimeoutError ? "transient" : "unknown";
   },

@@ -141,7 +141,9 @@ export async function dropStoriesOfAlbumPhotos(
       and(
         inArray(stories.sourceAlbumPhotoId, [...photoIds]),
         isNull(stories.deletedAt),
-        opts.userId ? eq(stories.authorId, opts.userId) : undefined,
+        // Ses propres stories reprises de la photo : jamais une copie d'une story d'un autre (son droit de repartage vient de son
+        // identification sur CETTE story, pas sur la photo ; la copie tombe avec son originale par `softDeleteWithCopies`).
+        opts.userId ? and(eq(stories.authorId, opts.userId), isNull(stories.sharedFromStoryId)) : undefined,
       ),
     );
   if (!rows.length) return [];
@@ -271,6 +273,8 @@ export const storiesShare = {
           eventId: source.eventId,
           sharedFromStoryId: id,
           sharedByUserId: v.user.id,
+          // Une story reprise d'une photo d'album garde son crédit « Photos : <média> » (servi, imprimé à l'export) et tombe avec l'identification.
+          sourceAlbumPhotoId: source.sourceAlbumPhotoId,
           // « Collaboration commerciale » : la copie garde la mention de l'originale (R7m2).
           commercialPartnerId: source.commercialPartnerId,
           // Même expiration que l'originale : la copie ne la prolonge jamais.

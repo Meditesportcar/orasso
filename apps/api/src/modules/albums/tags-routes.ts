@@ -56,7 +56,11 @@ export const albumTagsRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const raw: unknown = await c.req.json().catch(() => ({}));
     const done = await shareToStory(v, uuidParam(c, "id"), parse(shareToStorySchema, raw ?? {}));
-    return c.json({ id: done.id, expiresAt: done.expiresAt }, done.replayed ? 200 : 201);
+    // `replayed` + `audience` : une story déjà en ligne est rendue telle quelle (ni public ni légende ne la modifient), l'écran le dit.
+    return c.json(
+      { id: done.id, expiresAt: done.expiresAt, replayed: done.replayed, audience: done.audience },
+      done.replayed ? 200 : 201,
+    );
   })
   .get("/album-photos/:id/download", async (c) => {
     const v = await requireUser(c);

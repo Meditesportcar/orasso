@@ -6,12 +6,14 @@ import { gradeLabels, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { AlbumMentionsBlock } from "@/features/albums/AlbumMentions";
 import { ReportButton } from "@/features/ReportSheet";
 import { PersonRow } from "@/features/social/PersonRow";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { VehicleTrophies } from "@/features/vehicle/VehicleTrophies";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
@@ -27,6 +29,7 @@ export default function OtherVehiclePage() {
   const vehicle = useApi(() => api.otherVehicle(id), [id]);
   const nearby = useApi(() => api.ownersNearby(id), [id], { enabled: Boolean(vehicle.data) });
   const v = vehicle.data;
+  const { me } = useSession();
   const [viewer, setViewer] = useState<number | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -109,6 +112,8 @@ export default function OtherVehiclePage() {
             ) : null}
           </Plate>
         ) : null}
+        {/* Lot R9f : « Vu au <événement> · N photos » ; c'est ma voiture : « Voir les N photos » ouvre « Tes photos ». */}
+        <AlbumMentionsBlock mentions={v.albumMentions} mine={v.owner.userId === me?.user.id} />
         {/* Photos (lot 32) : toucher ouvre la visionneuse plein écran, d'où l'on peut signaler la photo. */}
         {full && full.photos.length > 1
           ? full.photos.slice(1).map((p, i) => (
