@@ -113,6 +113,9 @@ export async function seedPageFollows() {
  * un rail) et les commentaires en casquette (Roues Libres 66 commente une publication de Kenji_66, La Brasa lui répond).
  * Rejouable : une publication de Sud Cars, une flamme par compte, un commentaire par casquette (identifiants d'envoi fixes).
  */
+/** Identifiant d'envoi fixe du premier commentaire du seed (le rejeu retrouve ainsi sa publication). */
+const FIRST_COMMENT_ID = "00000000-0000-4000-8000-0000000009a1";
+
 async function seedPageFeed(pages: {
   brasa: { id: string; userId: string };
   sudCars: { id: string; userId: string };
@@ -153,29 +156,39 @@ async function seedPageFeed(pages: {
     );
   }
   // Roues Libres 66 (son propriétaire, second facteur) commente une publication de Kenji_66, La Brasa lui répond.
-  const kenji = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'kenji_66'` });
-  const post = kenji
-    ? await db.query.feedPosts.findFirst({
-        where: and(
-          eq(t.feedPosts.authorId, kenji.userId),
-          eq(t.feedPosts.persona, "fan"),
-          isNull(t.feedPosts.deletedAt),
-        ),
-        orderBy: sql`${t.feedPosts.createdAt} desc`,
-      })
-    : null;
   const owner = await db.query.structureMembers.findFirst({
     where: and(eq(t.structureMembers.structureId, pages.rouesLibres.id), eq(t.structureMembers.role, "owner")),
   });
   const sarah = owner ? await viewerOfUser(owner.userId, "totp") : null;
   const sofia = await viewerOfUser(pages.brasa.userId);
-  if (!post || !sarah || !sofia) return;
+  if (!sarah || !sofia) return;
+  // Rejeu : la publication visée est celle où le seed a déjà posé son commentaire (retrouvé par son identifiant d'envoi), jamais
+  // « la dernière de Kenji_66 » une seconde fois : s'il a publié depuis, l'identifiant fixe viserait une autre publication (409).
+  // Un commentaire du seed supprimé depuis n'est pas reposé.
+  const already = await db.query.feedPostComments.findFirst({
+    where: and(eq(t.feedPostComments.authorId, sarah.user.id), eq(t.feedPostComments.clientId, FIRST_COMMENT_ID)),
+  });
+  if (already?.deletedAt) return;
+  const kenji = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'kenji_66'` });
+  const post = already
+    ? await db.query.feedPosts.findFirst({ where: eq(t.feedPosts.id, already.postId) })
+    : kenji
+      ? await db.query.feedPosts.findFirst({
+          where: and(
+            eq(t.feedPosts.authorId, kenji.userId),
+            eq(t.feedPosts.persona, "fan"),
+            isNull(t.feedPosts.deletedAt),
+          ),
+          orderBy: sql`${t.feedPosts.createdAt} desc`,
+        })
+      : null;
+  if (!post) return;
   const first = await feedCommentsService.create(
     sarah,
     post.id,
     {
       text: "Merci d'être venu ! On vous garde une place au prochain rassemblement.",
-      clientId: "00000000-0000-4000-8000-0000000009a1",
+      clientId: FIRST_COMMENT_ID,
     },
     { kind: "structure", id: pages.rouesLibres.id, key: `s:${pages.rouesLibres.id}` },
   );
