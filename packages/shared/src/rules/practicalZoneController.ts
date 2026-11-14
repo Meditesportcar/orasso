@@ -362,7 +362,17 @@ export function createPracticalZone(deps: ZoneDeps) {
           c.t === "disk" &&
           state.cover.some((k) => k.t === "disk" && !k.except && k.lat === c.lat && k.lng === c.lng && k.km >= c.km),
       );
-      set(store((p) => (cut ? coverContains(covered, p) : inDisk(p)), data.places, known ? [] : covered));
+      const next = store((p) => (cut ? coverContains(covered, p) : inDisk(p)), data.places, known ? [] : covered);
+      // Disque déjà connu : remplacé par le disque de cette réponse (nouvel objet, au rayon servi actuel). Une lecture de zone partie avant, arrivée
+      // après, ne peut ainsi pas retirer un lieu neuf que ce disque garantit (l'ancien objet est dans les couvertures qu'elle connaissait).
+      if (known && covered.length > 0) {
+        const same = (k: (typeof next.cover)[number]) =>
+          k.t === "disk" &&
+          !k.except &&
+          covered.some((c) => c.t === "disk" && k.lat === c.lat && k.lng === c.lng && k.km >= c.km);
+        next.cover = [...next.cover.filter((k) => !same(k)), ...covered];
+      }
+      set(next);
     },
     /** Fin d'un geste sur la carte : la zone regardée. Ne lit rien. */
     setView(view: PracticalZone) {
