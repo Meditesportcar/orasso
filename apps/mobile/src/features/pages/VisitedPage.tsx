@@ -10,6 +10,7 @@ import { tokens, useTheme } from "@orasso/design-system/native";
 import {
   authorKeyOf,
   explicitPageTab,
+  isOwnPage,
   pagesLabels as L,
   type MediaPage,
   type PageKind,
@@ -130,6 +131,9 @@ export function VisitedPage({ kind }: { kind: VisitedKind }) {
     me?.personas?.some((e) => e.kind === (kind === "provider" ? "provider" : "media") && e.id === p.id),
   );
   const key = authorKeyOf(kind, p.id);
+  // « Suivre » : masqué seulement si la casquette active **est** la page visitée ; sans casquette, le propriétaire ne se suit pas
+  // lui-même (même règle que le site, `isOwnPage`). La structure du compte peut suivre sa vitrine ou son média.
+  const selfPage = isOwnPage({ actorKey: actor, pageKey: key, owner });
   const mentionsCount = mentionsBase === undefined ? undefined : Math.max(0, mentionsBase + mentionsDelta);
   const tabs = pageTabs(pageKind, { session, mentionsCount });
   const wanted = picked ?? pageOpenTab(pageKind, { publications: pagePublicationsCount(p) }, session);
@@ -228,7 +232,7 @@ export function VisitedPage({ kind }: { kind: VisitedKind }) {
         typeLabel={provider ? provider.typeLabel || L.typeProvider : L.typeMedia}
         verifiedLabel={media?.verified ? L.verifiedMedia : null}
         follow={
-          owner ? null : (
+          selfPage ? null : (
             <FollowLine
               following={Boolean(p.isFollowing)}
               busy={busy}

@@ -14,7 +14,33 @@ const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
 test.use({ actionTimeout: 30_000 });
 
-async function shot(page: Page, name: string) {
+/**
+ * Les images attendues d'une capture : chaque image **visible** doit être chargée pour de bon (`naturalWidth > 0`) ; une image cassée
+ * n'est plus acceptée parce que son chargement est « terminé ». Un repli attendu s'autorise explicitement (`brokenOk` : sélecteurs CSS).
+ */
+async function expectImagesLoaded(page: Page, brokenOk: string[] = []) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (allowed) => {
+          await Promise.all(
+            [...document.images].map((img) => (img.complete ? null : img.decode().catch(() => undefined))),
+          );
+          return [...document.images]
+            .filter((img) => {
+              const r = img.getBoundingClientRect();
+              return r.width > 0 && r.height > 0 && getComputedStyle(img).visibility !== "hidden";
+            })
+            .filter((img) => !allowed.some((q) => img.matches(q)))
+            .filter((img) => !(img.complete && img.naturalWidth > 0))
+            .map((img) => img.currentSrc || img.src);
+        }, brokenOk),
+      { message: "toutes les images visibles sont chargées (naturalWidth > 0)", timeout: 20_000 },
+    )
+    .toEqual([]);
+}
+
+async function shot(page: Page, name: string, brokenOk: string[] = []) {
   mkdirSync(DIR, { recursive: true });
   // Le thème voulu est vraiment celui de la page (le Sable ne repasse jamais en Béton sans que personne le voie, tour 2, point 4).
   const wanted = (await page.context().cookies()).find((c) => c.name === "orasso-theme")?.value;
@@ -22,9 +48,9 @@ async function shot(page: Page, name: string) {
     await expect(page.locator("html")).toHaveAttribute("data-theme", wanted);
   // Un état observable, pas un délai : réseau au repos, polices et images décodées, deux images peintes (la capture voit le contenu final).
   await page.waitForLoadState("networkidle");
+  await expectImagesLoaded(page, brokenOk);
   await page.evaluate(async () => {
     await document.fonts.ready;
-    await Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => undefined))));
     await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
   });
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: false });
@@ -77,6 +103,14 @@ async function setFollowing(email: string, targetKey: string, wanted: boolean, a
     headers: { cookie: await login(email), origin: WEB, ...(actor ? { "x-orasso-actor": actor } : {}) },
   });
   expect(res.status).toBe(200);
+}
+
+/** `GET /media/:id` lu au nom d'une casquette : son état d'abonnement (casquette de la personne : sans en-tête). */
+async function fetchMediaAs(email: string, mediaId: string, actor: string) {
+  const res = await fetch(`${API}/api/media/${mediaId}`, {
+    headers: { cookie: await login(email), origin: WEB, "x-orasso-actor": actor },
+  });
+  return (await res.json()) as { isFollowing: boolean };
 }
 
 /** `GET /media/:id` lu par une personne : son état d'abonnement et son nombre d'abonnés. */
@@ -630,6 +664,54 @@ test("Deux casquettes du même compte : la fiche pro suit sa vitrine de prestata
     await expect(page.getByTestId("follow-button")).toHaveCount(0);
   } finally {
     if (wasFollowing) await setFollowing(email, ownKey, true, proKey);
+    await ctx.close();
+  }
+});
+
+test("/m/<id> à deux casquettes du même compte : la fiche pro suit son propre média (au nom de la fiche) puis s'en désabonne ; le média ne se suit pas lui-même", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const email = "garage@orasso.local";
+  const cookie = await login(email);
+  // Un média créé par l'API pour le compte du garage (la graine ne lui en donne pas) ; retiré à la fin.
+  const created = await apiCall(cookie, "PUT", "/me/media-profile", {
+    name: "Garage Images B2b",
+    formats: ["photo"],
+    website: "https://example.org/garage-images",
+    departments: ["66"],
+  });
+  expect(created.status, "le média du garage est créé").toBe(200);
+  const media = await personaOf(email, "media");
+  const pro = await personaOf(email, "pro");
+  const proKey = `p:${pro.id}`;
+  const ownKey = `m:${media.id}`;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  try {
+    await setFollowing(email, ownKey, false, proKey);
+    await open(page, email, `/m/${media.id}?auteur=${encodeURIComponent(proKey)}&onglet=albums`);
+    // La fiche pro n'est pas la page visitée : « Suivre » est là, au nom de la fiche.
+    const button = page.getByTestId("follow-button");
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    await button.click();
+    await expect(button).toHaveText(`Suivi en tant que ${pro.label}`);
+    expect((await fetchMediaAs(email, media.id, proKey)).isFollowing, "la fiche pro suit le média").toBe(true);
+    // Se désabonner, au nom de la fiche aussi.
+    await button.click();
+    await expect(button).toHaveText(`Suivre en tant que ${pro.label}`);
+    expect((await fetchMediaAs(email, media.id, proKey)).isFollowing).toBe(false);
+    // Le média ne se suit pas lui-même (casquette = la page) ; sans casquette, le propriétaire non plus.
+    await page.goto(`/m/${media.id}?auteur=${encodeURIComponent(ownKey)}&onglet=albums`);
+    await expect(page.getByTestId("page-actor")).toBeVisible();
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+    await page.goto(`/m/${media.id}?onglet=albums`);
+    await expect(page.getByTestId("follow-button")).toHaveCount(0);
+  } finally {
+    await setFollowing(email, ownKey, false, proKey).catch(() => undefined);
+    // Le média de la recette est retiré : le compte retrouve l'état de la graine (sans casquette Média).
+    await sql("delete from page_follows where target_id = $1", [media.id]);
+    await sql("delete from media_profiles where id = $1", [media.id]);
     await ctx.close();
   }
 });

@@ -56,7 +56,12 @@ type More = { base: EventCard[] | null; extra: EventCard[]; next: string | null;
  * (au-delà des 50 à venir et des 12 passés). Après l'échec d'une page, « Réessayer » relit la suite, jamais une liste
  * fusionnée à moitié. Une nouvelle lecture de la page (« Réessayer » général) repart de ses données.
  */
-function useMoreEvents(structureId: string, scope: "upcoming" | "past", first: EventCard[] | null, firstNext: string | null) {
+function useMoreEvents(
+  structureId: string,
+  scope: "upcoming" | "past",
+  first: EventCard[] | null,
+  firstNext: string | null,
+) {
   const fresh: More = { base: first, extra: [], next: firstNext, failed: false, busy: false };
   const [state, setState] = useState<More>(fresh);
   const cur = state.base === first ? state : fresh;
@@ -79,7 +84,13 @@ function useMoreEvents(structureId: string, scope: "upcoming" | "past", first: E
       busy: false,
     });
   }
-  return { items: first === null ? null : [...first, ...cur.extra], next: cur.next, failed: cur.failed, busy: cur.busy, more };
+  return {
+    items: first === null ? null : [...first, ...cur.extra],
+    next: cur.next,
+    failed: cur.failed,
+    busy: cur.busy,
+    more,
+  };
 }
 
 function MoreEvents({

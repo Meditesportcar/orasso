@@ -7,6 +7,7 @@
 // qui suit (T6 et T14). `GET /providers/:id` est réservé aux connectés (lot 46).
 import {
   authorKeyOf,
+  isOwnPage,
   pagesLabels as L,
   proV2Labels as P,
   PAGE_TAB_PARAM,
@@ -103,7 +104,7 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
   const key = authorKeyOf("provider", provider.id);
   // Pas de « Suivre » sur sa propre page : avec une casquette, c'est la clé de la casquette qui compte (la structure de Sarah peut suivre le
   // média ou le prestataire de Sarah : deux pages distinctes) ; sans casquette, le propriétaire de la page (on ne se suit pas soi-même).
-  const selfPage = actor ? actor === key : owner;
+  const selfPage = isOwnPage({ actorKey: actor, pageKey: key, owner });
   const tabs = pageTabs("provider", {
     session: true,
     mentionsCount: mentionsShown(pageMentionsCount(provider), mentionsDelta),

@@ -6,6 +6,7 @@ import {
   aspectOfPhotos,
   explicitPageFilter,
   explicitPageTab,
+  isOwnPage,
   isPageManager,
   mentionLine,
   type PageKind,
@@ -306,6 +307,17 @@ describe("lot R9b : les compteurs du prestataire et du média", () => {
       "photo",
     ]);
     expect(pageCounters("media", { followers: 2 }).map((c) => c.value)).toEqual([2, null, null]);
+  });
+  it("isOwnPage : « Suivre » est masqué seulement si la casquette active est la page visitée ; sans casquette, le propriétaire", () => {
+    // Casquette = la page : masqué ; une autre casquette du même compte : proposé.
+    expect(isOwnPage({ actorKey: "m:1", pageKey: "m:1", owner: true })).toBe(true);
+    expect(isOwnPage({ actorKey: "p:9", pageKey: "m:1", owner: true })).toBe(false);
+    // Sans casquette : le propriétaire ne se suit pas lui-même ; un autre compte le peut.
+    expect(isOwnPage({ actorKey: null, pageKey: "m:1", owner: true })).toBe(true);
+    expect(isOwnPage({ actorKey: undefined, pageKey: "m:1", owner: false })).toBe(false);
+    expect(isOwnPage({ actorKey: "", pageKey: "m:1", owner: true })).toBe(true);
+    // Une casquette d'un compte qui n'est pas propriétaire de la page.
+    expect(isOwnPage({ actorKey: "s:2", pageKey: "m:1", owner: false })).toBe(false);
   });
   it("isPageManager : le propriétaire d'un prestataire ou d'un média", () => {
     for (const kind of ["provider", "media"] as const) {
