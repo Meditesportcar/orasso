@@ -162,8 +162,14 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
     },
   );
   // « Voir plus » au-delà des 50 à venir et des 12 passés (parité avec le site) : la suite se lit au curseur, sans vider la liste.
-  const moreUpcoming = useMoreEvents(organizer?.id, "upcoming", upcoming.data);
-  const morePast = useMoreEvents(organizer?.id, "past", past.data);
+  // Une relecture en panne garde la liste (`useApi`) : la panne se dit à part, comme sur le site (lot B3a, parité D20).
+  const moreUpcoming = useMoreEvents(
+    organizer?.id,
+    "upcoming",
+    upcoming.data,
+    upcoming.error !== null && !upcoming.loading,
+  );
+  const morePast = useMoreEvents(organizer?.id, "past", past.data, past.error !== null && !past.loading);
   const partners = useApi(
     () => api.structurePros(data?.kind === "organizer" ? data.slug : ""),
     [data?.kind === "organizer" ? data.slug : null],
@@ -326,6 +332,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
             partners={partnerItems}
             upcomingMore={moreUpcoming.more}
             pastMore={morePast.more}
+            upcomingReadFailed={moreUpcoming.readFailed}
+            pastReadFailed={morePast.readFailed}
             onRetryUpcoming={
               upcoming.data === null && upcoming.error && !upcoming.loading ? () => void upcoming.reload() : null
             }
