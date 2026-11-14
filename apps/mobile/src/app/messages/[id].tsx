@@ -26,6 +26,7 @@ import { pickPhotos } from "@/lib/photos";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
+import { Avatar } from "@/ui/Avatar";
 import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
@@ -355,7 +356,19 @@ export function ConversationScreen({
             <Notice tone="error">{loadError}</Notice>
           </View>
         ) : null}
-        {conversation?.otherUser ? (
+        {conversation?.page && !conversation.page.mine ? (
+          // Lot R9i : la page d'un média, jamais le compte qui la tient (aucun lien /u/…).
+          <View style={styles.pad}>
+            <Button
+              variant="secondary"
+              icon="profile"
+              testID="view-page"
+              onPress={() => router.push(`/m/${conversation.page?.id}`)}
+            >
+              {messagingLabels.viewPage}
+            </Button>
+          </View>
+        ) : conversation?.otherUser ? (
           <View style={styles.pad}>
             <Button
               variant="secondary"
@@ -387,6 +400,20 @@ export function ConversationScreen({
             <Notice>{blocked}</Notice>
           ) : (
             <>
+              {conversation?.page?.mine ? (
+                // Lot R9i : le titulaire répond au nom de sa page ; la personne ne voit jamais son compte.
+                <View style={styles.replyAs} testID="reply-as">
+                  <View style={styles.replyAsLine}>
+                    <Avatar url={conversation.page.logoUrl} pseudo={conversation.page.name} size={20} />
+                    <Text variant="bodyStrong" color={t.color.ink} style={styles.replyAsName}>
+                      {messagingLabels.replyAs(conversation.page.name)}
+                    </Text>
+                  </View>
+                  <Muted variant="caption">
+                    {messagingLabels.replyAsHint(conversation.otherUser?.pseudo ?? conversation.title)}
+                  </Muted>
+                </View>
+              ) : null}
               <TextField
                 label={messagingLabels.placeholder}
                 value={draft}
@@ -454,6 +481,9 @@ export function ConversationScreen({
 }
 
 const styles = StyleSheet.create({
+  replyAs: { gap: space1 },
+  replyAsLine: { flexDirection: "row", alignItems: "center", gap: space2 },
+  replyAsName: { flexShrink: 1 },
   about: { alignSelf: "stretch", marginBottom: 4 },
   fill: { flex: 1 },
   pad: { paddingHorizontal: space4, paddingTop: space2 },

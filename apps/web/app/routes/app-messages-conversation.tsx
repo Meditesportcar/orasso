@@ -209,7 +209,13 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
           <div className="s-grow s-stack s-stack--tight">
             <h1 className="s-title">{c.title}</h1>
             {c.subtitle && <span className="o-t-caption s-muted">{c.subtitle}</span>}
-            {c.otherUser && (
+            {c.page && !c.page.mine && (
+              // Lot R9i : la page d'un média, jamais le compte qui la tient (aucun lien /u/…).
+              <a className="o-t-caption" href={`/m/${c.page.id}`} data-testid="view-page">
+                {messagingLabels.viewPage}
+              </a>
+            )}
+            {c.otherUser && !(c.page && !c.page.mine) && (
               <a className="o-t-caption" href={`/u/${encodeURIComponent(c.otherUser.pseudo)}`}>
                 {messagingLabels.viewProfile}
               </a>
@@ -327,6 +333,18 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
               sendText();
             }}
           >
+            {c.page?.mine && (
+              // Lot R9i : le titulaire répond au nom de sa page ; la personne ne voit jamais son compte.
+              <div className="s-stack s-stack--tight" data-testid="reply-as">
+                <div className="s-row">
+                  <PersonAvatar url={c.page.logoUrl} pseudo={c.page.name} size={20} />
+                  <strong className="o-t-body">{messagingLabels.replyAs(c.page.name)}</strong>
+                </div>
+                <span className="o-t-caption s-muted">
+                  {messagingLabels.replyAsHint(c.otherUser?.pseudo ?? c.title)}
+                </span>
+              </div>
+            )}
             <label className="o-visually-hidden" htmlFor="message-body">
               {messagingLabels.placeholder}
             </label>
