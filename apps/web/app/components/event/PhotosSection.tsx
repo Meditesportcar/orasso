@@ -1,10 +1,11 @@
 // La section « Photos » de la fiche d'un événement (lot R9g, maquette R9.8 `e-photos`, `photosH`) : les albums publiés des médias accrédités,
 // l'album officiel en tête (T43 : dès qu'un album publié existe, même pendant l'événement ; sinon rien). Par album : la mosaïque, le titre
 // (jamais tronqué), « <média> · N photos », le tag « Album officiel », « Voir l'album » ; pour l'organisateur de l'événement, « … » (la
-// feuille « officiel »). Sans session la section se voit (T34), sans aucune action.
+// feuille « officiel »). Sans session la section se voit (T34), sans aucune action. Une panne de lecture n'est pas « aucun album » : le message
+// et « Réessayer » ; au-delà de la première page (50 albums), « Voir plus d'albums » (le total vient de l'API).
 import { Button, Icon } from "@orasso/design-system/web";
 import { type AlbumSummary, albumsOrder, eventPhotosLabels as L, showPhotosSection } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import "../../styles/albums.css";
@@ -22,13 +23,83 @@ function countView(albumId: string) {
   }).catch(() => undefined);
 }
 
-export function PhotosSection({ albums, manager }: { albums: readonly AlbumSummary[]; manager: boolean }) {
+export function PhotosSection({
+  albums,
+  manager,
+  countViews,
+  failed = false,
+  total,
+  nextCursor = null,
+  moreUrl,
+}: {
+  albums: readonly AlbumSummary[];
+  manager: boolean;
+  /** Compter une vue à l'ouverture d'un album : seulement avec une session, et depuis la fiche (jamais depuis la gestion de l'événement). */
+  countViews: boolean;
+  /** La lecture de la liste a échoué (autre chose qu'une absence) : le message et « Réessayer », pas une section vide. */
+  failed?: boolean;
+  /** Le nombre d'albums visibles au total (la première page n'en porte que 50). */
+  total?: number;
+  nextCursor?: string | null;
+  /** La route de la liste (sans curseur) : « Voir plus d'albums » y lit la page suivante. */
+  moreUrl?: string;
+}) {
   const revalidator = useRevalidator();
+  // Les pages suivantes : jetées quand la première page est relue (le chargeur rend une nouvelle liste).
+  const [more, setMore] = useState<{ items: AlbumSummary[]; cursor: string | null } | null>(null);
+  const [moreFailed, setMoreFailed] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la liste relue repart de la première page.
+  useEffect(() => {
+    setMore(null);
+    setMoreFailed(false);
+  }, [albums]);
   const [menu, setMenu] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const list = albumsOrder(albums);
+  const seen = new Set<string>();
+  const list = albumsOrder([...albums, ...(more?.items ?? [])]).filter((a) => {
+    if (seen.has(a.id)) return false;
+    seen.add(a.id);
+    return true;
+  });
+  const cursor = more ? more.cursor : nextCursor;
+  if (failed && list.length === 0) {
+    return (
+      <section className="s-section" id="photos" data-testid="event-photos" aria-labelledby="photos-title">
+        <h2 className="s-h2 alb-sec__head" id="photos-title">
+          <Icon name="camera" size={18} />
+          <span>{L.title}</span>
+        </h2>
+        <p className="s-error" role="alert" data-testid="event-photos-error">
+          {L.loadFailed}
+        </p>
+        <Button
+          variant="secondary"
+          icon="undo"
+          type="button"
+          onClick={() => revalidator.revalidate()}
+          data-testid="event-photos-retry"
+        >
+          {L.retry}
+        </Button>
+      </section>
+    );
+  }
   if (!showPhotosSection(list)) return null;
+
+  async function loadMore() {
+    if (!cursor || !moreUrl || loadingMore) return;
+    setLoadingMore(true);
+    setMoreFailed(false);
+    const res = await fetch(`${moreUrl}${moreUrl.includes("?") ? "&" : "?"}limit=50&cursor=${encodeURIComponent(cursor)}`, {
+      credentials: "same-origin",
+    }).catch(() => null);
+    const page = res?.ok ? ((await res.json().catch(() => null)) as { items: AlbumSummary[]; nextCursor: string | null } | null) : null;
+    if (page) setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], cursor: page.nextCursor }));
+    else setMoreFailed(true);
+    setLoadingMore(false);
+  }
 
   async function toggle(a: AlbumSummary) {
     setError(null);
@@ -51,7 +122,7 @@ export function PhotosSection({ albums, manager }: { albums: readonly AlbumSumma
         <Icon name="camera" size={18} />
         <span>{L.title}</span>
         <span className="o-t-caption s-muted" data-testid="event-photos-count">
-          {L.albumsCount(list.length)}
+          {L.albumsCount(Math.max(total ?? 0, list.length))}
         </span>
       </h2>
       <ul className="alb-list">
@@ -101,7 +172,7 @@ export function PhotosSection({ albums, manager }: { albums: readonly AlbumSumma
               variant="secondary"
               icon="next"
               href={`/albums/${a.id}`}
-              onClick={() => countView(a.id)}
+              onClick={countViews ? () => countView(a.id) : undefined}
               data-testid="event-photos-open"
             >
               {L.seeAlbum}
@@ -109,6 +180,26 @@ export function PhotosSection({ albums, manager }: { albums: readonly AlbumSumma
           </li>
         ))}
       </ul>
+      {cursor && moreUrl && (
+        <Button
+          variant="secondary"
+          icon="down"
+          type="button"
+          disabled={loadingMore}
+          onClick={() => void loadMore()}
+          data-testid="event-photos-more-albums"
+        >
+          {L.moreAlbums}
+        </Button>
+      )}
+      {moreFailed && (
+        <p className="s-error" role="alert" data-testid="event-photos-more-error">
+          {L.loadFailed}{" "}
+          <button type="button" className="s-link" onClick={() => void loadMore()}>
+            {L.retry}
+          </button>
+        </p>
+      )}
       {notice && (
         <p className="s-muted" role="status" data-testid="event-photos-notice">
           {notice}

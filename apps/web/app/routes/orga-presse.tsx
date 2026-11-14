@@ -49,6 +49,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     settings,
     requests,
     albums: albums.ok ? albums.data.items : [],
+    albumsFailed: !albums.ok && albums.status !== 404,
+    albumsTotal: albums.ok ? (albums.data.total ?? albums.data.items.length) : 0,
+    albumsNext: albums.ok ? albums.data.nextCursor : null,
   };
 }
 
@@ -108,7 +111,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaPresse({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, settings: s, requests, albums } = loaderData;
+  const { event, settings: s, requests, albums, albumsFailed, albumsTotal, albumsNext } = loaderData;
   const busy = useNavigation().state !== "idle";
   const pending = requests.filter((r) => r.status === "pending");
   const decided = requests.filter((r) => r.status !== "pending");
@@ -300,7 +303,15 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
         ))}
       </section>
       {/* Lot R9g : les albums des médias accrédités, l'album « officiel » à choisir (la fiche de l'événement montre la section). */}
-      <PhotosSection albums={albums} manager />
+      <PhotosSection
+        albums={albums}
+        manager
+        countViews={false}
+        failed={albumsFailed}
+        total={albumsTotal}
+        nextCursor={albumsNext}
+        moreUrl={`/api/events/${event.id}/albums`}
+      />
     </>
   );
 }

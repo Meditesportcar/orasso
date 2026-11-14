@@ -166,6 +166,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Lot R9g : les galeries sont des albums (section « Photos ») : ici ne restent que les liens.
     media: media.ok ? media.data.filter((c) => c.kind !== "gallery") : [],
     albums: albums.ok ? albums.data.items : [],
+    // Une panne n'est pas une absence : « Réessayer » (404 : la fiche n'a pas de section). Le total et la suite au-delà de 50 albums.
+    albumsFailed: !albums.ok && albums.status !== 404,
+    albumsTotal: albums.ok ? (albums.data.total ?? albums.data.items.length) : 0,
+    albumsNext: albums.ok ? albums.data.nextCursor : null,
     prize: board?.ok && board.data.settled ? board.data.winner : null,
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
@@ -475,6 +479,9 @@ function EventPage({
     grade,
     media,
     albums,
+    albumsFailed,
+    albumsTotal,
+    albumsNext,
     prize,
     leadsCrew,
     shareable,
@@ -788,7 +795,15 @@ function EventPage({
         )}
 
         {/* Lot R9g : « Photos », avant le règlement et le journal ; rien sans album publié. */}
-        <PhotosSection albums={albums} manager={manager} />
+        <PhotosSection
+          albums={albums}
+          manager={manager}
+          countViews={Boolean(userId)}
+          failed={albumsFailed}
+          total={albumsTotal}
+          nextCursor={albumsNext}
+          moreUrl={`/api/public/events/by-slug/${encodeURIComponent(event.slug)}/albums`}
+        />
 
         {media.length > 0 && (
           <section className="s-section" data-testid="media-contents" aria-labelledby="media-title">

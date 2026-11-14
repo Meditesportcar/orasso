@@ -28,8 +28,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const album = await apiOrThrow<AlbumView>(request, `/albums/${encodeURIComponent(params.id)}`);
   // Lot R9g : l'organisateur de l'événement (une de ses structures) a les actions « Reprendre dans le journal » et « officiel ».
+  // La propriété de l'album (`mine`) et les droits d'organisateur se calculent séparément : un compte média qui est aussi
+  // organisateur de l'événement a les deux.
   const event =
-    album.mine || album.status !== "published"
+    album.status !== "published"
       ? null
       : await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(album.event.slug)}`);
   const organizer = Boolean(
@@ -127,46 +129,46 @@ export default function AlbumPage({ loaderData, actionData: rawAction }: Route.C
             credit={L.creditLine(a.media.name)}
             // Les actions de la photo **affichée** : « Signaler » vise celle-ci (jamais la première), « Retirer » pour le titulaire.
             // R9f et R9g y posent les leurs.
-            actions={(photo) =>
-              a.mine ? (
-                <>
-                  {/* Même confirmation que l'appli : retirer une photo d'un album publié l'enlève pour tout le monde. */}
-                  <Form
-                    method="post"
-                    data-testid="album-photo-remove-form"
-                    onSubmit={(e) => {
-                      if (!window.confirm(`${L.photoRemove}\n${L.photoRemoveConfirm}`)) e.preventDefault();
-                    }}
-                  >
-                    <input type="hidden" name="intent" value="photo-delete" />
-                    <input type="hidden" name="photoId" value={photo.key} />
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      icon="trash"
-                      disabled={busy}
-                      data-testid="album-photo-remove"
+            actions={(photo) => (
+              <>
+                {a.mine ? (
+                  <>
+                    {/* Même confirmation que l'appli : retirer une photo d'un album publié l'enlève pour tout le monde. */}
+                    <Form
+                      method="post"
+                      data-testid="album-photo-remove-form"
+                      onSubmit={(e) => {
+                        if (!window.confirm(`${L.photoRemove}\n${L.photoRemoveConfirm}`)) e.preventDefault();
+                      }}
                     >
-                      {L.photoRemove}
-                    </Button>
-                  </Form>
-                  {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
-                  {/* Seulement pour la photo affichée : l'erreur d'un retrait refusé ne suit pas les autres photos. */}
-                  {actionData?.error && actionData.intent === "photo-delete" && actionData.photoId === photo.key && (
-                    <p role="alert" className="s-error" data-testid="album-photo-remove-error">
-                      {actionData.error}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Lot R9g : l'organisateur de l'événement reprend la photo dans son journal, ou choisit l'album « officiel ». */}
-                  {loaderData.organizer && <OrganizerActions key={`org-${photo.key}`} album={a} photo={photo} />}
-                  {/* Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée. */}
+                      <input type="hidden" name="intent" value="photo-delete" />
+                      <input type="hidden" name="photoId" value={photo.key} />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        icon="trash"
+                        disabled={busy}
+                        data-testid="album-photo-remove"
+                      >
+                        {L.photoRemove}
+                      </Button>
+                    </Form>
+                    {/* Le refus de l'API (409 : dernière photo d'un album publié) s'affiche ici, dans la fenêtre, pas derrière elle. */}
+                    {/* Seulement pour la photo affichée : l'erreur d'un retrait refusé ne suit pas les autres photos. */}
+                    {actionData?.error && actionData.intent === "photo-delete" && actionData.photoId === photo.key && (
+                      <p role="alert" className="s-error" data-testid="album-photo-remove-error">
+                        {actionData.error}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  /* Une clé par photo : le formulaire (et son « Signalement envoyé ») repart à zéro à chaque photo affichée. */
                   <ReportDialog key={photo.key} targetType="album_photo" targetId={photo.key} />
-                </>
-              )
-            }
+                )}
+                {/* Lot R9g : l'organisateur de l'événement reprend la photo dans son journal, ou choisit l'album « officiel » (en plus de ses droits de média, s'il l'est aussi). */}
+                {loaderData.organizer && <OrganizerActions key={`org-${photo.key}`} album={a} photo={photo} />}
+              </>
+            )}
           />
         )}
         {actionData?.error && actionData.intent !== "photo-delete" && (
