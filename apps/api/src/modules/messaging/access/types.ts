@@ -1,7 +1,7 @@
 // Règles d'accès d'une sorte de conversation (ARCHITECTURE-SUITE § 3.2). Une sorte = un fichier `access/<kind>.ts`
 // qui exporte un objet `KindRules` enregistré dans `access/index.ts` (lots 19 et 20 : `crew`, `structure_staff`,
 // `event_staff` ajoutent chacun leur fichier et une ligne d'enregistrement).
-import type { ConversationKind, ConversationWriteBlock, MessagePerson } from "@orasso/shared";
+import type { ConversationKind, ConversationView, ConversationWriteBlock, MessagePerson } from "@orasso/shared";
 
 import type { conversationParticipants, conversations } from "../../../db/schema";
 import type { Executor } from "../../../lib/tx";
@@ -23,7 +23,12 @@ export type Description = {
   participants: string[];
   otherUser: MessagePerson | null;
   structure: { id: string; slug: string; name: string; logoUrl: string | null } | null;
+  /** Lot R9i : la page d'un média d'une conversation `media` ; absent des autres sortes. */
+  page?: ConversationView["page"];
 };
+
+/** Lot R9i : ce que le lecteur voit à la place de toute autre personne (sa clé d'auteur, le nom et le logo de la page). */
+export type Mask = { userId: string; pseudo: string; avatarKey: string | null };
 
 export type KindRules = {
   kind: ConversationKind;
@@ -36,6 +41,11 @@ export type KindRules = {
   writeBlock(ex: Executor, conversation: ConversationRow, viewer: Reader): Promise<ConversationWriteBlock | null>;
   /** Titre, sous-titre, avatar et personnes affichées pour ce lecteur. */
   describe(ex: Executor, conversation: ConversationRow, viewer: Reader): Promise<Description>;
+  /**
+   * Lot R9i : sorte à identité masquée. Pour ce lecteur, tout auteur, lecteur ou participant qui n'est pas lui est servi
+   * sous ce masque (jamais le compte réel) ; `null` : ce lecteur voit les vrais comptes. Absent : aucune sorte d'avant.
+   */
+  mask?(ex: Executor, conversation: ConversationRow, viewer: Reader): Promise<Mask | null>;
   /** Conversations lisibles sans ligne de participant (organisateurs d'une structure). */
   extraConversationIds?(ex: Executor, userId: string): Promise<string[]>;
 };

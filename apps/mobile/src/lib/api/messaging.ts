@@ -27,6 +27,9 @@ export const messagingApi = {
     request<OpenConversationResult>("/api/conversations/direct", { method: "POST", body: { userId } }),
   contactStructure: (structureId: string) =>
     request<OpenConversationResult>(`/api/structures/${structureId}/conversation`, { method: "POST" }),
+  /** Lot R9i : écrire à la page d'un média où je suis identifié (la conversation se montre sous le nom de la page). */
+  contactMedia: (mediaId: string) =>
+    request<OpenConversationResult>(`/api/media/${mediaId}/conversation`, { method: "POST" }),
   contactRequests: () => request<{ items: ContactRequestView[] }>("/api/me/contact-requests"),
   requestContact: (pseudo: string, message: string) =>
     request<ContactRequestResult>("/api/contact-requests", { method: "POST", body: { pseudo, message } }),

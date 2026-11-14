@@ -9,8 +9,10 @@ import {
   MESSAGE_PREVIEW_MAX,
   MESSAGES_PER_MINUTE,
   type MessagePage,
+  type MessagePerson,
   type MessageSend,
   type MessageView,
+  mediaKey,
   messagePreview,
   messagingLabels,
   type OpenConversationResult,
@@ -21,20 +23,29 @@ import {
 import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversationParticipants, conversations, events, messages, structures, uploads } from "../../db/schema";
+import {
+  conversationParticipants,
+  conversations,
+  events,
+  mediaProfiles,
+  messages,
+  structures,
+  uploads,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { type Tx, withTx } from "../../lib/tx";
+import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
-import { type ConversationRow, type Reader, registeredKinds } from "./access";
+import { type ConversationRow, type Mask, type Reader, registeredKinds } from "./access";
 import { canTalkDirect } from "./access/direct";
+import { canOpenWithMedia } from "./access/media";
 import { isStructureOrganizer, isStructureSuspended, structureCanReach } from "./access/organizer";
 import {
   type Access,
@@ -94,6 +105,25 @@ async function getOrCreate(
 /** Destinataires d'un message : les lecteurs, sauf l'expéditeur et, pour un message de structure, ses collègues. */
 const recipientsOf = (readers: Reader[], sender: Reader) =>
   readers.filter((r) => r.userId !== sender.userId && !(sender.side === "structure" && r.side === "structure"));
+
+/** Lot R9i : le masque de cette personne dans cette conversation (`null` : elle voit les vrais comptes). */
+async function maskFor(ex: Executor, access: Access, reader: Reader) {
+  return (await access.rules.mask?.(ex, access.conversation, reader)) ?? null;
+}
+
+const maskedPerson = (mask: Mask): MessagePerson => ({
+  userId: mask.userId,
+  pseudo: mask.pseudo,
+  avatarUrl: storage.url(mask.avatarKey),
+});
+
+/**
+ * Lot R9i, T57 : l'auteur tel que ce lecteur le voit. Avec un masque, tout ce qui n'est pas lui est le masque (la page) ;
+ * sans masque, la vraie personne. **Aucun autre chemin ne fabrique un auteur pour une conversation `media`.**
+ */
+function shownSender(mask: Mask | null, senderId: string | null, real: MessagePerson | null, readerId: string) {
+  return mask && senderId !== readerId ? maskedPerson(mask) : real;
+}
 
 async function summaryOf(access: Access, actor: Actor): Promise<ConversationSummary> {
   const { conversation, rules, reader } = access;
@@ -169,6 +199,33 @@ export const messagingService = {
       const { conversation, created } = await getOrCreate(tx, organizerKey(structureId, v.user.id), {
         kind: "organizer",
         structureId,
+        createdBy: v.user.id,
+      });
+      await ensureParticipant(tx, conversation.id, v.user.id, "member");
+      return { id: conversation.id, created };
+    });
+  },
+
+  /**
+   * `POST /media/:id/conversation` (lot R9i, T58) : écrire à la page d'un média quand on y est identifié (voiture ou
+   * pseudo) sur un album publié. La page n'écrit jamais la première. Aucun refus ne dépend de l'état du titulaire ; seul
+   * le titulaire peut lire « C'est ta page. ».
+   */
+  async openWithMedia(v: Viewer, mediaId: string): Promise<OpenConversationResult> {
+    const [page] = await db
+      .select({ id: mediaProfiles.id, userId: mediaProfiles.userId })
+      .from(mediaProfiles)
+      .where(and(eq(mediaProfiles.id, mediaId), isNull(mediaProfiles.deletedAt)));
+    if (!page) throw notFound("Média introuvable");
+    if (page.userId === v.user.id) throw conflict("conflict", messagingLabels.mediaOwnPage);
+    const key = mediaKey(page.id, v.user.id);
+    const [existing] = await db.select().from(conversations).where(eq(conversations.directKey, key));
+    if (existing) return { id: existing.id, created: false };
+    if (!(await canOpenWithMedia(db, v.user.id, page.id))) throw forbidden(messagingLabels.mediaNotTagged);
+    return withTx(async (tx) => {
+      const { conversation, created } = await getOrCreate(tx, key, {
+        kind: "media",
+        mediaId: page.id,
         createdBy: v.user.id,
       });
       await ensureParticipant(tx, conversation.id, v.user.id, "member");
@@ -272,6 +329,7 @@ export const messagingService = {
       writeBlocked: block,
       structure: d.structure,
       otherUser: d.otherUser,
+      page: d.page ?? null,
     };
   },
 
@@ -300,20 +358,22 @@ export const messagingService = {
       page.map((m) => m.senderId),
     );
     const readBy = q.before ? null : await this.readByOf(access, page);
+    const mask = await maskFor(db, access, access.reader);
     // Tour 2 : « À propos de » filtré pour la personne qui lit (événement privé : ses ayants droit seulement).
     const abouts = await aboutsOf(db, page, v);
     const liveStories = await liveStoriesOf(db, page);
     return {
-      items: page.map((m) =>
-        serializeMessage(
+      items: page.map((m) => {
+        const view = serializeMessage(
           m,
           m.senderId ? (senders.get(m.senderId) ?? null) : null,
           v.user.id,
           readBy?.get(m.id) ?? null,
           abouts,
           liveStories,
-        ),
-      ),
+        );
+        return mask ? { ...view, sender: shownSender(mask, m.senderId, view.sender, v.user.id) } : view;
+      }),
       nextCursor: rows.length > q.limit ? (page.at(-1)?.id ?? null) : null,
     };
   },
@@ -347,9 +407,11 @@ export const messagingService = {
         and p.last_read_message_at is not null
         and (p.last_read_message_at, p.last_read_message_id) >= (m.created_at, m.id)
       order by pr.pseudo`);
+    // Lot R9i : pour une sorte à masque, « lu par » dit la page, jamais le compte qui l'a lu.
+    const mask = await maskFor(db, access, access.reader);
     for (const row of result.rows as { message_id: string; user_id: string; pseudo: string }[]) {
       const list = out.get(row.message_id) ?? [];
-      list.push({ userId: row.user_id, pseudo: row.pseudo });
+      list.push(mask ? { userId: mask.userId, pseudo: mask.pseudo } : { userId: row.user_id, pseudo: row.pseudo });
       out.set(row.message_id, list);
     }
     for (const m of mine) if (!out.has(m.id)) out.set(m.id, []);
@@ -483,17 +545,24 @@ export const messagingService = {
           if (who && (await aboutsOf(tx, [row], who)).size > 0) seeing.add(r.userId);
         }
       }
+      // Lot R9i : une charge par lecteur quand la sorte a un masque (chacun reçoit l'auteur tel qu'il le voit).
+      const masks = new Map<string, Mask | null>();
+      for (const r of access.readers) masks.set(r.userId, await maskFor(tx, access, r));
+      const publishNew = (readers: Reader[], view: MessageView) => {
+        const plain = readers.filter((r) => !masks.get(r.userId));
+        if (plain.length) publishToConversation(id, plain, "message.new", { message: view });
+        for (const r of readers) {
+          const mask = masks.get(r.userId);
+          if (!mask) continue;
+          const sender = shownSender(mask, v.user.id, view.sender, r.userId);
+          publishToConversation(id, [r], "message.new", { message: { ...view, sender } });
+        }
+      };
       after(() => {
         const withAbout = access.readers.filter((r) => seeing.has(r.userId));
         const without = access.readers.filter((r) => !seeing.has(r.userId));
-        if (withAbout.length) {
-          publishToConversation(id, withAbout, "message.new", {
-            message: serializeMessage(row, senderOf(v), null, null, abouts),
-          });
-        }
-        if (without.length) {
-          publishToConversation(id, without, "message.new", { message: serializeMessage(row, senderOf(v), null) });
-        }
+        if (withAbout.length) publishNew(withAbout, serializeMessage(row, senderOf(v), null, null, abouts));
+        if (without.length) publishNew(without, serializeMessage(row, senderOf(v), null));
         announce(
           id,
           access.readers.map((r) => r.userId),
@@ -522,7 +591,20 @@ export const messagingService = {
     if (!m) throw notFound("Message introuvable");
     const moved = await withTx((tx) => markReadTx(tx, id, v.user.id, access.reader.side, messageId));
     if (moved) {
-      publishToConversation(id, access.readers, "message.read", {
+      // Lot R9i : à qui a un masque (la personne qui écrit à une page), le lecteur est la page.
+      const plain: Reader[] = [];
+      for (const r of access.readers) {
+        const mask = r.userId === v.user.id ? null : await maskFor(db, access, r);
+        if (!mask) plain.push(r);
+        else {
+          publishToConversation(id, [r], "message.read", {
+            userId: mask.userId,
+            pseudo: mask.pseudo,
+            lastReadMessageId: messageId,
+          });
+        }
+      }
+      publishToConversation(id, plain, "message.read", {
         userId: v.user.id,
         pseudo: v.profile.pseudo,
         lastReadMessageId: messageId,
@@ -662,6 +744,26 @@ async function pushTo(tx: Tx, access: Access, row: MessageRow, v: Viewer, recipi
       )
       .returning({ userId: conversationParticipants.userId });
     if (!claimed) continue;
+    // Lot R9i : conversation de page. À la personne : le nom de la page, l'aperçu seul, la page comme acteur (jamais le
+    // compte du titulaire). Au titulaire : « Kenji · Sud Cars », « Kenji : … », la personne comme acteur.
+    const mask = await maskFor(tx, access, r);
+    if (mask || access.conversation.kind === "media") {
+      const page = mask ? null : (await access.rules.describe(tx, access.conversation, r)).subtitle;
+      await notificationsService.notify(tx, r.userId, "message_received", {
+        title: mask ? mask.pseudo : `${v.profile.pseudo} · ${page ?? ""}`,
+        body: mask ? preview : `${v.profile.pseudo} : ${preview}`,
+        inJournal: false,
+        data: {
+          conversationId: row.conversationId,
+          actor: mask
+            ? maskedPerson(mask)
+            : { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
+          link: `/app/messages/${row.conversationId}`,
+        },
+        link: { label: "Ouvrir la conversation", path: `/app/messages/${row.conversationId}` },
+      });
+      continue;
+    }
     // Message de la structure : « MéditeSportCar » ; message à la structure : « Kenji · MéditeSportCar ».
     const title =
       row.asStructure && structureName

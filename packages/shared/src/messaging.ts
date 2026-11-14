@@ -3,9 +3,9 @@
 /**
  * Sortes de conversation, toutes déclarées dès le lot 18 (§ 3.1) : `direct` (deux personnes) et `organizer` (une
  * personne et une structure) ici ; `crew` au lot 19 ; `structure_staff` et `event_staff` au lot 20. Chaque sorte a
- * ses règles d'accès dans `apps/api/src/modules/messaging/access/<kind>.ts`.
+ * ses règles d'accès (lot R9i : `media`, une personne et la page d'un média, sans jamais révéler le compte du titulaire) dans `apps/api/src/modules/messaging/access/<kind>.ts`.
  */
-export const conversationKinds = ["direct", "organizer", "crew", "structure_staff", "event_staff"] as const;
+export const conversationKinds = ["direct", "organizer", "crew", "structure_staff", "event_staff", "media"] as const;
 export type ConversationKind = (typeof conversationKinds)[number];
 
 /** `admin` : côté structure dans une conversation `organizer` (et chef de crew / organisateurs aux lots 19 et 20). */

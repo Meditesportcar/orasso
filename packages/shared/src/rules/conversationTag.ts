@@ -9,6 +9,7 @@ import type { ConversationSummary } from "../schemas/messaging";
 export function conversationTag(c: Pick<ConversationSummary, "kind" | "side">): string | null {
   if (c.side === "structure") return null;
   if (c.kind === "organizer") return messagingLabels.tagOrganizer;
+  if (c.kind === "media") return messagingLabels.tagMedia;
   if (c.kind === "crew") return messagingLabels.tagCrew;
   if (c.kind === "structure_staff" || c.kind === "event_staff") return messagingLabels.tagStaff;
   if (c.kind === "story_reply") return messagingLabels.tagStoryReply;

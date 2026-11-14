@@ -1,8 +1,9 @@
-import { Button } from "@orasso/design-system/web";
-import { type ConversationSummary, conversationTag, messagingLabels } from "@orasso/shared";
-import { useEffect, useState } from "react";
-import { Form, useActionData, useNavigation } from "react-router";
+import { Button, Icon } from "@orasso/design-system/web";
+import { albumTagLabels, type ConversationSummary, conversationTag, messagingLabels } from "@orasso/shared";
+import { useContext, useEffect, useRef, useState } from "react";
+import { Form, UNSAFE_DataRouterContext, useActionData, useLocation, useNavigate, useNavigation } from "react-router";
 
+import { contactMediaCall, createContactMediaController } from "../lib/contactMedia";
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
@@ -97,6 +98,97 @@ export function ContactOrganizer({
         </p>
       )}
     </Form>
+  );
+}
+
+/**
+ * L'enchaînement « Contacter <média> » depuis « Tes photos » (lot R9i) : un seul par écran, partagé par le bouton de l'en-tête et la
+ * rangée de la feuille. Le contrôleur (`createContactMediaController`) lit l'état du routeur de données lui-même ; périmé au démontage, à
+ * la perte de la session (`stale`, changement de compte) et dès qu'une navigation vers une autre adresse commence. Sans clé de média
+ * (page pas encore chargée), `open` ne fait rien.
+ */
+export function useContactMedia(mediaKey: string | null, onError: (message: string | null) => void, stale = false) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // `UNSAFE_DataRouterContext` : seul accès au routeur lui-même (son état change avant le rendu, `useNavigation()` après) ; limite au journal.
+  const router = useContext(UNSAFE_DataRouterContext)?.router;
+  const [busy, setBusy] = useState(false);
+  const latest = useRef({ navigate, onError, router, pathname: location.pathname });
+  latest.current = { navigate, onError, router, pathname: location.pathname };
+  const controller = useRef<ReturnType<typeof createContactMediaController> | null>(null);
+  if (!controller.current) {
+    controller.current = createContactMediaController({
+      // Jamais absent sous `<HydratedRouter>` ; sans routeur de données, au repos sur l'adresse rendue (`useLocation`) : la garde ne voit
+      // aucun départ et la conversation s'ouvre, au lieu de jeter toute réponse faute d'adresse connue.
+      router: {
+        get state() {
+          return latest.current.router?.state ?? idleRouterState(latest.current.pathname);
+        },
+        subscribe: (l) => latest.current.router?.subscribe(l) ?? (() => undefined),
+      },
+      navigate: (to) => latest.current.navigate(to),
+      onError: (m) => latest.current.onError(m),
+      setBusy,
+    });
+  }
+  useEffect(() => {
+    const c = controller.current;
+    return () => c?.cancel();
+  }, []);
+  useEffect(() => {
+    if (stale) controller.current?.cancel();
+  }, [stale]);
+  const open = () => {
+    if (!mediaKey) return;
+    const call = contactMediaCall(mediaKey);
+    if (!call) return;
+    void controller.current?.open(call, location.pathname);
+  };
+  return { busy, open };
+}
+
+const idleRouterState = (pathname: string) => ({ location: { pathname }, navigation: { state: "idle" as const } });
+
+/** Le bouton de l'en-tête (`header`) ou la rangée de la feuille d'une photo (`row`) : l'enchaînement vient de `useContactMedia`. */
+export function ContactMedia({
+  name,
+  variant,
+  busy,
+  onOpen,
+}: {
+  name: string;
+  variant: "header" | "row";
+  busy: boolean;
+  onOpen: () => void;
+}) {
+  if (variant === "row") {
+    return (
+      <button
+        type="button"
+        className="myp-sheet__row"
+        disabled={busy}
+        onClick={onOpen}
+        data-testid="photo-sheet-contact"
+      >
+        <Icon name="chat" size={20} />
+        <span>
+          <strong>{albumTagLabels.contactName(name)}</strong>
+          <span className="o-t-caption s-muted">{albumTagLabels.messageAboutPhoto}</span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      icon="chat"
+      loading={busy}
+      onClick={onOpen}
+      data-testid="my-photos-contact"
+    >
+      {albumTagLabels.contact}
+    </Button>
   );
 }
 

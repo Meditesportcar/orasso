@@ -21,6 +21,7 @@ import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
 import { events } from "./events";
+import { mediaProfiles } from "./media";
 import { stories } from "./stories";
 import { structures } from "./structures";
 
@@ -44,6 +45,8 @@ export const conversations = pgTable(
     eventId: uuid("event_id").references(() => events.id, { onDelete: "cascade" }),
     /** Discussion d'un crew (lot 19) : une seule par crew (`direct_key = crew:<id>`). */
     crewId: uuid("crew_id").references(() => crews.id, { onDelete: "cascade" }),
+    /** Conversation de page d'un média (lot R9i) : une par page et par personne (`direct_key = media:<id>:<userId>`). */
+    mediaId: uuid("media_id").references(() => mediaProfiles.id, { onDelete: "cascade" }),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     /** Plus d'écriture après cette date. */
     closedAt: tstz("closed_at"),
@@ -56,6 +59,9 @@ export const conversations = pgTable(
   },
   (t) => [
     index("conversations_structure_idx").on(t.structureId).where(sql`${t.structureId} is not null`),
+    index("conversations_media_idx").on(t.mediaId).where(sql`${t.mediaId} is not null`),
+    // Comparaison en texte : une valeur d'enum ajoutée ne peut pas servir dans la transaction qui l'ajoute (55P04).
+    check("conversations_media_check", sql`(${t.kind}::text = 'media') = (${t.mediaId} is not null)`),
     check("conversations_preview_check", sql`char_length(${t.lastMessagePreview}) <= 80`),
   ],
 );
