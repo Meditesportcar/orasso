@@ -500,7 +500,8 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusMd,
   },
   composer: { paddingHorizontal: space4, paddingTop: space2, gap: space2 },
-  field: { minHeight: 48, maxHeight: 140 },
+  // Lot B3a : pas de hauteur maximale sur le champ entier (étiquette + saisie + compteur) : elle rognait le compteur « 0 / 2000 » sous « Envoyer ». La saisie plafonne déjà seule.
+  field: { minHeight: 48 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: space2, justifyContent: "flex-end" },
   viewer: { flex: 1, alignItems: "center", justifyContent: "center" },
   viewerBar: { position: "absolute", right: space3 },
