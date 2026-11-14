@@ -16,13 +16,13 @@ import {
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { TITLE_FLOOR } from "@/features/home/fit";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 import { Avatar } from "@/ui/Avatar";
 
 const { space1, space2, space3 } = tokens.spacing;
-/** Plancher du corps d'un titre de ligne (celui des titres d'affiche et de ticket, `TITLE_FLOOR`). */
-const TITLE_MIN = 11;
+const TITLE_MIN = TITLE_FLOOR;
 
 export function EventRow({ event, hints = true }: { event: EventCard; hints?: boolean }) {
   const { t } = useTheme();
