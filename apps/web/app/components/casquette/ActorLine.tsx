@@ -13,11 +13,14 @@ export function ActorLine({
   intro = C.readingAs,
   action = { label: C.change, href: "/app/moi", hint: C.changeHint, icon: "sort" },
   testId = "fil-actor",
+  note,
 }: {
   casquette: Casquette;
   intro?: string;
   action?: { label: string; href: string; hint: string; icon: "sort" | "undo" };
   testId?: string;
+  /** Une ligne sous le nom : ce qui part au nom de la page et ce qui reste personnel. */
+  note?: string;
 }) {
   return (
     <div className="cas-line" data-testid={testId}>
@@ -29,6 +32,11 @@ export function ActorLine({
         <strong className="cas-line__name" data-testid={`${testId}-name`}>
           {casquette.name}
         </strong>
+        {note ? (
+          <small className="o-t-credit" data-testid={`${testId}-note`}>
+            {note}
+          </small>
+        ) : null}
       </p>
       <Button
         variant="secondary"

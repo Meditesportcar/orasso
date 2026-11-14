@@ -55,8 +55,9 @@ export function PageAlbums({
     setItems((list) => [...list, ...res.data.items.filter((a) => !list.some((x) => x.id === a.id))]);
     setNext(res.data.nextCursor);
   }
-  const albums = counts.albumsCount ?? items.length;
-  const photos = counts.photosCount ?? items.reduce((n, a) => n + a.photosCount, 0);
+  // Compteurs inconnus (panne de lecture, rien de servi) : pas de ligne, jamais « 0 album · 0 photo » à la place d'une panne.
+  const albums = counts.albumsCount ?? (first ? items.length : null);
+  const photos = counts.photosCount ?? (first ? items.reduce((n, a) => n + a.photosCount, 0) : null);
   return (
     <div className="s-stack" data-testid="page-albums">
       {owner ? (
@@ -71,9 +72,11 @@ export function PageAlbums({
           <h2 id="m-albums" className="s-h2">
             {albumLabels.albums}
           </h2>
-          <p className="o-t-caption s-muted" data-testid="media-public-albums-count">
-            {pagesLabels.albumsLine(albums, photos)}
-          </p>
+          {albums !== null && photos !== null ? (
+            <p className="o-t-caption s-muted" data-testid="media-public-albums-count">
+              {pagesLabels.albumsLine(albums, photos)}
+            </p>
+          ) : null}
           {items.length === 0 && !failed ? (
             <p className="o-t-body s-muted" data-testid="page-albums-empty">
               {albumLabels.empty}

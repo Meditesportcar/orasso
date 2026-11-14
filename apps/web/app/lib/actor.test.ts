@@ -3,8 +3,18 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACTOR_HEADER } from "@orasso/shared";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { actorOfParam, casquetteOfParam, withActorParam, withoutActorParam } from "./actor";
+import {
+  ActorProvider,
+  actorOfParam,
+  casquetteOfParam,
+  useActor,
+  useCasquette,
+  withActorParam,
+  withoutActorParam,
+} from "./actor";
 import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
 import { api } from "./api.server";
 
@@ -155,5 +165,26 @@ describe("la casquette portée par l'adresse (`?auteur=`)", () => {
       "/m/m1?onglet=albums&retour=%2Fapp",
     );
     expect(withoutActorParam(new URL("http://x/m/m1?onglet=mentions"))).toBe("/m/m1?onglet=mentions");
+  });
+});
+
+// Tour 2 de la partie 2 : `/m` et `/providers` enveloppent leur contenu dans `ActorProvider` quand l'adresse porte la casquette : tout ce qui
+// lit `useActor()` (commentaires, lectures de commentaires) part alors au nom de la page ; sans casquette, la personne.
+describe("ActorProvider autour d'une page publique portant `auteur`", () => {
+  const Probe = () => createElement("i", null, `${useActor()}|${useCasquette()?.name}`);
+  it("un enfant lit la clé et le nom de la casquette ; sans casquette, `null`", () => {
+    const withCasquette = renderToStaticMarkup(
+      createElement(ActorProvider, {
+        casquette: { key: "s:st1", name: "Roues Libres 66", logoUrl: null },
+        // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise du fournisseur
+        children: createElement(Probe),
+      }),
+    );
+    expect(withCasquette).toBe("<i>s:st1|Roues Libres 66</i>");
+    const without = renderToStaticMarkup(
+      // biome-ignore lint/correctness/noChildrenProp: fichier .ts, `children` est une propriété requise du fournisseur
+      createElement(ActorProvider, { casquette: null, children: createElement(Probe) }),
+    );
+    expect(without).toBe("<i>null|undefined</i>");
   });
 });

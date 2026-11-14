@@ -195,6 +195,23 @@
   gap: var(--space-1);
   padding: 0 var(--space-2);
 }
+/* Sous 400 px (R9h partie 2, tour 2) : « Mentions · 0 » n'était plus coupé net que sans icône ; marges au jeton le plus petit, l'icône cède la place. */
+@media (max-width: 400px) {
+  .pg-page .utabs__tab {
+    padding: 0 var(--space-1);
+  }
+  .pg-page .utabs__tab > svg {
+    display: none;
+  }
+}
+/* « Suivre en tant que <nom> » : un nom de page long passe à la ligne, jamais de défilement de côté. */
+.pg-page .o-button.fl-line {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
 
 /* Lot R9h, partie 2 : la Page du propriétaire (chips de gestion, QR, pied « Mes casquettes ») et « Suivre » d'un prestataire ou d'un média.
    Jetons seulement. */
@@ -253,4 +270,21 @@
 }
 .pg-row__text strong {
   overflow-wrap: anywhere;
+}
+
+/* La pastille « Tu agis au nom de » d'une page publique (R9h partie 2, tour 2) : un nom long garde toute la largeur, « En mon nom » passe dessous. */
+.pg-page .cas-line {
+  flex-wrap: wrap;
+}
+.pg-page .cas-line__text {
+  flex: 1 1 0;
+  min-width: 60%;
+}
+.pg-page .cas-line__name {
+  overflow-wrap: break-word;
+}
+@media (max-width: 480px) {
+  .pg-page .cas-line__change {
+    flex: 1 1 100%;
+  }
 }

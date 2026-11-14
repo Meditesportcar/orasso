@@ -38,7 +38,7 @@ import { PageMore } from "../components/pages/PageMore";
 import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ShareButtons } from "../components/ShareButtons";
-import { casquetteOfParam, withoutActorParam } from "../lib/actor";
+import { ActorProvider, casquetteOfParam, withoutActorParam } from "../lib/actor";
 import { api, apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/albums.css";
@@ -98,6 +98,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     actor,
     casquette,
     ownHref,
+    retour: url.searchParams.get("retour") ? back : null,
     tab,
     origin: originOf(request),
     albums,
@@ -113,10 +114,11 @@ const ALBUMS_PAGE = 20;
  * Adresse de la fiche, à un curseur donné (liste « Voir la suite » et « Réessayer ») : l'onglet « Albums » (le seul qui lit les liens) et la
  * casquette (`auteur`) restent dans l'adresse, sinon la suite se lirait sous un autre onglet ou au nom d'une autre casquette.
  */
-function pageHref(id: string, size: number, cursor: string, actor: string | null): string {
+function pageHref(id: string, size: number, cursor: string, actor: string | null, back: string | null): string {
   const params = new URLSearchParams();
   params.set(PAGE_TAB_PARAM, "albums");
   if (actor) params.set("auteur", actor);
+  if (back) params.set("retour", back);
   if (cursor) params.set("cursor", cursor);
   if (size !== PAGE_SIZE) params.set("taille", String(size));
   const query = params.toString();
@@ -124,7 +126,7 @@ function pageHref(id: string, size: number, cursor: string, actor: string | null
 }
 
 export default function MediaPage({ loaderData }: Route.ComponentProps) {
-  const { media: m, owner, actor, casquette, ownHref, tab, origin } = loaderData;
+  const { media: m, owner, actor, casquette, ownHref, retour, tab, origin } = loaderData;
   const ig = instagramUrl(m.instagram);
   const [follow, setFollow] = useState({ following: m.isFollowing, followers: m.followersCount });
   const [mentionsDelta, setMentionsDelta] = useState(0);
@@ -148,7 +150,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
     photos: m.photosCount ?? null,
   });
   return (
-    <>
+    <ActorProvider casquette={casquette}>
       <FicheBar heading={false} title="Média" back={loaderData.back} />
       <div className="s-narrow s-stack pg-page" data-testid="media-public">
         {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
@@ -225,6 +227,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
               first={loaderData.chunk}
               size={loaderData.size}
               actor={actor}
+              back={retour}
             />
           </PageAlbums>
         ) : tab === "publications" ? (
@@ -247,7 +250,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
           />
         )}
       </div>
-    </>
+    </ActorProvider>
   );
 }
 
@@ -259,15 +262,18 @@ function MediaContents({
   first,
   size,
   actor,
+  back,
 }: {
   mediaId: string;
   first: CursorChunk<MediaContentView>;
   size: number;
   actor: string | null;
+  /** Le `retour` de l'adresse (le ✕ de la fiche), gardé par « Voir la suite » et « Réessayer ». */
+  back: string | null;
 }) {
   const list = useCursorList<MediaContentView, LoaderData>(
     first,
-    (cursor) => pageHref(mediaId, size, cursor, actor),
+    (cursor) => pageHref(mediaId, size, cursor, actor, back),
     (data) => data.chunk,
   );
   // Lot R9e : les galeries sont des albums (section « Albums ») ; ici, les liens seulement (`kind=link` : l'API pagine les liens seuls,
@@ -309,7 +315,7 @@ function MediaContents({
           <div>
             <Button
               icon="undo"
-              href={pageHref(mediaId, size, list.to ?? first.cursor, actor)}
+              href={pageHref(mediaId, size, list.to ?? first.cursor, actor, back)}
               onClick={(e) => {
                 e.preventDefault();
                 list.load();
@@ -326,7 +332,7 @@ function MediaContents({
           <Button
             variant="secondary"
             icon="down"
-            href={pageHref(mediaId, size, list.to, actor)}
+            href={pageHref(mediaId, size, list.to, actor, back)}
             onClick={(e) => {
               e.preventDefault();
               list.load();

@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
 
 // Lot R9h, partie 2 : la « Page » du propriétaire des quatre casquettes, sur le site (`/orga/:s/page`, `/pro/:p/page`,
@@ -15,6 +16,10 @@ test.use({ actionTimeout: 30_000 });
 
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
+  // Le thème voulu est vraiment celui de la page (le Sable ne repasse jamais en Béton sans que personne le voie, tour 2, point 4).
+  const wanted = (await page.context().cookies()).find((c) => c.name === "orasso-theme")?.value;
+  if (wanted === "sable" || wanted === "beton")
+    await expect(page.locator("html")).toHaveAttribute("data-theme", wanted);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: false });
 }
@@ -464,5 +469,107 @@ test("Les liens de T54 : l'album mène à la page du média, la Page du média �
   await page.getByTestId("media-public-album").first().click();
   await page.waitForURL(/\/albums\//);
   await expect(page.getByTestId("album-media-link")).toHaveAttribute("href", `/m/${sudCars.id}`);
+  await ctx.close();
+});
+
+/** Les onglets de la page tiennent sans être coupés (`scrollWidth <= clientWidth`) : « Mentions · 0 » n'est jamais rogné à 390 px. */
+async function tabsFit(page: Page) {
+  const fits = await page.getByTestId("page-tabs").evaluate((el) => el.scrollWidth <= el.clientWidth);
+  expect(fits, "la rangée d'onglets ne coupe rien").toBe(true);
+}
+
+test("/providers/<id>?auteur= : la pastille dit ce qui part au nom de la page ; « Signaler » dit qu'il reste personnel ; la vignette ouvre la publication", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const brasa = await personaOf("sofia@orasso.local", "provider");
+  const structure = await personaOf("sarah@orasso.local", "organizer");
+  const key = `s:${structure.id}`;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await open(
+    page,
+    "sarah@orasso.local",
+    `/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=publications`,
+  );
+  await expect(page.getByTestId("page-actor-name")).toHaveText(structure.label);
+  await expect(page.getByTestId("page-actor-note")).toContainText("commentaires partent au nom de la page");
+  // « Signaler » reste personnel, et la feuille le dit sous la pastille.
+  await page.getByTestId("page-more").locator("summary").click();
+  await page.getByTestId("report-open").click();
+  await expect(page.getByTestId("report-personal")).toContainText("part à ton nom");
+  await expect(page.getByTestId("report-personal")).toContainText(structure.label);
+  await page.keyboard.press("Escape");
+  // La vignette ouvre la publication seule (`/app/publication/<id>`, sans pastille : elle n'agit pas au nom de la page).
+  await page.getByTestId("publication-tile-open").first().click();
+  await page.waitForURL(/\/app\/publication\//);
+  await expect(page.getByTestId("page-actor")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("/m/<id>?auteur= : pastille, « Suivre en tant que », « En mon nom » ; « Voir la suite » garde onglet, casquette et retour ; nom de page long à 390 px", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const sudCars = await personaOf("leo@orasso.local", "media");
+  const structure = await personaOf("sarah@orasso.local", "organizer");
+  const key = `s:${structure.id}`;
+  const longName = "Association des passionnés de belles mécaniques du Roussillon et des Pyrénées-Orientales";
+  await sql("update structures set name = $1 where id = $2", [longName, structure.id]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  try {
+    await setTheme(page, "sable");
+    const back = "/app/sorties";
+    await open(
+      page,
+      "sarah@orasso.local",
+      `/m/${sudCars.id}?auteur=${encodeURIComponent(key)}&onglet=albums&taille=1&retour=${encodeURIComponent(back)}`,
+    );
+    await expect(page.getByTestId("page-actor-name")).toHaveText(longName);
+    await expect(page.getByTestId("follow-button")).toContainText(`Suivre en tant que ${longName}`);
+    const nameFits = await page.getByTestId("page-actor-name").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+    expect(nameFits, "le nom de la page n'est jamais coupé").toBe(true);
+    await noHorizontalScroll(page);
+    await tabsFit(page);
+    // « Voir la suite » garde l'onglet, la casquette et le retour dans son adresse (liens : une page d'un lien).
+    const more = page.getByTestId("media-public-more");
+    await expect(more).toBeVisible();
+    const href = new URL((await more.getAttribute("href")) ?? "", WEB);
+    expect(href.pathname).toBe(`/m/${sudCars.id}`);
+    expect(href.searchParams.get("onglet")).toBe("albums");
+    expect(href.searchParams.get("auteur")).toBe(key);
+    expect(href.searchParams.get("retour")).toBe(back);
+    await shot(page, "m-au-nom-d-une-page-sable-390");
+    // « En mon nom » : la même adresse sans `auteur` (onglet et retour restent).
+    await page.getByTestId("page-actor-change").click();
+    await page.waitForURL((u) => !u.searchParams.has("auteur") && u.searchParams.get("onglet") === "albums");
+    expect(new URL(page.url()).searchParams.get("retour")).toBe(back);
+    await expect(page.getByTestId("page-actor")).toHaveCount(0);
+    await expect(page.getByTestId("follow-button")).toHaveText("Suivre");
+  } finally {
+    await sql("update structures set name = $1 where id = $2", [structure.label, structure.id]);
+    await ctx.close();
+  }
+});
+
+test("les onglets des pages publiques et des Pages du propriétaire tiennent à 390 px", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const brasa = await personaOf("sofia@orasso.local", "provider");
+  const sudCars = await personaOf("leo@orasso.local", "media");
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await setTheme(page, "sable");
+  await open(page, "damien@orasso.local", `/providers/${brasa.id}?onglet=prestations`);
+  await tabsFit(page);
+  await shot(page, "onglets-providers-sable-390");
+  await page.goto(`/m/${sudCars.id}?onglet=albums`);
+  await tabsFit(page);
+  await open(page, "sofia@orasso.local", "/app/prestataire/page");
+  await tabsFit(page);
+  await open(page, "leo@orasso.local", "/app/media/page");
+  await tabsFit(page);
+  await open(page, "sarah@orasso.local", "/orga/roues-libres-66/page");
+  await tabsFit(page);
   await ctx.close();
 });

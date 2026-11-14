@@ -33,7 +33,7 @@ import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
-import { casquetteOfParam, withoutActorParam } from "../lib/actor";
+import { ActorProvider, casquetteOfParam, withoutActorParam } from "../lib/actor";
 import { apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import "../styles/pages.css";
 import "../styles/providers.css";
@@ -96,7 +96,7 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
     organizers: provider.organizersCount ?? null,
   });
   return (
-    <>
+    <ActorProvider casquette={casquette}>
       <FicheBar title={P.providerPage} back={back} />
       <div className="s-narrow s-stack pg-page" data-testid="provider-public">
         {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
@@ -162,6 +162,6 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
           />
         )}
       </div>
-    </>
+    </ActorProvider>
   );
 }

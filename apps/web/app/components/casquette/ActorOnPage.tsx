@@ -13,6 +13,7 @@ export function ActorOnPage({ casquette, ownHref }: { casquette: Casquette; ownH
       intro={C.actingAs}
       action={{ label: C.inMyName, href: ownHref, hint: C.inMyNameHint, icon: "undo" }}
       testId="page-actor"
+      note={C.actingNote}
     />
   );
 }
