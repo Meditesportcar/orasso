@@ -253,9 +253,12 @@ test("en casquette Roues Libres 66, « Suivre » Sud Cars écrit l'abonnement de
   expect(rl66 && sud).toBeTruthy();
   const actor = `s:${rl66?.id}`;
   const read = async (asPage: boolean) => {
-    const res = await fetch(`${process.env.API_URL ?? "http://localhost:4881"}/api/media/${sud?.id}`, {
-      headers: { origin: "http://localhost:7051", cookie: sarah, ...(asPage ? { "x-orasso-actor": actor } : {}) },
-    });
+    const res = await fetch(
+      `${process.env.API_URL ?? `http://localhost:${process.env.API_PORT ?? 3001}`}/api/media/${sud?.id}`,
+      {
+        headers: { origin: "http://localhost:7051", cookie: sarah, ...(asPage ? { "x-orasso-actor": actor } : {}) },
+      },
+    );
     return (await res.json()) as { isFollowing: boolean; followersCount: number };
   };
   // État de départ : ni la personne ni la page ne suivent Sud Cars.
