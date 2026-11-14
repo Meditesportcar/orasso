@@ -2,6 +2,7 @@
 // `cover`, formes SVG, texte pango aux polices Archivo, signature « Orasso »). Aucun accès à la base ni au réseau.
 import sharp, { type OutputInfo, type OverlayOptions } from "sharp";
 
+import { C } from "./templates/shared";
 import { textLine } from "./text";
 import type { BoxLayer, PhotoLayer, PosterInput, PosterLayout, SigLayer, SvgLayer, TextLayer } from "./types";
 
@@ -39,6 +40,23 @@ async function clip(p: Placed, W: number, H: number): Promise<OverlayOptions | n
   return { input, left: x0, top: y0 };
 }
 
+/**
+ * Lot B3a : la zone photo d'une affiche sans photo. Un aplat clair (Suisse, Rétro, JDM, Billet) laissait une grande
+ * plage beige vide ; elle devient un aplat sombre barré d'un trait moutarde incliné (celui du gabarit Néon), pour que
+ * l'affiche reste franche sans photo. Un aplat déjà sombre ne change pas.
+ */
+async function emptyPhoto(w: number, h: number, flat: string): Promise<Buffer> {
+  const base = flat === C.flatLight ? C.flatDark : flat;
+  const img = sharp({ create: { width: w, height: h, channels: 4, background: base } });
+  if (base === flat) return img.png().toBuffer();
+  const t = Math.max(2, 0.03 * Math.min(w, h));
+  const band = `<polygon points="0,${0.72 * h} ${w},${0.52 * h} ${w},${0.52 * h + t} 0,${0.72 * h + t}" fill="${C.accent}"/>`;
+  return img
+    .composite([{ input: svg(w, h, band) }])
+    .png()
+    .toBuffer();
+}
+
 async function photoLayer(l: PhotoLayer, photo: Buffer | null): Promise<Placed> {
   const w = Math.max(1, Math.round(l.w));
   const h = Math.max(1, Math.round(l.h));
@@ -52,14 +70,10 @@ async function photoLayer(l: PhotoLayer, photo: Buffer | null): Promise<Placed> 
         .png()
         .toBuffer();
     } catch {
-      img = await sharp({ create: { width: w, height: h, channels: 4, background: l.flat } })
-        .png()
-        .toBuffer();
+      img = await emptyPhoto(w, h, l.flat);
     }
   } else {
-    img = await sharp({ create: { width: w, height: h, channels: 4, background: l.flat } })
-      .png()
-      .toBuffer();
+    img = await emptyPhoto(w, h, l.flat);
   }
   if (l.clip) {
     img = await sharp(img)
