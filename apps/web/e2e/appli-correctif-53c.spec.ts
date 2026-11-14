@@ -76,7 +76,8 @@ test("appli : missions chargées après une saisie, aucune supprimée ; sans ell
   const { ctx, page } = await open(browser);
   await signInOrganizer(page);
 
-  // `GET /needs` retenue : le titre est changé avant qu'elle arrive ; « Continuer » attend les missions.
+  // `GET /needs` retenue : le titre est changé avant qu'elle arrive ; le clic sur « Continuer » est mis en attente
+  // (R9-assistant, décision de Damien du 14/11/2026, option B : il n'est plus bloqué) et part à l'arrivée des missions.
   let release: () => void = () => undefined;
   const held = new Promise<void>((r) => {
     release = r;
@@ -89,11 +90,13 @@ test("appli : missions chargées après une saisie, aucune supprimée ; sans ell
   await expect(v(page, "wizard-step")).toContainText("Type", { timeout: 30_000 });
   const title = `Appli renommé ${unique()}`;
   await v(page, "wizard-title").fill(title);
-  await expect(v(page, "wizard-next")).toBeDisabled();
-  release();
-  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
-  await expect(v(page, "wizard-title")).toHaveValue(title);
   await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-next")).toContainText("Chargement…");
+  await expect(v(page, "wizard-next")).toBeDisabled();
+  await expect(v(page, "wizard-step")).toContainText("Type");
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
+  release();
+  // Sans nouveau clic : le temps 2 s'ouvre, le titre saisi est enregistré et les deux missions sont gardées.
   await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect(await needs()).toHaveLength(2);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
@@ -325,9 +328,59 @@ test("appli : réponse de création perdue, le nouvel essai ne recrée pas la mi
   await ctx.close();
 });
 
+// Tour 4 : pendant l'attente l'étape est figée ; « Annuler » rend la main. (Une saisie forcée par la recette malgré le gel
+// annule aussi l'attente : ceinture gardée dans l'appli, `epoch` avance à chaque modification de champ.)
+test("appli : clic en attente puis « Annuler » : l'étape se dégèle, rien n'est enregistré ; une saisie forcée annule aussi", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { damien, id } = await appliDraft(`Appli annuler ${unique()}`, ["food_truck"]);
+  const { ctx, page } = await open(browser);
+  await signInOrganizer(page);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes(`/api/events/${id}`) && ["POST", "PATCH", "PUT", "DELETE"].includes(r.method()))
+      writes.push(`${r.method()} ${r.url()}`);
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.goto(`/evenement/${id}/modifier?temps=type`);
+  await expect(v(page, "wizard-step")).toContainText("Type", { timeout: 30_000 });
+  await v(page, "wizard-title").fill(`Appli premier ${unique()}`);
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-next")).toContainText("Chargement…");
+  await expect(v(page, "wizard-wait")).toBeVisible();
+  await v(page, "wizard-wait-cancel").click();
+  await expect(v(page, "wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-wait")).toHaveCount(0);
+  // Deuxième clic, puis une saisie forcée par la recette malgré le gel : l'attente est annulée aussi.
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-next")).toContainText("Chargement…");
+  const second = `Appli second ${unique()}`;
+  await v(page, "wizard-title").fill(second);
+  await expect(v(page, "wizard-next")).toContainText("Continuer");
+  // Tour 5 : l'annulation par une modification le dit.
+  await expect(v(page, "wizard-notice")).toContainText("Clic annulé");
+  release();
+  await page.waitForLoadState("networkidle");
+  await expect(v(page, "wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(second);
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(second);
+  await ctx.close();
+});
+
 test("appli : « Recharger les missions » ne débloque l'enregistrement qu'après la réponse", async ({ browser }) => {
   test.setTimeout(240_000);
-  const { id } = await appliDraft(`Appli recharge ${unique()}`, ["food_truck"]);
+  const { damien, id } = await appliDraft(`Appli recharge ${unique()}`, ["food_truck"]);
   const { ctx, page } = await open(browser);
   await signInOrganizer(page);
   let mode: "fail" | "hold" | "pass" = "fail";
@@ -350,14 +403,21 @@ test("appli : « Recharger les missions » ne débloque l'enregistrement qu'apr�
   await page.goto(`/evenement/${id}/modifier?temps=type`);
   await expect(v(page, "wizard-needs-failed")).toBeVisible({ timeout: 30_000 });
   mode = "hold";
+  const title = `Appli attente ${unique()}`;
+  await v(page, "wizard-title").fill(title);
   await page.getByRole("button", { name: "Recharger les missions" }).click();
-  // Réponse retenue : rien ne s'enregistre encore, à aucun moment.
+  // Réponse retenue : le clic est mis en attente (R9-assistant), rien ne s'enregistre ni n'avance, à aucun moment
+  // (le titre saisi n'est pas enregistré côté API).
+  await v(page, "wizard-next").click();
   for (let i = 0; i < 6; i++) {
-    expect(await v(page, "wizard-next").isEnabled()).toBe(false);
+    await expect(v(page, "wizard-next")).toContainText("Chargement…");
+    await expect(v(page, "wizard-step")).toContainText("Type");
+    expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
     await page.waitForTimeout(300);
   }
   mode = "pass";
   release();
-  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
+  await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
   await ctx.close();
 });

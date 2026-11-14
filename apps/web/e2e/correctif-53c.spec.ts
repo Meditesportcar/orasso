@@ -40,6 +40,16 @@ async function draftEvent(cookie: string, title: string, needs: string[] = []): 
   return created.data.id;
 }
 
+/** Les requêtes d'écriture envoyées pour cet événement (surveillées à partir de l'appel). */
+function writesOf(page: Page, id: string): string[] {
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes(`/api/events/${id}`) && ["POST", "PATCH", "PUT", "DELETE"].includes(r.method()))
+      writes.push(`${r.method()} ${r.url()}`);
+  });
+  return writes;
+}
+
 const needsOf = async (cookie: string, id: string) =>
   (await apiCall<{ id: string; trade: string }[]>(cookie, "GET", `/events/${id}/needs`)).data;
 
@@ -49,7 +59,10 @@ async function openWizard(page: Page, id: string, temps: string) {
   if (await restored.isVisible().catch(() => false)) await restored.getByRole("button").click();
 }
 
-test("missions chargées après une saisie : aucune n'est supprimée ; sans elles, rien ne s'enregistre", async ({
+// R9-assistant (décision de Damien du 14/11/2026, option B) : un clic donné pendant le chargement des missions n'est plus
+// refusé (« se chargent ») : il est mis en attente (« Chargement… ») et part tout seul à l'arrivée des missions ; rien ne
+// s'enregistre sans elles ; si leur lecture échoue, le clic en attente est annulé et la panne est dite.
+test("missions chargées après une saisie : clic mis en attente puis exécuté, aucune mission supprimée ; sans elles, rien ne s'enregistre", async ({
   browser,
 }) => {
   test.setTimeout(180_000);
@@ -72,17 +85,20 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   const title = `Renommé ${unique()}`;
   await page.getByLabel("Titre").fill(title);
   await page.getByRole("button", { name: "Continuer" }).click();
-  await expect(page.getByTestId("wizard-error")).toContainText("se chargent");
+  // Clic mis en attente : le bouton passe en chargement, l'assistant reste au temps 1, rien n'est enregistré, aucun refus.
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  await expect(page.getByTestId("wizard-next")).toHaveAttribute("aria-busy", "true");
   await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
   const answered = page.waitForResponse(
     (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
   );
   release();
   await answered;
-  // Les missions arrivées, le refus « se chargent » ne reste plus affiché.
-  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
-  await page.getByRole("button", { name: "Continuer" }).click();
+  // Les missions arrivées, le clic en attente part tout seul : le temps 2 s'ouvre sans nouveau clic.
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
   expect((await needsOf(damien, id)).map((n) => n.trade).sort()).toEqual(["food_truck", "photographer"]);
   const ev = await apiCall<{ title: string }>(damien, "GET", `/events/${id}`);
   expect(ev.data.title).toBe(title);
@@ -119,6 +135,220 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect(await needsOf(damien, id)).toHaveLength(2);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(`${title} bis`);
+  await ctx.close();
+});
+
+test("panne de lecture des missions pendant l'attente : le clic en attente est annulé, la panne est dite, rien n'est enregistré", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Attente ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    await held;
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "unavailable", message: "Indisponible." } }),
+    });
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const title = `Jamais ${unique()}`;
+  await page.getByLabel("Titre").fill(title);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  release();
+  // Panne : le clic en attente est annulé (le bouton redevient « Continuer »), la panne est dite, rien n'est enregistré.
+  await expect(page.getByTestId("wizard-error")).toContainText("n'ont pas pu être chargées");
+  await expect(page.getByTestId("wizard-needs-failed")).toBeVisible();
+  await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  // « Recharger les missions » rend la main : un nouveau clic aboutit.
+  await page.unroute(`**/api/events/${id}/needs`);
+  await page.getByRole("button", { name: "Recharger les missions" }).click();
+  await expect(page.getByTestId("wizard-needs-failed")).toHaveCount(0);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
+  await ctx.close();
+});
+
+// Tour 4 : pendant l'attente l'étape est figée (champs, liens, boutons) ; « Annuler » seul rend la main.
+test("clic en attente : l'étape est figée, « Annuler l'attente » rend la main (focus compris), rien n'est enregistré, le reclic aboutit", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Annuler ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
+  const writes = writesOf(page, id);
+  const kept = `Titre ${unique()}`;
+  await page.getByLabel("Titre").fill(kept);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  // Le focus va sur « Annuler l'attente », puis revient au bouton cliqué après l'annulation.
+  await expect(page.getByTestId("wizard-wait-cancel")).toBeFocused();
+  await expect(page.getByTestId("wizard-wait-cancel")).toContainText("Annuler l'attente");
+  // L'étape est figée : ses champs et le pied de page sont inertes ; seul « Annuler » est actif.
+  await expect(page.locator("section.wz-step")).toHaveAttribute("inert", "");
+  await expect(page.locator(".wz-cta")).toHaveAttribute("inert", "");
+  await page.getByTestId("wizard-wait-cancel").click();
+  await expect(page.locator("section.wz-step")).not.toHaveAttribute("inert", "");
+  await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-next")).toBeFocused();
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
+  expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
+  // Le reclic aboutit : « Lieu », titre gardé et enregistré.
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(kept);
+  await ctx.close();
+});
+
+test("clic en attente puis sortie par un lien ordinaire (hors du gel) : rien n'est enregistré ni publié", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Sortie ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  // Discriminante (tour 5) : le document de destination du ✕ est retenu, donc la page de l'assistant reste vivante et
+  // `beforeunload` ne part pas ; les missions sont libérées AVANT la navigation. Sans l'annulation au clic sur le lien,
+  // le clic en attente part alors et écrit.
+  let openDestination: () => void = () => undefined;
+  const destinationHeld = new Promise<void>((r) => {
+    openDestination = r;
+  });
+  const destination = new RegExp(`/orga/meditesportcar/e/${id}(\\.data)?(\\?|$)`);
+  await page.route(destination, async (route) => {
+    if (route.request().url().includes("/modifier")) return route.continue();
+    // Soupape : si le test échoue avant de relâcher la destination, la requête ne bloque pas la fermeture.
+    await Promise.race([destinationHeld, new Promise((r) => setTimeout(r, 40_000))]);
+    await route.continue();
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
+  const writes = writesOf(page, id);
+  // Titre changé : sans cela l'étape n'a rien à enregistrer et le test ne prouverait rien.
+  await page.getByLabel("Titre").fill(`Sortie ${unique()}`);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  // Un lien ordinaire (`<a href>` hors de la zone figée, comme ceux de l'en-tête du site) : navigation complète, retenue.
+  // (Le ✕ de l'en-tête passe par le routeur : `useNavigation` l'annule déjà, il ne discrimine pas le point 2.)
+  await page.evaluate((href) => {
+    const a = document.createElement("a");
+    a.id = "zz-lien-ordinaire";
+    a.href = href;
+    a.textContent = "Lien ordinaire";
+    document.body.append(a);
+  }, `/orga/meditesportcar/e/${id}`);
+  await page.locator("#zz-lien-ordinaire").click({ noWaitAfter: true });
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  // Fenêtre d'observation (le réseau n'est jamais « au repos » : la navigation retenue reste en attente) : sans
+  // l'annulation au clic, l'écriture part dans les 300 ms après l'arrivée des missions (essai rouge du tour 5).
+  await page.waitForTimeout(1_500);
+  // Les missions sont arrivées, la navigation est encore retenue (la page ne se laisse pas interroger) : on lit les requêtes
+  // d'écriture déjà vues côté test, rien ne doit être parti.
+  const writesDuringHold = [...writes];
+  // La destination est relâchée avant les assertions : un échec ne laisse pas une requête retenue bloquer la fermeture.
+  openDestination();
+  expect(writesDuringHold).toEqual([]);
+  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(\\?|$)`), { timeout: 30_000 });
+  expect(writes).toEqual([]);
+  expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
+  await ctx.close();
+});
+
+test("saisie gardée + clic pendant le chargement : la saisie reprise est montrée, rien n'est enregistré, l'assistant n'avance pas", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Reprise ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  // Une première ouverture écrit une saisie gardée (titre changé, jamais enregistré), puis la page est rouverte.
+  const kept = `Gardé ${unique()}`;
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  await page.getByLabel("Titre").fill(kept);
+  // La saisie gardée est écrite après 300 ms : on attend qu'elle soit dans le stockage (pas une durée fixe).
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (t) => Object.entries(localStorage).some(([k, v]) => k.startsWith("orasso-wizard:") && v.includes(t)),
+        kept,
+      ),
+    )
+    .toBe(true);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() === "GET") await held;
+    await route.continue();
+  });
+  await page.reload();
+  const writes = writesOf(page, id);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
+  release();
+  await answered;
+  // La restauration de la saisie annule l'attente : saisie reprise visible, aucune avancée, rien d'enregistré.
+  await expect(page.getByTestId("wizard-restored")).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
+  await expect(page.getByLabel("Titre")).toHaveValue(kept);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(kept);
   await ctx.close();
 });
 

@@ -14,6 +14,8 @@ import {
   afterNeedWrites,
   afterZoneWrites,
   type CategoryOption,
+  cancelIsAnnounced,
+  decideClick,
   draftStart,
   type EventDraft,
   type EventFormat,
@@ -29,6 +31,8 @@ import {
   eventEditorLabels as L,
   type NeedDraft,
   needsFromSaved,
+  newTicket,
+  nextEpoch,
   notifyChanged,
   notifyFieldsOfDraft,
   notifySavedCode,
@@ -42,11 +46,16 @@ import {
   refusalMessage,
   sameDraft,
   serverDraft,
+  settleWait,
   type VehicleMake,
   vendorTypeLabels,
   voteOrgaLabels,
   wizardV2Labels as W,
+  type WaitedAction,
+  type WaitTicket,
   type WizardMemo,
+  waitCancelReason,
+  waitIsStale,
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
@@ -69,6 +78,7 @@ import { formatStamp } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { useEventFormats, useVendorTypes } from "@/lib/lists";
 import type { PickedPhoto } from "@/lib/photos";
+import { useSession } from "@/lib/session";
 import { imageForm } from "@/lib/structureFiles";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -91,7 +101,7 @@ import {
 import type { StepContext } from "./types";
 import { VotesTemps } from "./VotesTemps";
 
-const { space1, space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 
 const SCREENS: Record<EventWizardStep, (ctx: StepContext) => ReactNode> = {
   type: TypeTemps,
@@ -160,6 +170,7 @@ export function EventWizard({
   // La saisie gardée est relue une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
   const [loaded, setLoaded] = useState(false);
   const [resumed, setResumed] = useState<StoredDraft | null>(null);
+  const [showResume, setShowResume] = useState(false);
   // Ce qui est vraiment enregistré : la saisie en diffère tant que quelque chose reste à envoyer.
   const pristine = useRef<EventDraft>(d);
   const done = useRef(false);
@@ -194,6 +205,28 @@ export function EventWizard({
   const needsFailed = needsState === "failed";
   // Enregistrer sur le serveur : ouverture faite et missions chargées avec succès (tour 3 : pas pendant un rechargement).
   const canSave = loaded && needsState === "ok";
+  // R9-assistant (parité avec le site, D20) : un clic donné avant la fin de l'ouverture ou pendant le chargement des
+  // missions est mis en attente (`waiting`), puis exécuté un rendu plus tard (`due`, la saisie restaurée est alors à
+  // jour). Panne de lecture, changement d'étape ou sortie l'annulent ; un seul clic à la fois.
+  // Tour 2 : l'attente est liée à l'étape, à la saisie (`epoch`) et au compte vus au clic ; tout changement de l'un
+  // d'eux, ou la fenêtre « Quitter », l'annule (`waiting` et `due`).
+  const [waiting, setWaiting] = useState<WaitTicket | null>(null);
+  const [due, setDue] = useState<WaitTicket | null>(null);
+  const queued = (waiting ?? due)?.action ?? null;
+  // Tour 4 : pendant l'attente l'étape est figée (champs, frise, boutons) ; seul « Annuler » rend la main.
+  const frozen = queued !== null;
+  const queuedRef = useRef(false);
+  queuedRef.current = frozen;
+  // L'écran perd le focus (écran ouvert par-dessus, onglet changé) : l'attente est annulée.
+  const [blurred, setBlurred] = useState(false);
+  const [epoch, setEpoch] = useState(0);
+  const { me } = useSession();
+  const account = me?.user.id ?? null;
+  const waitCtx = useMemo(
+    () => ({ step: index, epoch, account, leaving: quitting || blurred }),
+    [index, epoch, account, quitting, blurred],
+  );
+  const clickState = needsFailed ? "failed" : canSave ? "ok" : "loading";
   // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
   const needsTurn = useRef(0);
   const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null | undefined> => {
@@ -258,6 +291,9 @@ export function EventWizard({
           setPosterState(stored.poster ?? null);
           setKeptPoster(stored.poster ?? null);
           setResumed(stored);
+          setEpoch((e) => e + 1);
+          // Tour 4 : le bandeau « saisie reprise » s'affiche aussi sur un autre temps si CETTE restauration annule une attente.
+          if (queuedRef.current) setShowResume(true);
         }
       }
       setLoaded(true);
@@ -332,6 +368,11 @@ export function EventWizard({
   // Lot 36 : copie d'un événement encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
+    // Tour 3 : une modification PAR LA PERSONNE (un champ) change `epoch` et annule le clic en attente ; les fusions
+    // automatiques (missions, valeurs calculées) passent par `setDraft` et ne l'annulent pas. Tour 5 : seulement si la
+    // valeur change vraiment (un `onBlur` qui rappelle `onChange` sans changement n'annule rien).
+    const next = { ...latest.current, [key]: value };
+    setEpoch((e) => nextEpoch(e, !sameDraft(next, latest.current)));
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
   const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
@@ -342,7 +383,10 @@ export function EventWizard({
     lastStart.current = start;
     setDraft((prev) => withCopyOpening(prev, copyLead, now()));
   }, [copyLead, start]);
-  const setD = useCallback((update: (prev: EventDraft) => EventDraft) => setDraft(update), []);
+  const setD = useCallback((update: (prev: EventDraft) => EventDraft) => {
+    setEpoch((e) => nextEpoch(e, !sameDraft(update(latest.current), latest.current)));
+    setDraft(update);
+  }, []);
 
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
@@ -377,6 +421,8 @@ export function EventWizard({
 
   const leave = () => {
     leaving.current = true;
+    setWaiting(null);
+    setDue(null);
     const pendingAction = pendingLeave.current;
     pendingLeave.current = null;
     if (pendingAction) return pendingAction();
@@ -387,9 +433,24 @@ export function EventWizard({
   // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin.
   const navigation = useNavigation();
   useEffect(() => {
-    if (keepOnDevice || !dirty) return;
+    const off = [
+      navigation.addListener("blur", () => setBlurred(true)),
+      navigation.addListener("focus", () => setBlurred(false)),
+    ];
+    return () => {
+      for (const o of off) o();
+    };
+  }, [navigation]);
+  useEffect(() => {
     return navigation.addListener("beforeRemove", (e) => {
       if (leaving.current || done.current) return;
+      if (keepOnDevice || !dirty) {
+        // Sortie sans fenêtre « Quitter » (tour 3) : elle annule quand même le clic en attente.
+        leaving.current = true;
+        setWaiting(null);
+        setDue(null);
+        return;
+      }
       e.preventDefault();
       pendingLeave.current = () => navigation.dispatch(e.data.action);
       setQuitting(true);
@@ -492,12 +553,17 @@ export function EventWizard({
     });
   }
 
-  async function go(delta: 1 | -1) {
+  /** `resumed` : le clic vient de l'attente (il ne se compte pas lui-même comme un second clic). */
+  async function go(delta: 1 | -1, resumed = false) {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
     setError(null);
     setNotice(null);
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
+    const click = decideClick(clickState, resumed ? null : queued, true);
+    if (click === "ignore") return;
+    if (click === "wait") return setWaiting(newTicket("next", waitCtx));
+    if (click === "refuse") return setError(W.needsFailed);
     let sent = d;
     const problem = eventStepProblem(step, sent);
     if (problem) return setError(problem);
@@ -532,6 +598,11 @@ export function EventWizard({
   }
 
   async function restart() {
+    // Tour 3 : « Recommencer » annule l'attente tout de suite, avant l'effacement (asynchrone) de la saisie gardée.
+    setWaiting(null);
+    setDue(null);
+    setEpoch((e) => e + 1);
+    setShowResume(false);
     pending.current = null;
     await clearEventDraft(structureId, eventId);
     const fresh = eventId ? pristine.current : initialEventDraft(now());
@@ -542,13 +613,21 @@ export function EventWizard({
     setPosterState(null);
     setKeptPoster(null);
     setResumed(null);
+    setEpoch((e) => e + 1);
     setError(null);
   }
 
   /** Fin de l'assistant : Publier, Brouillon, Aperçu (brouillon) ou « Enregistrer les modifications » (publié). */
-  async function finish(mode: "draft" | "publish" | "preview" | "save") {
+  async function finish(mode: "draft" | "publish" | "preview" | "save", resumed = false) {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
+    const click = decideClick(clickState, resumed ? null : queued, true);
+    if (click === "ignore") return;
+    if (click === "wait") {
+      setError(null);
+      return setWaiting(newTicket(mode, waitCtx));
+    }
+    if (click === "refuse") return setError(W.needsFailed);
     const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
     setBusy(true);
     setError(null);
@@ -602,6 +681,36 @@ export function EventWizard({
     }
   }
 
+  // Le clic en attente part dès que l'ouverture et les missions sont prêtes (ou tombe si leur lecture a échoué).
+  const runWaited = useRef<(action: WaitedAction) => void>(() => undefined);
+  runWaited.current = (action) => void (action === "next" ? go(1, true) : finish(action, true));
+  useEffect(() => {
+    const out = settleWait(waiting?.action ?? null, clickState);
+    if (out === "run" && waiting) {
+      if (!waitIsStale(waiting, waitCtx)) setDue(waiting);
+      setWaiting(null);
+    } else if (out === "fail") {
+      setWaiting(null);
+      setError(W.needsFailed);
+    }
+  }, [waiting, clickState, waitCtx]);
+  useEffect(() => {
+    if (!due) return;
+    setDue(null);
+    // Étape, saisie ou compte changés depuis le clic, ou fenêtre « Quitter » ouverte : l'action ne part pas.
+    if (!waitIsStale(due, waitCtx) && !leaving.current && !done.current) runWaited.current(due.action);
+  }, [due, waitCtx]);
+  // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
+  useEffect(() => {
+    const gone = leaving.current || done.current;
+    for (const t of [waiting, due]) {
+      // Tour 5 : une modification (ou une restauration) qui annule le clic le dit, plus d'annulation silencieuse.
+      if (t && !gone && cancelIsAnnounced(waitCancelReason(t, waitCtx))) setNotice(W.needsWaitChanged);
+    }
+    if (waiting && (gone || waitIsStale(waiting, waitCtx))) setWaiting(null);
+    if (due && (gone || waitIsStale(due, waitCtx))) setDue(null);
+  }, [waiting, due, waitCtx]);
+
   const ctx: StepContext = {
     d,
     set,
@@ -638,66 +747,84 @@ export function EventWizard({
           <View style={styles.end}>
             <Button
               icon="send"
-              loading={halted}
-              disabled={halted || !canSave || !canPublish}
+              loading={halted || queued === "publish"}
+              disabled={halted || needsFailed || !canPublish || (queued !== null && queued !== "publish")}
               onPress={() => void finish("publish")}
               testID="wizard-publish"
             >
-              {W.publish}
+              {queued === "publish" ? W.needsWaiting : W.publish}
             </Button>
             <View style={styles.actions}>
-              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+              <BackSquare
+                disabled={halted || frozen}
+                onPress={() => void go(-1)}
+                label={W.previous}
+                testID="wizard-back"
+              />
               <Button
                 variant="secondary"
                 icon="calendar"
-                disabled={halted || !canSave}
+                loading={queued === "draft"}
+                disabled={halted || needsFailed || (queued !== null && queued !== "draft")}
                 onPress={() => void finish("draft")}
                 style={styles.grow}
                 testID="wizard-save"
               >
-                {W.draft}
+                {queued === "draft" ? W.needsWaiting : W.draft}
               </Button>
               <Button
                 variant="secondary"
                 icon="eye"
-                disabled={halted || !canSave}
+                loading={queued === "preview"}
+                disabled={halted || needsFailed || (queued !== null && queued !== "preview")}
                 onPress={() => void finish("preview")}
                 testID="wizard-preview"
               >
-                {W.preview}
+                {queued === "preview" ? W.needsWaiting : W.preview}
               </Button>
             </View>
           </View>
         ) : (
           <View style={styles.actions}>
             {index > 0 ? (
-              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+              <BackSquare
+                disabled={halted || frozen}
+                onPress={() => void go(-1)}
+                label={W.previous}
+                testID="wizard-back"
+              />
             ) : (
-              <Button variant="secondary" icon="close" disabled={halted} onPress={close} testID="wizard-cancel">
+              <Button
+                variant="secondary"
+                icon="close"
+                disabled={halted || frozen}
+                onPress={close}
+                testID="wizard-cancel"
+              >
                 {L.cancel}
               </Button>
             )}
             {last ? (
               <Button
                 icon="check"
-                loading={halted}
-                disabled={halted || !canSave}
+                loading={halted || queued === "save"}
+                disabled={halted || needsFailed || queued === "save"}
                 onPress={() => void finish("save")}
                 style={styles.grow}
                 testID="wizard-save"
               >
-                {L.saveChanges}
+                {queued === "save" ? W.needsWaiting : L.saveChanges}
               </Button>
             ) : (
               <Button
                 icon="next"
-                loading={halted}
-                disabled={halted || !canSave}
+                loading={halted || queued === "next"}
+                disabled={halted || needsFailed || queued === "next"}
                 onPress={() => void go(1)}
                 style={styles.grow}
                 testID="wizard-next"
               >
-                {W.continue}
+                {queued === "next" ? W.needsWaiting : W.continue}
               </Button>
             )}
           </View>
@@ -726,7 +853,7 @@ export function EventWizard({
       <StepRail
         labels={eventWizardSteps.map((s) => eventStepLabels[s])}
         index={index}
-        disabled={halted || busy || photoSending !== null}
+        disabled={halted || busy || photoSending !== null || frozen}
         onPick={(i) => {
           setError(null);
           setNotice(null);
@@ -749,7 +876,23 @@ export function EventWizard({
         </View>
       ) : null}
       {notice ? <Notice testID="wizard-notice">{notice}</Notice> : null}
-      {resumed && index === (resumed.step ?? index) ? (
+      {frozen ? (
+        <View style={styles.resume} testID="wizard-wait">
+          <Notice>{W.needsWaitingNote}</Notice>
+          <Button
+            variant="plate"
+            icon="close"
+            onPress={() => {
+              setWaiting(null);
+              setDue(null);
+            }}
+            testID="wizard-wait-cancel"
+          >
+            {W.needsWaitCancel}
+          </Button>
+        </View>
+      ) : null}
+      {resumed && (showResume || index === (resumed.step ?? index)) ? (
         <View style={styles.resume} testID="wizard-resumed">
           <Notice>{L.draftResume(resumed.draft.title, formatStamp(resumed.savedAt))}</Notice>
           <Button variant="plate" icon="undo" onPress={() => void restart()} testID="wizard-restart">
@@ -757,7 +900,14 @@ export function EventWizard({
           </Button>
         </View>
       ) : null}
-      <Screen {...ctx} />
+      <View
+        style={styles.step}
+        pointerEvents={frozen ? "none" : "auto"}
+        importantForAccessibility={frozen ? "no-hide-descendants" : "auto"}
+        accessibilityElementsHidden={frozen}
+      >
+        <Screen {...ctx} />
+      </View>
       {notifyShown ? (
         <RecipientsBanner count={previewCount} timing={notifyTimingLine(notifyWhen, { now: notifyClock })} />
       ) : null}
@@ -778,6 +928,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: space2, flexWrap: "wrap" },
   end: { gap: space2 },
   grow: { flex: 1 },
+  // Même écart que le corps de `FlowScreen` (`Body`, `gap: space3`) : ce conteneur porte le gel et ne doit rien changer à la mise en page.
+  step: { gap: space3 },
   resume: { gap: space2 },
   head: { gap: space1 },
 });

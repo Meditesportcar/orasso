@@ -10,10 +10,12 @@
 import "../styles/wizard.css";
 import { Button } from "@orasso/design-system/web";
 import {
+  accountAfterAnnouncement,
   afterNeedWrites,
   afterZoneWrites,
   type CategoryOption,
   createdNeedDiffers,
+  decideClick,
   draftStart,
   type EventDraft,
   type EventNeedView,
@@ -33,6 +35,7 @@ import {
   type NotifyPreview,
   needChanges,
   needsFromSaved,
+  newTicket,
   noNeedWrites,
   noRefusals,
   notifyChanged,
@@ -50,12 +53,16 @@ import {
   sameDraft,
   serializeWizardMemo,
   serverDraft,
+  settleWait,
   storedStepIndex,
   type VehicleMake,
   vendorTypeLabels,
   voteOrgaLabels,
   wizardV2Labels as W,
+  type WaitedAction,
+  type WaitTicket,
   type WizardMemo,
+  waitIsStale,
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
@@ -67,11 +74,12 @@ import {
   zoneChanges,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useLocation, useNavigate } from "react-router";
+import { useBlocker, useLocation, useNavigate, useNavigation } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
+import { listenSession } from "../lib/sessionChannel";
 import { RecipientsBanner } from "./event/NotifySignup";
 import { ArrivalsStep } from "./wizard/ArrivalsStep";
 import { CriteriaStep } from "./wizard/CriteriaStep";
@@ -84,6 +92,8 @@ import { TypeStep } from "./wizard/TypeStep";
 import { VotesStep } from "./wizard/VotesStep";
 
 type Props = {
+  /** Le compte qui a chargé la page (tour 3 : le compte vu au clic, jamais `null` au premier chargement). */
+  userId: string;
   structureId: string;
   structureSlug: string;
   structureName: string;
@@ -244,7 +254,7 @@ export function EventWizard(props: Props) {
     if (!event) return;
     let alive = true;
     setNeedsState((s) => (s === "ok" ? s : "loading"));
-    void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`).then((res) => {
+    void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`, { timeoutMs: 15_000 }).then((res) => {
       if (!alive) return;
       if (!res.ok) return setNeedsState("failed");
       const loaded = needsFromSaved(res.data, event.startsAt);
@@ -258,6 +268,20 @@ export function EventWizard(props: Props) {
       alive = false;
     };
   }, [event, needsAttempt]);
+  // R9-assistant : un clic donné pendant le chargement des missions est mis en attente (`waiting`), puis exécuté une fois
+  // les missions arrivées ET la saisie gardée remise (`due`, un rendu plus tard : l'action lit alors la saisie à jour).
+  // Une panne de lecture, un changement d'étape ou la sortie de l'assistant l'annulent ; un seul clic à la fois.
+  // Tour 2 : l'attente est liée à l'étape, à la saisie (`epoch` : change quand une saisie gardée est restaurée ou effacée)
+  // et au compte vus au clic ; tout changement de l'un d'eux, ou la fenêtre « Quitter », l'annule (`waiting` et `due`).
+  const [waiting, setWaiting] = useState<WaitTicket | null>(null);
+  const [due, setDue] = useState<WaitTicket | null>(null);
+  const queued = (waiting ?? due)?.action ?? null;
+  const [epoch, setEpoch] = useState(0);
+  const [account, setAccount] = useState<string | null>(props.userId);
+  useEffect(
+    () => listenSession((announced, self) => setAccount((was) => accountAfterAnnouncement(was, announced, self))),
+    [],
+  );
   /** Message qui empêche d'enregistrer tant que les missions manquent, ou `null`. */
   const needsBlock = needsState === "loading" ? W.needsLoading : needsState === "failed" ? W.needsFailed : null;
   // Le refus « les missions se chargent » ne reste pas affiché une fois les missions arrivées : il disait d'attendre, plus de
@@ -321,6 +345,7 @@ export function EventWizard(props: Props) {
       const draft = loadedNeeds.current ? withLoadedNeeds(stored.draft, loadedNeeds.current) : stored.draft;
       if (sameDraft(draft, pristine.current)) return;
       setD(draft);
+      setEpoch((e) => e + 1);
       // `?temps=` prime ; un index écrit avec l'ancien découpage (douze étapes) est ignoré.
       const kept = storedStepIndex(stored.steps, stored.index);
       if (!props.stepWanted && kept !== null) setIndex(kept);
@@ -334,13 +359,16 @@ export function EventWizard(props: Props) {
     const timer = setTimeout(() => writeStorage(storageKey, dirty ? storedWizard(d, index) : null), 300);
     return () => clearTimeout(timer);
   }, [d, index, dirty, saving, storageKey, needsSettled]);
+  // Tour 4 : `beforeunload` est toujours écouté (lien ordinaire, fermeture, rechargement) : toute sortie annule le clic
+  // en attente ; la confirmation du navigateur n'est demandée que si la saisie est modifiée.
   useEffect(() => {
-    if (!dirty || saving) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      if (!leaving.current) e.preventDefault();
+    const leave = (e: BeforeUnloadEvent) => {
+      setWaiting(null);
+      setDue(null);
+      if (dirty && !saving && !leaving.current) e.preventDefault();
     };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    window.addEventListener("beforeunload", leave);
+    return () => window.removeEventListener("beforeunload", leave);
   }, [dirty, saving]);
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
@@ -349,8 +377,56 @@ export function EventWizard(props: Props) {
   const discardLocal = () => {
     writeStorage(storageKey, null);
     setD(pristine.current);
+    setEpoch((e) => e + 1);
     setRestored(null);
   };
+  // Une navigation en cours vers un autre chemin compte aussi comme sortie (tour 3), même sans fenêtre « Quitter ».
+  const navigation = useNavigation();
+  // Tour 5 : le focus suit l'attente. Au clic il est mémorisé, puis il va sur « Annuler l'attente » ; après l'annulation par
+  // ce bouton il revient au bouton cliqué ; quand l'action part, rien ne change.
+  const clickedEl = useRef<HTMLElement | null>(null);
+  const refocus = useRef(false);
+  const noteClicked = () => {
+    clickedEl.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  };
+  /** « Annuler l'attente » : le clic en attente est abandonné, la personne reprend la main. */
+  const cancelWait = (giveFocusBack = false) => {
+    refocus.current = giveFocusBack;
+    setWaiting(null);
+    setDue(null);
+  };
+  useEffect(() => {
+    if (queued !== null) {
+      document.querySelector<HTMLElement>('[data-testid="wizard-wait-cancel"]')?.focus();
+    } else if (refocus.current) {
+      refocus.current = false;
+      if (clickedEl.current?.isConnected) clickedEl.current.focus();
+    }
+  }, [queued]);
+  // Tour 5 : un lien ordinaire (✕ de l'en-tête, liens du site) est hors de la zone figée et `beforeunload` n'est pas fiable
+  // partout : pendant l'attente, tout clic sur un lien annule l'attente AVANT que la navigation parte (phase de capture).
+  useEffect(() => {
+    if (queued === null) return;
+    const onClick = (e: MouseEvent) => {
+      const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!link || link.hasAttribute("download")) return;
+      const target = link.getAttribute("target");
+      if (target && target !== "_self") return;
+      setWaiting(null);
+      setDue(null);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [queued]);
+  const leavingAsked =
+    blocker.state === "blocked" ||
+    (navigation.state !== "idle" &&
+      navigation.location !== undefined &&
+      navigation.location.pathname !== location.pathname);
+  const waitCtx = useMemo(
+    () => ({ step: index, epoch, account, leaving: leavingAsked }),
+    [index, epoch, account, leavingAsked],
+  );
 
   /**
    * Enregistre `sent` : l'événement (POST la première fois, PATCH ensuite ; l'affiche générée est rendue par l'API avec
@@ -497,13 +573,20 @@ export function EventWizard(props: Props) {
     });
   }
 
-  async function go(delta: 1 | -1) {
+  /** `resumed` : le clic vient de l'attente (il ne se compte pas lui-même comme un second clic). */
+  async function go(delta: 1 | -1, resumed = false) {
     if (busy) return;
     if (photoSending) return setError(W.posterStillSending);
     setError(null);
     setNotice(null);
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
-    if (needsBlock && isDraft && (saved || step !== "type")) return setError(needsBlock);
+    const click = decideClick(needsState, resumed ? null : queued, isDraft && Boolean(saved || step !== "type"));
+    if (click === "ignore") return;
+    if (click === "wait") {
+      noteClicked();
+      return setWaiting(newTicket("next", waitCtx));
+    }
+    if (click === "refuse" && needsBlock) return setError(needsBlock);
     let sent = d;
     const problem = eventStepProblem(step, sent);
     if (problem) return setError(problem);
@@ -538,10 +621,17 @@ export function EventWizard(props: Props) {
     window.scrollTo({ top: 0 });
   }
 
-  async function finish(mode: "draft" | "publish" | "preview" | "save") {
+  async function finish(mode: "draft" | "publish" | "preview" | "save", resumed = false) {
     if (busy) return;
     if (photoSending) return setError(W.posterStillSending);
-    if (needsBlock) return setError(needsBlock);
+    const click = decideClick(needsState, resumed ? null : queued, true);
+    if (click === "ignore") return;
+    if (click === "wait") {
+      setError(null);
+      noteClicked();
+      return setWaiting(newTicket(mode, waitCtx));
+    }
+    if (click === "refuse" && needsBlock) return setError(needsBlock);
     // Publier exige aussi l'affiche ; « Brouillon », « Aperçu » et un événement publié, non.
     const invalid = mode === "publish" ? eventPublishProblem(d) : firstEventProblem(d);
     if (invalid) {
@@ -587,6 +677,31 @@ export function EventWizard(props: Props) {
       mode === "save" && notifyShown && whenSaved ? `?prevenus=${notifySavedCode(preview.count, whenSaved)}` : "";
     window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : told}`);
   }
+
+  // Le clic en attente part dès que les missions sont là (ou tombe si leur lecture a échoué).
+  const runWaited = useRef<(action: WaitedAction) => void>(() => undefined);
+  runWaited.current = (action) => void (action === "next" ? go(1, true) : finish(action, true));
+  useEffect(() => {
+    const out = settleWait(waiting?.action ?? null, needsState);
+    if (out === "run" && waiting) {
+      if (!waitIsStale(waiting, waitCtx)) setDue(waiting);
+      setWaiting(null);
+    } else if (out === "fail") {
+      setWaiting(null);
+      setError(W.needsFailed);
+    }
+  }, [waiting, needsState, waitCtx]);
+  useEffect(() => {
+    if (!due) return;
+    setDue(null);
+    // Étape, saisie ou compte changés depuis le clic, ou fenêtre « Quitter » ouverte : l'action ne part pas.
+    if (!waitIsStale(due, waitCtx)) runWaited.current(due.action);
+  }, [due, waitCtx]);
+  // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
+  useEffect(() => {
+    if (waiting && waitIsStale(waiting, waitCtx)) setWaiting(null);
+    if (due && waitIsStale(due, waitCtx)) setDue(null);
+  }, [waiting, due, waitCtx]);
 
   const [title, intro] = HEADS[step];
   let body: ReactNode = null;
@@ -678,7 +793,8 @@ export function EventWizard(props: Props) {
         </div>
       )}
 
-      <section className="wz-step s-stack" aria-labelledby="step-title" data-step={step}>
+      {/* Tour 4 : pendant l'attente, l'étape est figée (`inert` : champs, liens, boutons) ; seul « Annuler » rend la main. */}
+      <section className="wz-step s-stack" aria-labelledby="step-title" data-step={step} inert={queued !== null}>
         <header className="wz-head">
           <h2 id="step-title" className="wz-title">
             {title}
@@ -726,18 +842,28 @@ export function EventWizard(props: Props) {
         )}
       </section>
 
-      <div className={last ? "wz-cta wz-cta--end" : "wz-cta"}>
+      {queued !== null && (
+        <div className="s-notice s-stack s-stack--tight" role="status" data-testid="wizard-wait">
+          <span>{W.needsWaitingNote}</span>
+          <div className="s-row">
+            <Button variant="secondary" icon="close" onClick={() => cancelWait(true)} data-testid="wizard-wait-cancel">
+              {W.needsWaitCancel}
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className={last ? "wz-cta wz-cta--end" : "wz-cta"} inert={queued !== null}>
         {last && isDraft ? (
           <>
             <Button
               icon="send"
               onClick={() => void finish("publish")}
-              loading={halted}
-              disabled={!verified || halted}
+              loading={halted || queued === "publish"}
+              disabled={!verified || halted || (queued !== null && queued !== "publish")}
               data-testid="wizard-publish"
               fullWidth
             >
-              {W.publish}
+              {queued === "publish" ? W.needsWaiting : W.publish}
             </Button>
             <div className="wz-cta__row">
               <Button
@@ -753,19 +879,21 @@ export function EventWizard(props: Props) {
                 variant="secondary"
                 icon="calendar"
                 onClick={() => void finish("draft")}
-                disabled={halted}
+                loading={queued === "draft"}
+                disabled={halted || (queued !== null && queued !== "draft")}
                 data-testid="wizard-keep-draft"
               >
-                {W.draft}
+                {queued === "draft" ? W.needsWaiting : W.draft}
               </Button>
               <Button
                 variant="secondary"
                 icon="eye"
                 onClick={() => void finish("preview")}
-                disabled={halted}
+                loading={queued === "preview"}
+                disabled={halted || (queued !== null && queued !== "preview")}
                 data-testid="wizard-preview"
               >
-                {W.preview}
+                {queued === "preview" ? W.needsWaiting : W.preview}
               </Button>
             </div>
           </>
@@ -787,18 +915,23 @@ export function EventWizard(props: Props) {
               </Button>
             )}
             {last ? (
-              <Button icon="check" onClick={() => void finish("save")} loading={halted} data-testid="wizard-save">
-                Enregistrer les modifications
+              <Button
+                icon="check"
+                onClick={() => void finish("save")}
+                loading={halted || queued === "save"}
+                data-testid="wizard-save"
+              >
+                {queued === "save" ? W.needsWaiting : "Enregistrer les modifications"}
               </Button>
             ) : (
               <Button
                 icon="next"
                 onClick={() => void go(1)}
-                loading={halted}
+                loading={halted || queued === "next"}
                 data-testid="wizard-next"
                 className="s-grow"
               >
-                {W.continue}
+                {queued === "next" ? W.needsWaiting : W.continue}
               </Button>
             )}
           </>

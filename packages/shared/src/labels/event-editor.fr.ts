@@ -417,6 +417,13 @@ export const wizardV2Labels = {
   needsLoading: "Les missions de l'événement se chargent : attends un instant avant d'enregistrer.",
   needsFailed: "Les missions de l'événement n'ont pas pu être chargées : rien n'est enregistré tant qu'elles manquent.",
   needsRetry: "Recharger les missions",
+  // R9-assistant (14/11/2026) : libellé du bouton dont le clic attend l'arrivée des missions.
+  needsWaiting: "Chargement…",
+  // Tour 4 : pendant l'attente l'étape est figée ; seul ce bouton rend la main (aucun libellé des docs : le plus simple).
+  needsWaitingNote: "Les missions de l'événement se chargent : l'étape continuera toute seule dès leur arrivée.",
+  needsWaitCancel: "Annuler l'attente",
+  // Tour 5 : une modification de la saisie pendant l'attente (appli) annule le clic, et le dit.
+  needsWaitChanged: "Clic annulé : la saisie a changé. Appuie de nouveau sur le bouton.",
   posterStillSending: "La photo de l'affiche s'envoie encore : attends la fin de l'envoi.",
 } as const;
 
