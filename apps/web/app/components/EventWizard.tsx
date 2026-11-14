@@ -31,6 +31,7 @@ import {
   firstEventProblem,
   hasRefusals,
   initialEventDraft,
+  linkClickLeavesPage,
   type NeedDraft,
   type NotifyPreview,
   needChanges,
@@ -382,25 +383,28 @@ export function EventWizard(props: Props) {
   };
   // Une navigation en cours vers un autre chemin compte aussi comme sortie (tour 3), même sans fenêtre « Quitter ».
   const navigation = useNavigation();
-  // Tour 5 : le focus suit l'attente. Au clic il est mémorisé, puis il va sur « Annuler l'attente » ; après l'annulation par
-  // ce bouton il revient au bouton cliqué ; quand l'action part, rien ne change.
+  // Tour 5 : le focus suit l'attente. Au clic il est mémorisé, puis il va sur « Annuler l'attente » ; quand l'attente finit
+  // (annulée par ce bouton, par un lien, par la navigation, ou action partie), le focus, tombé sur la page entière
+  // (`body`) avec la disparition du bouton, revient au bouton cliqué s'il existe encore (lot B3a).
   const clickedEl = useRef<HTMLElement | null>(null);
-  const refocus = useRef(false);
+  const hadQueued = useRef(false);
   const noteClicked = () => {
     clickedEl.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   };
   /** « Annuler l'attente » : le clic en attente est abandonné, la personne reprend la main. */
-  const cancelWait = (giveFocusBack = false) => {
-    refocus.current = giveFocusBack;
+  const cancelWait = () => {
     setWaiting(null);
     setDue(null);
   };
   useEffect(() => {
     if (queued !== null) {
+      hadQueued.current = true;
       document.querySelector<HTMLElement>('[data-testid="wizard-wait-cancel"]')?.focus();
-    } else if (refocus.current) {
-      refocus.current = false;
-      if (clickedEl.current?.isConnected) clickedEl.current.focus();
+    } else if (hadQueued.current) {
+      hadQueued.current = false;
+      // Le focus n'est rendu que s'il est tombé sur la page : un champ ou un lien choisi entre-temps le garde.
+      const active = document.activeElement;
+      if ((!active || active === document.body) && clickedEl.current?.isConnected) clickedEl.current.focus();
     }
   }, [queued]);
   // Tour 5 : un lien ordinaire (✕ de l'en-tête, liens du site) est hors de la zone figée et `beforeunload` n'est pas fiable
@@ -409,9 +413,14 @@ export function EventWizard(props: Props) {
     if (queued === null) return;
     const onClick = (e: MouseEvent) => {
       const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
-      if (!link || link.hasAttribute("download")) return;
-      const target = link.getAttribute("target");
-      if (target && target !== "_self") return;
+      if (!link) return;
+      // Lot B3a : un clic qui ne quitte pas la page (nouvel onglet, Ctrl/Cmd/Maj/Alt, `href="#"`) laisse l'attente en place.
+      const leaves = linkClickLeavesPage(e, {
+        href: link.getAttribute("href"),
+        target: link.getAttribute("target"),
+        download: link.hasAttribute("download"),
+      });
+      if (!leaves) return;
       setWaiting(null);
       setDue(null);
     };
@@ -846,7 +855,7 @@ export function EventWizard(props: Props) {
         <div className="s-notice s-stack s-stack--tight" role="status" data-testid="wizard-wait">
           <span>{W.needsWaitingNote}</span>
           <div className="s-row">
-            <Button variant="secondary" icon="close" onClick={() => cancelWait(true)} data-testid="wizard-wait-cancel">
+            <Button variant="secondary" icon="close" onClick={cancelWait} data-testid="wizard-wait-cancel">
               {W.needsWaitCancel}
             </Button>
           </div>
