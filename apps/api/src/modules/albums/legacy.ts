@@ -16,18 +16,18 @@ import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { eventAlbumPhotos, eventAlbums, events, legacyFileBlocks } from "../../db/schema";
-import { requireOrganizerWrite } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
-import { eventsRepo } from "../events/repo";
 import { contentView, type MediaContentRow } from "../media/serializers";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
 import { assertWritable, isAccredited, isUniqueViolation, mediaOfUser, requireMedia } from "./guards";
+import { setAlbumOfficial } from "./official";
+import { notifyAlbumPublished } from "./publish";
 import { albumsService, removeFiles } from "./service";
 import {
   type AlbumJoin,
@@ -221,7 +221,7 @@ export const albumsLegacy = {
     const sources: string[] = [];
     let committed = false;
     try {
-      const id = await withTx(async (tx) => {
+      const id = await withTx(async (tx, after) => {
         const media = await requireMedia(tx, v);
         const [event] = await tx.select().from(events).where(eq(events.id, input.eventId));
         if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
@@ -271,6 +271,12 @@ export const albumsLegacy = {
             plateState: "unknown" as const,
           })),
         );
+        // Lot R9g (T47) : une galerie publiée par l'APK en ligne prévient les responsables comme un album publié.
+        await notifyAlbumPublished(tx, after, {
+          album: { id: album.id, title: input.title ?? null, photosCount: uploaded.length, eventId: input.eventId },
+          mediaName: media.name,
+          authorId: v.user.id,
+        });
         return album.id;
       });
       committed = true;
@@ -320,48 +326,18 @@ export const albumsLegacy = {
       ),
     );
     if (!found) return null;
-    const event = await eventsRepo.byId(eventId);
-    await requireOrganizerWrite(v, event.structureId);
-    if (event.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
-    await withTx(async (tx, after) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album-official:${eventId.toLowerCase()}`}))`);
-      const [row] = await tx
-        .select()
-        .from(eventAlbums)
-        .where(and(eq(eventAlbums.id, id), isNull(eventAlbums.deletedAt)))
-        .for("update");
-      if (!row) throw notFound(mediaLabels.contentNotFound);
-      if (featured) {
-        if (!(await isAccredited(tx, eventId, row.mediaProfileId))) throw forbidden(mediaLabels.notAccredited);
-      }
-      const was = row.officialAt !== null;
-      if (featured) {
-        await tx
-          .update(eventAlbums)
-          .set({ officialAt: null })
-          .where(
-            and(
-              eq(eventAlbums.eventId, eventId),
-              sql`${eventAlbums.officialAt} is not null`,
-              sql`${eventAlbums.id} <> ${id}`,
-            ),
-          );
-      }
-      await tx
-        .update(eventAlbums)
-        .set({ officialAt: featured ? (row.officialAt ?? now()) : null })
-        .where(eq(eventAlbums.id, id));
-      if (featured && !was && !found.m.deletedAt) {
-        await notificationsService.notify(tx, found.m.userId, "media_content_featured", {
-          title: mediaLabels.featuredTitle,
-          body: mediaLabels.featuredBody(albumTitle(row.title, found.e.title), event.title),
-          eventId: event.id,
-          eventStartsAt: event.startsAt,
-          data: { eventId: event.id, contentId: id, screen: "media_contents" },
-          link: { label: "Voir l'événement", path: `/e/${event.slug}` },
-        });
-        after(() => notificationsService.kick());
-      }
+    // R9g : la même fonction que la route neuve (`PUT|DELETE /events/:id/albums/:albumId/official`) ; la façade d'avant prévenait le média.
+    await setAlbumOfficial(v, eventId, id, featured, async (tx, after, { event }) => {
+      if (found.m.deletedAt) return;
+      await notificationsService.notify(tx, found.m.userId, "media_content_featured", {
+        title: mediaLabels.featuredTitle,
+        body: mediaLabels.featuredBody(albumTitle(found.a.title, found.e.title), event.title),
+        eventId: event.id,
+        eventStartsAt: event.startsAt,
+        data: { eventId: event.id, contentId: id, screen: "media_contents" },
+        link: { label: "Voir l'événement", path: `/e/${event.slug}` },
+      });
+      after(() => notificationsService.kick());
     });
     return contentById(id);
   },

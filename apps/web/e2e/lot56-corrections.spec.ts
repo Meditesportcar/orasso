@@ -4,7 +4,7 @@ import pg from "pg";
 import { REPRISE_STATEMENTS } from "../../api/src/modules/albums/reprise";
 import { categoryOptions, nearOutcome, whenRange } from "../app/lib/events-filter";
 import { proPitchCard } from "../app/lib/pro-pitch";
-import { apiCall, setTheme } from "./helpers";
+import { apiCall, loginInBrowser, setTheme } from "./helpers";
 
 // Corrections des relectures du lot 56 (21/10/2026). Les parties pures (fenêtre « ce week-end », carte « fiche en vrai »
 // des pros, libellé du compteur) se testent sans navigateur ; le reste tourne sur le site et l'API lancés, base seedée.
@@ -364,7 +364,7 @@ test.describe("/evenements", () => {
   });
 });
 
-test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre dans la visionneuse", async ({
+test("fiche événement : une galerie sans adresse est un album de la section « Photos » et s'ouvre dans la visionneuse", async ({
   page,
 }) => {
   const slug = "nocturne-de-canet-2026";
@@ -378,10 +378,20 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   let contentId = "";
+  let accreditationId = "";
   try {
-    const media = await client.query<{ id: string }>("select id from media_profiles where deleted_at is null limit 1");
+    const media = await client.query<{ id: string; user_id: string }>(
+      "select id, user_id from media_profiles where deleted_at is null limit 1",
+    );
     const mediaId = media.rows[0]?.id;
     if (!mediaId) throw new Error("Aucun profil média dans le seed");
+    // R9g : la fiche ne montre l'album que d'un média accrédité maintenant à l'événement (la galerie d'avant n'avait pas cette condition).
+    const accreditation = await client.query<{ id: string }>(
+      `insert into applications (event_id, user_id, kind, media_profile_id, media_formats, status, rules_accepted_at, follow_structure)
+       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) on conflict do nothing returning id`,
+      [ev.data.id, media.rows[0]?.user_id, mediaId],
+    );
+    accreditationId = accreditation.rows[0]?.id ?? "";
     const inserted = await client.query<{ id: string }>(
       `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
        values ($1, $2, 'gallery', 'Galerie sans lien E2E', null, 'other', $3) returning id`,
@@ -391,39 +401,34 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     await adoptGallery(client);
     await setTheme(page, "beton");
     await page.setViewportSize(DESKTOP);
-    const views: string[] = [];
-    page.on("request", (r) => {
-      if (r.method() === "POST" && /\/api\/media-contents\/[^/]+\/view$/.test(r.url())) views.push(r.url());
-    });
-    await page.goto(`/e/${slug}`);
+    // L'album ouvert est réservé aux membres : la recette se connecte (Damien) avant d'ouvrir la fiche.
+    await loginInBrowser(page, "damien@orasso.local", undefined, `/e/${slug}`);
     await page.waitForLoadState("networkidle");
-    expect(views).toHaveLength(0);
-    const content = page.getByTestId("media-content").filter({ hasText: "Galerie sans lien E2E" });
-    await expect(content).toBeVisible();
-    const thumbs = content.getByTestId("media-gallery").locator("li");
-    await expect(thumbs).toHaveCount(2);
-    await thumbs.first().locator("a").click();
+    // R9g : la galerie est un album de la section « Photos » (elle n'a plus de visionneuse sur la fiche) ; « Voir l'album » l'ouvre.
+    const card = page.getByTestId("event-photos-album").filter({ hasText: "Galerie sans lien E2E" });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("2 photos");
+    await card.getByTestId("event-photos-open").click();
+    await page.waitForURL(new RegExp(`/albums/${contentId}`));
+    await expect(page.getByTestId("media-gallery-photo")).toHaveCount(2);
+    await page.getByTestId("media-gallery-photo").first().click();
     const viewer = page.getByTestId("media-gallery-viewer");
     await expect(viewer).toBeVisible();
-    // L'ouverture compte une consultation du contenu, une seule par page.
-    await expect.poll(() => views.length).toBe(1);
-    expect(views[0]).toContain(`/api/media-contents/${contentId}/view`);
-    await expect(viewer.getByTestId("media-gallery-current")).toBeVisible();
     await expect(viewer).toContainText("1 / 2");
-    await viewer.getByRole("button", { name: "Suivante" }).click();
+    await viewer.getByRole("button", { name: "Photo suivante" }).click();
     await expect(viewer).toContainText("2 / 2");
     await viewer.getByRole("button", { name: "Fermer" }).click();
     await expect(viewer).toBeHidden();
-    await thumbs.nth(1).locator("a").click();
-    await expect(viewer).toBeVisible();
-    expect(views).toHaveLength(1);
   } finally {
     if (contentId) await dropGallery(client, contentId);
+    if (accreditationId) await client.query("delete from applications where id = $1", [accreditationId]);
     await client.end();
   }
 });
 
-test("fiche événement : la consultation de galerie est retentée après un échec", async ({ page }) => {
+test("fiche événement : la vue de l'album est comptée à l'ouverture depuis la fiche, et réessayée après un échec", async ({
+  page,
+}) => {
   const events = await apiCall<{ items: { posterUrl: string | null }[] }>(null, "GET", "/events?limit=5");
   const slug = "nocturne-de-canet-2026";
   const keys = twoKeys(events.data.items);
@@ -431,10 +436,19 @@ test("fiche événement : la consultation de galerie est retentée après un éc
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   let contentId = "";
+  let accreditationId = "";
   try {
-    const media = await client.query<{ id: string }>("select id from media_profiles where deleted_at is null limit 1");
+    const media = await client.query<{ id: string; user_id: string }>(
+      "select id, user_id from media_profiles where deleted_at is null limit 1",
+    );
     const mediaId = media.rows[0]?.id;
     if (!mediaId) throw new Error("Aucun profil média dans le seed");
+    const accreditation = await client.query<{ id: string }>(
+      `insert into applications (event_id, user_id, kind, media_profile_id, media_formats, status, rules_accepted_at, follow_structure)
+       values ($1, $2, 'media', $3, array['photo'], 'accepted', now(), false) on conflict do nothing returning id`,
+      [ev.data.id, media.rows[0]?.user_id, mediaId],
+    );
+    accreditationId = accreditation.rows[0]?.id ?? "";
     const inserted = await client.query<{ id: string }>(
       `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
        values ($1, $2, 'gallery', 'Galerie retentée E2E', null, 'other', $3) returning id`,
@@ -444,32 +458,37 @@ test("fiche événement : la consultation de galerie est retentée après un éc
     await adoptGallery(client);
     await setTheme(page, "beton");
     await page.setViewportSize(DESKTOP);
-    let calls = 0;
+    const calls: number[] = [];
     await page.route(/\/api\/media-contents\/[^/]+\/view$/, async (route) => {
-      calls += 1;
-      if (calls === 1) await route.fulfill({ status: 503, body: "" });
+      calls.push(Date.now());
+      if (calls.length === 1) await route.fulfill({ status: 503, body: "" });
       else await route.continue();
     });
+    await loginInBrowser(page, "damien@orasso.local", undefined, `/e/${slug}`);
+    await page.waitForLoadState("networkidle");
+    // Aucune vue au chargement de la fiche.
+    expect(calls).toHaveLength(0);
+    const open = () =>
+      page
+        .getByTestId("event-photos-album")
+        .filter({ hasText: "Galerie retentée E2E" })
+        .getByTestId("event-photos-open");
+    // Une vue à l'ouverture ; le premier appel échoue (503), l'album s'ouvre quand même.
+    await open().click();
+    await page.waitForURL(new RegExp(`/albums/${contentId}`));
+    await expect.poll(() => calls.length).toBe(1);
+    // Nouvelle ouverture depuis la fiche : l'appel est retenté, et réussit.
     await page.goto(`/e/${slug}`);
     await page.waitForLoadState("networkidle");
-    const content = page.getByTestId("media-content").filter({ hasText: "Galerie retentée E2E" });
-    const thumbs = content.getByTestId("media-gallery").locator("li");
-    const viewer = page.getByTestId("media-gallery-viewer");
-    await thumbs.first().locator("a").click();
-    await expect(viewer).toBeVisible();
-    await expect.poll(() => calls).toBe(1);
-    await viewer.getByRole("button", { name: "Fermer" }).click();
-    // Premier appel en échec (503) : la réouverture réessaie, et réussit.
-    await expect(viewer).toBeHidden();
-    await thumbs.nth(1).locator("a").click();
-    await expect.poll(() => calls).toBe(2);
-    await viewer.getByRole("button", { name: "Fermer" }).click();
-    // Consultation confirmée : plus d'envoi.
-    await thumbs.first().locator("a").click();
-    await expect(viewer).toBeVisible();
-    expect(calls).toBe(2);
+    expect(calls).toHaveLength(1);
+    await open().click();
+    await page.waitForURL(new RegExp(`/albums/${contentId}`));
+    await expect.poll(() => calls.length).toBe(2);
+    const counted = await client.query<{ views: number }>("select views from event_albums where id = $1", [contentId]);
+    expect(counted.rows[0]?.views).toBe(1);
   } finally {
     if (contentId) await dropGallery(client, contentId);
+    if (accreditationId) await client.query("delete from applications where id = $1", [accreditationId]);
     await client.end();
   }
 });

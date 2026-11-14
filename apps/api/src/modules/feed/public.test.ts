@@ -115,6 +115,8 @@ describe("journal et liste d'une structure, sans session", () => {
     expect(r.json.items[0].author).toMatchObject({ key: `s:${w.structure.id}`, name: "Club de test" });
     // Photo propre : l'adresse publique ; sans photo : l'affiche de l'événement.
     expect(r.json.items[0].photos[0].url).toBe(`/api/public/feed-posts/${a.row.id}/photos/${a.name}`);
+    // Une photo ordinaire (sans crédit) : exactement ces trois clés (aucun champ `credit` vide).
+    expect(Object.keys(r.json.items[0].photos[0]).sort()).toEqual(["height", "url", "width"]);
     expect(r.json.items[0].visual).toBe("photos");
     expect(r.json.items[1].visual).toBe("event_poster");
     // Rien de la personne qui a publié : ni identifiant, ni pseudo.

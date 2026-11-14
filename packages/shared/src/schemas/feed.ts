@@ -205,7 +205,14 @@ export type FeedEventSummary = {
   structure: { slug: string; name: string; logoUrl: string | null };
 };
 
-export type FeedPostPhoto = { url: string; width: number; height: number };
+/**
+ * Lot R9g (T45) : le crédit d'une photo reprise d'un album dans le journal de l'événement. **Absent** d'une photo ordinaire (la forme d'avant
+ * est gardée pour l'APK en ligne). Liste blanche : la page du média (`m:<id>`, jamais le compte derrière), son nom, l'album d'origine
+ * (`null` quand il n'est plus visible : l'écran cache « Voir l'album »). Il ne se retire pas : aucune route ne le modifie.
+ */
+export type FeedPhotoCredit = { mediaKey: string; mediaName: string; albumId: string | null };
+
+export type FeedPostPhoto = { url: string; width: number; height: number; credit?: FeedPhotoCredit };
 
 export type FeedPostView = {
   id: string;

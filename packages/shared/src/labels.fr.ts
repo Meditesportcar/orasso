@@ -25,6 +25,7 @@ export * from "./labels/devClock.fr";
 export * from "./labels/event-editor.fr";
 export * from "./labels/eventJournal.fr";
 export * from "./labels/eventNotifications.fr";
+export * from "./labels/eventPhotos.fr";
 export * from "./labels/events.fr";
 export * from "./labels/explorer.fr";
 export * from "./labels/feed.fr";

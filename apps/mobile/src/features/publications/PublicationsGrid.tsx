@@ -3,6 +3,7 @@
 // que près de l'écran (`useNearScreen`) ; la publication « affiche » (`visual: "event_poster"`) montre l'affiche de son événement.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  creditLine,
   eventJournalLabels,
   type FeedPostView,
   publicationsLabels as L,
@@ -89,6 +90,15 @@ function Tile({
             <Icon name="place" size={12} color={c.inkMuted} />
             <Text variant="caption" color={c.inkMuted} style={styles.place} testID="publication-tile-place">
               {meta.place}
+            </Text>
+          </View>
+        ) : null}
+        {/* Lot R9g (T45) : le crédit d'une photo reprise, en texte sous la vignette (jamais une pastille sur la photo). */}
+        {creditLine(photo?.credit) ? (
+          <View style={styles.placeRow}>
+            <Icon name="camera" size={12} color={c.inkMuted} />
+            <Text variant="caption" color={c.inkMuted} style={styles.place} testID="publication-tile-credit">
+              {creditLine(photo?.credit)}
             </Text>
           </View>
         ) : null}

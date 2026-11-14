@@ -30,6 +30,7 @@ import { Waiting } from "@/ui/Waiting";
 import { AlbumCover } from "./AlbumCover";
 import { AlbumPhoto } from "./AlbumPhoto";
 import { AlbumPhotoViewer } from "./AlbumPhotoViewer";
+import { OrganizerHost, useIsEventOrganizer } from "./actions/OrganizerActions";
 import { TagHost } from "./actions/TagActions";
 import { tagHost } from "./actions/tagHost";
 import { IdentifyBanner } from "./IdentifyBanner";
@@ -90,6 +91,12 @@ export function AlbumScreen({ id }: { id: string }) {
     const task = InteractionManager.runAfterInteractions(runAfterClose);
     return () => task.cancel();
   }, [viewer, runAfterClose]);
+  /** Lot R9g : les actions de l'organisateur (feuille de reprise…) s'ouvrent après la fermeture de la visionneuse. */
+  const leaveViewer = useCallback((then: () => void) => {
+    afterClose.current = then;
+    setViewer(null);
+  }, []);
+  const reloadAlbum = useCallback(() => void album.reload(), [album.reload]);
   /** Signaler la photo affichée : la visionneuse se ferme, puis la feuille de signalement s'ouvre. */
   function reportPhoto(photo: AlbumPhotoView) {
     afterClose.current = () => openReport({ type: "album_photo", id: photo.id });
@@ -129,6 +136,9 @@ export function AlbumScreen({ id }: { id: string }) {
     }
   }
 
+  // Lot R9g : l'organisateur de l'événement a ses actions dans la visionneuse (reprise au journal, album officiel) ; la visionneuse les ajoute
+  // à celles du rôle (R9f) quand la casquette d'organisateur est celle de l'événement.
+  const organizer = useIsEventOrganizer(a ?? null);
   const role = albumViewerRoleOf({ mine: Boolean(a?.mine), taggable: taggable.data });
   const identified = a?.tagsCount ?? 0;
   const hasMine = Boolean(a?.photos.some((p) => p.tags?.some((tag) => tag.mine)));
@@ -252,6 +262,7 @@ export function AlbumScreen({ id }: { id: string }) {
               album={a}
               index={viewer}
               role={role}
+              organizer={organizer}
               onClose={() => setViewer(null)}
               onDismiss={Platform.OS === "ios" ? runAfterClose : undefined}
               onReport={reportPhoto}
@@ -263,6 +274,7 @@ export function AlbumScreen({ id }: { id: string }) {
               }}
             />
           ) : null}
+          <OrganizerHost album={a ?? null} leaveViewer={leaveViewer} onChanged={reloadAlbum} />
         </Overlay>
       }
     >
