@@ -1,7 +1,9 @@
 // Carte « souvenir » du Fil sur le site (lot R7j) : personnelle, visible de moi seul. « Il y a un an, tu étais à … », la
 // photo masquée de ma voiture (sinon l'affiche), « Voir » ouvre la page du souvenir.
+
 import { Icon } from "@orasso/design-system/web";
 import { memoryLabels } from "@orasso/shared";
+import { MemoryAlbumLine } from "../albums/AlbumMentions";
 
 import "../../styles/souvenirs.css";
 import { PassportStamp } from "../PassportStamp";
@@ -35,6 +37,11 @@ export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
         </>
       }
     >
+      <MemoryAlbumLine
+        albumPhotos={memory.albumPhotos}
+        carLabel={memory.car?.label ?? null}
+        testId="feed-memory-album"
+      />
       <a className="fil-media sv-fil-media" href={href} aria-label={memory.title}>
         {image ? <img src={image} alt="" loading="lazy" /> : null}
         <span className="sv-poster__stamp" aria-hidden="true" data-testid="feed-memory-stamp">

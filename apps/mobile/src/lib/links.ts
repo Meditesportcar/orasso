@@ -50,6 +50,9 @@ const NETWORK_LINK = "/app/reseau";
 const SPOT_LINK = /^\/app\/spot\/([0-9a-f-]{36})$/;
 const CREW_LINK = /^\/c\/([a-z0-9-]{1,80})(\?onglet=sorties)?$/;
 
+/** Lot R9f : un album (`/app/albums/<id>` du site) et « Tes photos » (`/app/albums/<id>/mes-photos`) → `/album/<id>[/mes-photos]`. */
+const ALBUM_LINK = /^\/app\/albums\/([0-9a-f-]{36})(\/mes-photos)?$/;
+
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (APP_LINK.test(value)) return value;
@@ -67,6 +70,8 @@ export function appLinkOf(value: unknown): string | null {
   if (spot) return `/spot/${spot[1]}`;
   const crew = CREW_LINK.exec(value);
   if (crew) return `/crew/${crew[1]}${crew[2] ?? ""}`;
+  const album = ALBUM_LINK.exec(value);
+  if (album) return `/album/${album[1]}${album[2] ?? ""}`;
   const review = REVIEW_LINK.exec(value);
   if (review) return `/acces?avis=${review[1]}`;
   return inboxPathOf(value);

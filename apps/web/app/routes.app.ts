@@ -70,6 +70,9 @@ export default [
     route("m/:id", "routes/m.tsx"),
     // Lot R9e : un album des médias, ouvert (`/albums/:id`, page publique, hors du bloc de casquette).
     route("albums/:id", "routes/album.tsx"),
+    // Lot R9f : « Tes photos » (les photos d'un album où je suis identifié).
+    route("app/albums/:id", "routes/album.tsx", { id: "album-app" }),
+    route("app/albums/:id/mes-photos", "routes/app-album-mes-photos.tsx"),
     route("providers/:id", "routes/prestataires.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),
