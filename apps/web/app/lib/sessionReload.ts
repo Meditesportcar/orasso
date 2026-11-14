@@ -54,12 +54,45 @@ function replaceByGet(): void {
 // Un rechargement lancé : un second appel (deux effets, deux annonces) ne le recompte pas.
 let reloading = false;
 
+/** Au bout de ce délai, un rechargement lancé qui n'a pas quitté la page est tenu pour échoué (« Recharger la page »). */
+export const RELOAD_STALL_MS = 8_000;
+let stallTimer: ReturnType<typeof setTimeout> | null = null;
+const stallListeners = new Set<() => void>();
+
+function clearStall(): void {
+  if (stallTimer !== null) clearTimeout(stallTimer);
+  stallTimer = null;
+}
+
+/** Le rechargement n'a pas quitté la page : le verrou est levé (un nouvel essai est possible) et les pages abonnées passent « failed ». */
+function armStall(): void {
+  clearStall();
+  stallTimer = setTimeout(() => {
+    stallTimer = null;
+    reloading = false;
+    for (const listener of [...stallListeners]) listener();
+  }, RELOAD_STALL_MS);
+}
+
+/** Le verrou global est levé (document restauré depuis le cache de navigation : il revenait avec `reloading === true`). */
+export function resetReloadLock(): void {
+  reloading = false;
+  clearStall();
+}
+
+/** S'abonne à « le rechargement n'a pas quitté la page » ; renvoie le désabonnement. */
+export function onReloadStalled(listener: () => void): () => void {
+  stallListeners.add(listener);
+  return () => void stallListeners.delete(listener);
+}
+
 /** Rechargement automatique compté : « started » (la page part, ou part déjà) ou « refused » (trop de rechargements : boucle). */
 export function reloadAutomatically(scope: string): "started" | "refused" {
   if (reloading) return "started";
   if (!mayReload(scope, Date.now())) return "refused";
   reloading = true;
   replaceByGet();
+  armStall();
   return "started";
 }
 
@@ -73,6 +106,7 @@ export function reloadManually(scope: string): void {
   if (window.name.startsWith(MARK)) window.name = "";
   reloading = true;
   replaceByGet();
+  armStall();
 }
 
 /**
@@ -101,6 +135,33 @@ export function nextConfirmation(was: SessionConfirmation, res: MeResult, owner:
   return was === "checking" || was === "failed" ? "failed" : was;
 }
 
+/**
+ * L'état de confirmation LIÉ au compte et à l'origine de la page qu'il a confirmés : une instance gardée montée qui reçoit un autre
+ * `owner` (ou un nouveau résultat « après un rechargement ») ne garde jamais le « ok » de l'ancien.
+ */
+export type TrackedConfirmation = { owner: string; afterReload: boolean; state: SessionConfirmation };
+
+export const freshConfirmation = (owner: string, afterReload: boolean): TrackedConfirmation => ({
+  owner,
+  afterReload,
+  state: afterReload ? "checking" : "ok",
+});
+
+/** Au rendu : si `owner` ou `afterReload` a changé, une nouvelle confirmation est demandée (« checking » tout de suite, pas dans un effet). */
+export const trackConfirmation = (
+  prev: TrackedConfirmation,
+  owner: string,
+  afterReload: boolean,
+): TrackedConfirmation =>
+  prev.owner === owner && prev.afterReload === afterReload ? prev : freshConfirmation(owner, afterReload);
+
+/** Applique une transition ; la réponse d'une vérification faite pour un autre compte que celui suivi est ignorée. */
+export const applyConfirmation = (
+  prev: TrackedConfirmation,
+  forOwner: string,
+  next: (was: SessionConfirmation) => SessionConfirmation,
+): TrackedConfirmation => (prev.owner === forOwner ? { ...prev, state: next(prev.state) } : prev);
+
 /** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
 export function createConfirmer(read: () => Promise<MeResult>) {
   let seq = 0;
@@ -120,10 +181,20 @@ export function createConfirmer(read: () => Promise<MeResult>) {
  * lit `isAfterReload`) : elle démarre « checking » et le reste jusqu'à ce que `/me` confirme `owner`.
  */
 export function useSessionConfirmation(owner: string, afterReload: boolean): SessionConfirmation {
-  const [state, setState] = useState<SessionConfirmation>(afterReload ? "checking" : "ok");
+  const [tracked, setTracked] = useState<TrackedConfirmation>(() => freshConfirmation(owner, afterReload));
+  // Réajusté au rendu (modèle React « état dérivé »), avant tout effet : « checking » dès que le compte ou l'origine change.
+  const current = trackConfirmation(tracked, owner, afterReload);
+  if (current !== tracked) setTracked(current);
+  const [stalled, setStalled] = useState(false);
   const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
   if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
-  const verify = useCallback(() => (confirmer.current as ReturnType<typeof createConfirmer>)(owner, setState), [owner]);
+  const verify = useCallback(
+    () =>
+      (confirmer.current as ReturnType<typeof createConfirmer>)(owner, (next) =>
+        setTracked((prev) => applyConfirmation(prev, owner, next)),
+      ),
+    [owner],
+  );
   const first = useRef(true);
   useEffect(() => {
     const wasFirst = first.current;
@@ -152,20 +223,27 @@ export function useSessionConfirmation(owner: string, afterReload: boolean): Ses
       void verify();
     };
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) void verify();
+      if (e.persisted) {
+        // Document restauré : son verrou de rechargement et son éventuel échec datent d'avant.
+        resetReloadLock();
+        setStalled(false);
+        void verify();
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
+    const offStalled = onReloadStalled(() => setStalled(true));
     return () => {
+      offStalled();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [verify]);
-  return state;
+  return stalled ? "failed" : current.state;
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */

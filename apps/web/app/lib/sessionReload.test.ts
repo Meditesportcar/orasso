@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AFTER_RELOAD_PARAM,
+  applyConfirmation,
   createConfirmer,
+  freshConfirmation,
   isAfterReload,
   isForeign,
   ME_TIMEOUT_MS,
@@ -15,6 +17,7 @@ import {
   reloadAutomatically,
   reloadManually,
   type SessionConfirmation,
+  trackConfirmation,
 } from "./sessionReload";
 
 function stubWindow(opts: { storage: boolean; search?: string; hash?: string }) {
@@ -250,5 +253,100 @@ describe("confirmation du compte après un rechargement", () => {
 
   it("le délai de /me est de 10 s", () => {
     expect(ME_TIMEOUT_MS).toBe(10_000);
+  });
+});
+
+// Partie B1, tour 9 : la confirmation liée au propriétaire confirmé, et le verrou de rechargement levé à la restauration / au blocage.
+
+describe("confirmation liée au propriétaire (instance gardée montée)", () => {
+  it("un autre owner redemande une confirmation tout de suite : « checking », jamais le « ok » de l'ancien", async () => {
+    // Instance montée sur A, confirmée.
+    let tracked = freshConfirmation("A", false);
+    expect(tracked.state).toBe("ok");
+    // Un nouveau résultat « pending » (afterReload) pour B arrive sans remontage : au rendu, « checking » (donc aucune navigation).
+    tracked = trackConfirmation(tracked, "B", true);
+    expect(tracked.state).toBe("checking");
+    // /me est retenu : la page reste « checking » (la navigation n'a lieu que pour « ok »).
+    let release: (r: MeResult) => void = () => {};
+    const verify = createConfirmer(() => new Promise<MeResult>((resolve) => (release = resolve)));
+    const done = verify("B", (next) => {
+      tracked = applyConfirmation(tracked, "B", next);
+    });
+    expect(tracked.state).toBe("checking");
+    // La réponse arrive : « ok ».
+    release(me("B"));
+    await done;
+    expect(tracked.state).toBe("ok");
+  });
+
+  it("afterReload qui passe à vrai pour le même compte redemande aussi une confirmation ; rien ne change sinon", () => {
+    const ok = freshConfirmation("A", false);
+    expect(trackConfirmation(ok, "A", false)).toBe(ok);
+    expect(trackConfirmation(ok, "A", true).state).toBe("checking");
+  });
+
+  it("la réponse d'une vérification faite pour l'ancien compte est ignorée", () => {
+    const now = trackConfirmation(freshConfirmation("A", false), "B", true);
+    expect(applyConfirmation(now, "A", () => "ok")).toBe(now);
+    expect(applyConfirmation(now, "B", () => "ok").state).toBe("ok");
+  });
+});
+
+describe("verrou global de rechargement", () => {
+  it("document restauré (pageshow persisté) : le verrou est levé, un nouveau changement de compte navigue", async () => {
+    vi.resetModules();
+    const { replaced } = stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    expect(mod.reloadAutomatically("crew")).toBe("started");
+    expect(replaced).toHaveLength(1);
+    // Sans levée du verrou : « started » sans naviguer (le défaut corrigé).
+    expect(mod.reloadAutomatically("crew")).toBe("started");
+    expect(replaced).toHaveLength(1);
+    // Restauration depuis le cache de navigation.
+    mod.resetReloadLock();
+    expect(mod.reloadAutomatically("crew")).toBe("started");
+    expect(replaced).toHaveLength(2);
+    mod.resetReloadLock();
+  });
+
+  it("un rechargement qui n'a pas quitté la page au bout du délai : abonnés prévenus (« failed »), verrou levé", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      const { replaced } = stubWindow({ storage: true });
+      const mod = await import("./sessionReload");
+      const stalled = vi.fn();
+      const off = mod.onReloadStalled(stalled);
+      mod.reloadAutomatically("crew");
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS - 1);
+      expect(stalled).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(stalled).toHaveBeenCalledTimes(1);
+      // Le verrou est levé : le bouton « Recharger la page » (ou un nouvel essai) navigue.
+      mod.reloadManually("crew");
+      expect(replaced).toHaveLength(2);
+      off();
+      mod.resetReloadLock();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("la restauration annule le minuteur de blocage", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      stubWindow({ storage: true });
+      const mod = await import("./sessionReload");
+      const stalled = vi.fn();
+      const off = mod.onReloadStalled(stalled);
+      mod.reloadAutomatically("crew");
+      mod.resetReloadLock();
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS * 2);
+      expect(stalled).not.toHaveBeenCalled();
+      off();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
