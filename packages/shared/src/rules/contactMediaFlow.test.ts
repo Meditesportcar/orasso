@@ -95,11 +95,13 @@ describe("« Contacter <média> » : l'enchaînement", () => {
     await p2;
     expect(t.log.navigated).toEqual(["neuve"]);
   });
-  it("l'appel qui ne se termine jamais, borné par l'écran (délai), rend une erreur et libère le bouton", async () => {
+  it("un appel qui lève devient le message de reprise et libère le bouton (la borne du délai est prouvée par contactMedia.test.ts)", async () => {
     const t = setup();
-    // L'écran borne l'appel : au bout du délai la requête est abandonnée et rend `ok: false`.
-    await t.flow.open(async () => ({ ok: false, message: CONTACT_MEDIA_FALLBACK_MESSAGE }), t.hooks);
+    await t.flow.open(async () => {
+      throw new Error("abandonné");
+    }, t.hooks);
     expect(t.log.errors.at(-1)).toBe(CONTACT_MEDIA_FALLBACK_MESSAGE);
     expect(t.log.busy.at(-1)).toBe(false);
+    expect(t.log.navigated).toEqual([]);
   });
 });

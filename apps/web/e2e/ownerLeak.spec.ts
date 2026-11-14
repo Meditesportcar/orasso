@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { apiOrLoaderData, hasNoBody, OWNER_PSEUDO, type ResponseLike, watchOwnerLeak } from "./ownerLeak";
+import {
+  apiOrLoaderData,
+  hasNoBody,
+  OWNER_PSEUDO,
+  type RequestLike,
+  type ResponseLike,
+  type WebSocketLike,
+  watchOwnerLeak,
+} from "./ownerLeak";
 
 // Le contrôle de confidentialité (`ownerLeak.ts`) s'éprouve hors navigateur, sur de fausses réponses : il doit échouer quand un corps attendu
 // reste illisible ou arrive après le délai, et quand un marqueur du titulaire s'y trouve. `legacyDone` est l'ancien contrôle des recettes
@@ -9,20 +17,37 @@ const MARKERS = [OWNER_PSEUDO, "leo@orasso.local", "11111111-2222-4333-8444-5555
 type Fake = Partial<Omit<ResponseLike, "url">> & { url?: string };
 
 function fakePage() {
-  let listener: (r: ResponseLike) => void = () => undefined;
+  const listeners = new Map<string, (arg: never) => void>();
+  const sockets: ((frame: { payload: string | Uint8Array }) => void)[] = [];
+  const request = (url = "http://x.test/api/ok"): RequestLike => ({ url: () => url, headers: () => ({}) });
   return {
     page: {
-      on: (_e: "response", l: (r: ResponseLike) => void) => {
-        listener = l;
+      on: (e: string, l: (arg: never) => void) => {
+        listeners.set(e, l);
       },
     },
     emit: (r: Fake) =>
-      listener({
+      (listeners.get("response") as (r: ResponseLike) => void)({
         url: () => r.url ?? "http://x.test/api/ok",
         status: r.status ?? (() => 200),
         headers: r.headers ?? (() => ({})),
         text: r.text ?? (async () => "{}"),
       }),
+    request,
+    start: (req: RequestLike) => (listeners.get("request") as (r: RequestLike) => void)(req),
+    finish: (req: RequestLike) => (listeners.get("requestfinished") as (r: RequestLike) => void)(req),
+    socket: (url = "ws://x.test/api/ws") => {
+      const ws: WebSocketLike = {
+        url: () => url,
+        on: (_e, l) => {
+          sockets.push(l);
+        },
+      };
+      (listeners.get("websocket") as (w: WebSocketLike) => void)(ws);
+    },
+    frame: (payload: string | Uint8Array) => {
+      for (const l of sockets) l({ payload });
+    },
   };
 }
 const body = (text: string): Fake => ({ text: async () => text });
@@ -33,7 +58,7 @@ const late = (text: string, ms: number): Fake => ({
 /** L'ancien contrôle, tel qu'il était (délai et erreur de lecture => `""`, `texts.length > 0`). */
 async function legacyDone(f: ReturnType<typeof fakePage>, emit: () => void, timeoutMs: number) {
   const reads: Promise<string>[] = [];
-  f.page.on("response", (res) => {
+  f.page.on("response", (res: ResponseLike) => {
     if (!res.url().includes("/api/")) return;
     if (res.headers()["content-type"]?.includes("event-stream")) return;
     reads.push(
@@ -126,4 +151,80 @@ test("le site écoute aussi les données des chargeurs (*.data) ; l'appli seulem
   f.emit(body('{"ok":true}'));
   f.emit({ url: data, ...body(`[{"by":"${OWNER_PSEUDO}"}]`) });
   await expect(w.done()).rejects.toThrow(/portent le pseudo/);
+});
+
+// Tour 3 : l'ancien contrôle ne prenait que les lectures présentes à l'appel de `done()` (`Promise.all(reads)`) ; une réponse arrivée
+// pendant l'attente finale n'était pas contrôlée.
+async function previousDone(f: ReturnType<typeof fakePage>, whileWaiting: () => void) {
+  const reads: Promise<string>[] = [];
+  f.page.on("response", ((res: ResponseLike) => reads.push(res.text())) as never);
+  f.emit(late('{"ok":true}', 80));
+  const waiting = Promise.all(reads);
+  setTimeout(whileWaiting, 20);
+  const texts = await waiting;
+  expect(texts.filter((t) => t.includes(OWNER_PSEUDO))).toEqual([]);
+}
+
+test("ancien contrôle : une réponse arrivée pendant l'attente finale, qui porte le pseudo, passait à tort", async () => {
+  const f = fakePage();
+  await previousDone(f, () => f.emit(body(`{"by":"${OWNER_PSEUDO}"}`)));
+});
+
+test("nouveau contrôle : la réponse arrivée pendant l'attente finale est contrôlée (pseudo => échec)", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(late('{"ok":true}', 80));
+  const done = w.done();
+  setTimeout(() => f.emit(body(`{"by":"${OWNER_PSEUDO}"}`)), 20);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});
+
+test("une requête partie mais sans réponse encore à l'appel de done() est attendue, puis contrôlée", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(body('{"ok":true}'));
+  const req = f.request();
+  f.start(req);
+  const done = w.done();
+  setTimeout(() => {
+    f.emit(body(`{"by":"${OWNER_PSEUDO}"}`));
+    f.finish(req);
+  }, 30);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});
+
+test("une requête qui ne se termine jamais fait échouer au délai (corps jamais lu)", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS, readTimeoutMs: 80 });
+  f.emit(body('{"ok":true}'));
+  f.start(f.request("http://x.test/api/jamais"));
+  await expect(w.done()).rejects.toThrow(/requête encore en route/);
+});
+
+test("une requête de flux n'est pas attendue ; une requête terminée ou abandonnée non plus", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS, readTimeoutMs: 80 });
+  f.emit(body('{"ok":true}'));
+  f.start({ url: () => "http://x.test/api/stream", headers: () => ({ accept: "text/event-stream" }) });
+  const r = f.request();
+  f.start(r);
+  f.finish(r);
+  await expect(w.done()).resolves.toBeUndefined();
+});
+
+test("temps réel : une trame reçue du WebSocket qui porte le pseudo fait échouer ; une trame propre passe", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(body('{"ok":true}'));
+  f.socket();
+  f.frame('{"type":"message","by":"Kenji_66"}');
+  await expect(w.done()).resolves.toBeUndefined();
+  f.frame(new TextEncoder().encode(`{"type":"message","by":"${OWNER_PSEUDO}"}`));
+  await expect(w.done()).rejects.toThrow(/portent le pseudo/);
+  const g = fakePage();
+  const w2 = watchOwnerLeak(g.page, { markers: MARKERS });
+  g.emit(body('{"ok":true}'));
+  g.socket("ws://x.test/vite-hmr");
+  g.frame(OWNER_PSEUDO);
+  await expect(w2.done()).resolves.toBeUndefined();
 });

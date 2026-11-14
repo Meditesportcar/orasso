@@ -7,9 +7,9 @@ import {
   messagingLabels,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { Form, useActionData, useNavigate, useNavigation } from "react-router";
+import { Form, useActionData, useLocation, useNavigate, useNavigation } from "react-router";
 
-import { contactMediaCall } from "../lib/contactMedia";
+import { contactMediaCall, guardedNavigate, type NavigationSnapshot, navigationLeavesPage } from "../lib/contactMedia";
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
@@ -108,41 +108,60 @@ export function ContactOrganizer({
 }
 
 /**
- * « Contacter <média> » depuis « Tes photos » (lot R9i, partie 2) : ouvre ou rouvre la conversation de la page du média, montrée
- * sous son nom et son logo (jamais le compte qui la tient). `header` : le bouton de l'en-tête ; `row` : la rangée de la feuille
- * d'une photo. Le refus de l'API (403, 404) est dit par le libellé de l'API, rendu par l'écran (`onError`).
+ * L'enchaînement « Contacter <média> » depuis « Tes photos » (lot R9i) : un seul par écran, partagé par le bouton de l'en-tête et la
+ * rangée de la feuille. Périmé au démontage, et dès qu'une navigation vers une autre adresse commence (l'ancien écran reste monté
+ * pendant que les chargeurs de la page suivante tournent) ; la navigation n'a lieu que si le routeur est au repos à la réponse.
  */
-export function ContactMedia({
-  mediaKey,
-  name,
-  variant,
-  onError,
-}: {
-  mediaKey: string;
-  name: string;
-  variant: "header" | "row";
-  onError: (message: string | null) => void;
-}) {
+export function useContactMedia(mediaKey: string, onError: (message: string | null) => void) {
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const location = useLocation();
   const [busy, setBusy] = useState(false);
-  // Une opération à la fois, périmée au démontage (retour arrière, autre écran) : sa réponse tardive n'ouvre rien et ne dit rien.
   const flow = useRef(createContactMediaFlow());
+  // Lu à l'instant de la réponse, pas au rendu qui a lancé l'appel.
+  const nav = useRef<NavigationSnapshot>({ state: navigation.state, pathname: navigation.location?.pathname ?? null });
+  nav.current = { state: navigation.state, pathname: navigation.location?.pathname ?? null };
   useEffect(() => {
     const f = flow.current;
     return () => f.cancel();
   }, []);
+  const leaving = navigationLeavesPage(nav.current, location.pathname);
+  useEffect(() => {
+    if (leaving) flow.current.cancel(setBusy);
+  }, [leaving]);
   const open = () => {
     const call = contactMediaCall(mediaKey);
     if (!call) return;
     void flow.current.open(call, {
       setBusy,
       onError,
-      navigate: (id) => navigate(`/app/messages/${id}`),
+      navigate: guardedNavigate(() => nav.current, navigate),
     });
   };
+  return { busy, open };
+}
+
+/** Le bouton de l'en-tête (`header`) ou la rangée de la feuille d'une photo (`row`) : l'enchaînement vient de `useContactMedia`. */
+export function ContactMedia({
+  name,
+  variant,
+  busy,
+  onOpen,
+}: {
+  name: string;
+  variant: "header" | "row";
+  busy: boolean;
+  onOpen: () => void;
+}) {
   if (variant === "row") {
     return (
-      <button type="button" className="myp-sheet__row" disabled={busy} onClick={open} data-testid="photo-sheet-contact">
+      <button
+        type="button"
+        className="myp-sheet__row"
+        disabled={busy}
+        onClick={onOpen}
+        data-testid="photo-sheet-contact"
+      >
         <Icon name="chat" size={20} />
         <span>
           <strong>{albumTagLabels.contactName(name)}</strong>
@@ -152,7 +171,14 @@ export function ContactMedia({
     );
   }
   return (
-    <Button type="button" variant="secondary" icon="chat" loading={busy} onClick={open} data-testid="my-photos-contact">
+    <Button
+      type="button"
+      variant="secondary"
+      icon="chat"
+      loading={busy}
+      onClick={onOpen}
+      data-testid="my-photos-contact"
+    >
       {albumTagLabels.contact}
     </Button>
   );
