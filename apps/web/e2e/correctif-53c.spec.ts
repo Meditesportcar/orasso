@@ -246,7 +246,7 @@ test("clic en attente puis sortie par le ✕ de l'en-tête : rien n'est enregist
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
   // Sortie par le lien de l'en-tête : l'attente est annulée, la page quittée ; la réponse arrive trop tard pour agir.
   await page.locator(".o-appbar__close").first().click();
-  await page.waitForURL(/\/orga\/meditesportcar(\?|$)/, { timeout: 30_000 });
+  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(\\?|$)`), { timeout: 30_000 });
   release();
   await page.waitForLoadState("networkidle");
   expect(writes).toEqual([]);
