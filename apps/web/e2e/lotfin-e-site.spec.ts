@@ -1157,6 +1157,57 @@ test.describe("B2a : une publication de story qui ne répond pas", () => {
     await ctx.close();
   });
 
+  test("reprise réelle : la 1re publication aboutit après le délai, le nouvel essai (même clé) ne crée pas de 2e story", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const author = await who("StB2aReprise");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await toSend(a, author.email, "Reprise après le délai");
+    const keys: string[] = [];
+    let posts = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await a.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      posts += 1;
+      keys.push((route.request().postDataJSON() as { uploadKey?: string }).uploadKey ?? "");
+      if (posts > 1) return route.continue();
+      // 1re requête : retenue au-delà du délai de 20 s du composeur, PUIS livrée à l'API (la story est créée, la réponse est perdue).
+      await gate;
+      try {
+        await route.fetch();
+        await route.abort();
+      } catch {
+        // La page a déjà abandonné la requête : la livraison à l'API a eu lieu avant.
+      }
+    });
+    await a.getByTestId("story-publish-send").click();
+    await expect(a.getByTestId("story-error")).toBeVisible({ timeout: 60_000 });
+    const message = await a.getByTestId("story-error").innerText();
+    expect(message).toContain("Ta story a peut-être été publiée");
+    expect(message).toContain("pas publiée deux fois");
+    expect(message).not.toContain("profil");
+    // La 1re requête aboutit maintenant, côté API, après l'abandon du composeur.
+    release();
+    await expect.poll(async () => (await storiesOf(author, author.id)).length, { timeout: 30_000 }).toBe(1);
+    const first = (await storiesOf(author, author.id))[0];
+    // Le composeur est toujours là, le brouillon intact : on réessaie ici, avec la même clé.
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    await a.getByTestId("story-publish-send").click();
+    await expect.poll(() => posts, { timeout: 30_000 }).toBe(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]?.length ?? 0).toBeGreaterThan(0);
+    await expect(a.getByTestId("story-error")).toHaveCount(0, { timeout: 30_000 });
+    const stories = await storiesOf(author, author.id);
+    expect(stories.map((x) => x.id)).toEqual([first?.id]);
+    await ctx.close();
+  });
+
   test("l'annonce de B pendant un envoi sans réponse : l'état neutre se termine au délai, « peut-être publiée »", async ({
     browser,
   }) => {

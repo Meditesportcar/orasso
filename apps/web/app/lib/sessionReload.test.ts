@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "./api.client";
 import {
   AFTER_RELOAD_PARAM,
+  beginSharedRequest,
   createConfirmer,
   deriveConfirmation,
   fetchMe,
@@ -13,12 +14,19 @@ import {
   ME_TIMEOUT_MS,
   type MeKnowledge,
   type MeResult,
+  markSharedLayout,
   mayReload,
   nextAnnounced,
+  noteForeignAnnouncement,
+  publishSharedMe,
   recordMe,
   reloadAutomatically,
   reloadManually,
+  resetSharedMe,
   type SessionConfirmation,
+  sharedConfirmation,
+  sharedConfirmedMe,
+  subscribeShared,
   unknownMe,
 } from "./sessionReload";
 
@@ -578,5 +586,90 @@ describe("la mise en page sous la marque : un seul compteur", () => {
     expect(deriveConfirmation({ me: "B", failed: false }, "C", true)).toBe("mismatch");
     expect(typeof mod.useSharedConfirmation).toBe("function");
     expect(typeof mod.resetSharedMe).toBe("function");
+  });
+});
+
+// B2a, tour 2 : l'état partagé avec la mise en page, lu sans React (numéros de départ, annonces étrangères, repère de la mise en page).
+describe("la confirmation partagée avec la mise en page (sans React)", () => {
+  beforeEach(() => resetSharedMe());
+  afterEach(() => resetSharedMe());
+
+  it("publier puis lire : la mise en page retient un /me parti après son repère", () => {
+    const since = markSharedLayout();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmedMe(since)).toBe("B");
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    expect(sharedConfirmation("C", true, since)).toBe("mismatch");
+  });
+
+  it("l'abonné n'est prévenu qu'une fois pour la même publication ; undefined est sans effet", () => {
+    const seen = vi.fn();
+    const off = subscribeShared(seen);
+    const at = beginSharedRequest();
+    publishSharedMe(undefined, at);
+    expect(seen).not.toHaveBeenCalled();
+    publishSharedMe("B", at);
+    publishSharedMe("B", at);
+    expect(seen).toHaveBeenCalledTimes(1);
+    off();
+    publishSharedMe("C", beginSharedRequest());
+    expect(seen).toHaveBeenCalledTimes(1);
+  });
+
+  it("une réponse plus ancienne que celle retenue ne la remplace pas ; une plus récente, si", () => {
+    const first = beginSharedRequest();
+    const second = beginSharedRequest();
+    publishSharedMe("C", second);
+    publishSharedMe("B", first);
+    expect(sharedConfirmedMe(0)).toBe("C");
+    publishSharedMe("D", beginSharedRequest());
+    expect(sharedConfirmedMe(0)).toBe("D");
+  });
+
+  it("resetSharedMe remet tout à zéro", () => {
+    publishSharedMe("B", beginSharedRequest());
+    resetSharedMe();
+    expect(sharedConfirmedMe(0)).toBeUndefined();
+    expect(sharedConfirmation("B", true, 0)).toBe("checking");
+  });
+
+  it("/me retenu, annonce de C, puis livraison de la réponse retardée de B : pas « ok »", () => {
+    const since = markSharedLayout();
+    const slow = beginSharedRequest(); // le /me de B part…
+    noteForeignAnnouncement(); // …C s'annonce depuis une autre fenêtre…
+    publishSharedMe("B", slow); // …la réponse de B arrive après.
+    expect(sharedConfirmedMe(since)).toBeUndefined();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+  });
+
+  it("une annonce étrangère fait tomber une confirmation déjà retenue ; un /me parti après elle la rétablit", () => {
+    const since = markSharedLayout();
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    const seen = vi.fn();
+    const off = subscribeShared(seen);
+    noteForeignAnnouncement();
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    off();
+  });
+
+  it("une publication antérieure au chargeur (repère de la mise en page) est ignorée", () => {
+    publishSharedMe("B", beginSharedRequest()); // l'ancien document de la page, avant le chargeur
+    const since = markSharedLayout(); // le `loaderData` de la mise en page change (retour arrière côté client)
+    expect(sharedConfirmedMe(since)).toBeUndefined();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest()); // un /me parti après le repère
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+  });
+
+  it("un /me parti avant le repère mais livré après est ignoré", () => {
+    const early = beginSharedRequest();
+    const since = markSharedLayout();
+    publishSharedMe("B", early);
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
   });
 });
