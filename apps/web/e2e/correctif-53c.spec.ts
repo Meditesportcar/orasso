@@ -49,7 +49,10 @@ async function openWizard(page: Page, id: string, temps: string) {
   if (await restored.isVisible().catch(() => false)) await restored.getByRole("button").click();
 }
 
-test("missions chargées après une saisie : aucune n'est supprimée ; sans elles, rien ne s'enregistre", async ({
+// R9-assistant (décision de Damien du 14/11/2026, option B) : un clic donné pendant le chargement des missions n'est plus
+// refusé (« se chargent ») : il est mis en attente (« Chargement… ») et part tout seul à l'arrivée des missions ; rien ne
+// s'enregistre sans elles ; si leur lecture échoue, le clic en attente est annulé et la panne est dite.
+test("missions chargées après une saisie : clic mis en attente puis exécuté, aucune mission supprimée ; sans elles, rien ne s'enregistre", async ({
   browser,
 }) => {
   test.setTimeout(180_000);
@@ -72,17 +75,20 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   const title = `Renommé ${unique()}`;
   await page.getByLabel("Titre").fill(title);
   await page.getByRole("button", { name: "Continuer" }).click();
-  await expect(page.getByTestId("wizard-error")).toContainText("se chargent");
+  // Clic mis en attente : le bouton passe en chargement, l'assistant reste au temps 1, rien n'est enregistré, aucun refus.
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  await expect(page.getByTestId("wizard-next")).toHaveAttribute("aria-busy", "true");
   await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
   const answered = page.waitForResponse(
     (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
   );
   release();
   await answered;
-  // Les missions arrivées, le refus « se chargent » ne reste plus affiché.
-  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
-  await page.getByRole("button", { name: "Continuer" }).click();
+  // Les missions arrivées, le clic en attente part tout seul : le temps 2 s'ouvre sans nouveau clic.
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
   expect((await needsOf(damien, id)).map((n) => n.trade).sort()).toEqual(["food_truck", "photographer"]);
   const ev = await apiCall<{ title: string }>(damien, "GET", `/events/${id}`);
   expect(ev.data.title).toBe(title);
@@ -119,6 +125,52 @@ test("missions chargées après une saisie : aucune n'est supprimée ; sans elle
   await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
   expect(await needsOf(damien, id)).toHaveLength(2);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(`${title} bis`);
+  await ctx.close();
+});
+
+test("panne de lecture des missions pendant l'attente : le clic en attente est annulé, la panne est dite, rien n'est enregistré", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Attente ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    await held;
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "unavailable", message: "Indisponible." } }),
+    });
+  });
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  const title = `Jamais ${unique()}`;
+  await page.getByLabel("Titre").fill(title);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  release();
+  // Panne : le clic en attente est annulé (le bouton redevient « Continuer »), la panne est dite, rien n'est enregistré.
+  await expect(page.getByTestId("wizard-error")).toContainText("n'ont pas pu être chargées");
+  await expect(page.getByTestId("wizard-needs-failed")).toBeVisible();
+  await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(title);
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  // « Recharger les missions » rend la main : un nouveau clic aboutit.
+  await page.unroute(`**/api/events/${id}/needs`);
+  await page.getByRole("button", { name: "Recharger les missions" }).click();
+  await expect(page.getByTestId("wizard-needs-failed")).toHaveCount(0);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
   await ctx.close();
 });
 

@@ -417,6 +417,8 @@ export const wizardV2Labels = {
   needsLoading: "Les missions de l'événement se chargent : attends un instant avant d'enregistrer.",
   needsFailed: "Les missions de l'événement n'ont pas pu être chargées : rien n'est enregistré tant qu'elles manquent.",
   needsRetry: "Recharger les missions",
+  // R9-assistant (14/11/2026) : libellé du bouton dont le clic attend l'arrivée des missions.
+  needsWaiting: "Chargement…",
   posterStillSending: "La photo de l'affiche s'envoie encore : attends la fin de l'envoi.",
 } as const;
 
