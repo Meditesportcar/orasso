@@ -1,6 +1,6 @@
 // Lot B2b, tour 1 : les « Voir plus » des événements d'une Page : générations, réponses inversées, jamais de remise à zéro
 // pour un tableau relu à l'identique.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { type EventsPageResult, EventsPager, type EventsPagerState, eventsPagerKey, mergeEvents } from "./eventsPager";
 
@@ -18,7 +18,7 @@ function deferred() {
 
 function setup(fetchPage: (cursor: string) => Promise<EventsPageResult<E>>, firstNext: string | null = "c1") {
   const seen: EventsPagerState<E>[] = [];
-  const key = eventsPagerKey("s1", "upcoming", null, firstNext);
+  const key = eventsPagerKey("s1", "upcoming", null);
   const pager = new EventsPager<E>(fetchPage, (s) => seen.push(s), key, firstNext);
   return { pager, seen, key };
 }
@@ -87,23 +87,23 @@ describe("événements d'une Page : « Voir plus »", () => {
     expect(calls).toBe(1);
   });
 
-  it("une réponse arrivée après une relecture de la page (nouvelle génération) est écartée", async () => {
+  it("une réponse arrivée après une relecture de la page (même curseur) est écartée", async () => {
     const old = deferred();
-    const { pager } = setup(() => old.promise);
+    const { pager, key } = setup(() => old.promise);
     const slow = pager.more();
-    // La page est relue : autre curseur de la suite, donc autre génération.
-    pager.sync(eventsPagerKey("s1", "upcoming", null, "d1"), "d1");
-    expect(pager.current).toMatchObject({ next: "d1", extra: [], busy: false });
+    // La page est relue, curseur suivant inchangé : nouvelle génération quand même.
+    pager.sync(key, "c1");
+    expect(pager.current).toMatchObject({ next: "c1", extra: [], busy: false });
     old.resolve({ ok: true, data: { items: ev("vieux"), nextCursor: "vieux-suite" } });
     await slow;
-    expect(pager.current).toMatchObject({ next: "d1", extra: [], failed: false });
+    expect(pager.current).toMatchObject({ next: "c1", extra: [], failed: false });
   });
 
   it("un échec arrivé en retard d'une ancienne génération n'affiche aucune panne", async () => {
     const old = deferred();
-    const { pager } = setup(() => old.promise);
+    const { pager, key } = setup(() => old.promise);
     const slow = pager.more();
-    pager.sync(eventsPagerKey("s1", "upcoming", null, "d1"), "d1");
+    pager.sync(key, "c1");
     old.resolve({ ok: false });
     await slow;
     expect(pager.current.failed).toBe(false);
@@ -113,14 +113,13 @@ describe("événements d'une Page : « Voir plus »", () => {
     const first = deferred();
     const second = deferred();
     const asked: string[] = [];
-    const { pager } = setup((c) => {
+    const { pager, key } = setup((c) => {
       asked.push(c);
       return c === "c1" ? first.promise : second.promise;
     });
     const p1 = pager.more();
-    pager.sync(eventsPagerKey("s1", "upcoming", null, "d1"), "d1");
+    pager.sync(key, "d1");
     const p2 = pager.more();
-    // La nouvelle répond d'abord, puis l'ancienne, en retard.
     second.resolve({ ok: true, data: { items: ev("n1", "n2"), nextCursor: "d2" } });
     await p2;
     first.resolve({ ok: true, data: { items: ev("o1"), nextCursor: "c2" } });
@@ -130,22 +129,117 @@ describe("événements d'une Page : « Voir plus »", () => {
     expect(pager.current.next).toBe("d2");
   });
 
-  it("une relecture identique (même clé) ne remet pas à zéro les événements ajoutés", async () => {
-    const { pager } = setup(async () => ({ ok: true, data: { items: ev("a", "b"), nextCursor: "c2" } }));
+  /** Un serveur : une suite de pages chaînées par curseur, modifiable entre deux lectures. */
+  function chain(pages: Record<string, { items: E[]; next: string | null }>) {
+    return async (c: string): Promise<EventsPageResult<E>> => {
+      const p = pages[c];
+      return p ? { ok: true, data: { items: p.items, nextCursor: p.next } } : { ok: false };
+    };
+  }
+
+  it("pendant la relecture en arrière-plan l'ancienne liste reste affichée (et intacte si elle échoue)", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("a", "b"), next: "c2" },
+      c2: { items: ev("c", "d"), next: null },
+    };
+    const gate = deferred();
+    let hold = false;
+    const read = chain(pages);
+    const { pager, key } = setup(async (c) => {
+      if (hold) await gate.promise;
+      return read(c);
+    });
     await pager.more();
-    // « Suivre », « Réessayer » d'une autre section : le chargeur relit la page, tableau neuf, mêmes curseurs.
-    pager.sync(eventsPagerKey("s1", "upcoming", null, "c1"), "c1");
-    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b"]);
-    expect(pager.current.next).toBe("c2");
+    await pager.more();
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b", "c", "d"]);
+    // « b » est annulé ; la page est relue, même curseur suivant « c1 ».
+    pages.c1 = { items: ev("a"), next: "c2" };
+    hold = true;
+    pager.sync(key, "c1");
+    expect(pager.current.busy).toBe(true);
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b", "c", "d"]);
+    hold = false;
+    gate.resolve({ ok: false });
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
   });
 
-  it("une autre structure, ou un autre curseur de départ, remet la liste à zéro", async () => {
+  it("événement annulé en 2e page : remplacé d'un coup après la relecture", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("a", "b"), next: "c2" },
+      c2: { items: ev("c", "d"), next: null },
+    };
+    const { pager, key } = setup(chain(pages));
+    await pager.more();
+    await pager.more();
+    pages.c1 = { items: ev("a"), next: "c2" };
+    pages.c2 = { items: ev("c"), next: null };
+    pager.sync(key, "c1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "c"]);
+    expect(pager.current.pages).toBe(2);
+  });
+
+  it("frontière de la 1re page déplacée : rien n'est effacé, la liste est à jour après la relecture", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("e2", "e3"), next: "c2" },
+      c2: { items: ev("e4", "e5"), next: "c3" },
+      c3: { items: ev("e6"), next: null },
+    };
+    const { pager, key } = setup(chain(pages));
+    await pager.more();
+    await pager.more();
+    await pager.more();
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["e2", "e3", "e4", "e5", "e6"]);
+    // L'événement e1 (de la 1re page) est annulé : la frontière passe de « c1 » à « d1 » (la suite démarre un cran plus loin).
+    pages.d1 = { items: ev("e3", "e4"), next: "d2" };
+    pages.d2 = { items: ev("e5", "e6"), next: "d3" };
+    pages.d3 = { items: ev("e7"), next: null };
+    pager.sync(key, "d1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["e3", "e4", "e5", "e6", "e7"]);
+    expect(pager.current.next).toBeNull();
+  });
+
+  it("une relecture qui échoue laisse l'ancienne liste et « Voir plus » disponible, sans message", async () => {
+    const pages: Record<string, { items: E[]; next: string | null }> = {
+      c1: { items: ev("a"), next: "c2" },
+      c2: { items: ev("b"), next: "c3" },
+    };
+    const { pager, key } = setup(chain(pages));
+    await pager.more();
+    await pager.more();
+    pager.sync(key, "zz");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(pager.current).toMatchObject({ failed: false, next: "c3", pages: 2 });
+    expect(pager.current.extra.map((e) => e.id)).toEqual(["a", "b"]);
+  });
+
+  it("la relecture ne dépasse pas dix pages", async () => {
+    const asked: string[] = [];
+    const { pager, key } = setup(async (c) => {
+      asked.push(c);
+      const n = Number(c.slice(1));
+      return { ok: true, data: { items: ev(`x${n}`), nextCursor: `c${n + 1}` } };
+    });
+    for (let i = 0; i < 12; i++) await pager.more();
+    expect(pager.current.pages).toBe(12);
+    asked.length = 0;
+    pager.sync(key, "c1");
+    await vi.waitFor(() => expect(pager.current.busy).toBe(false));
+    expect(asked).toHaveLength(10);
+    expect(pager.current.pages).toBe(10);
+  });
+
+  it("une autre structure, une autre liste ou un autre curseur de départ remet la liste à zéro", async () => {
     const { pager } = setup(async () => ({ ok: true, data: { items: ev("a"), nextCursor: "c2" } }));
     await pager.more();
-    pager.sync(eventsPagerKey("s2", "upcoming", null, "c1"), "c1");
+    pager.sync(eventsPagerKey("s2", "upcoming", null), "c1");
     expect(pager.current.extra).toEqual([]);
     await pager.more();
-    pager.sync(eventsPagerKey("s2", "upcoming", "x9", "c1"), "c1");
+    pager.sync(eventsPagerKey("s2", "past", null), "c1");
+    expect(pager.current.extra).toEqual([]);
+    await pager.more();
+    pager.sync(eventsPagerKey("s2", "past", "x9"), "c1");
     expect(pager.current.extra).toEqual([]);
   });
 });

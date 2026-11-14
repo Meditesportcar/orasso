@@ -27,7 +27,7 @@ export function useMoreEvents(
   first: Page<EventCard> | null,
 ): { items: EventCard[] | null; more: MoreEventsView } {
   const firstNext = first?.nextCursor ?? null;
-  const key = eventsPagerKey(structureId ?? "", scope, null, firstNext);
+  const key = eventsPagerKey(structureId ?? "", scope, null);
   const where = useRef({ structureId, scope });
   where.current = { structureId, scope };
   const [state, setState] = useState<EventsPagerState<EventCard>>(() =>
@@ -52,11 +52,18 @@ export function useMoreEvents(
         firstNext,
       ),
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la clé seule (pas par l'identité de la réponse)
-  useEffect(() => pager.sync(key, firstNext), [key]);
+  // Chaque lecture de la première page (la réponse change à chaque lecture) ouvre une génération : remise à zéro si la clé change,
+  // sinon les pages ajoutées sont relues en arrière-plan et remplacées d'un coup.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
+  useEffect(() => pager.sync(key, firstNext), [first, key]);
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
   return {
     items: first ? mergeEvents(first.items, cur.extra) : null,
-    more: { next: cur.next, failed: cur.failed, busy: cur.busy, onMore: () => void pager.more() },
+    more: {
+      next: cur.pages === 0 ? firstNext : cur.next,
+      failed: cur.failed,
+      busy: cur.busy,
+      onMore: () => void pager.more(),
+    },
   };
 }

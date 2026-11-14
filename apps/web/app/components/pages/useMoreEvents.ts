@@ -26,7 +26,7 @@ export function useMoreEvents(
   /** Le curseur d'où la première page a été lue (`null` : le début) : sans JavaScript, « Voir plus » est un lien. */
   start: string | null,
 ) {
-  const key = eventsPagerKey(structureId, scope, start, firstNext);
+  const key = eventsPagerKey(structureId, scope, start);
   const where = useRef({ structureId, scope });
   where.current = { structureId, scope };
   const [state, setState] = useState<EventsPagerState<EventCard>>(() =>
@@ -47,14 +47,15 @@ export function useMoreEvents(
         firstNext,
       ),
   );
-  // Une nouvelle lecture de la page : le pager juge, sur la clé, s'il repart de zéro ou garde ce qui a été ajouté.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la clé seule (pas par l'identité des tableaux)
-  useEffect(() => pager.sync(key, firstNext), [key]);
+  // Chaque lecture de la page (le tableau change à chaque lecture du chargeur) ouvre une génération : le pager repart de zéro si la
+  // clé change, sinon relit les pages ajoutées en arrière-plan et les remplace d'un coup.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
+  useEffect(() => pager.sync(key, firstNext), [first, key]);
   // Avant que l'effet ne passe : la clé neuve montre déjà la liste neuve, jamais l'ancienne suite sur la nouvelle base.
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
   return {
     items: first === null ? null : mergeEvents(first, cur.extra),
-    next: cur.next,
+    next: cur.pages === 0 ? firstNext : cur.next,
     failed: cur.failed,
     busy: cur.busy,
     more: () => pager.more(),
