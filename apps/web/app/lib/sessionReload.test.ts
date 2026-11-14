@@ -4,12 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AFTER_RELOAD_PARAM,
+  createConfirmer,
   isAfterReload,
   isForeign,
+  ME_TIMEOUT_MS,
+  type MeResult,
   mayReload,
   nextAnnounced,
+  nextConfirmation,
   reloadAutomatically,
   reloadManually,
+  type SessionConfirmation,
 } from "./sessionReload";
 
 function stubWindow(opts: { storage: boolean; search?: string; hash?: string }) {
@@ -170,5 +175,80 @@ describe("isForeign", () => {
   it("vérification en cours ou en échec : pas « étranger » (la page est neutre pour une autre raison)", () => {
     expect(isForeign({ ...base, confirmed: "checking" })).toBe(false);
     expect(isForeign({ ...base, confirmed: "failed" })).toBe(false);
+  });
+});
+
+// Partie B1, tour 8 : la confirmation du compte après un rechargement (`useSessionConfirmation` = un état local + ce vérificateur ;
+// sans environnement DOM dans ce paquet, on teste le vérificateur lui-même, que le crochet appelle tel quel).
+
+const me = (id: string): MeResult => ({ ok: true, data: { user: { id } } });
+
+/** Un état local comme `useState` : `apply` lui passe la fonction de transition. */
+function localState(initial: SessionConfirmation) {
+  const box = { state: initial };
+  return {
+    box,
+    apply: (next: (was: SessionConfirmation) => SessionConfirmation) => {
+      box.state = next(box.state);
+    },
+  };
+}
+
+describe("confirmation du compte après un rechargement", () => {
+  it("la page rechargée démarre « checking » (le crochet l'initialise ainsi), le compte confirmé la passe « ok »", async () => {
+    const { box, apply } = localState("checking");
+    await createConfirmer(async () => me("A"))("A", apply);
+    expect(box.state).toBe("ok");
+  });
+
+  it("/me dit un autre compte : « mismatch » (la page se recharge, comptée)", async () => {
+    const { box, apply } = localState("checking");
+    await createConfirmer(async () => me("C"))("B", apply);
+    expect(box.state).toBe("mismatch");
+    // La décision de la page : étrangère, donc rechargement automatique compté.
+    expect(isForeign({ owner: "B", layoutUserId: "B", announced: undefined, confirmed: box.state })).toBe(true);
+  });
+
+  it("401 (plus de session) : « mismatch »", async () => {
+    const { box, apply } = localState("checking");
+    await createConfirmer(async () => ({ ok: false, status: 401 }))("B", apply);
+    expect(box.state).toBe("mismatch");
+  });
+
+  it("panne réseau ou délai (status 0) et erreur serveur : « failed » (« Recharger la page »)", async () => {
+    for (const status of [0, 500, 503]) {
+      const { box, apply } = localState("checking");
+      await createConfirmer(async () => ({ ok: false, status }))("A", apply);
+      expect(box.state, `status ${status}`).toBe("failed");
+    }
+  });
+
+  it("une revérification silencieuse qui échoue ne masque pas une page déjà confirmée", async () => {
+    const { box, apply } = localState("ok");
+    await createConfirmer(async () => ({ ok: false, status: 0 }))("A", apply);
+    expect(box.state).toBe("ok");
+  });
+
+  it("la réponse d'une vérification plus ancienne que la dernière est ignorée (seq)", async () => {
+    const { box, apply } = localState("checking");
+    const resolvers: Array<(r: MeResult) => void> = [];
+    const verify = createConfirmer(() => new Promise<MeResult>((resolve) => resolvers.push(resolve)));
+    const first = verify("A", apply);
+    const second = verify("A", apply);
+    // La seconde répond d'abord (« ok ») ; la première, tardive, dit un autre compte : elle ne doit rien changer.
+    (resolvers[1] as (r: MeResult) => void)(me("A"));
+    await second;
+    (resolvers[0] as (r: MeResult) => void)(me("C"));
+    await first;
+    expect(box.state).toBe("ok");
+  });
+
+  it("nextConfirmation : un compte différent après « ok » repasse « mismatch »", () => {
+    expect(nextConfirmation("ok", me("C"), "A")).toBe("mismatch");
+    expect(nextConfirmation("failed", me("A"), "A")).toBe("ok");
+  });
+
+  it("le délai de /me est de 10 s", () => {
+    expect(ME_TIMEOUT_MS).toBe(10_000);
   });
 });

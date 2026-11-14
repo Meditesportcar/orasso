@@ -82,22 +82,48 @@ export function reloadManually(scope: string): void {
  */
 export type SessionConfirmation = "ok" | "checking" | "mismatch" | "failed";
 
+/** Délai de la vérification : au-delà, l'abandon donne `status: 0` donc « failed » (« Recharger la page »), jamais « Mise à jour… » à vie. */
+export const ME_TIMEOUT_MS = 10_000;
+
+/** Ce que la vérification doit savoir de la réponse de `/me` (le résultat de `apiFetch` convient). */
+export type MeResult = { ok: true; data: { user: { id: string } } } | { ok: false; status: number };
+
+const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
+
+/**
+ * L'état suivant d'après la réponse de `/me` : le compte est celui des données (« ok »), un autre ou plus de session (401 :
+ * « mismatch »), ou la vérification n'a pas pu se faire (réseau, délai, serveur) : une vérification attendue (« checking », « failed »)
+ * reste en échec ; une revérification silencieuse ne change rien.
+ */
+export function nextConfirmation(was: SessionConfirmation, res: MeResult, owner: string): SessionConfirmation {
+  if (res.ok) return res.data.user.id === owner ? "ok" : "mismatch";
+  if (res.status === 401) return "mismatch";
+  return was === "checking" || was === "failed" ? "failed" : was;
+}
+
+/** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
+export function createConfirmer(read: () => Promise<MeResult>) {
+  let seq = 0;
+  return async (
+    owner: string,
+    apply: (next: (was: SessionConfirmation) => SessionConfirmation) => void,
+  ): Promise<void> => {
+    const mine = ++seq;
+    const res = await read();
+    if (mine !== seq) return;
+    apply((was) => nextConfirmation(was, res, owner));
+  };
+}
+
 /**
  * `owner` : le compte qui a chargé les données de la page. `afterReload` : la page vient d'un rechargement automatique (le chargeur
  * lit `isAfterReload`) : elle démarre « checking » et le reste jusqu'à ce que `/me` confirme `owner`.
  */
 export function useSessionConfirmation(owner: string, afterReload: boolean): SessionConfirmation {
   const [state, setState] = useState<SessionConfirmation>(afterReload ? "checking" : "ok");
-  const seq = useRef(0);
-  const verify = useCallback(async () => {
-    const mine = ++seq.current;
-    const res = await apiFetch<{ user: { id: string } }>("/me");
-    if (mine !== seq.current) return;
-    if (res.ok) return setState(res.data.user.id === owner ? "ok" : "mismatch");
-    if (res.status === 401) return setState("mismatch");
-    // Réseau ou serveur : une vérification attendue qui échoue reste en échec ; une revérification silencieuse ne change rien.
-    setState((was) => (was === "checking" || was === "failed" ? "failed" : was));
-  }, [owner]);
+  const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
+  if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
+  const verify = useCallback(() => (confirmer.current as ReturnType<typeof createConfirmer>)(owner, setState), [owner]);
   const first = useRef(true);
   useEffect(() => {
     const wasFirst = first.current;
