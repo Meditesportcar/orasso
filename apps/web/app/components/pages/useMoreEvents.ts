@@ -8,10 +8,10 @@ import {
   EventsPager,
   type EventsPagerState,
   eventsPagerKey,
+  eventsView,
   freshEventsPagerState,
   type KeptFirstPage,
   keepFirstPage,
-  mergeEvents,
   structureEventsPath,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
@@ -73,12 +73,10 @@ export function useMoreEvents(
   useEffect(() => pager.onRead(key, firstNext, first !== null), [first, key]);
   // Avant que l'effet ne passe : la clé neuve montre déjà la liste neuve, jamais l'ancienne suite sur la nouvelle base.
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, view.next);
+  // La suite, la panne de la relecture (dite à part, la liste reste) et l'échec de « Voir plus » : cohérents avec ce qui est
+  // affiché (`eventsView`, testé dans packages/shared : rien sous la panne de la 1re page, un seul message sinon).
   return {
-    items: view.items === null ? null : mergeEvents(view.items, cur.extra),
-    // La suite, la panne de la relecture (dite à part, la liste reste) : cohérentes avec ce qui est affiché.
-    next: view.items === null ? null : cur.pages === 0 ? view.next : cur.next,
-    readFailed: view.readFailed,
-    failed: cur.failed,
+    ...eventsView({ items: view.items, next: view.next, readFailed: view.readFailed }, cur),
     busy: cur.busy,
     more: () => pager.more(),
   };

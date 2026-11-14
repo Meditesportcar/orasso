@@ -98,3 +98,39 @@ describe("liste vide gardée, relecture en panne, reprise", () => {
     expect(html).not.toContain("structure-upcoming-from-start");
   });
 });
+
+// Lot B3a : une liste pleine gardée + une relecture en panne : les cartes et la panne (une seule) ensemble.
+describe("liste pleine gardée, relecture en panne", () => {
+  const card = (id: string) => ({
+    id,
+    slug: `evt-${id}`,
+    title: `Événement ${id}`,
+    format: "meet",
+    startsAt: "2027-05-01T08:00:00.000Z",
+    endsAt: "2027-05-01T16:00:00.000Z",
+    city: "Perpignan",
+    department: "66",
+    lat: null,
+    lng: null,
+    posterUrl: null,
+    generatedPosterUrl: null,
+    photoUrl: null,
+    status: "published",
+    outlook: "confirmed",
+    structure: { id: "st-1", slug: "roues-libres-66", name: "Roues Libres 66", logoUrl: null },
+    capacity: null,
+    remaining: null,
+  });
+
+  it("à venir : les cartes restent, la panne de relecture se dit une fois, « Voir plus » reste utilisable", () => {
+    set("upcoming", { items: [card("a"), card("b")], next: "c1", readFailed: true, failed: false });
+    const html = render();
+    expect(html).toContain('data-testid="structure-upcoming"');
+    expect(html.match(/data-testid="event-tile"/g)).toHaveLength(2);
+    expect(html).toContain('data-testid="structure-upcoming-reread-error"');
+    expect(html).not.toContain("structure-upcoming-more-error");
+    expect(html).toContain('data-testid="structure-upcoming-more"');
+    expect(html).not.toContain("Aucun événement à venir");
+    set("upcoming", { items: [], next: null, readFailed: false, failed: false });
+  });
+});
