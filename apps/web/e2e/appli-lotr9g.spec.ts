@@ -356,3 +356,26 @@ test("51 albums : « 51 albums », 50 affichés, « Voir plus d'albums » ajoute
     await client.end();
   }
 });
+
+test("sans session, ouvrir un album depuis la fiche ne compte aucune vue", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, baseURL: APP });
+  await ctx.addInitScript(() => localStorage.setItem("orasso.onboarded", "1"));
+  const page = await ctx.newPage();
+  try {
+    const views: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && /\/api\/media-contents\/.+\/view/.test(r.url())) views.push(r.url());
+    });
+    await go(page, `/e/${SLUG}`);
+    await page.getByTestId("event-photos").scrollIntoViewIfNeeded({ timeout: 30_000 });
+    await page.getByTestId("event-photos-open").click();
+    await expect(page.getByTestId("album-open")).toBeVisible({ timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+    // Un laps où une vue serait partie : aucune requête de vue.
+    await page.waitForTimeout(1_500);
+    expect(views).toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});

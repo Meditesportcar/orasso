@@ -79,8 +79,13 @@ export function PhotosSection({
     let last = Number.NaN;
     let stable = 0;
     let tries = 0;
+    // Borné : si la mesure échoue sans cesse (page pas montée, nœud absent), on abandonne au bout de `REVEAL_TRIES` essais (la page reste où elle est).
     const again = () => {
       tries += 1;
+      if (tries >= REVEAL_TRIES) {
+        onRevealed?.();
+        return;
+      }
       timer = setTimeout(step, REVEAL_EVERY_MS);
     };
     const step = () => {
@@ -178,8 +183,8 @@ export function PhotosSection({
             kind="s"
             icon="next"
             onPress={() => {
-              // R9e : « voir les vues » ne disparaît pas : une vue à chaque ouverture de l'album depuis la fiche (un échec est sans suite).
-              void api.viewMediaContent(a.id).catch(() => undefined);
+              // R9e : « voir les vues » ne disparaît pas : une vue à chaque ouverture de l'album depuis la fiche (seulement avec une session ; un échec est sans suite).
+              if (signedIn) void api.viewMediaContent(a.id).catch(() => undefined);
               router.push(`/album/${a.id}` as never);
             }}
             testID="event-photos-open"

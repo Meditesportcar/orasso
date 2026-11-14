@@ -142,10 +142,13 @@ export const albumRepost = {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album-repost:${photoId}`}))`);
         if (await isReposted(tx, photoId)) throw alreadyError();
         // Pendant la copie, l'album, la photo ou l'accréditation ont pu tomber : on relit **et on verrouille** avant d'écrire. Même ordre
-        // que les retraits (verrou consultatif de l'album, puis les lignes) : un retrait, une suppression d'album ou une révocation
+        // que les retraits (verrou consultatif de l'album, puis l'événement, puis les lignes) : un retrait, une suppression d'album ou une révocation
         // attend la fin de la reprise, ou a fini avant et la relecture le voit. Si une condition tombe : 404, et le fichier copié est
         // effacé par le `catch` ci-dessous.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${albumId}`}))`);
+        // L'événement d'abord, dans l'ordre du module des candidatures (événement, puis candidature) : l'insertion de la publication
+        // prend de toute façon un verrou sur l'événement (clé étrangère) ; l'ordre inverse faisait un interblocage avec une révocation.
+        await tx.execute(sql`select id from events where id = ${eventId} for key share`);
         await tx
           .select({ id: applications.id })
           .from(applications)
