@@ -735,7 +735,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   };
 
   if (step === "done" && created) {
-    const who = L.doneAudience[createdAudience ?? chosen?.audience ?? "followers"];
+    const who = createdAudience ?? chosen?.audience ?? "followers";
     return (
       <FlowScreen title={L.title} onClose={close}>
         <View style={[styles.done, { backgroundColor: c.surface }]} testID="story-done">
