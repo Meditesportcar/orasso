@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "./api.client";
 
@@ -62,33 +62,48 @@ let reloading = false;
 export const RELOAD_STALL_MS = 15_000;
 let stallTimer: ReturnType<typeof setTimeout> | null = null;
 const stallListeners = new Set<() => void>();
+// Tour 12 : « le dernier rechargement de ce document n'a pas quitté la page » est un fait du DOCUMENT, tenu ici (pas par le
+// composant). Vrai à l'expiration du minuteur, ou à la restauration d'un document dont un rechargement était en cours (ou déjà
+// bloqué : une 2e restauration ne l'efface pas). Faux seulement quand un nouveau rechargement part réellement.
+let reloadStalled = false;
+
+function setReloadStalled(value: boolean): void {
+  if (reloadStalled === value) return;
+  reloadStalled = value;
+  for (const listener of [...stallListeners]) listener();
+}
 
 function clearStall(): void {
   if (stallTimer !== null) clearTimeout(stallTimer);
   stallTimer = null;
 }
 
-/** Le rechargement n'a pas quitté la page : les pages abonnées ajoutent le bouton sous « Mise à jour… » (le verrou reste posé). */
+/** Un rechargement part réellement : le fait « bloqué » retombe, le minuteur est réarmé. */
 function armStall(): void {
   clearStall();
+  setReloadStalled(false);
   stallTimer = setTimeout(() => {
     stallTimer = null;
-    for (const listener of [...stallListeners]) listener();
+    setReloadStalled(true);
   }, RELOAD_STALL_MS);
 }
 
 /**
  * Le verrou global est levé (document restauré depuis le cache de navigation : il revenait avec `reloading === true`). Renvoie vrai
- * si un rechargement était en cours : la page ne sait plus s'il aboutira, elle doit offrir « Recharger la page ».
+ * si un rechargement était en cours : la page ne sait plus s'il aboutira, `reloadStalled` passe à vrai (et y reste si déjà vrai).
  */
 export function resetReloadLock(): boolean {
   const was = reloading;
   reloading = false;
   clearStall();
+  if (was) setReloadStalled(true);
   return was;
 }
 
-/** S'abonne à « le rechargement n'a pas quitté la page » ; renvoie le désabonnement. */
+/** Le rechargement lancé n'a pas quitté la page (le bouton « Recharger la page » s'ajoute sous « Mise à jour… » si la page est étrangère). */
+export const isReloadStalled = (): boolean => reloadStalled;
+
+/** S'abonne aux changements de `isReloadStalled` (forme `useSyncExternalStore`) ; renvoie le désabonnement. */
 export function onReloadStalled(listener: () => void): () => void {
   stallListeners.add(listener);
   return () => void stallListeners.delete(listener);
@@ -142,11 +157,9 @@ export type MeKnowledge = {
   me: string | null | undefined;
   /** `/me` n'a pas pu répondre (réseau, délai, serveur) alors qu'aucun compte n'est encore connu. */
   failed: boolean;
-  /** Le rechargement est lent ou a été interrompu : le bouton « Recharger la page » s'ajoute sous « Mise à jour… ». */
-  stalled: boolean;
 };
 
-export const unknownMe = (): MeKnowledge => ({ me: undefined, failed: false, stalled: false });
+export const unknownMe = (): MeKnowledge => ({ me: undefined, failed: false });
 
 /** Une réponse de `/me` : le compte rendu remplace le précédent ; une panne ne change pas un compte déjà connu. */
 export function recordMe(prev: MeKnowledge, res: MeResult): MeKnowledge {
@@ -166,10 +179,6 @@ export function deriveConfirmation(k: MeKnowledge, owner: string, afterReload: b
   return k.failed ? "failed" : "checking";
 }
 
-/** Le bouton « Recharger la page » apparaît (ou disparaît). */
-export const setStalledOf = (prev: MeKnowledge, stalled: boolean): MeKnowledge =>
-  prev.stalled === stalled ? prev : { ...prev, stalled };
-
 /** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
 export function createConfirmer(read: () => Promise<MeResult>) {
   let seq = 0;
@@ -183,20 +192,14 @@ export function createConfirmer(read: () => Promise<MeResult>) {
 
 /**
  * `owner` : le compte qui a chargé les données de la page. `afterReload` : la page vient d'un rechargement automatique (le chargeur
- * lit `isAfterReload`) : elle est « checking » tant que `/me` n'a rien dit. `stalled` : voir `MeKnowledge`.
+ * lit `isAfterReload`) : elle est « checking » tant que `/me` n'a rien dit. `stalled` : `isReloadStalled()` du module (fait du document).
  */
 export function useSessionConfirmation(
   owner: string,
   afterReload: boolean,
 ): { confirmed: SessionConfirmation; stalled: boolean } {
   const [known, setKnown] = useState<MeKnowledge>(unknownMe);
-  // Le bouton ne survit pas à un autre compte ni à une autre origine de la page : remis à faux au rendu (le compte connu, lui, reste).
-  const [seen, setSeen] = useState({ owner, afterReload });
-  const changed = seen.owner !== owner || seen.afterReload !== afterReload;
-  if (changed) {
-    setSeen({ owner, afterReload });
-    setKnown((prev) => setStalledOf(prev, false));
-  }
+  const stalled = useSyncExternalStore(onReloadStalled, isReloadStalled, () => false);
   const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
   if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
   const verify = useCallback(
@@ -233,10 +236,8 @@ export function useSessionConfirmation(
     };
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
-        // Document restauré : son verrou de rechargement et son éventuel échec datent d'avant.
-        // Un rechargement était en cours : on ne sait pas s'il aboutira, donc le bouton (la page ne change pas, rien ne relance).
-        const wasReloading = resetReloadLock();
-        setKnown((prev) => setStalledOf(prev, wasReloading));
+        // Document restauré : son verrou de rechargement date d'avant ; s'il y en avait un en cours, le module pose `reloadStalled`.
+        resetReloadLock();
         void verify();
       }
     };
@@ -244,16 +245,14 @@ export function useSessionConfirmation(
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
-    const offStalled = onReloadStalled(() => setKnown((prev) => setStalledOf(prev, true)));
     return () => {
-      offStalled();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [verify]);
-  return { confirmed: deriveConfirmation(known, owner, afterReload), stalled: known.stalled && !changed };
+  return { confirmed: deriveConfirmation(known, owner, afterReload), stalled };
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */

@@ -661,7 +661,8 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     const hold = await holdNextDocument(a);
     const paul = await cookiesOf(browser, crew.paul.email);
     // Pendant la navigation retenue, la page ne répond plus aux appels du test : elle se signale par la console, et un vrai
-    // événement `pageshow` persisté part de la fenêtre 3 s plus tard (le délai de « Recharger la page » est de 15 s).
+    // événement `pageshow` persisté part de la fenêtre 300 ms après qu'elle a affiché « Mise à jour… » (rechargement réellement lancé) ;
+    // le bouton doit venir de la restauration, donc avant 10 s (le minuteur de « Recharger la page » est de 15 s).
     const events: string[] = [];
     a.on("console", (m) => {
       if (m.text().startsWith("b1seen:")) events.push(m.text().slice(7));
@@ -673,18 +674,20 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
           if (!seen.has(id) && document.querySelector(`[data-testid="${id}"]`)) {
             seen.add(id);
             console.log(`b1seen:${id}`);
+            if (id === "crew-refreshing") {
+              setTimeout(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })), 300);
+            }
           }
         }
       };
       new MutationObserver(look).observe(document, { childList: true, subtree: true });
-      setTimeout(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })), 3_000);
     });
     hold.arm();
     await swapCookies(ctx, paul);
     await announceForbidding(a, crew.paul.id, INVITATION);
     await hold.arrived;
     // « Mise à jour… » d'abord, sans bouton ; puis, à la restauration, le bouton s'ajoute dessous sans que « Mise à jour… » parte.
-    await expect.poll(() => events, { timeout: 30_000 }).toEqual(["crew-refreshing", "crew-refresh-slow"]);
+    await expect.poll(() => events, { timeout: 10_000 }).toEqual(["crew-refreshing", "crew-refresh-slow"]);
     hold.release();
     await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
     await expect(a.getByTestId("crew-refresh-slow")).toHaveCount(0);

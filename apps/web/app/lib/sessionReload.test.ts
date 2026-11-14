@@ -17,7 +17,6 @@ import {
   reloadAutomatically,
   reloadManually,
   type SessionConfirmation,
-  setStalledOf,
   unknownMe,
 } from "./sessionReload";
 
@@ -365,8 +364,10 @@ describe("verrou global de rechargement", () => {
       const off = mod.onReloadStalled(stalled);
       mod.reloadAutomatically("crew");
       mod.resetReloadLock();
+      // Tour 12 : la restauration pose elle-même le fait (une notification) ; le minuteur annulé n'en ajoute pas une seconde.
+      expect(stalled).toHaveBeenCalledTimes(1);
       vi.advanceTimersByTime(mod.RELOAD_STALL_MS * 2);
-      expect(stalled).not.toHaveBeenCalled();
+      expect(stalled).toHaveBeenCalledTimes(1);
       off();
     } finally {
       vi.useRealTimers();
@@ -385,7 +386,7 @@ describe("restauration pendant un rechargement, et bouton (tours 10 et 11)", () 
     expect(mod.resetReloadLock()).toBe(false);
   });
 
-  it("page restaurée pendant un rechargement, `foreign` inchangé : le bouton est affiché (stalled), sans nouvelle navigation", async () => {
+  it("page restaurée pendant un rechargement, `foreign` inchangé : reloadStalled est vrai (le bouton), sans nouvelle navigation", async () => {
     vi.resetModules();
     const { replaced } = stubWindow({ storage: true });
     const mod = await import("./sessionReload");
@@ -393,20 +394,121 @@ describe("restauration pendant un rechargement, et bouton (tours 10 et 11)", () 
     let k = mod.recordMe(mod.unknownMe(), me("C"));
     mod.reloadAutomatically("crew");
     expect(replaced).toHaveLength(1);
+    expect(mod.isReloadStalled()).toBe(false);
     // Ce que fait le crochet sur un `pageshow` persisté (l'événement réel est dans la recette lotfin-e-site, tour 11).
-    k = mod.setStalledOf(k, mod.resetReloadLock());
+    mod.resetReloadLock();
     k = mod.recordMe(k, me("C"));
     expect(mod.deriveConfirmation(k, "A", false)).toBe("mismatch");
-    expect(k.stalled).toBe(true);
+    expect(mod.isReloadStalled()).toBe(true);
     expect(replaced).toHaveLength(1);
-    // Une restauration sans rechargement en cours ne montre pas le bouton.
-    expect(mod.setStalledOf(k, mod.resetReloadLock()).stalled).toBe(false);
   });
 
-  it("setStalledOf ne change rien quand la valeur est déjà celle-là", () => {
-    const slow = setStalledOf(unknownMe(), true);
-    expect(slow.stalled).toBe(true);
-    expect(setStalledOf(slow, true)).toBe(slow);
-    expect(slow.me).toBeUndefined();
+  it("une restauration sans rechargement en cours ne pose pas reloadStalled", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    expect(mod.resetReloadLock()).toBe(false);
+    expect(mod.isReloadStalled()).toBe(false);
+  });
+});
+
+describe("le bouton de secours est un fait du document (tour 12)", () => {
+  it("(a) deux pageshow persistés successifs pendant une discordance : le bouton reste", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    mod.reloadAutomatically("crew");
+    mod.resetReloadLock();
+    expect(mod.isReloadStalled()).toBe(true);
+    // 2e restauration : plus de rechargement en cours, le fait n'est pas effacé.
+    expect(mod.resetReloadLock()).toBe(false);
+    expect(mod.isReloadStalled()).toBe(true);
+    const k = mod.recordMe(mod.unknownMe(), me("C"));
+    expect(mod.deriveConfirmation(k, "A", false)).toBe("mismatch");
+  });
+
+  it("(b) minuteur expiré, puis owner/afterReload qui changent (chargeur retardé), discordance persistante : le bouton reste", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      stubWindow({ storage: true });
+      const mod = await import("./sessionReload");
+      const k = mod.recordMe(mod.unknownMe(), me("C"));
+      mod.reloadAutomatically("crew");
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS);
+      expect(mod.isReloadStalled()).toBe(true);
+      // Le chargeur retardé donne un autre owner, puis une autre origine : rien de cela ne touche le fait du document.
+      expect(mod.deriveConfirmation(k, "B", false)).toBe("mismatch");
+      expect(mod.deriveConfirmation(k, "B", true)).toBe("mismatch");
+      expect(mod.isReloadStalled()).toBe(true);
+      // /me ne le touche pas non plus.
+      mod.recordMe(k, me("C"));
+      expect(mod.isReloadStalled()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("(c) reloadStalled vrai, puis nouveau rechargement automatique : faux jusqu'à l'expiration du nouveau minuteur", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      const { replaced } = stubWindow({ storage: true });
+      const mod = await import("./sessionReload");
+      mod.reloadAutomatically("crew");
+      mod.resetReloadLock();
+      expect(mod.isReloadStalled()).toBe(true);
+      expect(mod.reloadAutomatically("crew")).toBe("started");
+      expect(replaced).toHaveLength(2);
+      expect(mod.isReloadStalled()).toBe(false);
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS - 1);
+      expect(mod.isReloadStalled()).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(mod.isReloadStalled()).toBe(true);
+      // Le geste manuel le remet aussi à faux, puis le minuteur le reposera.
+      mod.reloadManually("crew");
+      expect(mod.isReloadStalled()).toBe(false);
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS);
+      expect(mod.isReloadStalled()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un appel de rechargement refusé ou ignoré (verrou posé) ne remet pas reloadStalled à faux", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      stubWindow({ storage: true });
+      const mod = await import("./sessionReload");
+      mod.reloadAutomatically("crew");
+      vi.advanceTimersByTime(mod.RELOAD_STALL_MS);
+      expect(mod.reloadAutomatically("crew")).toBe("started");
+      expect(mod.isReloadStalled()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("les abonnés sont prévenus à chaque changement du fait, pas à chaque appel", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    const seen = vi.fn();
+    const off = mod.onReloadStalled(seen);
+    mod.reloadAutomatically("crew");
+    mod.resetReloadLock();
+    expect(seen).toHaveBeenCalledTimes(1);
+    mod.resetReloadLock();
+    expect(seen).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('(d) recordMe sur un état « failed » puis réponse me("A") pour owner A : « ok »', () => {
+    const failed = recordMe(unknownMe(), { ok: false, status: 0 });
+    expect(deriveConfirmation(failed, "A", true)).toBe("failed");
+    const next = recordMe(failed, me("A"));
+    expect(next.failed).toBe(false);
+    expect(deriveConfirmation(next, "A", true)).toBe("ok");
   });
 });
