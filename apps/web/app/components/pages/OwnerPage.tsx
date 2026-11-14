@@ -55,7 +55,10 @@ export type OwnerData =
       eventsComplete: boolean;
       /** `null` : la lecture a échoué (jamais une liste vide à la place d'une panne). */
       upcoming: EventCard[] | null;
+      /** Le curseur de la page suivante (« Voir plus ») : `null` quand la liste est entière ou illisible. */
+      upcomingNext: string | null;
       past: EventCard[] | null;
+      pastNext: string | null;
       partners: ProCard[] | null;
       inviteToken: string | null;
       inviteFailed: boolean;
@@ -244,7 +247,9 @@ export function OwnerPage({ data }: { data: OwnerData }) {
         <StructureEvents
           structure={data.page}
           upcoming={data.upcoming}
+          upcomingNext={data.upcomingNext}
           past={data.past}
+          pastNext={data.pastNext}
           partners={data.partners}
           inviteToken={data.inviteToken}
           inviteFailed={data.inviteFailed}

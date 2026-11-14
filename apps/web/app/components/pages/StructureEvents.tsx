@@ -10,8 +10,10 @@ import {
   structureKindLabels,
 } from "@orasso/shared";
 
-import { useRevalidator } from "react-router";
+import { useState } from "react";
+import { useLocation, useRevalidator } from "react-router";
 
+import { apiFetch } from "../../lib/api.client";
 import { EventTile } from "../EventTile";
 import { ProTile } from "../ProTile";
 import { ShareButtons } from "../ShareButtons";
@@ -20,6 +22,7 @@ import { Stars } from "../Stars";
 /** Une lecture qui a échoué : le message et « Réessayer » (relit la page), jamais une absence. */
 function ReadError({ text, testId }: { text: string; testId: string }) {
   const revalidator = useRevalidator();
+  const location = useLocation();
   return (
     <div className="s-stack s-stack--tight" role="alert" data-testid={testId}>
       <p className="s-notice">{text}</p>
@@ -27,8 +30,13 @@ function ReadError({ text, testId }: { text: string; testId: string }) {
         <Button
           variant="secondary"
           icon="undo"
+          // Sans JavaScript, le lien recharge la page ; avec, il relit seulement ses données.
+          href={`${location.pathname}${location.search}`}
           disabled={revalidator.state !== "idle"}
-          onClick={() => void revalidator.revalidate()}
+          onClick={(event) => {
+            event.preventDefault();
+            void revalidator.revalidate();
+          }}
           data-testid={`${testId}-retry`}
         >
           {L.readRetry}
@@ -38,10 +46,86 @@ function ReadError({ text, testId }: { text: string; testId: string }) {
   );
 }
 
+const UPCOMING_PAGE = 50;
+const PAST_PAGE = 12;
+
+type More = { base: EventCard[] | null; extra: EventCard[]; next: string | null; failed: boolean; busy: boolean };
+
+/**
+ * Les événements d'une liste (à venir ou passés) : la première page lue par le serveur, puis « Voir plus » au curseur
+ * (au-delà des 50 à venir et des 12 passés). Après l'échec d'une page, « Réessayer » relit la suite, jamais une liste
+ * fusionnée à moitié. Une nouvelle lecture de la page (« Réessayer » général) repart de ses données.
+ */
+function useMoreEvents(structureId: string, scope: "upcoming" | "past", first: EventCard[] | null, firstNext: string | null) {
+  const fresh: More = { base: first, extra: [], next: firstNext, failed: false, busy: false };
+  const [state, setState] = useState<More>(fresh);
+  const cur = state.base === first ? state : fresh;
+  async function more() {
+    setState({ ...cur, busy: true });
+    const limit = scope === "past" ? PAST_PAGE : UPCOMING_PAGE;
+    const res = await apiFetch<{ items: EventCard[]; nextCursor: string | null }>(
+      `/events?structureId=${encodeURIComponent(structureId)}&limit=${limit}${scope === "past" ? "&scope=past" : ""}&cursor=${encodeURIComponent(cur.next ?? "")}`,
+    );
+    if (!res.ok) {
+      setState({ ...cur, failed: true, busy: false });
+      return;
+    }
+    const known = new Set([...(first ?? []), ...cur.extra].map((e) => e.id));
+    setState({
+      ...cur,
+      extra: [...cur.extra, ...res.data.items.filter((e) => !known.has(e.id))],
+      next: res.data.nextCursor,
+      failed: false,
+      busy: false,
+    });
+  }
+  return { items: first === null ? null : [...first, ...cur.extra], next: cur.next, failed: cur.failed, busy: cur.busy, more };
+}
+
+function MoreEvents({
+  next,
+  failed,
+  busy,
+  onMore,
+  testId,
+  label,
+}: {
+  next: string | null;
+  failed: boolean;
+  busy: boolean;
+  onMore: () => void;
+  testId: string;
+  label: string;
+}) {
+  if (next === null && !failed) return null;
+  return (
+    <div className="s-stack s-stack--tight">
+      {failed ? (
+        <p className="s-notice" role="alert" data-testid={`${testId}-error`}>
+          {L.eventsReadError}
+        </p>
+      ) : null}
+      <div>
+        <Button
+          variant="secondary"
+          icon={failed ? "undo" : "down"}
+          disabled={busy}
+          onClick={onMore}
+          data-testid={failed ? `${testId}-retry` : testId}
+        >
+          {failed ? L.readRetry : label}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function StructureEvents({
   structure,
-  upcoming,
-  past,
+  upcoming: firstUpcoming,
+  upcomingNext,
+  past: firstPast,
+  pastNext,
   partners,
   inviteToken,
   inviteFailed,
@@ -49,12 +133,19 @@ export function StructureEvents({
 }: {
   structure: StructurePublic;
   upcoming: EventCard[] | null;
+  /** Le curseur de la page suivante des événements à venir (`null` : la liste est entière). */
+  upcomingNext: string | null;
   past: EventCard[] | null;
+  pastNext: string | null;
   partners: ProCard[] | null;
   inviteToken: string | null;
   inviteFailed: boolean;
   origin: string;
 }) {
+  const up = useMoreEvents(structure.id, "upcoming", firstUpcoming, upcomingNext);
+  const old = useMoreEvents(structure.id, "past", firstPast, pastNext);
+  const upcoming = up.items;
+  const past = old.items;
   const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
   const socials = Object.entries(structure.socials).filter(([, url]) => Boolean(url)) as [string, string][];
   const average = structure.rating.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
@@ -75,6 +166,14 @@ export function StructureEvents({
             ))}
           </div>
         )}
+        <MoreEvents
+          next={up.next}
+          failed={up.failed}
+          busy={up.busy}
+          onMore={() => void up.more()}
+          testId="structure-upcoming-more"
+          label={L.eventsMore}
+        />
       </section>
 
       {past === null ? (
@@ -94,6 +193,14 @@ export function StructureEvents({
               <EventTile key={event.id} event={event} showStructure={false} />
             ))}
           </div>
+          <MoreEvents
+            next={old.next}
+            failed={old.failed}
+            busy={old.busy}
+            onMore={() => void old.more()}
+            testId="structure-past-more"
+            label={L.pastMore}
+          />
         </section>
       ) : null}
 

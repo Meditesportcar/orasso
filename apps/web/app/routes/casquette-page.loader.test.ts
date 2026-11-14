@@ -24,13 +24,20 @@ const PAGE = {
 };
 /** Les lectures de la panne : les adresses (début) qui répondent 503. */
 let down: string[] = [];
+/** Les lectures refusées (403) plutôt qu'en panne : adresses (début). */
+let forbidden: string[] = [];
+/** Les listes d'événements dont la page suivante existe : adresses (début) → curseur rendu. */
+let cursors: Record<string, string> = {};
 
 vi.mock("../lib/api.server", () => {
   const answer = (path: string) => {
     if (down.some((d) => path.startsWith(d)))
       return { ok: false as const, status: 503, error: { code: "internal", message: "En panne" } };
+    if (forbidden.some((d) => path.startsWith(d)))
+      return { ok: false as const, status: 403, error: { code: "two_factor_required", message: "Second facteur" } };
+    const cursor = Object.entries(cursors).find(([d]) => path.startsWith(d))?.[1] ?? null;
     const data = path.startsWith("/events?")
-      ? { items: [], nextCursor: null }
+      ? { items: cursor ? [event("e-1")] : [], nextCursor: cursor }
       : path.endsWith("/pros")
         ? []
         : path.startsWith("/structures/st-1")
@@ -54,6 +61,19 @@ vi.mock("../lib/api.server", () => {
   };
 });
 
+const event = (id: string) => ({
+  id,
+  slug: id,
+  title: `Rassemblement ${id}`,
+  startsAt: "2026-12-01T09:00:00.000Z",
+  endsAt: "2026-12-01T17:00:00.000Z",
+  department: "66",
+  city: "Perpignan",
+  posterUrl: null,
+  format: "meet",
+  status: "published",
+});
+
 const loadPage = async (query = "") => {
   const { loader } = await import("./casquette-page");
   return loader({
@@ -67,6 +87,8 @@ beforeAll(async () => {
 }, 60_000);
 beforeEach(() => {
   down = [];
+  forbidden = [];
+  cursors = {};
 });
 
 /** L'onglet « Événements » rendu comme le site le rend, avec ce que le chargeur a lu. */
@@ -117,5 +139,46 @@ describe("chargeur de la Page d'une structure", () => {
     expect(html).toContain("Les pros partenaires ne se chargent pas pour le moment.");
     expect(html).toContain("Le lien d&#x27;invitation ne se charge pas pour le moment.");
     expect(html).not.toMatch(/\b0 partenaire/);
+    // Le compteur des partenaires est inconnu (« – »), jamais « 0 » : l'assertion précédente (« 0 partenaire ») ne pouvait pas échouer.
+    expect(html).toMatch(/data-testid="page-count-partners"[^>]*>(?:(?!<\/).)*–/s);
+    // « Réessayer » est un lien vers la page courante (sans JavaScript, il la recharge).
+    expect(html).toMatch(/<a [^>]*href="\/"[^>]*data-testid="structure-past-error-retry"/);
+  });
+
+  it("403 « second facteur » sur le lien d'invitation : un refus n'est pas une panne, pas de « Réessayer » (cas 403)", async () => {
+    forbidden = ["/structures/st-1"];
+    const data = (await loadPage("?onglet=evenements")) as Record<string, unknown>;
+    expect(data.inviteToken).toBeNull();
+    expect(data.inviteFailed).toBe(false);
+    const html = await render(data as never);
+    expect(html).not.toContain("Le lien d&#x27;invitation ne se charge pas");
+  });
+
+  it("au-delà des limites (50 à venir, 12 passés) : les curseurs sont transmis et « Voir plus » est proposé", async () => {
+    cursors = {
+      "/events?structureId=st-1&limit=50": "CURSEUR-A-VENIR",
+      "/events?structureId=st-1&scope=past": "CURSEUR-PASSES",
+    };
+    const data = (await loadPage("?onglet=evenements")) as Record<string, unknown>;
+    expect(data.upcomingNext).toBe("CURSEUR-A-VENIR");
+    expect(data.pastNext).toBe("CURSEUR-PASSES");
+    // Les listes ne sont pas entières : le total des événements reste inconnu.
+    expect(data.eventsComplete).toBe(false);
+    const html = await render(data as never);
+    expect(html).toContain('data-testid="structure-upcoming-more"');
+    expect(html).toContain('data-testid="structure-past-more"');
+    // Listes entières : pas de « Voir plus ».
+    cursors = {};
+    const whole = await render((await loadPage("?onglet=evenements")) as never);
+    expect(whole).not.toContain("structure-upcoming-more");
+    expect(whole).not.toContain("structure-past-more");
+  });
+
+  it("une panne des événements ne donne aucun curseur", async () => {
+    down = ["/events?structureId=st-1"];
+    cursors = { "/events?structureId=st-1": "X" };
+    const data = (await loadPage("?onglet=evenements")) as Record<string, unknown>;
+    expect(data.upcomingNext).toBeNull();
+    expect(data.pastNext).toBeNull();
   });
 });

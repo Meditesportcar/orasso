@@ -87,9 +87,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Le total des événements n'est dit que si les deux listes sont lues en entier.
     eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
     staffSent: url.searchParams.get("staff") === "demande",
-    upcoming: upcoming.ok ? upcoming.data.items : [],
-    past: past.ok ? past.data.items : [],
-    partners: partners.ok ? partners.data : [],
+    // Une lecture qui échoue reste `null` : l'onglet dit la panne avec « Réessayer », jamais une liste vide (comme la Page du propriétaire).
+    upcoming: upcoming.ok ? upcoming.data.items : null,
+    upcomingNext: upcoming.ok ? upcoming.data.nextCursor : null,
+    past: past.ok ? past.data.items : null,
+    pastNext: past.ok ? past.data.nextCursor : null,
+    partners: partners.ok ? partners.data : null,
+    inviteFailed: Boolean(full && !full.ok && full.status >= 500),
     connected: session,
     inviteToken: full?.ok ? full.data.inviteToken : null,
     isOrganizer: Boolean(organizer),
@@ -148,8 +152,11 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
   const {
     structure,
     upcoming,
+    upcomingNext,
     past,
+    pastNext,
     partners,
+    inviteFailed,
     connected,
     inviteToken,
     isOrganizer,
@@ -175,8 +182,8 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
   });
   const counters = pageCounters("structure", {
     followers: structure.followersCount,
-    events: eventsComplete ? upcoming.length + past.length : null,
-    partners: partners.length,
+    events: eventsComplete && upcoming && past ? upcoming.length + past.length : null,
+    partners: partners ? partners.length : null,
   });
   const key = authorKeyOf("structure", structure.id);
   const ring = connected ? profileRingState(structure.stories) : null;
@@ -301,10 +308,12 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
         <StructureEvents
           structure={structure}
           upcoming={upcoming}
+          upcomingNext={upcomingNext}
           past={past}
+          pastNext={pastNext}
           partners={partners}
           inviteToken={inviteToken}
-          inviteFailed={false}
+          inviteFailed={inviteFailed}
           origin={origin}
         />
       ) : tab === "publications" ? (

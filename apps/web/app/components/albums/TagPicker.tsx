@@ -87,7 +87,8 @@ export function TagPicker({
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
-    const suffix = params.size ? `?${params}` : "";
+    const text = params.toString();
+    const suffix = text ? `?${text}` : "";
     setView(picker.current.state());
     void apiFetch<Taggable>(`/albums/${encodeURIComponent(albumId)}/taggable${suffix}`).then((res) => {
       const next = res.ok

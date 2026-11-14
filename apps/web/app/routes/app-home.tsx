@@ -69,7 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     params.set("lat", String(lat));
     params.set("lng", String(lng));
   }
-  const res = await api<HomeData>(request, `/me/home${params.size ? `?${params}` : ""}`);
+  const res = await api<HomeData>(request, `/me/home${params.toString() ? `?${params}` : ""}`);
   return {
     pseudo: me.profile.pseudo,
     // Bandeau « où sont passées les choses » (lot R7a1) : une seule fois par navigateur (cookie `whatsnew_r7=vu`) ;

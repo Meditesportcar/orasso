@@ -66,10 +66,13 @@ export async function loader({ request, params }: Route.LoaderArgs): Promise<Own
       eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
       // Une lecture qui échoue reste `null` : l'écran dit la panne avec « Réessayer », jamais une liste vide ni un « 0 ».
       upcoming: upcoming.ok ? upcoming.data.items : null,
+      upcomingNext: upcoming.ok ? upcoming.data.nextCursor : null,
       past: past.ok ? past.data.items : null,
+      pastNext: past.ok ? past.data.nextCursor : null,
       partners: partners.ok ? partners.data : null,
       inviteToken: full.ok ? full.data.inviteToken : null,
-      inviteFailed: !full.ok,
+      // Un refus (403 `two_factor_required`, propriétaire sans second facteur) n'est pas une panne : « Réessayer » n'y changerait rien.
+      inviteFailed: !full.ok && full.status >= 500,
     };
   }
   if (path.startsWith("/pro/")) {
