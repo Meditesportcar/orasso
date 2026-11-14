@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
 import { sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
@@ -616,9 +616,16 @@ test("Événements d'une structure au-delà des limites (50 à venir, 12 passés
       expect(new Set(hrefs).size, "aucune carte en double").toBe(hrefs.length);
     }
   } finally {
-    // Les événements de la recette sont retirés (ils n'ont aucune autre ligne liée).
-    if (created.length) await sql("delete from events where id = any($1::uuid[])", [created]).catch(() => undefined);
-    await ctx.close();
+    // Les événements de la recette sont retirés avec les notifications que leur publication a créées (leur `event_id` passerait à
+    // NULL sans les effacer) ; une erreur de nettoyage fait échouer la recette au lieu de laisser des restes.
+    try {
+      if (created.length) {
+        await sql("delete from notifications where event_id = any($1::uuid[])", [created]);
+        await sql("delete from events where id = any($1::uuid[])", [created]);
+      }
+    } finally {
+      await ctx.close();
+    }
   }
 });
 
@@ -792,13 +799,17 @@ test("/m/<id> à deux casquettes du même compte : la fiche pro suit son propre 
     departments: ["66"],
   });
   expect(created.status, "le média du garage est créé").toBe(200);
-  const media = await personaOf(email, "media");
-  const pro = await personaOf(email, "pro");
-  const proKey = `p:${pro.id}`;
-  const ownKey = `m:${media.id}`;
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
+  // Entré dans le `try` dès la création : un échec plus bas retire quand même le média de la recette.
+  let mediaId: string | null = null;
+  let ctx: BrowserContext | null = null;
   try {
+    const media = await personaOf(email, "media");
+    mediaId = media.id;
+    const pro = await personaOf(email, "pro");
+    const proKey = `p:${pro.id}`;
+    const ownKey = `m:${media.id}`;
+    ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
     await setFollowing(email, ownKey, false, proKey);
     await open(page, email, `/m/${media.id}?auteur=${encodeURIComponent(proKey)}&onglet=albums`);
     // La fiche pro n'est pas la page visitée : « Suivre » est là, au nom de la fiche.
@@ -818,11 +829,15 @@ test("/m/<id> à deux casquettes du même compte : la fiche pro suit son propre 
     await page.goto(`/m/${media.id}?onglet=albums`);
     await expect(page.getByTestId("follow-button")).toHaveCount(0);
   } finally {
-    await setFollowing(email, ownKey, false, proKey).catch(() => undefined);
     // Le média de la recette est retiré : le compte retrouve l'état de la graine (sans casquette Média).
-    await sql("delete from page_follows where target_id = $1", [media.id]);
-    await sql("delete from media_profiles where id = $1", [media.id]);
-    await ctx.close();
+    try {
+      if (mediaId) {
+        await sql("delete from page_follows where target_id = $1", [mediaId]);
+        await sql("delete from media_profiles where id = $1", [mediaId]);
+      }
+    } finally {
+      await ctx?.close();
+    }
   }
 });
 
