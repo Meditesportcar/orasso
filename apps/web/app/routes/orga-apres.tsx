@@ -12,13 +12,14 @@ import {
   eventPhotosLabels,
   formatDayDate,
   afterEventLabels as L,
+  pagesLabels,
   renderTemplate,
   reviewLink,
   showPhotosSection,
   type ThanksResult,
 } from "@orasso/shared";
 import { useState } from "react";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation, useRevalidator } from "react-router";
 import { TextAreaField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -49,14 +50,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Lot B2b (T54) : les albums des médias accrédités ; la ligne « Photos » mène à leur gestion (album officiel). Une panne la cache.
     api<AlbumsList>(request, `/events/${params.eventId}/albums?limit=50`),
   ]);
-  const photos =
-    albums.ok && showPhotosSection(albums.data.items)
+  // Une panne (5xx, service injoignable) n'est pas une absence : la ligne reste, le compte est inconnu et l'erreur se dit.
+  const photos: { line: string; failed: boolean } | null = albums.ok
+    ? showPhotosSection(albums.data.items)
       ? {
           line: eventPhotosLabels.manageLine(
             albums.data.total ?? albums.data.items.length,
             albums.data.items.find((a) => a.official)?.media.name ?? null,
           ),
+          failed: false,
         }
+      : null
+    : albums.status >= 500
+      ? { line: eventPhotosLabels.manageLineUnknown, failed: true }
       : null;
   return { event, view: view.ok ? view.data : null, viewError: view.ok ? null : view.error.message, pseudo, photos };
 }
@@ -86,6 +92,30 @@ function Ranked({ title, items }: { title: string; items: { label: string; count
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Les albums ne se lisent pas : le message et « Réessayer » (relit la page), la ligne de gestion reste. */
+function PhotosReadError() {
+  const revalidator = useRevalidator();
+  return (
+    <div className="s-stack s-stack--tight" role="alert" data-testid="ae-photos-error">
+      <p className="s-notice">{eventPhotosLabels.manageReadError}</p>
+      <div>
+        <Button
+          variant="secondary"
+          icon="undo"
+          disabled={revalidator.state !== "idle"}
+          onClick={() => {
+            if (revalidator.state !== "idle") return;
+            void revalidator.revalidate();
+          }}
+          data-testid="ae-photos-retry"
+        >
+          {pagesLabels.readRetry}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -223,6 +253,7 @@ export default function OrgaApres({ loaderData, actionData, params }: Route.Comp
           >
             {photos.line}
           </Button>
+          {photos.failed && <PhotosReadError />}
         </section>
       )}
 

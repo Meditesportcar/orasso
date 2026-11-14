@@ -54,6 +54,9 @@ export const eventPhotosLabels = {
   /** La gestion de l'événement, bloc « Après » : « Photos · 2 albums · officiel : Objectif 66 ». */
   manageLine: (n: number, official: string | null) =>
     `Photos · ${countFr(n, "album")}${official ? ` · officiel : ${official}` : ""}`,
+  /** Les albums ne se lisent pas (panne) : la ligne reste, le compte est inconnu, et l'erreur se dit. */
+  manageLineUnknown: "Photos · –",
+  manageReadError: "Les albums ne se chargent pas pour le moment.",
   manageHint: "Ouvre la fiche, à la section « Photos »",
   /** Messages de l'API (les mêmes que ceux des écrans). */
   errors: {
