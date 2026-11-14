@@ -174,6 +174,7 @@ describe("un lien qui ne quitte pas la page n'annule pas l'attente (lot B3a)", (
     expect(linkClickLeavesPage(plain, { ...page, href: "#section" })).toBe(false);
     expect(linkClickLeavesPage(plain, { ...page, href: "javascript:void(0)" })).toBe(false);
     expect(linkClickLeavesPage(plain, { ...page, href: null })).toBe(false);
-    expect(linkClickLeavesPage(plain, { ...page, href: "  " })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: "" })).toBe(true);
+    expect(linkClickLeavesPage(plain, { ...page, href: "  " })).toBe(true);
   });
 });

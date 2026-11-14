@@ -71,7 +71,7 @@ export const cancelIsAnnounced = (reason: WaitCancelReason | null): boolean => r
 /**
  * Lot B3a : ce clic sur un lien quitte-t-il vraiment la page ? Non pour un clic qui ne navigue pas ici : autre bouton
  * que le principal, touche Ctrl, Cmd, Maj ou Alt (nouvel onglet, nouvelle fenêtre, téléchargement), cible autre que
- * cette fenêtre, `download`, ou un lien sans destination (`href="#"`, ancre de la page, `javascript:`). Seul un clic
+ * cette fenêtre, `download`, ou un lien sans destination (`href="#"`, ancre de la page, `javascript:`) ; `href=""` recharge la page : c'est une sortie. Seul un clic
  * qui quitte la page annule le clic en attente de l'assistant.
  */
 export function linkClickLeavesPage(
@@ -81,8 +81,9 @@ export function linkClickLeavesPage(
   if (click.button !== 0 || click.ctrlKey || click.metaKey || click.shiftKey || click.altKey) return false;
   if (link.download) return false;
   if (link.target && link.target !== "_self") return false;
-  const href = (link.href ?? "").trim();
-  if (href === "" || href.startsWith("#") || href.toLowerCase().startsWith("javascript:")) return false;
+  if (link.href === null) return false;
+  const href = link.href.trim();
+  if (href.startsWith("#") || href.toLowerCase().startsWith("javascript:")) return false;
   return true;
 }
 
