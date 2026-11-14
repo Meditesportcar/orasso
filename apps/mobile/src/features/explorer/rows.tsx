@@ -1,6 +1,6 @@
 // Lignes de l'Explorer et de la recherche : un événement, un pro, un véhicule trouvé. Tout est un lien ; un nom
 // (d'événement, de pro, de véhicule) ne se tronque jamais.
-import { Chip, ChipRow, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, ChipRow, Photo, Plate, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import {
   countFr,
   type EventCard,
@@ -21,6 +21,8 @@ import { mediaSource } from "@/lib/media";
 import { Avatar } from "@/ui/Avatar";
 
 const { space1, space2, space3 } = tokens.spacing;
+/** Plancher du corps d'un titre de ligne (celui des titres d'affiche et de ticket, `TITLE_FLOOR`). */
+const TITLE_MIN = 11;
 
 export function EventRow({ event, hints = true }: { event: EventCard; hints?: boolean }) {
   const { t } = useTheme();
@@ -46,9 +48,10 @@ export function EventRow({ event, hints = true }: { event: EventCard; hints?: bo
             {event.outlook === "uncertain" ? " · Incertain" : ""}
             {event.status === "cancelled" ? " · Annulé" : ""}
           </Text>
-          <Text variant="posterM" color={t.color.plateInk}>
+          {/* Lot B3a : le titre ne se coupe jamais au milieu d'un mot (police agrandie : le corps baisse au besoin). */}
+          <WordSafeText variant="posterM" base={tokens.type.posterM.fontSize} min={TITLE_MIN} color={t.color.plateInk}>
             {event.title}
-          </Text>
+          </WordSafeText>
           <Text variant="meta" color={t.color.plateMuted}>
             {formatDay(event.startsAt)} · {formatHour(event.startsAt)}
             {event.city ? ` · ${event.city}` : ""}
@@ -103,9 +106,9 @@ export function ProRow({ pro, hints = true }: { pro: ProCard; hints?: boolean })
           <Text variant="label" color={t.color.plateMuted}>
             {pro.activities.map((a) => proActivityLabels[a]).join(" · ")}
           </Text>
-          <Text variant="posterM" color={t.color.plateInk}>
+          <WordSafeText variant="posterM" base={tokens.type.posterM.fontSize} min={TITLE_MIN} color={t.color.plateInk}>
             {pro.name}
-          </Text>
+          </WordSafeText>
           {where ? (
             <Text variant="meta" color={t.color.plateMuted}>
               {where}
@@ -141,9 +144,9 @@ export function VehicleHitRow({ hit }: { hit: SearchVehicleHit }) {
         onPress={() => router.push(`/v/${hit.id}`)}
         style={styles.body}
       >
-        <Text variant="posterS" color={t.color.plateInk}>
+        <WordSafeText variant="posterS" base={tokens.type.posterS.fontSize} min={TITLE_MIN} color={t.color.plateInk}>
           {hit.label}
-        </Text>
+        </WordSafeText>
       </Pressable>
       <Pressable
         accessibilityRole="link"
