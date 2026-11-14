@@ -147,7 +147,7 @@ export default function EventPage() {
   const scrolledFor = useRef<string | null>(null);
   const revealed = useCallback(() => {
     scrolledFor.current = slug;
-  }, []);
+  }, [slug]);
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   // Lot M3 : reprend la lecture partie au toucher de la carte (Explorer, carte), sinon la lance.
