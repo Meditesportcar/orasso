@@ -200,6 +200,9 @@ export async function seedFeed() {
   await seedCoauthors();
 }
 
+/** Légendes des publications que ce seed pose (compte Orasso, Kenji_66, Marc_66) : les autres scripts ne visent que celles-là, jamais une publication réelle. */
+export const SEED_PLAN_CAPTIONS: string[] = PLAN.map((p) => p.caption);
+
 async function seedOrassoFeed() {
   await migrateLegacyFeedKeys();
   // Le compte officiel : jamais de connexion possible (mot de passe aléatoire, e-mail non distribuable).

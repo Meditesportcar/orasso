@@ -6,12 +6,14 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { AppError } from "../../src/lib/errors";
 import type { AuthUser, Viewer } from "../../src/lib/session";
 import { feedCommentsService } from "../../src/modules/feed/comments/service";
 import { notificationsService } from "../../src/modules/notifications/service";
 import { storiesService } from "../../src/modules/stories/service";
 import { uploadsService } from "../../src/modules/uploads/service";
 import { storeFeedPhoto } from "./feed";
+import { KENJI_RECENT_CAPTION } from "./feed-comments";
 import { reviewedNoPlateCar } from "./photos";
 
 async function viewerOfUser(userId: string, secondFactor: string | null = null): Promise<Viewer | null> {
@@ -115,6 +117,7 @@ export async function seedPageFollows() {
  */
 /** Identifiant d'envoi fixe du premier commentaire du seed (le rejeu retrouve ainsi sa publication). */
 const FIRST_COMMENT_ID = "00000000-0000-4000-8000-0000000009a1";
+const SECOND_COMMENT_ID = "00000000-0000-4000-8000-0000000009a2";
 
 async function seedPageFeed(pages: {
   brasa: { id: string; userId: string };
@@ -138,22 +141,37 @@ async function seedPageFeed(pages: {
     });
     if (!(await storeFeedPhoto(id, 9))) await db.delete(t.feedPosts).where(eq(t.feedPosts.id, id));
   }
-  // Le rail « Ça plaît en ce moment » : trois flammes de comptes en règle sur la plus récente publication de Roues Libres 66.
-  const orgaPost = await db.query.feedPosts.findFirst({
-    where: and(eq(t.feedPosts.structureId, pages.rouesLibres.id), isNull(t.feedPosts.deletedAt)),
-    orderBy: sql`${t.feedPosts.createdAt} desc`,
-  });
+  // Le rail « Ça plaît en ce moment » : trois flammes de comptes en règle sur la plus récente publication du seed de Roues Libres 66
+  // (journal du Lydia), jamais sur une publication réelle ; rien n'est refait si une de ces flammes existe déjà.
+  const lydia = await db.query.events.findFirst({ where: eq(t.events.slug, "rassemblement-du-lydia") });
+  const orgaPost = lydia
+    ? await db.query.feedPosts.findFirst({
+        where: and(
+          eq(t.feedPosts.structureId, pages.rouesLibres.id),
+          eq(t.feedPosts.eventId, lydia.id),
+          isNull(t.feedPosts.deletedAt),
+        ),
+        orderBy: sql`${t.feedPosts.createdAt} desc`,
+      })
+    : null;
   if (orgaPost) {
     const fans = await db
       .select({ userId: t.profiles.userId })
       .from(t.profiles)
       .where(sql`lower(${t.profiles.pseudo}) in ('kenji_66', 'lea_11', 'marc_66')`);
-    for (const f of fans) {
-      await db.insert(t.feedPostReactions).values({ postId: orgaPost.id, userId: f.userId }).onConflictDoNothing();
+    const flamed = await db
+      .select({ userId: t.feedPostReactions.userId })
+      .from(t.feedPostReactions)
+      .where(eq(t.feedPostReactions.postId, orgaPost.id));
+    const done = fans.some((f) => flamed.some((r) => r.userId === f.userId));
+    if (!done) {
+      for (const f of fans) {
+        await db.insert(t.feedPostReactions).values({ postId: orgaPost.id, userId: f.userId }).onConflictDoNothing();
+      }
+      await db.execute(
+        sql`update feed_posts set reactions_count = (select count(*)::int from feed_post_reactions where post_id = ${orgaPost.id}) where id = ${orgaPost.id}`,
+      );
     }
-    await db.execute(
-      sql`update feed_posts set reactions_count = (select count(*)::int from feed_post_reactions where post_id = ${orgaPost.id}) where id = ${orgaPost.id}`,
-    );
   }
   // Roues Libres 66 (son propriétaire, second facteur) commente une publication de Kenji_66, La Brasa lui répond.
   const owner = await db.query.structureMembers.findFirst({
@@ -162,40 +180,53 @@ async function seedPageFeed(pages: {
   const sarah = owner ? await viewerOfUser(owner.userId, "totp") : null;
   const sofia = await viewerOfUser(pages.brasa.userId);
   if (!sarah || !sofia) return;
-  // Rejeu : la publication visée est celle où le seed a déjà posé son commentaire (retrouvé par son identifiant d'envoi), jamais
-  // « la dernière de Kenji_66 » une seconde fois : s'il a publié depuis, l'identifiant fixe viserait une autre publication (409).
-  // Un commentaire du seed supprimé depuis n'est pas reposé.
-  const already = await db.query.feedPostComments.findFirst({
-    where: and(eq(t.feedPostComments.authorId, sarah.user.id), eq(t.feedPostComments.clientId, FIRST_COMMENT_ID)),
-  });
-  if (already?.deletedAt) return;
+  // Rejeu : un commentaire du seed qui existe déjà (supprimé ou non) n'est jamais reposé ni rappelé par le service (supprimé : 409 ;
+  // publication supprimée ou compte devenu privé : 404). La publication visée est celle du seed (légende), jamais « la dernière de
+  // Kenji_66 » ; si elle manque ou est supprimée, rien n'est reporté sur une autre.
+  const exists = (authorId: string, clientId: string) =>
+    db.query.feedPostComments.findFirst({
+      where: and(eq(t.feedPostComments.authorId, authorId), eq(t.feedPostComments.clientId, clientId)),
+    });
+  const already = await exists(sarah.user.id, FIRST_COMMENT_ID);
+  const replied = await exists(sofia.user.id, SECOND_COMMENT_ID);
+  if (already && replied) return;
   const kenji = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'kenji_66'` });
   const post = already
     ? await db.query.feedPosts.findFirst({ where: eq(t.feedPosts.id, already.postId) })
     : kenji
       ? await db.query.feedPosts.findFirst({
-          where: and(
-            eq(t.feedPosts.authorId, kenji.userId),
-            eq(t.feedPosts.persona, "fan"),
-            isNull(t.feedPosts.deletedAt),
-          ),
-          orderBy: sql`${t.feedPosts.createdAt} desc`,
+          where: and(eq(t.feedPosts.authorId, kenji.userId), eq(t.feedPosts.caption, KENJI_RECENT_CAPTION)),
         })
       : null;
-  if (!post) return;
-  const first = await feedCommentsService.create(
-    sarah,
-    post.id,
-    {
-      text: "Merci d'être venu ! On vous garde une place au prochain rassemblement.",
-      clientId: FIRST_COMMENT_ID,
-    },
-    { kind: "structure", id: pages.rouesLibres.id, key: `s:${pages.rouesLibres.id}` },
-  );
-  await feedCommentsService.create(
-    sofia,
-    post.id,
-    { text: "Et le brasero vous attend aussi !", clientId: "00000000-0000-4000-8000-0000000009a2", parentId: first.id },
-    { kind: "provider", id: pages.brasa.id, key: `v:${pages.brasa.id}` },
-  );
+  if (!post || post.deletedAt) return;
+  try {
+    const first = already
+      ? { id: already.id }
+      : await feedCommentsService.create(
+          sarah,
+          post.id,
+          {
+            text: "Merci d'être venu ! On vous garde une place au prochain rassemblement.",
+            clientId: FIRST_COMMENT_ID,
+          },
+          { kind: "structure", id: pages.rouesLibres.id, key: `s:${pages.rouesLibres.id}` },
+        );
+    if (!replied) {
+      await feedCommentsService.create(
+        sofia,
+        post.id,
+        { text: "Et le brasero vous attend aussi !", clientId: SECOND_COMMENT_ID, parentId: first.id },
+        { kind: "provider", id: pages.brasa.id, key: `v:${pages.brasa.id}` },
+      );
+    }
+  } catch (error) {
+    // Publication devenue illisible (compte de Kenji_66 privé ou suspendu) ou commentaire parent supprimé : la graine continue.
+    if (error instanceof AppError && (error.status === 404 || error.status === 409)) {
+      console.log(
+        `Commentaires de pages : publication ou commentaire du seed indisponible (${error.status}), rien ajouté.`,
+      );
+      return;
+    }
+    throw error;
+  }
 }
