@@ -621,6 +621,8 @@ export function EventWizard({
   async function finish(mode: "draft" | "publish" | "preview" | "save", resumed = false) {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
+    // Lot B3a : le clic est pris (comme « Continuer », `go`) : « Clic annulé… » d'une attente précédente s'efface.
+    setNotice(null);
     const click = decideClick(clickState, resumed ? null : queued, true);
     if (click === "ignore") return;
     if (click === "wait") {

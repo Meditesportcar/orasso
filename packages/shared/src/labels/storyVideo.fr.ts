@@ -1,4 +1,5 @@
 import { STORY_VIDEO_MAX_BYTES, STORY_VIDEO_MAX_MS, STORY_VIDEO_PENDING_MAX_BYTES } from "../rules/storyVideo";
+import { doneWho, type StoryDoneAudience } from "./storyPublish.fr";
 
 // Stories vidéo (lot R7g, maquettes R7.8 `ps_4_md_video`, R7.7 `sk_video` et R7.22 `sf_cam`) : libellés de l'API, de l'appli
 // et du site, mêmes mots partout.
@@ -42,7 +43,7 @@ export const storyVideoLabels = {
   sendingPercent: (percent: number) => `Envoi de la vidéo · ${percent} %`,
   offline: "Impossible d'envoyer une vidéo sans réseau.",
   uploadTimeout: "L'envoi a pris trop de temps : réessaie avec une meilleure connexion.",
-  doneText: (audience: string) => `${audience} la voit pendant 24 h. Publiée telle quelle, sans floutage.`,
+  doneText: (audience: StoryDoneAudience) => `${doneWho(audience)} pendant 24 h. Publiée telle quelle, sans floutage.`,
   readingVideo: "Lecture de la vidéo…",
   // API.
   apiTooLong: `Une story vidéo dure ${SECONDS} secondes au plus.`,

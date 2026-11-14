@@ -3,6 +3,7 @@ import {
   accountAfterAnnouncement,
   cancelIsAnnounced,
   decideClick,
+  linkClickLeavesPage,
   newTicket,
   nextEpoch,
   settleWait,
@@ -147,5 +148,33 @@ describe("pourquoi l'attente est annulée, et quand elle le dit (tour 5)", () =>
     expect(waitIsStale(ticket, unchanged)).toBe(false);
     const changed = { ...seen, epoch: nextEpoch(seen.epoch, true) };
     expect(waitIsStale(ticket, changed)).toBe(true);
+  });
+});
+
+describe("un lien qui ne quitte pas la page n'annule pas l'attente (lot B3a)", () => {
+  const plain = { button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
+  const page = { href: "/orga", target: null, download: false };
+
+  it("un clic simple sur un lien de la page quitte la page", () => {
+    expect(linkClickLeavesPage(plain, page)).toBe(true);
+    expect(linkClickLeavesPage(plain, { ...page, target: "_self" })).toBe(true);
+  });
+
+  it("Ctrl, Cmd, Maj, Alt ou un autre bouton : rien ne quitte la page", () => {
+    for (const key of ["ctrlKey", "metaKey", "shiftKey", "altKey"] as const)
+      expect(linkClickLeavesPage({ ...plain, [key]: true }, page), key).toBe(false);
+    expect(linkClickLeavesPage({ ...plain, button: 1 }, page)).toBe(false);
+    expect(linkClickLeavesPage({ ...plain, button: 2 }, page)).toBe(false);
+  });
+
+  it("nouvel onglet, téléchargement, lien sans destination : rien ne quitte la page", () => {
+    expect(linkClickLeavesPage(plain, { ...page, target: "_blank" })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, download: true })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: "#" })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: "#section" })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: "javascript:void(0)" })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: null })).toBe(false);
+    expect(linkClickLeavesPage(plain, { ...page, href: "" })).toBe(true);
+    expect(linkClickLeavesPage(plain, { ...page, href: "  " })).toBe(true);
   });
 });

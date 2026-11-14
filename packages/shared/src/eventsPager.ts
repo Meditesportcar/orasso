@@ -175,6 +175,26 @@ export function structureEventsPath(
 export type KeptFirstPage<T> = { key: string; items: T[]; next: string | null };
 
 /**
+ * Lot B3a : ce que l'écran montre d'une liste d'événements, sans React (le crochet du site et celui de l'appli l'appellent,
+ * le test aussi). `view` : la première page affichée (`keepFirstPage`, ou la lecture de l'écran) ; `cur` : l'état du pager.
+ * - première lecture en panne (rien à montrer, `items` nul) : ni liste, ni « Voir plus », ni échec de « Voir plus » ;
+ * - relecture en panne (`readFailed`) : la liste gardée reste et la panne de la relecture se dit seule : un échec de
+ *   « Voir plus » en plus ferait deux messages identiques, il n'est pas montré (« Voir plus » reste utilisable).
+ */
+export function eventsView<T extends { id: string }>(
+  view: { items: T[] | null; next: string | null; readFailed: boolean },
+  cur: Pick<EventsPagerState<T>, "extra" | "pages" | "next" | "failed">,
+): { items: T[] | null; next: string | null; readFailed: boolean; failed: boolean } {
+  if (view.items === null) return { items: null, next: null, readFailed: false, failed: false };
+  return {
+    items: mergeEvents(view.items, cur.extra),
+    next: cur.pages === 0 ? view.next : cur.next,
+    readFailed: view.readFailed,
+    failed: cur.failed && !view.readFailed,
+  };
+}
+
+/**
  * Lot B2b, tour 3 : ce que l'écran montre comme première page. Une lecture réussie est gardée ; une relecture en panne
  * (`first` nul) pour la **même clé** garde la dernière première page lue (la liste affichée, avec les pages ajoutées, ne
  * disparaît pas) et dit la panne à part (`readFailed`) ; une **première** lecture en panne (rien de gardé pour cette clé)

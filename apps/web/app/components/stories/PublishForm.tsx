@@ -575,9 +575,7 @@ export function PublishForm({
         <FicheBar title={L.done} back={back} />
         <div className="story-done">
           <p className="o-t-body">
-            {clip
-              ? SV.doneText(L.doneAudience[done.audience ?? audience])
-              : L.doneText(L.doneAudience[done.audience ?? audience])}
+            {clip ? SV.doneText(done.audience ?? audience) : L.doneText(done.audience ?? audience)}
           </p>
           {done.replayed ? (
             <p className="o-t-caption">{L.doneReplayed}</p>

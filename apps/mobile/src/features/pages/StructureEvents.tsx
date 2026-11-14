@@ -75,6 +75,8 @@ export function StructureEvents({
   partners,
   upcomingMore,
   pastMore,
+  upcomingReadFailed = false,
+  pastReadFailed = false,
   onRetryUpcoming,
   onRetryPast,
 }: {
@@ -86,6 +88,9 @@ export function StructureEvents({
   /** « Voir plus » au-delà des 50 à venir et des 12 passés. */
   upcomingMore?: MoreEventsView;
   pastMore?: MoreEventsView;
+  /** Lot B3a (parité D20) : la relecture de la page a échoué, la liste gardée reste : la panne se dit à part, comme sur le site. */
+  upcomingReadFailed?: boolean;
+  pastReadFailed?: boolean;
   /** Présent quand la première lecture de la liste a échoué (panne, pas encore en cours) : « Réessayer » la relit. */
   onRetryUpcoming?: (() => void) | null;
   onRetryPast?: (() => void) | null;
@@ -100,10 +105,17 @@ export function StructureEvents({
       {upcoming === null && onRetryUpcoming ? (
         <ReadFailed text={L.eventsReadError} onRetry={onRetryUpcoming} testID="structure-upcoming-error" />
       ) : null}
-      {upcoming && upcoming.length === 0 ? <Muted variant="body">{explorerLabels.structureNoEvents}</Muted> : null}
+      {upcoming && upcoming.length === 0 && !upcomingReadFailed ? (
+        <Muted variant="body">{explorerLabels.structureNoEvents}</Muted>
+      ) : null}
       {upcoming?.map((e) => (
         <EventRow key={e.id} event={e} hints={false} />
       ))}
+      {upcomingReadFailed ? (
+        <Notice tone="error" testID="structure-upcoming-reread-error">
+          {L.eventsReadError}
+        </Notice>
+      ) : null}
       <MoreEvents
         more={upcomingMore}
         label={L.eventsMore}
@@ -117,12 +129,17 @@ export function StructureEvents({
           <ReadFailed text={L.pastReadError} onRetry={onRetryPast} testID="structure-past-error" />
         </>
       ) : null}
-      {past && past.length > 0 ? (
+      {past && (past.length > 0 || pastReadFailed) ? (
         <>
           <SectionTitle>{L.eventsPast}</SectionTitle>
           {past.map((e) => (
             <EventRow key={e.id} event={e} hints={false} />
           ))}
+          {pastReadFailed ? (
+            <Notice tone="error" testID="structure-past-reread-error">
+              {L.pastReadError}
+            </Notice>
+          ) : null}
           <MoreEvents more={pastMore} label={L.pastMore} errorText={L.pastReadError} testID="structure-past-more" />
         </>
       ) : null}

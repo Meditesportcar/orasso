@@ -70,7 +70,8 @@ export function ticket(ctx: PosterCtx): PosterLayout {
         size: 3.2 * cqw,
         color: C.dark,
       }),
-      { kind: "sig", right: W - 8 * cqw, y: 0.47 * H, anchor: "top", color: C.dark },
+      // Lot B3a : sans photo, la zone est un aplat sombre (voir `emptyPhoto`) : la signature passe en clair.
+      { kind: "sig", right: W - 8 * cqw, y: 0.47 * H, anchor: "top", color: ctx.input.photo ? C.dark : C.ink },
     ],
   };
 }

@@ -5,12 +5,13 @@
   min-width: 0;
 }
 
-/* Le nom passe à la ligne (jamais tronqué, jamais rétréci : la maquette R9.3 le met sur deux lignes en police ×1,3). */
+/* Le nom passe à la ligne entre les mots (jamais tronqué : la maquette R9.3 le met sur deux lignes en police ×1,3). Lot B3a : son
+   corps baisse (jusqu'à 11 px) pour que le mot le plus large tienne sur la colonne, au lieu d'être coupé en plein mot. */
 .pg-id__name.o-t-poster-l {
   margin: 0;
-  font-size: 18px;
+  font-size: clamp(var(--type-label-size), calc(100cqi / var(--em, 10)), 18px);
   line-height: 1.1;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   white-space: normal;
 }
 /* L'étiquette de type (`tag line` : contour d'un trait, capitales). */

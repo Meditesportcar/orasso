@@ -71,8 +71,9 @@ export default function StructurePage() {
     enabled: Boolean(s),
   });
   // « Voir plus » au-delà des 50 à venir et des 12 passés (parité avec le site) : la suite se lit au curseur, sans vider la liste.
-  const moreUpcoming = useMoreEvents(s?.id, "upcoming", upcoming.data);
-  const morePast = useMoreEvents(s?.id, "past", past.data);
+  // Une relecture en panne garde la liste (`useApi`) : la panne se dit à part, comme sur le site (lot B3a, parité D20).
+  const moreUpcoming = useMoreEvents(s?.id, "upcoming", upcoming.data, upcoming.error !== null && !upcoming.loading);
+  const morePast = useMoreEvents(s?.id, "past", past.data, past.error !== null && !past.loading);
   const partners = useApi(() => api.structurePros(slug), [slug], { enabled: Boolean(s) });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
@@ -278,6 +279,8 @@ export default function StructurePage() {
           partners={partnerItems}
           upcomingMore={moreUpcoming.more}
           pastMore={morePast.more}
+          upcomingReadFailed={moreUpcoming.readFailed}
+          pastReadFailed={morePast.readFailed}
           onRetryUpcoming={
             upcoming.data === null && upcoming.error && !upcoming.loading ? () => void upcoming.reload() : null
           }

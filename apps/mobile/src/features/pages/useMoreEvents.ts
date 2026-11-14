@@ -7,8 +7,8 @@ import {
   EventsPager,
   type EventsPagerState,
   eventsPagerKey,
+  eventsView,
   freshEventsPagerState,
-  mergeEvents,
   type Page,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
@@ -21,11 +21,16 @@ export const PAST_PAGE = 12;
 /** Ce que l'écran montre sous une liste : « Voir plus », « Réessayer » après un échec, jamais une liste vidée par une panne. */
 export type MoreEventsView = { next: string | null; failed: boolean; busy: boolean; onMore: () => void };
 
+/** La liste vue par l'écran : les événements, « Voir plus », et la panne de la relecture de la page (dite à part, la liste reste). */
+export type EventsListView = { items: EventCard[] | null; readFailed: boolean; more: MoreEventsView };
+
 export function useMoreEvents(
   structureId: string | undefined,
   scope: "upcoming" | "past",
   first: Page<EventCard> | null,
-): { items: EventCard[] | null; more: MoreEventsView } {
+  /** Lot B3a (parité D20) : la dernière lecture de la page a échoué alors qu'une liste est déjà affichée (`useApi` la garde). */
+  readFailed = false,
+): EventsListView {
   const firstNext = first?.nextCursor ?? null;
   const key = eventsPagerKey(structureId ?? "", scope, null);
   const where = useRef({ structureId, scope });
@@ -57,13 +62,13 @@ export function useMoreEvents(
   // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par chaque lecture (`first`) et par la clé
   useEffect(() => pager.onRead(key, firstNext, first !== null), [first, key]);
   const cur = state.key === key ? state : freshEventsPagerState<EventCard>(key, firstNext);
+  const view = eventsView(
+    { items: first?.items ?? null, next: firstNext, readFailed: first !== null && readFailed },
+    cur,
+  );
   return {
-    items: first ? mergeEvents(first.items, cur.extra) : null,
-    more: {
-      next: cur.pages === 0 ? firstNext : cur.next,
-      failed: cur.failed,
-      busy: cur.busy,
-      onMore: () => void pager.more(),
-    },
+    items: view.items,
+    readFailed: view.readFailed,
+    more: { next: view.next, failed: view.failed, busy: cur.busy, onMore: () => void pager.more() },
   };
 }

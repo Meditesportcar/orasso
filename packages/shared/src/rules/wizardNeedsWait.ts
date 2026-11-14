@@ -68,6 +68,25 @@ export const waitIsStale = (ticket: WaitTicket, ctx: WaitContext): boolean => wa
 /** Seul un changement de la saisie annule en le disant (« Clic annulé : la saisie a changé ») : une sortie ou un autre temps se voient. */
 export const cancelIsAnnounced = (reason: WaitCancelReason | null): boolean => reason === "saisie";
 
+/**
+ * Lot B3a : ce clic sur un lien quitte-t-il vraiment la page ? Non pour un clic qui ne navigue pas ici : autre bouton
+ * que le principal, touche Ctrl, Cmd, Maj ou Alt (nouvel onglet, nouvelle fenêtre, téléchargement), cible autre que
+ * cette fenêtre, `download`, ou un lien sans destination (`href="#"`, ancre de la page, `javascript:`) ; `href=""` recharge la page : c'est une sortie. Seul un clic
+ * qui quitte la page annule le clic en attente de l'assistant.
+ */
+export function linkClickLeavesPage(
+  click: { button: number; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean },
+  link: { href: string | null; target: string | null; download: boolean },
+): boolean {
+  if (click.button !== 0 || click.ctrlKey || click.metaKey || click.shiftKey || click.altKey) return false;
+  if (link.download) return false;
+  if (link.target && link.target !== "_self") return false;
+  if (link.href === null) return false;
+  const href = link.href.trim();
+  if (href.startsWith("#") || href.toLowerCase().startsWith("javascript:")) return false;
+  return true;
+}
+
 /** `epoch` n'avance que si la valeur change vraiment (un champ qui rappelle `onChange` sans changement n'annule rien). */
 export const nextEpoch = (epoch: number, changed: boolean): number => (changed ? epoch + 1 : epoch);
 

@@ -1,5 +1,15 @@
 import { STORY_CAPTION_MAX, STORY_PLACE_MAX, STORY_TAGS_MAX } from "../rules/audience";
 
+export type StoryDoneAudience = "followers" | "crew" | "public";
+const DONE_AUDIENCE: Record<StoryDoneAudience, string> = {
+  followers: "Tes abonnés",
+  crew: "Ton crew",
+  public: "Tous les membres",
+};
+/** « Tes abonnés la voient », « Ton crew la voit » : le verbe s'accorde au sujet (pluriel sauf le crew). */
+export const doneWho = (audience: StoryDoneAudience): string =>
+  `${DONE_AUDIENCE[audience]} la ${audience === "crew" ? "voit" : "voient"}`;
+
 // « Publier une story » (lot R7f3, D38, maquettes R7.8 `p-publier` et R7.22 `s-format`) : libellés communs à l'appli et au
 // site, mêmes mots partout. Les libellés de l'API (refus, notifications) restent dans `stories.fr.ts`.
 export const storyPublishLabels = {
@@ -123,8 +133,8 @@ export const storyPublishLabels = {
   sending: "Envoi de la photo…",
   publishing: "Publication de la story…",
   done: "Story publiée",
-  doneText: (audience: string) => `${audience} la voit pendant 24 h. Plaque traitée.`,
-  doneAudience: { followers: "Tes abonnés", crew: "Ton crew", public: "Tous les membres" },
+  // Lot B3a : le verbe s'accorde au public (« Tes abonnés la voient », « Ton crew la voit »).
+  doneText: (audience: StoryDoneAudience) => `${doneWho(audience)} pendant 24 h. Plaque traitée.`,
   doneReplayed: "Ta story est déjà partie (sans tes dernières modifications).",
   doneSkipped: "Certaines identifications ont été écartées : ces personnes ne pourraient pas voir ta story.",
   backToFeed: "Retour au Fil",

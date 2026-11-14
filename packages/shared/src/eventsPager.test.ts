@@ -7,6 +7,7 @@ import {
   EventsPager,
   type EventsPagerState,
   eventsPagerKey,
+  eventsView,
   type KeptFirstPage,
   keepFirstPage,
   mergeEvents,
@@ -333,11 +334,11 @@ describe("événements d'une Page : « Voir plus »", () => {
       const show = (first: E[] | null, next: string | null) => {
         const view = keepFirstPage(kept, key, first, next);
         kept = view.kept;
-        const cur = pager.current;
+        const shown = eventsView(view, pager.current);
         return {
-          ids: view.items === null ? null : mergeEvents(view.items, cur.extra).map((e) => e.id),
-          next: view.items === null ? null : cur.pages === 0 ? view.next : cur.next,
-          readFailed: view.readFailed,
+          ids: shown.items === null ? null : shown.items.map((e) => e.id),
+          next: shown.next,
+          readFailed: shown.readFailed,
         };
       };
       return { pager, key, show, firstItems, firstNext };
@@ -382,6 +383,37 @@ describe("événements d'une Page : « Voir plus »", () => {
     it("une autre clé ne reprend pas la première page gardée d'une autre liste", () => {
       const kept: KeptFirstPage<E> = { key: "autre", items: ev("x"), next: null };
       expect(keepFirstPage(kept, "s1|upcoming|", null, null)).toMatchObject({ items: null, readFailed: false });
+    });
+  });
+
+  // Lot B3a : « Voir plus » sous une panne de la 1re page, et les deux pannes en même temps.
+  describe("eventsView : ce que l'écran montre sous la liste", () => {
+    const cur = (patch: Partial<EventsPagerState<E>> = {}) => ({
+      extra: [],
+      pages: 0,
+      next: null,
+      failed: false,
+      ...patch,
+    });
+
+    it("première lecture en panne : ni liste, ni « Voir plus », même si un ancien « Voir plus » avait échoué", () => {
+      const view = eventsView(
+        { items: null, next: null, readFailed: false },
+        cur({ pages: 2, next: "c3", failed: true }),
+      );
+      expect(view).toEqual({ items: null, next: null, readFailed: false, failed: false });
+    });
+
+    it("« Voir plus » en échec seul : l'échec se dit, la liste reste", () => {
+      const view = eventsView({ items: ev("a"), next: "c1", readFailed: false }, cur({ failed: true, next: "c1" }));
+      expect(view).toMatchObject({ readFailed: false, failed: true, next: "c1" });
+      expect(view.items?.map((e) => e.id)).toEqual(["a"]);
+    });
+
+    it("« Voir plus » en échec ET relecture en panne : un seul message, celui de la relecture", () => {
+      const view = eventsView({ items: ev("a"), next: "c1", readFailed: true }, cur({ failed: true, next: "c1" }));
+      expect(view).toMatchObject({ readFailed: true, failed: false, next: "c1" });
+      expect(view.items?.map((e) => e.id)).toEqual(["a"]);
     });
   });
 });
