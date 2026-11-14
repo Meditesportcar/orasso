@@ -164,6 +164,19 @@ describe("« Contacter <média> » : une navigation choisie ensuite", () => {
     expect(t.log.opened).toEqual(["/app/messages/c2"]);
     expect(t.listeners.size).toBe(0);
   });
+  it("retour au repos, puis annulation avant la micro-tâche : aucune navigation", async () => {
+    const t = screen();
+    const contact = deferred<ContactMediaResult>();
+    const p = t.controller.open(() => contact.promise, HERE);
+    t.loading(HERE);
+    contact.resolve({ ok: true, conversationId: "c5" });
+    await p;
+    t.idle();
+    // La micro-tâche de navigation est placée ; l'annulation (changement de compte) passe avant elle.
+    t.controller.cancel();
+    await Promise.resolve();
+    expect(t.log.opened).toEqual([]);
+  });
   it("même adresse en rechargement qui ne finit pas : l'erreur de reprise est dite au délai, rien ne s'ouvre", async () => {
     const t = screen(20);
     const p = t.controller.open(async () => ({ ok: true, conversationId: "c3" }), HERE);

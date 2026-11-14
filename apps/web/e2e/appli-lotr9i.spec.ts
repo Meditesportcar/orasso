@@ -89,10 +89,9 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `conversation-personne-${theme}-384`);
     await page.getByTestId("view-page").click();
     await page.waitForURL(/\/m\/[0-9a-f-]{36}/, { timeout: 30_000 });
-    // L'adresse change avant le GET du nouvel écran : on attend son contenu visible, puis la période calme de `done()`.
-    await expect(page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    // L'adresse change avant le GET du nouvel écran : on attend un élément propre à la page du média (« Sud Cars » figure aussi dans l'en-tête
+    // de la conversation qu'on quitte), puis la période calme de `done()`.
+    await expect(page.getByTestId("media-head")).toBeVisible({ timeout: 30_000 });
     await api.done();
     expect(await page.content()).not.toContain(OWNER);
     await ctx.close();

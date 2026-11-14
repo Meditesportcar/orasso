@@ -57,7 +57,7 @@ export const SETTLE_TIMEOUT_MS = 10_000;
  * réponse (pas l'état rendu par `useNavigation()`, qui n'est mis à jour qu'à la validation du rendu, dans `startTransition`) :
  * - au repos : la conversation s'ouvre ;
  * - une autre adresse est en cours (ou déjà atteinte) : le choix de l'utilisateur prime, rien ne s'ouvre, rien ne se dit ;
- * - la même adresse recharge (revalidation) : on attend le retour au repos, puis on ouvre ; sans retour au repos dans le délai, l'erreur
+ * - la même adresse recharge (navigation vers la même adresse) : on attend le retour au repos, puis on ouvre ; sans retour au repos dans le délai, l'erreur
  *   de reprise est dite.
  */
 export function createContactMediaController(deps: {
@@ -99,6 +99,8 @@ export function createContactMediaController(deps: {
   function arrive(conversationId: string) {
     clear();
     if (leaves()) return;
+    // La génération de cette opération : une annulation (`cancel`) ou un nouvel appel entre-temps périme aussi la micro-tâche ci-dessous.
+    const mine = seq;
     if (snapshot().state === "idle") return deps.navigate(`/app/messages/${conversationId}`);
     // Même adresse en rechargement : on attend le retour au repos (ou une autre destination, qui annule), borné.
     const stop = () => {
@@ -113,7 +115,7 @@ export function createContactMediaController(deps: {
       // Après la fin de la mise à jour du routeur (appelée depuis son propre abonné, une navigation lancée ici serait écrasée par la suite de
       // sa mise à jour) : on relit alors l'état une dernière fois.
       queueMicrotask(() => {
-        if (!leaves() && snapshot().state === "idle") deps.navigate(`/app/messages/${conversationId}`);
+        if (mine === seq && !leaves() && snapshot().state === "idle") deps.navigate(`/app/messages/${conversationId}`);
       });
     });
     const timer = setTimeout(() => {

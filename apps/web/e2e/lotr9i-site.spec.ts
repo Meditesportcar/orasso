@@ -200,6 +200,8 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(page.getByTestId("view-page")).toBeVisible();
       await expect(page.locator('img[src*="sud-cars-logo"]').filter({ visible: true }).first()).toBeVisible();
 
+      // Le corps de `/conversations/<id>/read` est coupé par la navigation : on attend la fin du réseau de l'écran de la conversation.
+      await page.waitForLoadState("networkidle");
       await page.goto(`/app/albums/${albumId}/mes-photos`);
       await page.waitForLoadState("networkidle");
       await page.getByTestId("my-photo-more").first().click();
@@ -297,9 +299,8 @@ test("« Contacter » : un retour arrière pendant l'appel n'est pas remplacé p
   });
   await page.goBack();
   await dataAskedPromise;
-  // La réponse de « Contacter » arrive pendant ce chargement ; on lui laisse le temps d'être traitée.
+  // La réponse de « Contacter » arrive pendant ce chargement ; la suite (attente du chargement, ouverture, absence de fuite) est vérifiée plus bas.
   release();
-  await page.waitForTimeout(1_500);
   expect(page.url()).not.toMatch(/\/messages\//);
   releaseData();
   await page.waitForURL((u) => u.pathname === before);
@@ -310,7 +311,7 @@ test("« Contacter » : un retour arrière pendant l'appel n'est pas remplacé p
   await ctx.close();
 });
 
-// Tour 4, point 3 : la même adresse recharge (revalidation des chargeurs) quand la réponse arrive : la conversation s'ouvre au retour au repos,
+// Tour 4, point 3 (tour 5, point 1) : le routeur navigue vers la même adresse (état « loading », même chemin) quand la réponse arrive : la conversation s'ouvre au retour au repos,
 // elle n'est pas perdue sans un mot.
 test("« Contacter » : un rechargement de la même page à la réponse n'empêche pas d'ouvrir la conversation", async ({
   browser,
@@ -341,7 +342,8 @@ test("« Contacter » : un rechargement de la même page à la réponse n'empêc
   });
   await contact.click();
   await askedPromise;
-  // Une revalidation des chargeurs de la même page, retenue : le routeur est en « loading » sur la même adresse quand la réponse arrive.
+  // Une navigation vers la même adresse, retenue (ses chargeurs ne répondent pas) : le routeur est en « loading » sur la même adresse quand la
+  // réponse arrive (`revalidate()` ne convient pas : il garde l'état « idle »).
   let releaseData: () => void = () => undefined;
   const heldData = new Promise<void>((r) => {
     releaseData = r;
@@ -355,14 +357,25 @@ test("« Contacter » : un rechargement de la même page à la réponse n'empêc
     await heldData;
     await route.continue();
   });
-  // Sans attendre la fin de la revalidation (retenue) : l'appel ne doit pas bloquer la page de recette.
+  // Sans attendre la fin de la navigation (retenue) : l'appel ne doit pas bloquer la page de recette.
   await page.evaluate(() => {
-    void (
-      window as unknown as { __reactRouterDataRouter: { revalidate(): Promise<void> } }
-    ).__reactRouterDataRouter.revalidate();
+    const router = (window as unknown as { __reactRouterDataRouter: { navigate(to: string): Promise<void> } })
+      .__reactRouterDataRouter;
+    void router.navigate(window.location.pathname + window.location.search);
   });
   await dataAskedPromise;
+  // Le routeur est bien en chargement sur la même adresse : c'est la branche d'attente qu'on éprouve.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __reactRouterDataRouter: { state: { navigation: { state: string } } } })
+            .__reactRouterDataRouter.state.navigation.state,
+      ),
+    )
+    .toBe("loading");
   release();
+  // La réponse de « Contacter » est traitée pendant le chargement retenu ; on lui laisse le temps d'arriver, puis rien ne doit être parti.
   await page.waitForTimeout(1_500);
   expect(page.url()).not.toMatch(/\/messages\//);
   releaseData();

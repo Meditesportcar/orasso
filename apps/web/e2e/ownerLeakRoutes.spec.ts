@@ -190,3 +190,25 @@ test("par interception : une trame du WebSocket qui porte le pseudo fait échoue
   f.frame(`{"type":"message","by":"${OWNER_PSEUDO}"}`);
   await expect(w.done()).rejects.toThrow(/portent le pseudo/);
 });
+
+// Tour 5 : la période calme part de l'appel de `done()` (réponse propre, 550 ms de silence, puis `done()` et une fuite 50 ms après).
+test("par interception : la fenêtre de calme part de done() (réponse propre, 550 ms de silence, fuite 50 ms après)", async () => {
+  const f = fakeContext();
+  const w = await watchOwnerLeakViaRoutes(f.context, { markers: MARKERS });
+  await f.request({ fetch: ok('{"ok":true}') });
+  await new Promise((r) => setTimeout(r, 550));
+  const done = w.done();
+  setTimeout(() => void f.request({ fetch: ok(`{"by":"${OWNER_PSEUDO}"}`) }), 50);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});
+
+// Tour 5 : la livraison à la page (`route.fulfill()`) est bornée ; une livraison qui ne se résout jamais est un échec avec diagnostic.
+test("par interception : une livraison qui ne se résout jamais fait échouer au délai, avec diagnostic", async () => {
+  const f = fakeContext();
+  const w = await watchOwnerLeakViaRoutes(f.context, { markers: MARKERS, readTimeoutMs: 100 });
+  await f.request({ fetch: ok('{"ok":true}') });
+  void f.request({ fetch: ok('{"ok":true}'), fulfill: () => new Promise<void>(() => undefined) });
+  const started = Date.now();
+  await expect(w.done()).rejects.toThrow(/livraison non terminée après 100 ms/);
+  expect(Date.now() - started).toBeLessThan(3_000);
+});

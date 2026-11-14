@@ -265,3 +265,25 @@ test("la période calme n'attend pas indéfiniment : des requêtes sans fin font
     clearInterval(timer);
   }
 });
+
+// Tour 5 : la période calme partait de la dernière activité, pas de l'appel de `done()` : une réponse propre, 550 ms de silence, puis
+// `done()` et une fuite 50 ms plus tard réussissaient en 1 ms. La fenêtre de calme est complète à partir de chaque `done()`.
+test("une réponse propre, 550 ms de silence, puis done() et une fuite 50 ms après : la fenêtre part de done() (échec)", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(body('{"ok":true}'));
+  await new Promise((r) => setTimeout(r, 550));
+  const done = w.done();
+  setTimeout(() => f.emit(body(`{"by":"${OWNER_PSEUDO}"}`)), 50);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});
+
+test("la fenêtre de calme est prolongée par toute nouvelle activité après done() (fuite à 400 ms d'une réponse propre à 300 ms)", async () => {
+  const f = fakePage();
+  const w = watchOwnerLeak(f.page, { markers: MARKERS });
+  f.emit(body('{"ok":true}'));
+  const done = w.done();
+  setTimeout(() => f.emit(body('{"ok":true}')), 300);
+  setTimeout(() => f.emit(body(`{"by":"${OWNER_PSEUDO}"}`)), 700);
+  await expect(done).rejects.toThrow(/portent le pseudo/);
+});

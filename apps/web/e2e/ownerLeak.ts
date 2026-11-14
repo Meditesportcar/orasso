@@ -6,7 +6,8 @@ import { apiCall, login } from "./helpers";
 // (erreur de lecture, délai dépassé) : seules les réponses sans corps (204, 205, 304, redirections) et les flux sont écartées ; seuls les
 // corps réellement lus comptent, et au moins un corps non vide doit avoir été lu. Les requêtes attendues sont suivies dès leur départ et
 // `done()` attend que la collection soit stable (plus aucune requête en vol, aucune lecture ajoutée) puis **une période calme** (500 ms
-// sans nouvelle requête, réponse, lecture ni trame ; tour 4) avant de contrôler : une réponse arrivée pendant l'attente finale, ou une
+// sans nouvelle requête, réponse, lecture ni trame ; tour 4), **comptée à partir de l'appel de `done()`** et prolongée par toute nouvelle
+// activité (tour 5), avant de contrôler : une réponse arrivée pendant l'attente finale, ou une
 // requête qui part juste après l'appel de `done()` (dans l'appli, l'adresse change avant le GET du nouvel écran), est contrôlée comme les
 // autres. Les trames reçues du WebSocket (temps réel) passent par le même contrôle.
 
@@ -72,7 +73,8 @@ export const isClosedError = (e: unknown) =>
  */
 function collector(markers: string[], timeoutMs: number, quietMs = 500) {
   const reads: Promise<Read>[] = [];
-  // Le dernier instant où quelque chose s'est passé (requête, réponse, lecture commencée ou finie, trame) : base de la période calme.
+  // Le dernier instant où quelque chose s'est passé (requête, réponse, lecture commencée ou finie, trame) : prolonge la période calme, qui part
+  // au plus tôt de l'appel de `done()`.
   let lastActivity = Date.now();
   const touch = () => {
     lastActivity = Date.now();
@@ -82,7 +84,9 @@ function collector(markers: string[], timeoutMs: number, quietMs = 500) {
 
   /** Attend les lectures, y compris celles qui arrivent pendant l'attente, jusqu'à ce qu'aucune requête ne soit plus en vol. */
   async function settle(): Promise<Read[]> {
-    const hardDeadline = Date.now() + 4 * timeoutMs + quietMs;
+    // La fenêtre de calme part de CET appel (tour 5) : une réponse propre suivie de 550 ms de silence avant `done()` ne dispense pas d'attendre.
+    const calledAt = Date.now();
+    const hardDeadline = calledAt + 4 * timeoutMs + quietMs;
     const requestDeadline = Date.now() + timeoutMs;
     for (;;) {
       const n = reads.length;
@@ -98,7 +102,7 @@ function collector(markers: string[], timeoutMs: number, quietMs = 500) {
       }
       if (reads.length !== n) continue;
       if (inflight.size === 0) {
-        if (Date.now() - lastActivity >= quietMs) return [];
+        if (Date.now() - Math.max(lastActivity, calledAt) >= quietMs) return [];
         await new Promise((r) => setTimeout(r, 20));
         continue;
       }
@@ -238,12 +242,19 @@ export async function watchOwnerLeakViaRoutes(context: ContextLike, opts: Opts) 
     async (route) => {
       const url = route.request().url();
       if (route.request().headers().accept?.includes("event-stream")) return route.fallback();
-      // La lecture existe dès le départ de la requête et ne se termine qu'une fois la réponse livrée à la page.
+      // La lecture existe dès le départ de la requête et ne se termine qu'une fois la réponse livrée à la page. Toute la séquence (requête,
+      // lecture, livraison) est bornée (tour 5) : une livraison qui ne finit jamais est un échec avec diagnostic, jamais une attente sans fin.
       c.touch();
       let resolveRead: (r: Read) => void = (r) => void r;
       c.reads.push(
         new Promise<Read>((resolve) => {
+          const bound = setTimeout(
+            () =>
+              resolve({ url, text: null, problem: `requête, lecture ou livraison non terminée après ${timeoutMs} ms` }),
+            timeoutMs,
+          );
           resolveRead = (r) => {
+            clearTimeout(bound);
             c.touch();
             resolve(r);
           };
