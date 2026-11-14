@@ -143,9 +143,10 @@ export default function EventPage() {
   }>();
   // Lot R9g : le lien « Photos » (notification d'album publié, gestion de l'événement) défile jusqu'à la section, une seule fois.
   const pageScroll = useRef<ScrollView>(null);
-  const scrolledToPhotos = useRef(false);
+  // Le slug pour lequel le lien profond a déjà défilé (un autre événement sur la même instance : de nouveau).
+  const scrolledFor = useRef<string | null>(null);
   const revealed = useCallback(() => {
-    scrolledToPhotos.current = true;
+    scrolledFor.current = slug;
   }, []);
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
@@ -720,7 +721,7 @@ export default function EventPage() {
         </SmButton>
       ) : null}
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
-      <LineupBlock eventId={e.id} slug={e.slug} onSettled={lineupSettled} />
+      <LineupBlock key={e.id} eventId={e.id} slug={e.slug} onSettled={lineupSettled} />
       {/* Lot R9g : « Photos », les albums des médias accrédités (l'officiel en tête) ; rien sans album publié. */}
       {!cancelled ? (
         <PhotosSection
@@ -728,7 +729,7 @@ export default function EventPage() {
           signedIn={status === "in"}
           ownStructure={ownStructure}
           refreshKey={journalTick}
-          reveal={section === "photos" && lineupDone && !scrolledToPhotos.current}
+          reveal={section === "photos" && lineupDone && scrolledFor.current !== slug}
           scrollRef={pageScroll}
           onRevealed={revealed}
         />

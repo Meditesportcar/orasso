@@ -245,7 +245,7 @@ test("une page suivante partie avant une actualisation est ignorée (51 albums, 
         await staleGate;
         await route.continue();
       });
-      const stale = page.waitForResponse((r) => /albums?.*cursor=/.test(r.url()), { timeout: 30_000 });
+      const stale = page.waitForResponse((r) => /albums\?.*cursor=/.test(r.url()), { timeout: 30_000 });
       await page.getByTestId("event-photos-more-albums").click();
       await page.getByTestId("event-photos-more").first().click();
       await page.getByTestId("event-photos-official-toggle").click();

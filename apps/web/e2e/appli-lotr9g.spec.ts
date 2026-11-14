@@ -487,3 +487,35 @@ test("lien profond « Photos » : fiche retardée puis plateau retardé ; l'atte
     await ctx.close();
   }
 });
+
+test("liste non vide, puis actualisation en 404 (événement devenu invisible) : la section disparaît", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, DAMIEN);
+  try {
+    let gone = false;
+    await page.route(`**/api/events/by-slug/${SLUG}/albums*`, (route) =>
+      gone
+        ? route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code: "not_found", message: "Événement introuvable" } }),
+          })
+        : route.continue(),
+    );
+    await go(page, `/e/${SLUG}`);
+    await expect(page.getByTestId("lineup-block")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(1, { timeout: 30_000 });
+    gone = true;
+    // Retour sur la fiche depuis le plateau : la liste est relue, elle répond 404.
+    await page.getByTestId("lineup-block").getByText("Voir le plateau", { exact: false }).first().click();
+    await page.waitForURL(/plateau/, { timeout: 30_000 });
+    await page.goBack();
+    await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-photos")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("event-photos-album-title")).toHaveCount(0);
+    await expect(page.getByTestId("event-photos-refresh-error")).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});

@@ -86,6 +86,7 @@ export function PhotosSection({
     let tries = 0;
     // Borné : si la mesure échoue sans cesse (page pas montée, nœud absent), on abandonne au bout de `REVEAL_TRIES` essais (la page reste où elle est).
     const again = () => {
+      if (cancelled) return;
       tries += 1;
       if (tries >= REVEAL_TRIES) {
         // On abandonne, mais on défile à la dernière position mesurée (la page bougeait encore : mieux vaut près de la section que loin).
@@ -153,6 +154,8 @@ export function PhotosSection({
       </View>
     );
   }
+  // Un 404 (événement devenu privé, non publié…) à l'actualisation : la section disparaît, même si des albums ont déjà été lus.
+  if (list.error?.status === 404) return null;
   if (!visible) return null;
   return (
     <View ref={block} style={styles.block} testID="event-photos" collapsable={false}>

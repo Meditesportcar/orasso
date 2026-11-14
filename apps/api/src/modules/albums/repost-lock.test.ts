@@ -91,8 +91,12 @@ it.each(Object.entries(revocations))(
     await gate.started;
     // La révocation par son chemin réel, pendant que la reprise est suspendue avant l'insertion ; on attend qu'elle bloque sur un verrou.
     const revoking = revoke({ eventId, applicationId });
-    await waitForLockWaiter();
-    gate.release();
+    try {
+      await waitForLockWaiter();
+    } finally {
+      // Toujours relâcher la reprise (même si l'attente échoue) : sinon elle garde ses verrous et bloque le test suivant et la fermeture du pool.
+      gate.release();
+    }
     const [reposted, revoked] = await Promise.all([pending, revoking]);
     expect(reposted.status, reposted.text).toBe(201);
     expect(revoked.status, revoked.text).toBe(200);
