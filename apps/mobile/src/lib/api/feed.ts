@@ -17,6 +17,9 @@ import type {
 import { request } from "../http";
 import { qs } from "./qs";
 
+/** Les genres de carte que cette appli sait dessiner en plus de ceux d'avant (`?cards=`) : l'API ne sert « album » qu'à qui le demande. */
+const FEED_CARDS = "album";
+
 export type FeedPostBody = {
   caption: string | null;
   vehicleId?: string | null;
@@ -42,10 +45,10 @@ export const feedApi = {
    * (`useActor`) ; sans lui, c'est la personne qui lit.
    */
   feed: (filter: FeedFilter, cursor?: string | null, actor?: string | null) =>
-    request<FeedPage>(`/api/fil${qs({ filter, cursor })}`, { actor }),
+    request<FeedPage>(`/api/fil${qs({ filter, cursor, cards: FEED_CARDS })}`, { actor }),
   /** Nouveautés depuis l'instant du parcours affiché (`FeedPage.ref`) : la pastille « Nouvelles publications » (R8c2). */
   feedFresh: (filter: FeedFilter, since: string, actor?: string | null) =>
-    request<{ count: number }>(`/api/fil/fresh${qs({ filter, since })}`, { actor }),
+    request<{ count: number }>(`/api/fil/fresh${qs({ filter, since, cards: FEED_CARDS })}`, { actor }),
   /** Les cartes vues, ouvertes ou partagées (lots de 50 au plus, 204 sans corps). */
   feedSeen: (cards: SeenEntry[]) =>
     request<unknown>("/api/me/fil/seen", { method: "POST", body: { cards }, timeout: 15_000 }),

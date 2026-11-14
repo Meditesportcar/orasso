@@ -124,6 +124,8 @@ export const CACHE_KEY_PREFIXES = [
   "journal.",
   // Lot R9b : la Page du titulaire d'une casquette (une clé par casquette, propre au compte).
   "owner-page-",
+  // Lot R9e : un album ouvert (une clé par album, propre au compte : les brouillons du titulaire n'appartiennent qu'à lui).
+  "album-",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {
@@ -143,6 +145,8 @@ async function purgeLegacyCaches(): Promise<void> {
   await kvSet(LEGACY_PURGED_KEY, "1");
 }
 let cacheScopeId: string | null = null;
+/** Compte les changements de compte lié (connexion, autre compte, déconnexion) : A, puis B, puis A fait trois, jamais « rien ». */
+let scopeGeneration = 0;
 let cacheQueue: Promise<unknown> = Promise.resolve();
 
 const indexKeyOf = (scope: string) => `cache-index.${scope}`;
@@ -207,11 +211,14 @@ async function scrubHomeCaches(scope: string): Promise<void> {
 export function bindCacheScope(accountId: string): Promise<void> {
   if (cacheScopeId === accountId) return Promise.resolve();
   return serial(async () => {
+    // Deux liaisons simultanées du même compte : la seconde, une fois la première faite, ne change rien (et n'invalide aucun billet).
+    if (cacheScopeId === accountId) return;
     const previous = (await kvGet(CACHE_SCOPE_KEY)) ?? cacheScopeId;
     if (previous && previous !== accountId) await dropScope(previous);
     await purgeLegacyCaches();
     await kvSet(CACHE_SCOPE_KEY, accountId);
     cacheScopeId = accountId;
+    scopeGeneration += 1;
     await scrubHomeCaches(accountId).catch(() => undefined);
   });
 }
@@ -221,6 +228,7 @@ export function purgeCaches(): Promise<void> {
   return serial(async () => {
     const scope = cacheScopeId ?? (await kvGet(CACHE_SCOPE_KEY));
     cacheScopeId = null;
+    scopeGeneration += 1;
     if (scope) await dropScope(scope);
     await kvDel(CACHE_SCOPE_KEY);
   });
@@ -256,4 +264,15 @@ export function cacheSetJson(key: string, value: unknown, scope: string | null =
 export function accountGuard(): { scope: string | null; current: () => boolean } {
   const scope = cacheScopeId;
   return { scope, current: () => scope === null || cacheScopeId === scope };
+}
+
+/**
+ * Le compte **et la génération de session** du départ (tour 5) : `current()` est faux dès que le compte lié a changé une fois, même si le
+ * compte d'origine revient ensuite (A, puis B, puis A : les réponses en vol du premier passage restent étrangères). Pour les formulaires qui ne
+ * doivent jamais revivre (la création d'un album) ; `accountGuard` garde sa règle pour les lectures.
+ */
+export function accountTicket(): { scope: string | null; current: () => boolean } {
+  const scope = cacheScopeId;
+  const generation = scopeGeneration;
+  return { scope, current: () => scopeGeneration === generation };
 }

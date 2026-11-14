@@ -4,7 +4,7 @@
 // Avec `contentId` (fiche événement), l'ouverture compte une consultation du contenu, comme l'appli.
 import { Button } from "@orasso/design-system/web";
 import { mediaAppLabels as L } from "@orasso/shared";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "../styles/media.css";
 
@@ -14,12 +14,18 @@ export function PhotoGallery({
   photos,
   title,
   contentId,
+  credit,
+  actions,
 }: {
   photos: readonly GalleryPhotoView[];
   /** Titre du contenu, affiché en tête de la visionneuse. */
   title?: string;
   /** Identifiant du contenu média : l'ouverture de la galerie compte une consultation. */
   contentId?: string;
+  /** Lot R9e (album) : le crédit sous la photo ouverte (« Photos : <média> »). */
+  credit?: string;
+  /** Lot R9e (album) : l'emplacement des actions de la visionneuse (R9f : « Identifier une voiture » ; R9g : « Reprendre dans le journal »), qui reçoit la photo ouverte. */
+  actions?: (photo: GalleryPhotoView, index: number) => React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState<number | null>(null);
@@ -48,14 +54,26 @@ export function PhotoGallery({
     ref.current?.showModal();
   };
   const close = () => ref.current?.close();
-  const go = (delta: number) => setIndex((i) => (i === null ? i : (i + delta + total) % total));
+  // Navigation depuis l'index **affiché** : après le retrait de la dernière photo de la suite, « précédente » et « suivante » ne réaffichent pas la même.
+  const go = (delta: number) =>
+    setIndex((i) => (i === null || total === 0 ? i : (Math.min(i, total - 1) + delta + total) % total));
+  // Et l'index d'état revient lui aussi dans la plage quand la suite raccourcit.
+  useEffect(() => {
+    setIndex((i) => (i !== null && total > 0 && i > total - 1 ? total - 1 : i));
+  }, [total]);
 
   // Flèches du clavier dans la visionneuse (la fenêtre modale a le focus) ; Échap ferme déjà la fenêtre.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowLeft") go(-1);
     else if (e.key === "ArrowRight") go(1);
   };
-  const current = index === null ? null : photos[index];
+  // Une photo retirée raccourcit la suite : la visionneuse passe à la photo voisine (l'index revient dans la plage) ; quand il n'en reste
+  // plus, elle se ferme (jamais une fenêtre ouverte et vide, sans « Fermer »).
+  const shownIndex = index === null || total === 0 ? null : Math.min(index, total - 1);
+  const current = shownIndex === null ? null : photos[shownIndex];
+  useEffect(() => {
+    if (index !== null && total === 0) ref.current?.close();
+  }, [index, total]);
   return (
     <>
       <ul className="md-thumbs" data-testid="media-gallery">
@@ -82,7 +100,10 @@ export function PhotoGallery({
         ref={ref}
         className="md-viewer"
         aria-label={title ?? L.galleryViewer}
-        onClose={() => setIndex(null)}
+        // Seule la fermeture de **cette** fenêtre vide la visionneuse : celle d'une fenêtre imbriquée (« Signaler ») remonte en React et la viderait.
+        onClose={(e) => {
+          if (e.target === e.currentTarget) setIndex(null);
+        }}
         onKeyDown={onKeyDown}
         data-testid="media-gallery-viewer"
       >
@@ -90,12 +111,22 @@ export function PhotoGallery({
           <div className="md-viewer__body">
             {title && <h2 className="o-t-poster-s o-never-truncate">{title}</h2>}
             <img className="md-viewer__img" src={current.url} alt="" data-testid="media-gallery-current" />
+            {credit && (
+              <div className="o-t-caption" data-testid="media-gallery-credit">
+                {credit}
+              </div>
+            )}
+            {actions && (
+              <div className="md-viewer__actions" data-testid="media-gallery-actions">
+                {actions(current, shownIndex ?? 0)}
+              </div>
+            )}
             <div className="md-viewer__bar">
               <Button type="button" variant="secondary" icon="back" onClick={() => go(-1)} disabled={total < 2}>
                 {L.galleryPrev}
               </Button>
               <span className="o-t-caption" aria-live="polite" data-testid="media-gallery-position">
-                {L.galleryPosition((index ?? 0) + 1, total)}
+                {L.galleryPosition((shownIndex ?? 0) + 1, total)}
               </span>
               <Button type="button" variant="secondary" icon="next" onClick={() => go(1)} disabled={total < 2}>
                 {L.galleryNext}

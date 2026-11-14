@@ -1,6 +1,7 @@
 import { siteLabels } from "@orasso/shared";
 import { expect, test } from "@playwright/test";
 import pg from "pg";
+import { REPRISE_STATEMENTS } from "../../api/src/modules/albums/reprise";
 import { categoryOptions, nearOutcome, whenRange } from "../app/lib/events-filter";
 import { proPitchCard } from "../app/lib/pro-pitch";
 import { apiCall, setTheme } from "./helpers";
@@ -9,6 +10,29 @@ import { apiCall, setTheme } from "./helpers";
 // des pros, libellé du compteur) se testent sans navigateur ; le reste tourne sur le site et l'API lancés, base seedée.
 const DESKTOP = { width: 1280, height: 900 } as const;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Lot R9e : une galerie d'avant (ligne `media_contents` de kind « gallery ») devient un album publié par la reprise (les mêmes
+ * instructions que la migration, rejouées ici : la galerie de la recette est créée après les migrations) ; la façade la sert depuis
+ * l'album, au même identifiant.
+ */
+async function adoptGallery(client: pg.Client): Promise<void> {
+  for (const statement of REPRISE_STATEMENTS) await client.query(statement);
+}
+/** Efface la galerie de la recette et l'album qu'elle est devenue (les photos suivent, `on delete cascade`). */
+async function dropGallery(client: pg.Client, id: string): Promise<void> {
+  await client.query("delete from event_albums where id = $1", [id]);
+  await client.query("delete from media_contents where id = $1", [id]);
+}
+/** Deux images du seed distinctes (une clé de stockage ne sert qu'à une photo d'album). */
+function twoKeys(items: { posterUrl: string | null }[]): [string, string] {
+  const keys = [
+    ...new Set(items.map((i) => i.posterUrl?.replace(/^\/api\/files\//, "")).filter((k): k is string => Boolean(k))),
+  ];
+  const [a, b] = keys;
+  if (!a || !b) throw new Error("Deux images du seed sont nécessaires pour la galerie");
+  return [a, b];
+}
 
 test.describe("parties pures", () => {
   test("« ce week-end » ne remonte jamais avant maintenant", () => {
@@ -350,8 +374,7 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     `/events/by-slug/${slug}`,
   );
   const events = await apiCall<{ items: { posterUrl: string | null }[] }>(null, "GET", "/events?limit=5");
-  const key = events.data.items.map((i) => i.posterUrl?.replace(/^\/api\/files\//, "")).find(Boolean);
-  if (!key) throw new Error("Aucune image du seed pour la galerie");
+  const keys = twoKeys(events.data.items);
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   let contentId = "";
@@ -362,9 +385,10 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     const inserted = await client.query<{ id: string }>(
       `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
        values ($1, $2, 'gallery', 'Galerie sans lien E2E', null, 'other', $3) returning id`,
-      [mediaId, ev.data.id, [key, key]],
+      [mediaId, ev.data.id, keys],
     );
     contentId = inserted.rows[0]?.id ?? "";
+    await adoptGallery(client);
     await setTheme(page, "beton");
     await page.setViewportSize(DESKTOP);
     const views: string[] = [];
@@ -394,7 +418,7 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     await expect(viewer).toBeVisible();
     expect(views).toHaveLength(1);
   } finally {
-    if (contentId) await client.query("delete from media_contents where id = $1", [contentId]);
+    if (contentId) await dropGallery(client, contentId);
     await client.end();
   }
 });
@@ -402,8 +426,7 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
 test("fiche événement : la consultation de galerie est retentée après un échec", async ({ page }) => {
   const events = await apiCall<{ items: { posterUrl: string | null }[] }>(null, "GET", "/events?limit=5");
   const slug = "nocturne-de-canet-2026";
-  const key = events.data.items.map((i) => i.posterUrl?.replace(/^\/api\/files\//, "")).find(Boolean);
-  if (!key) throw new Error("Aucune image du seed pour la galerie");
+  const keys = twoKeys(events.data.items);
   const ev = await apiCall<{ id: string }>(null, "GET", `/events/by-slug/${slug}`);
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -415,9 +438,10 @@ test("fiche événement : la consultation de galerie est retentée après un éc
     const inserted = await client.query<{ id: string }>(
       `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
        values ($1, $2, 'gallery', 'Galerie retentée E2E', null, 'other', $3) returning id`,
-      [mediaId, ev.data.id, [key, key]],
+      [mediaId, ev.data.id, keys],
     );
     contentId = inserted.rows[0]?.id ?? "";
+    await adoptGallery(client);
     await setTheme(page, "beton");
     await page.setViewportSize(DESKTOP);
     let calls = 0;
@@ -445,7 +469,7 @@ test("fiche événement : la consultation de galerie est retentée après un éc
     await expect(viewer).toBeVisible();
     expect(calls).toBe(2);
   } finally {
-    if (contentId) await client.query("delete from media_contents where id = $1", [contentId]);
+    if (contentId) await dropGallery(client, contentId);
     await client.end();
   }
 });

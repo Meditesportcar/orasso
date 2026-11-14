@@ -100,6 +100,11 @@ export type AlbumPhotoView = {
    * identification visible (la forme de R9e est gardée).
    */
   tags?: AlbumTagView[];
+  /**
+   * Lot R9e (tour 1) : l’identifiant de tentative de l’ajout (`clientId`), **pour le titulaire seulement** (`GET /albums/:id`) : il retrouve sa photo
+   * quand la réponse de l’ajout s’est perdue (rapprochement) et peut la retirer sans photo fantôme.
+   */
+  clientId?: string;
 };
 
 /**
@@ -130,6 +135,8 @@ export type AlbumView = AlbumSummary & {
   photos: AlbumPhotoView[];
   /** Lot R9f : le nombre de photos de cet album avec au moins une identification visible de moi (« N sur M photos identifiées ») ; absent si zéro. */
   tagsCount?: number;
+  /** Lot R9e (tour 1) : combien de photos de ce brouillon ou album ont été floutées (« N plaques floutées »), **pour le titulaire seulement** ; absent si zéro. */
+  blurredCount?: number;
 };
 
 /** `GET /me/albums`, `GET /events/:id/albums`, `GET /media/:id/albums`. */

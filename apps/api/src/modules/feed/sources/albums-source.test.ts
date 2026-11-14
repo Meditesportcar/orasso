@@ -28,6 +28,7 @@ let leo: TestUser;
 let leoMedia: string;
 let kenji: TestUser;
 let eventId: string;
+let eventSlug: string;
 let leoAccreditation: string;
 let clock: ReturnType<typeof useClock>;
 
@@ -49,6 +50,8 @@ beforeEach(async () => {
   clock = useClock(paris(11, 5, 12));
   const scenario = await organizerEvent();
   eventId = scenario.event.id;
+  // Le slug de l'événement de test est unique à chaque appel (tour 3 de R9e-2, `events_slug_key` sous charge) : on compare au slug créé.
+  eventSlug = scenario.event.slug;
   const media = await mediaUser("Leo_Media");
   leo = media.user;
   leoMedia = media.mediaId;
@@ -175,7 +178,7 @@ describe("la carte", () => {
     });
     expect(view.attach.event).toMatchObject({
       id: eventId,
-      slug: "rassemblement-du-lydia",
+      slug: eventSlug,
       title: "Rassemblement du Lydia",
     });
     expect(view.cover).toHaveLength(4);
