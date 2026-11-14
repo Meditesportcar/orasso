@@ -7298,3 +7298,8 @@ Lot **sensible** (données privées entre comptes). Site seul, aucune migration.
 
 ### À revoir avec Damien
 - La barre du visiteur apparaît une fraction de seconde sous la marque pour un compte qui a des véhicules (le chargeur de la mise en page ne lit plus `personas`). Si cela se voit trop, on pourra garder la forme de la barre dans un cookie de préférence plutôt que de la lire sous la marque.
+
+## Lot B2a, tour 1 (14/11/2026) : un seul compteur de rechargements, la mise en page lit l'état de l'enfant
+- **Choix (décision du coordinateur, appliquée)** : la mise en page (`layouts/app.tsx`) ne recharge plus et ne lit plus `/me` elle-même. Le `/me` de la page enfant (Crew, « Tes photos », seules à porter la marque) est publié dans un petit état du document (`sessionReload.ts` : `publishMe`, lu par `useSharedConfirmation` en `useSyncExternalStore`) ; la mise en page en déduit sa confirmation (`deriveConfirmation`) pour n'annoncer son compte aux autres fenêtres qu'une fois confirmé. Raison : « simple » (une trentaine de lignes, pas de contexte à faire traverser le routeur) ; un seul compteur (celui de la page), donc 2 rechargements au plus en 20 s, et plus de lecture double de `/me`. Le paramètre `watch` de `useSessionConfirmation`, devenu inutile, est retiré. Conséquence : sur une adresse marquée sans page enfant qui confirme (marque saisie à la main), la mise en page n'annonce pas son compte : sans effet sur les données.
+- **Recette `lotfin-e-site` (B2a)** : Kenji est remis à l'état du seed (e-mail vérifié, non suspendu) au début de la recette, avant de lire son état, pas seulement dans le `finally`.
+- Fichiers : `apps/web/app/layouts/app.tsx`, `apps/web/app/lib/sessionReload.ts` (+ `.test.ts`), `apps/web/e2e/lotfin-e-site.spec.ts`.

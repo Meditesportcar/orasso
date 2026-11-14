@@ -180,6 +180,39 @@ export function deriveConfirmation(k: MeKnowledge, owner: string, afterReload: b
   return k.failed ? "failed" : "checking";
 }
 
+// B2a, tour 1 : le compte que le `/me` de la page enfant (Crew, « Tes photos ») a rendu, tenu pour la mise en page de CE document : elle ne
+// lit plus `/me` elle-même ni ne recharge (un seul compteur de rechargements, celui de la page qui porte les données). `undefined` :
+// aucune réponse encore ; `null` : plus de session.
+let sharedMe: string | null | undefined;
+const sharedListeners = new Set<() => void>();
+
+function publishMe(me: string | null | undefined): void {
+  if (me === undefined || me === sharedMe) return;
+  sharedMe = me;
+  for (const listener of [...sharedListeners]) listener();
+}
+
+const subscribeShared = (listener: () => void): (() => void) => {
+  sharedListeners.add(listener);
+  return () => void sharedListeners.delete(listener);
+};
+
+/** Remet à zéro le compte partagé (tests ; un nouveau document repart de zéro de lui-même). */
+export function resetSharedMe(): void {
+  sharedMe = undefined;
+  for (const listener of [...sharedListeners]) listener();
+}
+
+/** Ce que la mise en page déduit du `/me` de la page enfant : « checking » sous la marque tant qu'elle n'a rien dit ; jamais de rechargement. */
+export function useSharedConfirmation(owner: string, afterReload: boolean): SessionConfirmation {
+  const me = useSyncExternalStore(
+    subscribeShared,
+    () => sharedMe,
+    () => undefined,
+  );
+  return deriveConfirmation({ me, failed: false }, owner, afterReload);
+}
+
 /** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
 export function createConfirmer(read: () => Promise<MeResult>) {
   let seq = 0;
@@ -198,7 +231,6 @@ export function createConfirmer(read: () => Promise<MeResult>) {
 export function useSessionConfirmation(
   owner: string,
   afterReload: boolean,
-  watch = true,
 ): { confirmed: SessionConfirmation; stalled: boolean } {
   const [known, setKnown] = useState<MeKnowledge>(unknownMe);
   const stalled = useSyncExternalStore(onReloadStalled, isReloadStalled, () => false);
@@ -216,8 +248,6 @@ export function useSessionConfirmation(
     if (!wasFirst || afterReload) void verify();
   }, [verify, afterReload, owner]);
   useEffect(() => {
-    // `watch` faux (la mise en page : elle ne confirme qu'après un rechargement) : aucune revérification au retour de l'onglet.
-    if (!watch) return;
     let hiddenBefore = document.visibilityState === "hidden";
     let blurred = false;
     const onVisibility = () => {
@@ -255,7 +285,8 @@ export function useSessionConfirmation(
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [verify, watch]);
+  }, [verify]);
+  useEffect(() => publishMe(known.me), [known.me]);
   return { confirmed: deriveConfirmation(known, owner, afterReload), stalled };
 }
 

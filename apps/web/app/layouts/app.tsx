@@ -19,7 +19,7 @@ import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
 import { useAnnounceSession } from "../lib/sessionChannel";
-import { isAfterReload, useReloadWhenForeign, useSessionConfirmation } from "../lib/sessionReload";
+import { isAfterReload, useSharedConfirmation } from "../lib/sessionReload";
 import { useChannel } from "../lib/useChannel";
 import "../styles/activity.css";
 import "../styles/moderation.css";
@@ -131,10 +131,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   // Activité et Messages en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
   // Après un rechargement automatique, le compte de cette mise en page n'est annoncé (aux autres fenêtres, dont un Crew ouvert ailleurs)
-  // qu'une fois confirmé par `/me` ; une discordance (la page n'est pas celle d'une page qui se recharge d'elle-même) recharge ici.
-  const { confirmed } = useSessionConfirmation(loaderData.userId, loaderData.afterReload, false);
+  // qu'une fois confirmé par le `/me` de la page enfant (Crew, « Tes photos » : les seules à porter la marque). La mise en page ne lit
+  // pas `/me` elle-même et ne recharge jamais : le compteur de rechargements est celui de la page qui porte les données.
+  const confirmed = useSharedConfirmation(loaderData.userId, loaderData.afterReload);
   useAnnounceSession(loaderData.userId, !loaderData.afterReload || confirmed === "ok");
-  useReloadWhenForeign(loaderData.afterReload && confirmed === "mismatch", "layout");
   const announcements = useAnnouncements(loaderData.userId);
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {

@@ -1195,6 +1195,12 @@ test.describe("B2a : la mise en page sous la marque", () => {
     const KENJI = "kenji@orasso.local";
     const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
     await db.connect();
+    // Idempotent : une passe tuée avant son `finally` aurait laissé Kenji suspendu et non vérifié ; on le remet à l'état du seed AVANT de le lire.
+    await db.query('update "user" set email_verified = true where email = $1', [KENJI]);
+    await db.query(
+      'update profiles set suspended_until = null where user_id = (select id from "user" where email = $1)',
+      [KENJI],
+    );
     const found = await db.query<{ id: string; email_verified: boolean; suspended_until: Date | null }>(
       'select u.id, u.email_verified, p.suspended_until from "user" u join profiles p on p.user_id = u.id where u.email = $1',
       [KENJI],

@@ -541,3 +541,42 @@ describe("le bouton de secours est un fait du document (tour 12)", () => {
     expect(deriveConfirmation(next, "A", true)).toBe("ok");
   });
 });
+
+// B2a, tour 1 : la mise en page ne recharge pas et ne lit pas `/me` ; un seul compteur (celui de la page enfant) borne les rechargements.
+describe("la mise en page sous la marque : un seul compteur", () => {
+  it("sous un /me qui ne correspond pas de façon répétée : 2 rechargements au plus en 20 s, jamais un de plus par la mise en page", async () => {
+    vi.resetModules();
+    const { replaced, store } = stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    // La page enfant (portée `crew`) est seule à recharger : 2 départs, puis le refus.
+    const results: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      results.push(mod.reloadAutomatically("crew"));
+      mod.resetReloadLock();
+    }
+    expect(results).toEqual(["started", "started", "refused", "refused"]);
+    expect(replaced).toHaveLength(2);
+    // Aucun compteur propre à la mise en page.
+    expect(store.has("orasso-reloads:layout")).toBe(false);
+  });
+
+  it("le source de la mise en page ne demande aucun rechargement et ne lit pas /me", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../layouts/app.tsx", import.meta.url), "utf8");
+    expect(src).not.toContain("useReloadWhenForeign");
+    expect(src).not.toContain("useSessionConfirmation");
+    expect(src).toContain("useSharedConfirmation");
+  });
+
+  it("la mise en page déduit sa confirmation du /me de l'enfant : neutre tant qu'il n'a rien dit, puis ok ou mismatch", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    // Sans DOM : l'état partagé se lit par la même déduction que le hook (`deriveConfirmation`) ; ici, le contrat de la marque.
+    expect(deriveConfirmation({ me: undefined, failed: false }, "C", true)).toBe("checking");
+    expect(deriveConfirmation({ me: "C", failed: false }, "C", true)).toBe("ok");
+    expect(deriveConfirmation({ me: "B", failed: false }, "C", true)).toBe("mismatch");
+    expect(typeof mod.useSharedConfirmation).toBe("function");
+    expect(typeof mod.resetSharedMe).toBe("function");
+  });
+});
