@@ -66,6 +66,28 @@ const zoneEquals = (a: PracticalZone, b: PracticalZone) =>
 /** Deux zones se recouvrent-elles (des bords qui se touchent seulement ne comptent pas) ? */
 const zonesOverlap = (a: PracticalZone, b: PracticalZone) =>
   a.south < b.north && b.south < a.north && a.west < b.east && b.west < a.east;
+/** Une couverture touche-t-elle la zone ? Rectangle : recouvrement ; disque : le point de la zone le plus proche du centre est dans le rayon. */
+const coverTouches = (c: ZoneCover, zone: PracticalZone): boolean =>
+  c.t === "rect"
+    ? zonesOverlap(c.zone, zone)
+    : distanceKm(c, {
+        lat: Math.min(Math.max(c.lat, zone.south), zone.north),
+        lng: Math.min(Math.max(c.lng, zone.west), zone.east),
+      }) <= c.km;
+/**
+ * Filet : une case marquée incomplète (`except`) par la lecture la plus récente n'est jamais couverte par une couverture plus ancienne
+ * (rectangle ou disque) : ces cases sont ajoutées aux exceptions des anciennes couvertures.
+ */
+function withLatestExceptions(older: readonly ZoneCover[], latest: readonly ZoneCover[]): ZoneCover[] {
+  const cells = new Set<string>();
+  for (const c of latest) if (c.t === "rect" && c.except) for (const k of c.except) cells.add(k);
+  if (cells.size === 0) return [...older];
+  return older.map((c) => {
+    const have = c.except;
+    if (have && [...cells].every((k) => have.has(k))) return c;
+    return { ...c, except: new Set([...(c.except ?? []), ...cells]) };
+  });
+}
 const insideZone = (outer: PracticalZone | null, view: PracticalZone) =>
   outer !== null &&
   [view.south, view.north].every((lat) => [view.west, view.east].every((lng) => zoneContains(outer, { lat, lng })));
@@ -157,7 +179,10 @@ export function createPracticalZone(deps: ZoneDeps) {
         if (size <= PRACTICAL_STORE_MAX) {
           const merged = replaceInStore(new Map(inZone.map((p) => [p.id, p])), () => false, incoming);
           const sameZone = state.cover.filter((c) => c.t === "rect" && zoneEquals(c.zone, keepZone));
-          return { places: merged, cover: [...sameZone, ...covered] };
+          return {
+            places: merged,
+            cover: [...withLatestExceptions(sameZone, covered), ...covered],
+          };
         }
         // Impossible : rien n'est déclaré couvert, on repart de la première page.
         pageState = null;
@@ -169,7 +194,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       pageState = null;
       return { places: replaceInStore(new Map(), () => true, incoming), cover: [...covered] };
     }
-    return { places, cover: [...state.cover, ...covered] };
+    return { places, cover: [...withLatestExceptions(state.cover, covered), ...covered] };
   };
 
   async function load(): Promise<void> {
@@ -258,11 +283,16 @@ export function createPracticalZone(deps: ZoneDeps) {
       const status = deps.statusOf(error);
       if (status === 409 && cursor !== undefined) {
         // Les données ont changé entre deux pages : tout ce que l'ancienne version garantissait sur cette zone est invalidé, que la vue soit
-        // encore dans la zone ou non. Toute couverture rectangulaire qui CHEVAUCHE la zone du curseur est retirée (même une recherche
-        // antérieure sur un autre rectangle), puis les lieux de la zone que plus rien ne garantit ; la garantie des lectures d'ouverture
-        // (disques) reste, avec ses lieux. Une case autrefois complète qui a grossi ne reste donc pas « chargée » sur l'ancien état.
-        const cover = state.cover.filter((c) => !(c.t === "rect" && zonesOverlap(c.zone, zone)));
-        const places = new Map([...state.places].filter(([, p]) => !zoneContains(zone, p) || coverContains(cover, p)));
+        // encore dans la zone ou non. TOUTE couverture qui touche la zone du curseur est retirée, rectangle (même d'une autre recherche) ou
+        // disque d'ouverture : une case qui a grossi ne reste jamais « chargée » sur l'ancien état. Les lieux d'une lecture d'ouverture restent
+        // en mémoire sans couverture (une relecture de plus est acceptable) ; ceux que garantissait un rectangle de la zone sortent.
+        const rects = state.cover.filter((c) => c.t === "rect" && coverTouches(c, zone));
+        const cover = state.cover.filter((c) => !coverTouches(c, zone));
+        const places = new Map(
+          [...state.places].filter(
+            ([, p]) => !zoneContains(zone, p) || (!coverContains(rects, p) && coverContains(state.cover, p)),
+          ),
+        );
         seriesIds = new Set();
         pageState = null;
         set({ places, cover });
@@ -316,7 +346,7 @@ export function createPracticalZone(deps: ZoneDeps) {
       const known = covered.every(
         (c) =>
           c.t === "disk" &&
-          state.cover.some((k) => k.t === "disk" && k.lat === c.lat && k.lng === c.lng && k.km >= c.km),
+          state.cover.some((k) => k.t === "disk" && !k.except && k.lat === c.lat && k.lng === c.lng && k.km >= c.km),
       );
       set(store((p) => (cut ? coverContains(covered, p) : inDisk(p)), data.places, known ? [] : covered));
     },

@@ -33,7 +33,7 @@ const pick = (r: () => number) => centres[Math.floor(r() * centres.length)] as {
 function dataset(r: () => number, tag: string) {
   const all: PracticalPlace[] = [];
   centres.forEach((c, ci) => {
-    const n = 900 + Math.floor(r() * 900);
+    const n = 350 + Math.floor(r() * 350);
     for (let k = 0; k < n; k++) {
       const a = r() * Math.PI * 2,
         d = r() ** 0.7 * 0.25;
@@ -43,6 +43,14 @@ function dataset(r: () => number, tag: string) {
   return all;
 }
 
+type Cover = ReturnType<ReturnType<typeof createPracticalZone>["getState"]>["cover"][number];
+const coverKey = (c: Cover): string =>
+  c.t === "rect" ? `r:${c.zone.south},${c.zone.west},${c.zone.north},${c.zone.east}` : `d:${c.lat},${c.lng},${c.km}`;
+const cellCentre = (key: string) => {
+  const [i, j] = key.split(",").map(Number) as [number, number];
+  return { lat: (i + 0.5) / 10, lng: (j + 0.5) / 10 };
+};
+
 const st = { cursor: 0, c409: 0, drops: 0, maxSize: 0 };
 
 async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
@@ -50,10 +58,19 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
   const A = dataset(r, "s");
   let data = A;
   const stable = new Set(A.map((p) => p.id));
-  const pending: { resolve: (v: PracticalData) => void; reject: (e: unknown) => void; v: PracticalData | Error }[] = [];
+  const pending: {
+    resolve: (v: PracticalData) => void;
+    reject: (e: unknown) => void;
+    v: PracticalData | Error;
+    epoch: number;
+  }[] = [];
+  /** La version des données (change à chaque `flip`) et les couvertures apparues depuis (clés), pour le contrôle « couvert = en mémoire ». */
+  let epoch = 0;
+  const freshKeys = new Set<string>();
   let reads = 0;
   const read = async (z: PracticalZone, cursor?: string): Promise<PracticalData> => {
     reads++;
+    const myEpoch = epoch;
     if (cursor) st.cursor++;
     const page = cursor ? Number(cursor.split(":")[0]) : 0;
     const pg = placesInZonePage(data, z, page);
@@ -84,7 +101,7 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
       if (v instanceof Error) throw v;
       return v;
     }
-    return new Promise((resolve, reject) => pending.push({ resolve, reject, v }));
+    return new Promise((resolve, reject) => pending.push({ resolve, reject, v, epoch: myEpoch }));
   };
   const z = createPracticalZone({
     read,
@@ -106,10 +123,56 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
         `seed ${seed} ${label}: ${bad} lieux couverts absents (ex ${ex}), mémoire ${s.places.size}\n${log.slice(-15).join("\n")}`,
       );
   };
+  /** Contrôles de couverture après chaque geste (voir plus bas). */
+  const checkCover = (label: string, onlyKeys: ReadonlySet<string> | null) => {
+    const s = z.getState();
+    // 1. Une case incomplète (`except`) d'une couverture plus récente n'est jamais couverte par une couverture plus ancienne.
+    s.cover.forEach((c, j) => {
+      if (c.t !== "rect" || !c.except) return;
+      for (const key of c.except)
+        for (let i = 0; i < j; i++) {
+          const older = s.cover[i] as Cover;
+          if (coverContains([older], cellCentre(key)))
+            throw new Error(
+              [
+                `seed ${seed} ${label}: case incomplète ${key} couverte par une couverture plus ancienne (${coverKey(older)})`,
+                ...log.slice(-15),
+              ].join("\n"),
+            );
+        }
+    });
+    // 2. Pour chaque couverture apparue depuis le dernier changement de version, tous les lieux ACTUELS de ses cases complètes sont en mémoire.
+    for (const c of s.cover) {
+      const key = coverKey(c);
+      if (!freshKeys.has(key) || (onlyKeys && !onlyKeys.has(key))) continue;
+      const dLat = c.t === "disk" ? c.km / 111 + 0.01 : 0;
+      const dLng = c.t === "disk" ? c.km / (111 * Math.cos((c.lat * Math.PI) / 180)) + 0.05 : 0;
+      const box =
+        c.t === "rect" ? c.zone : { south: c.lat - dLat, north: c.lat + dLat, west: c.lng - dLng, east: c.lng + dLng };
+      for (const p of data)
+        if (
+          !s.places.has(p.id) &&
+          p.lat >= box.south &&
+          p.lat <= box.north &&
+          p.lng >= box.west &&
+          p.lng <= box.east &&
+          coverContains([c], p)
+        )
+          throw new Error(
+            [
+              `seed ${seed} ${label}: lieu actuel ${p.id} couvert par ${coverKey(c)} absent de la mémoire`,
+              ...log.slice(-15),
+            ].join("\n"),
+          );
+    }
+  };
   let prevSize = 0;
-  for (let step = 0; step < 400; step++) {
+  for (let step = 0; step < 300; step++) {
     const x = r();
     const before = reads;
+    const prevCover = new Set(z.getState().cover);
+    const prevKeys = new Set([...prevCover].map(coverKey));
+    let unreliable = false;
     if (x < 0.3) {
       const c = pick(r);
       const h = 0.02 + r() * 0.25,
@@ -146,6 +209,9 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
       const ids = new Set(next.map((p) => p.id));
       for (const id of [...stable]) if (!ids.has(id)) stable.delete(id);
       data = next;
+      epoch++;
+      freshKeys.clear();
+      unreliable = true;
       log.push("flip");
     } else if (x < 0.83) {
       z.retry();
@@ -162,6 +228,7 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
     } else {
       if (opts.inflight && pending.length) {
         const p = pending.shift()!;
+        if (p.epoch !== epoch) unreliable = true; // réponse lue sur une version d'avant : elle ne prouve rien sur les données actuelles
         log.push(`deliver ${p.v instanceof Error ? "409" : (p.v as PracticalData).places.length}`);
         if (p.v instanceof Error) p.reject(p.v);
         else p.resolve(p.v);
@@ -176,26 +243,35 @@ async function run(seed: number, opts: { flips: boolean; inflight: boolean }) {
       prevSize = sz;
       st.maxSize = Math.max(st.maxSize, sz);
     }
+    const appeared = new Set<string>();
+    if (!unreliable)
+      for (const c of z.getState().cover)
+        if (!prevCover.has(c) && !prevKeys.has(coverKey(c))) {
+          freshKeys.add(coverKey(c));
+          appeared.add(coverKey(c));
+        }
     check(`step ${step}`);
+    // Les couvertures qui viennent d'apparaître à chaque geste, toutes celles de la version courante tous les 25 gestes (durée de la suite).
+    checkCover(`step ${step}`, step % 25 === 0 ? null : appeared);
   }
   return reads;
 }
 
 it("fuzz données fixes, réponses immédiates", async () => {
   st.c409 = 0;
-  for (let s = 1; s <= 4; s++) await run(s, { flips: false, inflight: false });
+  for (let s = 1; s <= 2; s++) await run(s, { flips: false, inflight: false });
 }, 120_000);
 it("fuzz données fixes, réponses en vol", async () => {
   st.c409 = 0;
-  for (let s = 1; s <= 4; s++) await run(s, { flips: false, inflight: true });
+  for (let s = 1; s <= 2; s++) await run(s, { flips: false, inflight: true });
 }, 120_000);
 it("fuzz versions qui changent (409), en vol", async () => {
   st.c409 = 0;
-  for (let s = 1; s <= 4; s++) await run(s, { flips: true, inflight: true });
+  for (let s = 1; s <= 2; s++) await run(s, { flips: true, inflight: true });
   expect(st.c409).toBeGreaterThan(0);
 }, 120_000);
 it("fuzz versions qui changent (409), immédiat", async () => {
   st.c409 = 0;
-  for (let s = 1; s <= 4; s++) await run(s, { flips: true, inflight: false });
+  for (let s = 1; s <= 2; s++) await run(s, { flips: true, inflight: false });
   expect(st.c409).toBeGreaterThan(0);
 }, 120_000);

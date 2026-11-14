@@ -194,7 +194,8 @@ export function placesInZone<T extends { id: string; lat: number; lng: number }>
 
 /** Ce que l'écran a déjà chargé : un disque (la lecture d'ouverture, 30 km autour de l'origine) ou un carré (une zone demandée). */
 export type ZoneCover =
-  | ({ t: "disk"; km: number } & LatLng)
+  /** Un disque ; `except` : des cases incomplètes d'une lecture plus récente (clés `cellKey`), jamais couvertes par ce disque plus ancien. */
+  | ({ t: "disk"; km: number; except?: ReadonlySet<string> } & LatLng)
   /** Un carré ; `except` : des cases de 0,1° (clés `cellKey`) dont tous les lieux n'ont PAS été servis (réponse coupée, répartie par case). */
   | { t: "rect"; zone: PracticalZone; except?: ReadonlySet<string> };
 
@@ -203,7 +204,9 @@ export const cellKey = (p: LatLng): string => `${cellDown(p.lat)},${cellDown(p.l
 
 export const coverContains = (cover: readonly ZoneCover[], p: LatLng): boolean =>
   cover.some((c) =>
-    c.t === "disk" ? distanceKm(c, p) <= c.km : zoneContains(c.zone, p) && !(c.except && c.except.has(cellKey(p))),
+    c.t === "disk"
+      ? distanceKm(c, p) <= c.km && !(c.except && c.except.has(cellKey(p)))
+      : zoneContains(c.zone, p) && !(c.except && c.except.has(cellKey(p))),
   );
 
 /**

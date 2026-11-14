@@ -473,4 +473,38 @@ describe("409 : l'invalidation vise toute couverture qui chevauche la zone du cu
     expect(s.loading).toBe(false);
     expect(s.failed).toBe(false);
   });
+
+  it("variante disque d'ouverture : un disque complet qui couvre la case ne la déclare plus chargée après le 409", async () => {
+    // Le disque d'ouverture de 30 km autour de (48,85 ; 2,3) couvre la case G (lat 48,8-48,9 ; lng 2,6-2,7) avec 30 lieux ; H est hors du disque.
+    let data = cellPlaces("A", 1, 2, 30);
+    const read = serveFrom(() => data);
+    const z = make(read);
+    z.ingest({
+      origin: { kind: "city", label: "X", lat: 48.85, lng: 2.3 },
+      places: data,
+      partial: false,
+      attribution: att,
+    });
+    const g = { south: 48.81, west: 2.61, north: 48.89, east: 2.69 };
+    z.setView(g);
+    expect(viewCovered(z.getState().cover, g)).toBe(true);
+    // G et H grossissent : une zone qui chevauche le disque est coupée (G et H incomplètes).
+    data = grown("B");
+    z.setView({ south: 48.84, west: 2.84, north: 48.86, east: 2.86 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    // Dès la page 0, la case marquée incomplète n'est plus couverte par le disque plus ancien (filet).
+    z.setView(g);
+    expect(viewCovered(z.getState().cover, g)).toBe(false);
+    // Entre deux pages, le cache est renouvelé : la page suivante (lue depuis H) est refusée, la page 0 est relue.
+    data = grown("C");
+    z.setView({ south: 48.81, west: 2.81, north: 48.89, east: 2.89 });
+    z.searchHere();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read.mock.calls.map((c) => c[1]?.slice(0, 2))).toEqual([undefined, "1:", undefined]);
+    z.setView(g);
+    const s = z.getState();
+    expect(viewCovered(s.cover, g)).toBe(false);
+    expect(zoneNeedsSearch(s)).toBe(true);
+  });
 });
