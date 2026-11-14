@@ -66,6 +66,8 @@ it("la MÊME ouverture relue (disque déjà connu) pendant une lecture de zone p
   // Les données sont renouvelées (N apparaît) ; la même ouverture est relue et arrive avant la réponse de zone.
   z.ingest({ origin, places: [a, fresh], partial: false, attribution: att });
   expect(z.getState().places.has("N")).toBe(true);
+  // La seconde ouverture REMPLACE le disque connu : il n'y en a toujours qu'un (un doublon de disque ne passerait pas inaperçu).
+  expect(z.getState().cover.length).toBe(1);
   (release as unknown as (d: PracticalData) => void)({ origin: null, places: [c], partial: false, attribution: att });
   await vi.advanceTimersByTimeAsync(0);
   const s = z.getState();
