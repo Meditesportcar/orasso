@@ -406,7 +406,7 @@ describe("ligne de raison d'une carte d'événement (lot B3b)", () => {
     expect(feedEventMoment("2026-11-17T08:00:00Z", now)).toBe("demain");
     expect(feedEventMoment("2026-11-18T08:00:00Z", now)).toBe("18 novembre");
   });
-  it("carte chaude : jamais « à l'instant », le moment de l'événement", () => {
+  it("une carte d'événement dit le moment de l'événement, jamais « à l'instant » ni l'âge de la carte", () => {
     expect(feedReasonLine(eventCard("2026-11-17T08:00:00Z", now.toISOString()), now)).toBe(
       "Événement d'un abonnement · demain",
     );
@@ -416,10 +416,13 @@ describe("ligne de raison d'une carte d'événement (lot B3b)", () => {
     expect(feedReasonLine(eventCard("2026-11-18T09:00:00Z", now.toISOString()), now)).toBe(
       "Événement d'un abonnement · 18 novembre",
     );
-  });
-  it("événement lointain : l'ancienneté de la carte, comme avant", () => {
+    // Un événement lointain, dont la carte est datée à l'instant du parcours : la date de l'événement, pas « à l'instant ».
+    expect(feedReasonLine(eventCard("2026-12-10T09:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · 10 décembre",
+    );
+    // Une carte ancienne (publication de longue date) : la même chose.
     expect(feedReasonLine(eventCard("2026-12-10T09:00:00Z", "2026-11-14T10:00:00Z"), now)).toBe(
-      `Événement d'un abonnement · ${feedAgo("2026-11-14T10:00:00Z", now)}`,
+      "Événement d'un abonnement · 10 décembre",
     );
   });
   it("les autres cartes gardent leur ancienneté", () => {

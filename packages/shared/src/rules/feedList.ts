@@ -580,19 +580,15 @@ export function feedEventMoment(startsAt: string | Date, now: Date): string {
   return start.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: PARIS });
 }
 
-/** Un événement qui commence dans les 48 h (ou a commencé) : la date de sa carte est l'instant du parcours (« carte chaude »), pas un moment de publication. */
-const HOT_MS = 48 * 3_600_000;
-
 /**
- * La petite ligne d'une carte : la raison, puis l'ancienneté. Une carte d'événement « chaude » (l'API la date à l'instant du
- * parcours pour la faire monter) ne dit pas « à l'instant » : elle dit quand a lieu l'événement.
+ * La petite ligne d'une carte : la raison, puis l'ancienneté. Une carte d'événement ne dit jamais « à l'instant » ni « il y a 3 j » :
+ * sa date est celle du classement (l'API la ramène à l'instant du parcours pour la faire monter, dès qu'il approche), pas celle d'une
+ * nouveauté. Elle dit quand a lieu l'événement.
  */
 export function feedReasonLine(card: FeedCard, now: Date): string {
   if (card.kind === "event_recommended") {
-    const event = (card.payload as { event?: { startsAt?: string } }).event;
-    if (event?.startsAt && new Date(event.startsAt).getTime() - now.getTime() <= HOT_MS) {
-      return `${card.reason.label} · ${feedEventMoment(event.startsAt, now)}`;
-    }
+    const startsAt = (card.payload as { event?: { startsAt?: string } }).event?.startsAt;
+    if (startsAt) return `${card.reason.label} · ${feedEventMoment(startsAt, now)}`;
   }
   return `${card.reason.label} · ${feedAgo(card.at, now)}`;
 }
