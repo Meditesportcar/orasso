@@ -1214,6 +1214,10 @@ test.describe("B2a : la mise en page sous la marque", () => {
       await expect(bPage.getByTestId("near-access")).toHaveCount(1);
       const nearTitle = (await bPage.locator(".near__text strong").first().innerText()).trim();
       expect(nearTitle.length).toBeGreaterThan(3);
+      // L'adresse de l'accès (ASCII : le titre peut être sérialisé avec des échappements) : son dernier segment identifie la sortie.
+      const nearHref = (await bPage.getByTestId("near-access").getAttribute("href")) ?? "";
+      const nearKey = nearHref.split("/").filter(Boolean).pop()?.split("?")[0] ?? "";
+      expect(nearKey.length).toBeGreaterThan(3);
       await expect(bPage.getByTestId("verify-banner")).toBeVisible();
       await expect(bPage.getByTestId("suspended-banner")).toBeVisible();
       const badges = await bPage.locator('[aria-label*="non lu"]').count();
@@ -1261,7 +1265,8 @@ test.describe("B2a : la mise en page sous la marque", () => {
       const { status, body } = held as { status: number; body: string };
       expect(status).toBe(200);
       expect(body.includes(was.id), "la réponse retenue est celle de B (son identifiant y figure)").toBe(true);
-      expect(body.includes(nearTitle), "l'accès le plus proche de B").toBe(false);
+      expect(body.includes(nearTitle), "l'accès le plus proche de B (titre)").toBe(false);
+      expect(body.includes(nearKey), "l'accès le plus proche de B (adresse)").toBe(false);
       expect(body.includes("near-access"), "l'accès flottant").toBe(false);
       expect(body.includes("Vérifie ton e-mail"), "l'état de l'e-mail de B").toBe(false);
       expect(body.includes("verify-banner")).toBe(false);
