@@ -1,11 +1,11 @@
 // B2a, tour 2 : la clé d'envoi d'une story est gardée tant qu'une tentative antérieure reste incertaine, même après un refus ultérieur.
 import { describe, expect, it } from "vitest";
 
-import { forget, mayRenewKey, newUncertainty, settleAttempt } from "./sendKey";
+import { forgetSendKey, mayRenewSendKey, newSendUncertainty, settleSendAttempt } from "./sendKey";
 
-/** Le composeur, réduit à sa clé : un refus net renouvelle la clé seulement si `mayRenewKey` le permet. L'API : une story par clé. */
+/** Le composeur, réduit à sa clé : un refus net renouvelle la clé seulement si `mayRenewSendKey` le permet. L'API : une story par clé. */
 function composer() {
-  const state = newUncertainty();
+  const state = newSendUncertainty();
   const server = new Map<string, number>(); // clé -> nombre de stories créées (`storyIdFor` : une par clé)
   let seq = 0;
   let key: string | null = null;
@@ -16,8 +16,8 @@ function composer() {
   const serverCreate = (k: string) => server.set(k, 1);
   const attempt = (res: { ok: boolean; status: number }) => {
     const sent = currentKey();
-    const renewable = mayRenewKey(state, res);
-    settleAttempt(state, res);
+    const renewable = mayRenewSendKey(state, res);
+    settleSendAttempt(state, res);
     if (res.ok) key = null;
     else if (renewable) key = null;
     return sent;
@@ -29,7 +29,7 @@ function composer() {
     serverCreate,
     newFile: () => {
       key = null;
-      forget(state);
+      forgetSendKey(state);
     },
   };
 }

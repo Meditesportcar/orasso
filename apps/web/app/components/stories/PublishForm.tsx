@@ -18,11 +18,14 @@ import {
   feedPublishLabels,
   fillFrame,
   fitDefault,
+  forgetSendKey,
   frameState,
   isStoryRatio,
   storyPublishLabels as L,
   limitFrame,
+  mayRenewSendKey,
   moveFrame,
+  newSendUncertainty,
   noCommercialDraft,
   type PeopleSearchPage,
   type PlateRect,
@@ -38,6 +41,7 @@ import {
   type StoryTagPick,
   storyVideoLabels as SV,
   sendIfAlive,
+  settleSendAttempt,
   storyAudienceOptions,
   storyBody,
   storyEffectiveVisibility,
@@ -69,7 +73,6 @@ import { Canvas } from "./Canvas";
 import { CommercialLine, commercialText, useCommercialLine } from "./CommercialLine";
 import { prepareStoryPhoto, type StoryPhoto } from "./prepare";
 import { ClipRefused, prepareStoryClip, releaseClip, type StoryClip } from "./prepareVideo";
-import { forget, mayRenewKey, newUncertainty, settleAttempt } from "./sendKey";
 
 export type PublishFormProps = {
   /** Lot R9h (tour 1) : le compte du formulaire ; une session devenue celle d'un autre bloque l'envoi (jamais sous la page d'un autre compte). */
@@ -196,11 +199,11 @@ export function PublishForm({
   // Un envoi antérieur est parti sans réponse certaine (réseau perdu, délai, 5xx) : la story existe peut-être ; un refus ultérieur (4xx, y
   // compris 409 `account_changed`) ne le prouve pas, l'incertitude reste jusqu'à une réponse positive.
   // La clé d'envoi suit la même incertitude (`sendKey.ts`) : gardée tant qu'une tentative antérieure peut encore aboutir.
-  const uncertainBefore = useRef(newUncertainty());
+  const uncertainBefore = useRef(newSendUncertainty());
   const settlePost = (res: { ok: boolean; status: number }) => {
-    if (res.ok) return settleAttempt(uncertainBefore.current, res);
-    const renewable = mayRenewKey(uncertainBefore.current, res);
-    settleAttempt(uncertainBefore.current, res);
+    if (res.ok) return settleSendAttempt(uncertainBefore.current, res);
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
+    settleSendAttempt(uncertainBefore.current, res);
     if (renewable) setMaybePosted(false);
   };
   useEffect(() => listenSession((announced) => setSessionStale((was) => latchStale(was, userId, announced))), [userId]);
@@ -305,7 +308,7 @@ export function PublishForm({
       setClip(null);
       clipKeys.current = null;
       uploaded.current = null;
-      forget(uncertainBefore.current);
+      forgetSendKey(uncertainBefore.current);
       setPhoto(next);
       setFrame(fitDefault(next.width, next.height));
       setRects([]);
@@ -332,7 +335,7 @@ export function PublishForm({
       setPhoto(null);
       uploaded.current = null;
       clipKeys.current = null;
-      forget(uncertainBefore.current);
+      forgetSendKey(uncertainBefore.current);
       setClip(next);
       setRects([]);
       setNoPlate(false);
@@ -450,7 +453,7 @@ export function PublishForm({
       settlePost(res);
       return setDone(res.data);
     }
-    const renewable = mayRenewKey(uncertainBefore.current, res);
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
     settlePost(res);
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
@@ -525,7 +528,7 @@ export function PublishForm({
       settlePost(res);
       return setDone(res.data);
     }
-    const renewable = mayRenewKey(uncertainBefore.current, res);
+    const renewable = mayRenewSendKey(uncertainBefore.current, res);
     settlePost(res);
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.

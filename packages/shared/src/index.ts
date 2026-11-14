@@ -24,6 +24,7 @@ export * from "./rules";
 export * from "./rules/feedComments";
 export * from "./rules/feedCommentsList";
 export * from "./rules/homeAgo";
+export * from "./rules/sendKey";
 export * from "./schemas";
 export * from "./schemas/feedComments";
 export * from "./shareMessage";
