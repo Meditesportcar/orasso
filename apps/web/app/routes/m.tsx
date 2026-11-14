@@ -29,6 +29,7 @@ import {
   type WithPageExtras,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
+import { ActorOnPage } from "../components/casquette/ActorOnPage";
 import { PageAlbums } from "../components/pages/PageAlbums";
 import { PageFollow } from "../components/pages/PageFollow";
 import { PageHead } from "../components/pages/PageHead";
@@ -37,7 +38,7 @@ import { PageMore } from "../components/pages/PageMore";
 import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ShareButtons } from "../components/ShareButtons";
-import { actorOfParam } from "../lib/actor";
+import { casquetteOfParam, withoutActorParam } from "../lib/actor";
 import { api, apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/albums.css";
@@ -60,7 +61,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const id = encodeURIComponent(params.id);
   // Lot R9h (T48) : la casquette qui regarde est portée par l'adresse (`?auteur=`), revérifiée ici et par l'API.
-  const actor = actorOfParam(url.searchParams.get("auteur"), me.personas);
+  const casquette = casquetteOfParam(url.searchParams.get("auteur"), me.personas);
+  const actor = casquette?.key ?? null;
+  // « En mon nom » : la même adresse sans `auteur` (onglet, retour et curseur restent).
+  const ownHref = withoutActorParam(url);
   const media = await apiOrThrow<WithPageExtras<MediaPageData>>(request, `/media/${id}`, { actor });
   const owner = me.personas.some((p) => p.kind === "media" && p.id === media.id);
   const tab = pageShownTab("media", {
@@ -69,24 +73,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     session: true,
   });
   // Lot R9e : les albums publiés (une page, la suite se charge au clic) ; les photos viennent d'une route protégée (session).
-  const albumsRes = await api<AlbumsList>(request, `/media/${id}/albums?limit=${ALBUMS_PAGE}`);
-  const albums = albumsRes.ok ? albumsRes.data : null;
+  // Tour 1 de la partie 2 : albums et liens ne se lisent que pour l'onglet « Albums » (les autres onglets n'en ont pas besoin).
+  const albumsRes =
+    tab === "albums" ? await api<AlbumsList>(request, `/media/${id}/albums?limit=${ALBUMS_PAGE}`) : null;
+  const albums = albumsRes?.ok ? albumsRes.data : null;
   // Contenus publiés (relecture du lot 57) : une page par appel, au curseur de l'API (`?cursor=`), 20 par page
   // (`?taille=` : de 1 à 20, pour alléger la page). « Voir la suite » charge la suivante, sans plafond de pages.
   const size = Math.min(PAGE_SIZE, Math.max(1, Math.floor(Number(url.searchParams.get("taille"))) || PAGE_SIZE));
   const cursor = cursorParam(url);
-  const chunk = await loadChunk<MediaContentView>(cursor, async (c) => {
-    const res = await api<Page<MediaContentView>>(
-      request,
-      `/media/${id}/contents?kind=link&limit=${size}${c ? `&cursor=${encodeURIComponent(c)}` : ""}`,
-    );
-    return res.ok ? res.data : null;
-  });
+  const chunk: CursorChunk<MediaContentView> =
+    tab === "albums"
+      ? await loadChunk<MediaContentView>(cursor, async (c) => {
+          const res = await api<Page<MediaContentView>>(
+            request,
+            `/media/${id}/contents?kind=link&limit=${size}${c ? `&cursor=${encodeURIComponent(c)}` : ""}`,
+          );
+          return res.ok ? res.data : null;
+        })
+      : { items: [], next: null, failed: false, cursor: "" };
   return {
     back,
     media,
     owner,
     actor,
+    casquette,
+    ownHref,
     tab,
     origin: originOf(request),
     albums,
@@ -98,9 +109,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 const PAGE_SIZE = 20;
 const ALBUMS_PAGE = 20;
 
-/** Adresse de la fiche, à un curseur donné (liste « Voir la suite » et « Réessayer »). */
-function pageHref(id: string, size: number, cursor: string): string {
+/**
+ * Adresse de la fiche, à un curseur donné (liste « Voir la suite » et « Réessayer ») : l'onglet « Albums » (le seul qui lit les liens) et la
+ * casquette (`auteur`) restent dans l'adresse, sinon la suite se lirait sous un autre onglet ou au nom d'une autre casquette.
+ */
+function pageHref(id: string, size: number, cursor: string, actor: string | null): string {
   const params = new URLSearchParams();
+  params.set(PAGE_TAB_PARAM, "albums");
+  if (actor) params.set("auteur", actor);
   if (cursor) params.set("cursor", cursor);
   if (size !== PAGE_SIZE) params.set("taille", String(size));
   const query = params.toString();
@@ -108,7 +124,7 @@ function pageHref(id: string, size: number, cursor: string): string {
 }
 
 export default function MediaPage({ loaderData }: Route.ComponentProps) {
-  const { media: m, owner, actor, tab, origin } = loaderData;
+  const { media: m, owner, actor, casquette, ownHref, tab, origin } = loaderData;
   const ig = instagramUrl(m.instagram);
   const [follow, setFollow] = useState({ following: m.isFollowing, followers: m.followersCount });
   const [mentionsDelta, setMentionsDelta] = useState(0);
@@ -135,6 +151,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
     <>
       <FicheBar heading={false} title="Média" back={loaderData.back} />
       <div className="s-narrow s-stack pg-page" data-testid="media-public">
+        {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
         <PageHead
           testId="media-head"
           name={m.name}
@@ -148,6 +165,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
               <PageFollow
                 targetKey={key}
                 actor={actor}
+                actorName={casquette?.name}
                 following={follow.following}
                 onDone={(r: PageFollowResult) => setFollow({ following: r.following, followers: r.followersCount })}
               />
@@ -206,6 +224,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
               mediaId={m.id}
               first={loaderData.chunk}
               size={loaderData.size}
+              actor={actor}
             />
           </PageAlbums>
         ) : tab === "publications" ? (
@@ -239,14 +258,16 @@ function MediaContents({
   mediaId,
   first,
   size,
+  actor,
 }: {
   mediaId: string;
   first: CursorChunk<MediaContentView>;
   size: number;
+  actor: string | null;
 }) {
   const list = useCursorList<MediaContentView, LoaderData>(
     first,
-    (cursor) => pageHref(mediaId, size, cursor),
+    (cursor) => pageHref(mediaId, size, cursor, actor),
     (data) => data.chunk,
   );
   // Lot R9e : les galeries sont des albums (section « Albums ») ; ici, les liens seulement (`kind=link` : l'API pagine les liens seuls,
@@ -288,7 +309,7 @@ function MediaContents({
           <div>
             <Button
               icon="undo"
-              href={pageHref(mediaId, size, list.to ?? first.cursor)}
+              href={pageHref(mediaId, size, list.to ?? first.cursor, actor)}
               onClick={(e) => {
                 e.preventDefault();
                 list.load();
@@ -305,7 +326,7 @@ function MediaContents({
           <Button
             variant="secondary"
             icon="down"
-            href={pageHref(mediaId, size, list.to)}
+            href={pageHref(mediaId, size, list.to, actor)}
             onClick={(e) => {
               e.preventDefault();
               list.load();

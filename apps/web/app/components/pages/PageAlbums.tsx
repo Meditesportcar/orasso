@@ -72,7 +72,7 @@ export function PageAlbums({
             {albumLabels.albums}
           </h2>
           <p className="o-t-caption s-muted" data-testid="media-public-albums-count">
-            {pagesLabels.albumsCount(albums)} · {pagesLabels.photosCount(photos)}
+            {pagesLabels.albumsLine(albums, photos)}
           </p>
           {items.length === 0 && !failed ? (
             <p className="o-t-body s-muted" data-testid="page-albums-empty">

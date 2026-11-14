@@ -20,7 +20,10 @@ async function shot(page: Page, name: string) {
 }
 
 async function open(page: Page, email: string, to: string) {
+  // On repart sans session, mais le thème posé par `setTheme` reste : `clearCookies` l'effaçait et le Sable tournait en Béton (tour 1, point 2).
+  const theme = (await page.context().cookies()).find((c) => c.name === "orasso-theme");
   await page.context().clearCookies();
+  if (theme) await setTheme(page, theme.value as "beton" | "sable" | "auto");
   await loginInBrowser(page, email, undefined, to);
   await page.goto(to);
 }
@@ -121,6 +124,9 @@ const SPACES = [
   },
 ] as const;
 
+/** L'onglet ouvert sans `onglet` (le champ `first` de `SPACES`). */
+const FIRST_TAB = { events: "Événements", publications: "Publications" } as const;
+
 for (const theme of ["beton", "sable"] as const) {
   for (const space of SPACES) {
     for (const viewport of [
@@ -194,6 +200,10 @@ for (const theme of ["beton", "sable"] as const) {
           expect(name, "le nom n'est jamais coupé").toBe(true);
         }
         await shot(page, `page-${space.name}-${theme}-${viewport.name}`);
+
+        // Sans `onglet`, l'onglet par défaut est celui de la fiche (tour 1, point 4).
+        await page.goto(path);
+        await expect(tabs.getByRole("tab", { selected: true })).toContainText(FIRST_TAB[space.first]);
 
         // Chaque onglet s'ouvre par son adresse.
         for (const tab of space.tabs) {
@@ -314,7 +324,15 @@ for (const theme of ["beton", "sable"] as const) {
     await page.goto(`/providers/${brasa.id}?onglet=prestations`);
     await expect(page.getByTestId("page-prestations")).toBeVisible();
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    // Sans casquette dans l'adresse : ni pastille, ni « en tant que » (tour 1, point 1).
+    await expect(page.getByTestId("page-actor")).toHaveCount(0);
+    await expect(page.getByTestId("follow-button")).not.toContainText("en tant que");
     await shot(page, `providers-visiteur-${theme}`);
+    // À 390 px : aucun défilement de côté (tour 1, point 4).
+    await page.setViewportSize(MOBILE);
+    await noHorizontalScroll(page);
+    await shot(page, `providers-visiteur-${theme}-390`);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByTestId("follow-button").click();
     await expect(page.getByTestId("follow-button")).toContainText("Suivi");
     await expect(page.getByTestId("page-count-followers")).toContainText(String(before.followersCount + 1));
@@ -332,9 +350,16 @@ for (const theme of ["beton", "sable"] as const) {
       `/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=prestations`,
     );
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    // La pastille dit au nom de qui on agit, et le bouton aussi (tour 1, point 1) : un lien reçu ne fait jamais suivre en silence.
+    await expect(page.getByTestId("page-actor")).toBeVisible();
+    await expect(page.getByTestId("page-actor-name")).toHaveText("Roues Libres 66");
+    await expect(page.getByTestId("page-actor")).toContainText("Tu agis au nom de");
+    await expect(page.getByTestId("follow-button")).toHaveText("Suivre en tant que Roues Libres 66");
+    await shot(page, `providers-au-nom-d-une-page-${theme}`);
     const base = await providerAs("sarah@orasso.local", brasa.id, key);
     await page.getByTestId("follow-button").click();
     await expect(page.getByTestId("follow-button")).toContainText("Suivi");
+    await expect(page.getByTestId("follow-button")).toHaveText("Suivi en tant que Roues Libres 66");
     expect(followCalls.at(-1)).toBe(key);
     const asPage = await providerAs("sarah@orasso.local", brasa.id, key);
     expect(asPage.isFollowing, "la page suit").toBe(true);
@@ -349,9 +374,17 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
     expect((await providerAs("sarah@orasso.local", brasa.id, key)).followersCount).toBe(base.followersCount);
 
+    // « En mon nom » : la même adresse sans `auteur` (l'onglet reste), plus de pastille, le bouton redit « Suivre ».
+    await page.goto(`/providers/${brasa.id}?auteur=${encodeURIComponent(key)}&onglet=prestations`);
+    await page.getByTestId("page-actor-change").click();
+    await page.waitForURL((u) => !u.searchParams.has("auteur") && u.searchParams.get("onglet") === "prestations");
+    await expect(page.getByTestId("page-actor")).toHaveCount(0);
+    await expect(page.getByTestId("follow-button")).toHaveText("Suivre");
+
     // Une clé qui n'est pas au compte n'est jamais crue : la personne agit.
     followCalls.length = 0;
     await page.goto(`/providers/${brasa.id}?auteur=${encodeURIComponent(`s:${brasa.id}`)}&onglet=prestations`);
+    await expect(page.getByTestId("page-actor")).toHaveCount(0);
     await page.getByTestId("follow-button").click();
     await expect(page.getByTestId("follow-button")).toContainText("Suivi");
     expect(followCalls).toEqual(["moi"]);

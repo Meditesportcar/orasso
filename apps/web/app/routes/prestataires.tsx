@@ -22,6 +22,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 
+import { ActorOnPage } from "../components/casquette/ActorOnPage";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PageFollow } from "../components/pages/PageFollow";
 import { PageHead } from "../components/pages/PageHead";
@@ -32,7 +33,7 @@ import { PagePublications } from "../components/pages/PagePublications";
 import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
-import { actorOfParam } from "../lib/actor";
+import { casquetteOfParam, withoutActorParam } from "../lib/actor";
 import { apiOrThrow, originOf, requireMe, safeReturn } from "../lib/api.server";
 import "../styles/pages.css";
 import "../styles/providers.css";
@@ -51,7 +52,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const back = safeReturn(url.searchParams.get("retour"), "/app");
   const me = await requireMe(request);
   // Lot R9h (T48) : la casquette qui regarde est portée par l'adresse (`?auteur=`), revérifiée ici et par l'API.
-  const actor = actorOfParam(url.searchParams.get("auteur"), me.personas);
+  const casquette = casquetteOfParam(url.searchParams.get("auteur"), me.personas);
+  const actor = casquette?.key ?? null;
+  // « En mon nom » : la même adresse sans `auteur` (onglet, retour et curseur restent).
+  const ownHref = withoutActorParam(url);
   const provider = await apiOrThrow<WithPageExtras<ProviderPage>>(
     request,
     `/providers/${encodeURIComponent(params.id)}`,
@@ -65,11 +69,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     counts: { publications: pagePublicationsCount(provider) },
     session: true,
   });
-  return { back, provider, owner, actor, tab, origin: originOf(request) };
+  return { back, provider, owner, actor, casquette, ownHref, tab, origin: originOf(request) };
 }
 
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
-  const { back, provider, owner, actor, tab, origin } = loaderData;
+  const { back, provider, owner, actor, casquette, ownHref, tab, origin } = loaderData;
   const [follow, setFollow] = useState({ following: provider.isFollowing, followers: provider.followersCount });
   const [mentionsDelta, setMentionsDelta] = useState(0);
   // Le nombre servi fait foi : la correction locale repart de zéro à chaque nombre neuf ou autre page.
@@ -95,6 +99,7 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
     <>
       <FicheBar title={P.providerPage} back={back} />
       <div className="s-narrow s-stack pg-page" data-testid="provider-public">
+        {casquette ? <ActorOnPage casquette={casquette} ownHref={ownHref} /> : null}
         <PageHead
           testId="provider-head"
           name={provider.name}
@@ -108,6 +113,7 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
               <PageFollow
                 targetKey={key}
                 actor={actor}
+                actorName={casquette?.name}
                 following={follow.following}
                 onDone={(r: PageFollowResult) => setFollow({ following: r.following, followers: r.followersCount })}
               />

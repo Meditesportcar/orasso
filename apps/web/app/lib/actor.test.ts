@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACTOR_HEADER } from "@orasso/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { actorOfParam, withActorParam } from "./actor";
+import { actorOfParam, casquetteOfParam, withActorParam, withoutActorParam } from "./actor";
 import { ACTOR_ROUTES, actorHeaders, carriesActor } from "./actorRoutes";
 import { api } from "./api.server";
 
@@ -112,7 +112,7 @@ describe("api (serveur, loaders) ne pose l'en-tête que sur la liste", () => {
 describe("la casquette portée par l'adresse (`?auteur=`)", () => {
   const personas = [
     { kind: "fan", id: "u1", label: "Moi", assisted: false },
-    { kind: "organizer", id: "st1", label: "Roues Libres 66", assisted: false },
+    { kind: "organizer", id: "st1", label: "Roues Libres 66", assisted: false, logoUrl: "/logo.png" },
     { kind: "pro", id: "pr1", label: "Garage", assisted: false },
     { kind: "organizer", id: "st2", label: "Survolée", assisted: true },
     { kind: "organizer", id: "st3", label: "Suspendue", assisted: false, suspended: true },
@@ -134,5 +134,26 @@ describe("la casquette portée par l'adresse (`?auteur=`)", () => {
     expect(actorOfParam("s:st2", personas), "survol d'assistance").toBeNull();
     expect(actorOfParam("s:st3", personas), "page suspendue").toBeNull();
     expect(actorOfParam("x:st1", personas), "préfixe inconnu").toBeNull();
+  });
+
+  it("casquetteOfParam : la clé, le nom et le logo de la casquette (pastille « Tu agis au nom de »), null sinon", () => {
+    expect(casquetteOfParam("s:st1", personas)).toEqual({
+      key: "s:st1",
+      name: "Roues Libres 66",
+      logoUrl: "/logo.png",
+    });
+    expect(casquetteOfParam("p:pr1", personas)).toEqual({ key: "p:pr1", name: "Garage", logoUrl: null });
+    expect(casquetteOfParam("s:st3", personas), "page suspendue").toBeNull();
+    expect(casquetteOfParam("s:st2", personas), "survol d'assistance").toBeNull();
+    expect(casquetteOfParam("s:autre", personas), "clé non tenue par le compte").toBeNull();
+    expect(casquetteOfParam(null, personas)).toBeNull();
+  });
+
+  it("withoutActorParam : « En mon nom » retire seulement `auteur`, le reste de l'adresse est gardé", () => {
+    expect(withoutActorParam(new URL("http://x/providers/p1?auteur=s%3Ast1"))).toBe("/providers/p1");
+    expect(withoutActorParam(new URL("http://x/m/m1?onglet=albums&auteur=s%3Ast1&retour=%2Fapp"))).toBe(
+      "/m/m1?onglet=albums&retour=%2Fapp",
+    );
+    expect(withoutActorParam(new URL("http://x/m/m1?onglet=mentions"))).toBe("/m/m1?onglet=mentions");
   });
 });

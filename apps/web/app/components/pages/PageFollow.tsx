@@ -3,7 +3,7 @@
 // qui suit**, jamais la personne : l'acteur part avec l'appel (liste blanche, T49). La réponse de l'écriture est appliquée tout de suite
 // (état et nombre d'abonnés) ; une panne se dit, rien n'est défait en silence.
 import { Button } from "@orasso/design-system/web";
-import { pagesLabels as L, type PageFollowResult } from "@orasso/shared";
+import { casquettesLabels as C, pagesLabels as L, type PageFollowResult } from "@orasso/shared";
 import { useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
@@ -11,6 +11,7 @@ import { apiFetch } from "../../lib/api.client";
 export function PageFollow({
   targetKey,
   actor,
+  actorName,
   following,
   onDone,
 }: {
@@ -18,6 +19,8 @@ export function PageFollow({
   targetKey: string;
   /** La casquette qui regarde (clé d'auteur), ou `null` : la personne. */
   actor: string | null;
+  /** Le nom de cette casquette : « Suivre en tant que <nom> » (on ne suit jamais au nom d'une page sans que le bouton le dise). */
+  actorName?: string | null;
   following: boolean;
   onDone: (result: PageFollowResult) => void;
 }) {
@@ -45,7 +48,13 @@ export function PageFollow({
         onClick={() => void toggle()}
         data-testid="follow-button"
       >
-        {following ? L.following : L.follow}
+        {actor && actorName
+          ? following
+            ? C.followingAs(actorName)
+            : C.followAs(actorName)
+          : following
+            ? L.following
+            : L.follow}
       </Button>
       {error ? (
         <span className="s-error" role="alert" data-testid="follow-error">

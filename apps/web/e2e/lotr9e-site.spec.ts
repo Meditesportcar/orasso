@@ -126,7 +126,7 @@ test("Léo crée un album en trois étapes, le publie ; Damien le voit dans son 
     await page.goto(`/m/${mediaId}?onglet=albums`);
     await expect(page.getByTestId("media-public-albums")).toBeVisible();
     await expect(page.getByTestId("media-public-album").filter({ hasText: title })).toBeVisible();
-    await expect(page.getByTestId("media-public-albums-count")).toContainText("albums · ");
+    await expect(page.getByTestId("media-public-albums-count")).toHaveText(/^\d+ albums? · \d+ photos?$/);
 
     // Damien : la carte « album » dans son Fil (« Voir l'album », ni flamme ni commentaire), puis la fiche sans gestion.
     const damien = await browser.newContext({ viewport: { width: 390, height: 900 } });

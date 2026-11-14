@@ -64,9 +64,25 @@ export function withActorParam(href: string, actor: string | null): string {
  * jamais en assistance ni suspendue : `resolveStoryAuthor`), sinon `null` (la personne). Une clé qui n'est pas au compte n'est jamais crue.
  */
 export function actorOfParam(asked: string | null, personas: Me["personas"]): string | null {
-  const choice = resolveStoryAuthor(
-    asked,
-    personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended),
-  );
-  return choice?.kind === "page" ? choice.key : null;
+  return casquetteOfParam(asked, personas)?.key ?? null;
+}
+
+/**
+ * La casquette en entier que porte une adresse (clé, nom, logo), ou `null` : de quoi dire, sur la page, au nom de qui on agit
+ * (pastille « Tu agis au nom de » et « Suivre en tant que », partie 2, tour 1). Mêmes règles que `actorOfParam`.
+ */
+export function casquetteOfParam(asked: string | null, personas: Me["personas"]): Casquette | null {
+  const usable = personas.filter((p) => p.kind !== "fan" && p.kind !== "visitor" && !p.suspended);
+  const choice = resolveStoryAuthor(asked, usable);
+  if (choice?.kind !== "page") return null;
+  const persona = usable.find((p) => p.kind === choice.persona && p.id === choice.id);
+  return { key: choice.key, name: choice.name, logoUrl: persona?.logoUrl ?? null };
+}
+
+/** La même adresse sans `auteur` (« En mon nom ») : chemin, onglet, retour et curseur restent. */
+export function withoutActorParam(url: URL): string {
+  const params = new URLSearchParams(url.search);
+  params.delete("auteur");
+  const query = params.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}`;
 }
