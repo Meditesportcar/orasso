@@ -107,9 +107,11 @@ for (const theme of ["beton", "sable"] as const) {
     const back = await openApp(browser, theme, "kenji@orasso.local");
     await back.page.goto("/messages");
     await back.page.getByTestId("conversation-row").filter({ hasText: "Sud Cars" }).click();
-    await expect(back.page.getByText("Sud Cars", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(back.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(back.page.getByTestId("messages").getByText(answer)).toBeVisible();
-    await expect(back.page.getByText("Sud Cars", { exact: true }).nth(1)).toBeVisible();
+    await expect(back.page.getByTestId("messages").getByText("Sud Cars", { exact: true }).first()).toBeVisible();
     expect(await back.page.content()).not.toContain(OWNER);
     await back.ctx.close();
 
@@ -123,7 +125,9 @@ for (const theme of ["beton", "sable"] as const) {
     expect(opened.status).toBeLessThan(300);
     const damien = await openApp(browser, theme, "damien@orasso.local");
     await damien.page.goto(`/messages/${opened.data.id}`);
-    await expect(damien.page.getByText("Sud Cars", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(damien.page.getByText("Sud Cars", { exact: true }).filter({ visible: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(damien.page.getByTestId("view-page")).toBeVisible();
     await shot(damien.page, `conversation-damien-${theme}-384`);
     await damien.ctx.close();
