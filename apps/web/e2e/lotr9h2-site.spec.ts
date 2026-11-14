@@ -540,6 +540,88 @@ test("T54 : la gestion de l'événement (« Après ») porte la ligne « Photos 
   await ctx.close();
 });
 
+test("Événements d'une structure au-delà des limites (50 à venir, 12 passés) : « Voir plus » sur la Page du propriétaire et sur la page publique", async ({
+  browser,
+}) => {
+  test.setTimeout(280_000);
+  const email = "sarah@orasso.local";
+  const cookie = await login(email);
+  // La structure de la Page ouverte plus bas (`roues-libres-66`) : Sarah en gère d'autres, la persona « organisateur » n'est pas forcément celle-là.
+  const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(cookie, "GET", "/me");
+  const structure = { id: me.data.memberships.find((m) => m.structureSlug === "roues-libres-66")?.structureId ?? "" };
+  expect(structure.id, "Sarah gère Roues Libres 66").not.toBe("");
+  const stamp = `B2b${Date.now().toString(36)}`;
+  const created: string[] = [];
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  try {
+    // 64 événements publiés par l'API (demain et après) : 13 deviennent passés (dates reculées en base), 51 restent à venir.
+    for (let i = 0; i < 64; i++) {
+      const start = new Date(Date.now() + (2 + (i % 20)) * 24 * 3600 * 1000);
+      const res = await apiCall<{ id: string }>(cookie, "POST", `/structures/${structure.id}/events`, {
+        title: `${stamp} ${String(i).padStart(2, "0")}`,
+        format: "gathering",
+        startsAt: start.toISOString(),
+        endsAt: new Date(start.getTime() + 4 * 3600 * 1000).toISOString(),
+        addressLine: "Parking du port",
+        postalCode: "66140",
+        city: "Canet-en-Roussillon",
+        department: "66",
+        lat: 42.6988,
+        lng: 3.0334,
+        admittedVehicleTypes: ["car"],
+        capacity: 10,
+        maxVehiclesPerUser: 1,
+        admission: "open",
+        publicAccess: "free",
+        registrationsOpenAt: new Date(Date.now() - 3600_000).toISOString(),
+        previewHours: 0,
+        rulesText: "Recette du lot B2b : événement retiré à la fin.",
+        description: "Événement de recette (pagination), retiré à la fin.",
+      });
+      expect(res.status, `création ${i}`).toBe(201);
+      created.push(res.data.id);
+      expect((await apiCall(cookie, "POST", `/events/${res.data.id}/publish`)).status).toBe(200);
+    }
+    // 13 événements passés : terminés il y a 2 à 14 jours.
+    for (const [k, id] of created.slice(0, 13).entries()) {
+      await sql(
+        "update events set starts_at = now() - make_interval(days => $2 + 1), ends_at = now() - make_interval(days => $2) where id = $1",
+        [id, k + 1],
+      );
+    }
+    const countTiles = (testId: string) => page.getByTestId(testId).getByTestId("event-tile").count();
+    for (const where of [
+      { url: "/orga/roues-libres-66/page?onglet=evenements", who: "propriétaire" },
+      { url: "/o/roues-libres-66?onglet=evenements", who: "public" },
+    ]) {
+      await open(page, email, where.url);
+      // Première page : 50 à venir, 12 passés, et « Voir plus » pour chacune.
+      await expect(page.getByTestId("structure-upcoming")).toBeVisible();
+      expect(await countTiles("structure-upcoming"), `${where.who} : 50 à venir`).toBe(50);
+      expect(await countTiles("structure-past"), `${where.who} : 12 passés`).toBe(12);
+      await expect(page.getByTestId("structure-upcoming-more")).toBeVisible();
+      await expect(page.getByTestId("structure-past-more")).toBeVisible();
+      // « Voir plus » : la suite s'ajoute (au moins le 51e à venir et le 13e passé), sans doublon, puis plus de bouton.
+      await page.getByTestId("structure-upcoming-more").click();
+      await expect(page.getByTestId("structure-upcoming-more")).toHaveCount(0);
+      expect(await countTiles("structure-upcoming"), `${where.who} : à venir au-delà de 50`).toBeGreaterThan(50);
+      await page.getByTestId("structure-past-more").click();
+      await expect(page.getByTestId("structure-past-more")).toHaveCount(0);
+      expect(await countTiles("structure-past"), `${where.who} : passés au-delà de 12`).toBeGreaterThan(12);
+      const hrefs = await page
+        .getByTestId("structure-past")
+        .locator("a[href]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+      expect(new Set(hrefs).size, "aucune carte en double").toBe(hrefs.length);
+    }
+  } finally {
+    // Les événements de la recette sont retirés (ils n'ont aucune autre ligne liée).
+    if (created.length) await sql("delete from events where id = any($1::uuid[])", [created]).catch(() => undefined);
+    await ctx.close();
+  }
+});
+
 /** Les onglets de la page tiennent sans être coupés (`scrollWidth <= clientWidth`) : « Mentions · 0 » n'est jamais rogné à 390 px. */
 async function tabsFit(page: Page) {
   const fits = await page.getByTestId("page-tabs").evaluate((el) => el.scrollWidth <= el.clientWidth);
