@@ -8,11 +8,13 @@ import {
   albumLabels,
   createOperationGate,
   emptyPhotosState,
+  exitAfterRemoval,
   albumTagLabels as L,
   liveStoryAt,
   type MyPhoto,
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
+  reconcileRemovals,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -82,7 +84,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
   const exitWanted = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `close` est recréé à chaque rendu
   useEffect(() => {
-    if (exitWanted.current && focused && view.error?.status === 404) {
+    if (exitAfterRemoval({ wanted: exitWanted.current, focused, status: view.error?.status })) {
       exitWanted.current = false;
       close();
     }
@@ -132,11 +134,13 @@ export function MyPhotosScreen({ id }: { id: string }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: seulement quand de nouvelles données arrivent
   useEffect(() => {
     if (!v || removed.size === 0) return;
-    const present = new Set(v.photos.map((p) => p.tagId));
-    const kept = new Set([...removed].filter((id) => present.has(id)));
-    if (kept.size === removed.size) return;
-    setRemoved(kept);
-    if (kept.size === 0) exitWanted.current = false;
+    const next = reconcileRemovals(
+      removed,
+      v.photos.map((p) => p.tagId),
+    );
+    if (next.same) return;
+    setRemoved(next.kept);
+    if (next.cleared) exitWanted.current = false;
   }, [v]);
   // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
   // les retraits ne sont levés qu'après une lecture réussie.

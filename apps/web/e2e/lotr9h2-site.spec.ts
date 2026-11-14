@@ -512,6 +512,34 @@ test("Les liens de T54 : l'album mène à la page du média, la Page du média �
   await ctx.close();
 });
 
+test("T54 : la gestion de l'événement (« Après ») porte la ligne « Photos · N albums » vers la gestion des albums", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  // Un événement de la graine dont un album est publié, et le propriétaire de sa structure.
+  const [row] = await sql<{ event_id: string; slug: string; email: string }>(
+    `select e.id as event_id, st.slug, u.email
+       from event_albums a
+       join events e on e.id = a.event_id
+       join structures st on st.id = e.structure_id
+       join "user" u on u.id = st.created_by
+      where a.status = 'published' and a.deleted_at is null
+      order by e.starts_at desc limit 1`,
+  );
+  expect(row, "la graine a un album publié sur un événement").toBeTruthy();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await open(page, row?.email ?? "", `/orga/${row?.slug}/e/${row?.event_id}/apres`);
+  const link = page.getByTestId("ae-photos-link");
+  await expect(link).toBeVisible();
+  await expect(link).toContainText(/Photos · \d+ albums?/);
+  await expect(link).toHaveAttribute("href", `/orga/${row?.slug}/e/${row?.event_id}/presse#photos`);
+  await link.click();
+  await page.waitForURL(/\/presse/);
+  await expect(page.getByTestId("event-photos")).toBeVisible();
+  await ctx.close();
+});
+
 /** Les onglets de la page tiennent sans être coupés (`scrollWidth <= clientWidth`) : « Mentions · 0 » n'est jamais rogné à 390 px. */
 async function tabsFit(page: Page) {
   const fits = await page.getByTestId("page-tabs").evaluate((el) => el.scrollWidth <= el.clientWidth);

@@ -320,6 +320,32 @@ export function createMyPhotosReads<V>() {
 }
 
 /**
+ * Les retraits en attente après une lecture réussie (appli) : rangés par **identification** (`tagId`), seuls ceux que les données lues ne
+ * contiennent plus sont réconciliés. Une lecture lancée AVANT le retrait, arrivée après, contient encore le `tagId` retiré : il reste masqué.
+ * `cleared` : plus aucun retrait en attente (la sortie sur 404 n'est plus attendue). `same` : rien n'a changé (pas de nouvel état à poser).
+ */
+export function reconcileRemovals(
+  removed: ReadonlySet<string>,
+  presentTagIds: Iterable<string>,
+): { kept: ReadonlySet<string>; cleared: boolean; same: boolean } {
+  const present = new Set(presentTagIds);
+  const kept = new Set([...removed].filter((id) => present.has(id)));
+  return { kept, cleared: kept.size === 0, same: kept.size === removed.size };
+}
+
+/**
+ * Faut-il quitter « Tes photos » ? Seulement après un retrait (`wanted`), quand l'écran a le focus, et sur une 404 de la relecture (plus
+ * aucune identification à mon nom dans cet album). Une 404 de chargement ordinaire (rien attendu) ne ferme rien.
+ */
+export function exitAfterRemoval(input: {
+  wanted: boolean;
+  focused: boolean;
+  status: number | null | undefined;
+}): boolean {
+  return input.wanted && input.focused && input.status === 404;
+}
+
+/**
  * Ce que « Tes photos » montre quand la liste visible est vide : « Chargement… » tant qu'un retrait attend sa réconciliation (jamais un
  * faux « aucune photo »), rien quand l'erreur est affichée, sinon « aucune photo ».
  */

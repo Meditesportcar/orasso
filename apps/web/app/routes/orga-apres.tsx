@@ -4,14 +4,17 @@
 
 import { Button, Counters, TextField } from "@orasso/design-system/web";
 import {
+  type AlbumsList,
   type EventOrganizer,
   type EventReportView,
   EXPORT_REASON_MIN,
   eventDaysLabels,
+  eventPhotosLabels,
   formatDayDate,
   afterEventLabels as L,
   renderTemplate,
   reviewLink,
+  showPhotosSection,
   type ThanksResult,
 } from "@orasso/shared";
 import { useState } from "react";
@@ -41,8 +44,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { membership, pseudo } = await organizerOf(request, params.structure);
   const event = await apiOrThrow<EventOrganizer>(request, `/events/${params.eventId}`);
   if (event.structure.id !== membership.structureId) throw new Response("Événement introuvable.", { status: 404 });
-  const view = await api<EventReportView>(request, `/events/${params.eventId}/report`);
-  return { event, view: view.ok ? view.data : null, viewError: view.ok ? null : view.error.message, pseudo };
+  const [view, albums] = await Promise.all([
+    api<EventReportView>(request, `/events/${params.eventId}/report`),
+    // Lot B2b (T54) : les albums des médias accrédités ; la ligne « Photos » mène à leur gestion (album officiel). Une panne la cache.
+    api<AlbumsList>(request, `/events/${params.eventId}/albums?limit=50`),
+  ]);
+  const photos =
+    albums.ok && showPhotosSection(albums.data.items)
+      ? {
+          line: eventPhotosLabels.manageLine(
+            albums.data.total ?? albums.data.items.length,
+            albums.data.items.find((a) => a.official)?.media.name ?? null,
+          ),
+        }
+      : null;
+  return { event, view: view.ok ? view.data : null, viewError: view.ok ? null : view.error.message, pseudo, photos };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -75,7 +91,7 @@ function Ranked({ title, items }: { title: string; items: { label: string; count
 }
 
 export default function OrgaApres({ loaderData, actionData, params }: Route.ComponentProps) {
-  const { event, view, viewError, pseudo } = loaderData;
+  const { event, view, viewError, pseudo, photos } = loaderData;
   const busy = useNavigation().state !== "idle";
   const report = view?.report ?? null;
   const d = report?.data;
@@ -193,6 +209,22 @@ export default function OrgaApres({ loaderData, actionData, params }: Route.Comp
           </>
         )}
       </section>
+
+      {photos && (
+        <section className="orga__panel s-stack" aria-labelledby="ae-photos" data-testid="ae-photos">
+          <h2 className="s-h2" id="ae-photos">
+            {eventPhotosLabels.title}
+          </h2>
+          <Button
+            variant="secondary"
+            icon="camera"
+            href={`/orga/${params.structure}/e/${event.id}/presse#photos`}
+            data-testid="ae-photos-link"
+          >
+            {photos.line}
+          </Button>
+        </section>
+      )}
 
       {view && <Thanks eventId={event.id} view={view} event={event} pseudo={pseudo} />}
       {view && <Export eventId={event.id} />}
