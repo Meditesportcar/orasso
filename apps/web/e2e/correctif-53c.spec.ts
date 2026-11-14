@@ -185,7 +185,9 @@ test("panne de lecture des missions pendant l'attente : le clic en attente est a
 });
 
 // Tour 4 : pendant l'attente l'étape est figée (champs, liens, boutons) ; « Annuler » seul rend la main.
-test("clic en attente : l'étape est figée, « Annuler » rend la main, rien n'est enregistré", async ({ browser }) => {
+test("clic en attente : l'étape est figée, « Annuler l'attente » rend la main (focus compris), rien n'est enregistré, le reclic aboutit", async ({
+  browser,
+}) => {
   test.setTimeout(180_000);
   const damien = await login("damien@orasso.local");
   const id = await draftEvent(damien, `Annuler ${unique()}`, ["food_truck"]);
@@ -203,15 +205,20 @@ test("clic en attente : l'étape est figée, « Annuler » rend la main, rien n'
   await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
   const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
   const writes = writesOf(page, id);
-  await page.getByLabel("Titre").fill(`Titre ${unique()}`);
+  const kept = `Titre ${unique()}`;
+  await page.getByLabel("Titre").fill(kept);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
+  // Le focus va sur « Annuler l'attente », puis revient au bouton cliqué après l'annulation.
+  await expect(page.getByTestId("wizard-wait-cancel")).toBeFocused();
+  await expect(page.getByTestId("wizard-wait-cancel")).toContainText("Annuler l'attente");
   // L'étape est figée : ses champs et le pied de page sont inertes ; seul « Annuler » est actif.
   await expect(page.locator("section.wz-step")).toHaveAttribute("inert", "");
   await expect(page.locator(".wz-cta")).toHaveAttribute("inert", "");
   await page.getByTestId("wizard-wait-cancel").click();
   await expect(page.locator("section.wz-step")).not.toHaveAttribute("inert", "");
   await expect(page.getByTestId("wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-next")).toBeFocused();
   const answered = page.waitForResponse(
     (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
   );
@@ -221,6 +228,10 @@ test("clic en attente : l'étape est figée, « Annuler » rend la main, rien n'
   await expect(page.getByTestId("wizard-step")).toContainText("Type");
   expect(writes).toEqual([]);
   expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
+  // Le reclic aboutit : « Lieu », titre gardé et enregistré.
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(kept);
   await ctx.close();
 });
 
@@ -239,16 +250,36 @@ test("clic en attente puis sortie par le ✕ de l'en-tête : rien n'est enregist
     if (route.request().method() === "GET") await held;
     await route.continue();
   });
+  // Discriminante (tour 5) : le document de destination du ✕ est retenu, donc la page de l'assistant reste vivante et
+  // `beforeunload` ne part pas ; les missions sont libérées AVANT la navigation. Sans l'annulation au clic sur le lien,
+  // le clic en attente part alors et écrit.
+  let openDestination: () => void = () => undefined;
+  const destinationHeld = new Promise<void>((r) => {
+    openDestination = r;
+  });
+  const destination = new RegExp(`/orga/meditesportcar/e/${id}(.data)?(?|$)`);
+  await page.route(destination, async (route) => {
+    if (route.request().url().includes("/modifier")) return route.continue();
+    await destinationHeld;
+    await route.continue();
+  });
   await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
   const before = JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data);
   const writes = writesOf(page, id);
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-next")).toContainText("Chargement…");
-  // Sortie par le lien de l'en-tête : l'attente est annulée, la page quittée ; la réponse arrive trop tard pour agir.
   await page.locator(".o-appbar__close").first().click();
-  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(\\?|$)`), { timeout: 30_000 });
+  const answered = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/events/${id}/needs`) && r.request().method() === "GET",
+  );
   release();
+  await answered;
   await page.waitForLoadState("networkidle");
+  // Les missions sont arrivées, l'assistant est encore affiché (navigation retenue) : rien ne doit être parti.
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  expect(writes).toEqual([]);
+  openDestination();
+  await page.waitForURL(new RegExp(`/orga/meditesportcar/e/${id}(?|$)`), { timeout: 30_000 });
   expect(writes).toEqual([]);
   expect(JSON.stringify((await apiCall(damien, "GET", `/events/${id}`)).data)).toBe(before);
   await ctx.close();

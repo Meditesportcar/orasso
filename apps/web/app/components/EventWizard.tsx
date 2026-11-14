@@ -382,11 +382,42 @@ export function EventWizard(props: Props) {
   };
   // Une navigation en cours vers un autre chemin compte aussi comme sortie (tour 3), même sans fenêtre « Quitter ».
   const navigation = useNavigation();
-  /** « Annuler » : le clic en attente est abandonné, la personne reprend la main. */
-  const cancelWait = () => {
+  // Tour 5 : le focus suit l'attente. Au clic il est mémorisé, puis il va sur « Annuler l'attente » ; après l'annulation par
+  // ce bouton il revient au bouton cliqué ; quand l'action part, rien ne change.
+  const clickedEl = useRef<HTMLElement | null>(null);
+  const refocus = useRef(false);
+  const noteClicked = () => {
+    clickedEl.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  };
+  /** « Annuler l'attente » : le clic en attente est abandonné, la personne reprend la main. */
+  const cancelWait = (giveFocusBack = false) => {
+    refocus.current = giveFocusBack;
     setWaiting(null);
     setDue(null);
   };
+  useEffect(() => {
+    if (queued !== null) {
+      document.querySelector<HTMLElement>('[data-testid="wizard-wait-cancel"]')?.focus();
+    } else if (refocus.current) {
+      refocus.current = false;
+      if (clickedEl.current?.isConnected) clickedEl.current.focus();
+    }
+  }, [queued]);
+  // Tour 5 : un lien ordinaire (✕ de l'en-tête, liens du site) est hors de la zone figée et `beforeunload` n'est pas fiable
+  // partout : pendant l'attente, tout clic sur un lien annule l'attente AVANT que la navigation parte (phase de capture).
+  useEffect(() => {
+    if (queued === null) return;
+    const onClick = (e: MouseEvent) => {
+      const link = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!link || link.hasAttribute("download")) return;
+      const target = link.getAttribute("target");
+      if (target && target !== "_self") return;
+      setWaiting(null);
+      setDue(null);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [queued]);
   const leavingAsked =
     blocker.state === "blocked" ||
     (navigation.state !== "idle" &&
@@ -551,7 +582,10 @@ export function EventWizard(props: Props) {
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
     const click = decideClick(needsState, resumed ? null : queued, isDraft && Boolean(saved || step !== "type"));
     if (click === "ignore") return;
-    if (click === "wait") return setWaiting(newTicket("next", waitCtx));
+    if (click === "wait") {
+      noteClicked();
+      return setWaiting(newTicket("next", waitCtx));
+    }
     if (click === "refuse" && needsBlock) return setError(needsBlock);
     let sent = d;
     const problem = eventStepProblem(step, sent);
@@ -594,6 +628,7 @@ export function EventWizard(props: Props) {
     if (click === "ignore") return;
     if (click === "wait") {
       setError(null);
+      noteClicked();
       return setWaiting(newTicket(mode, waitCtx));
     }
     if (click === "refuse" && needsBlock) return setError(needsBlock);
@@ -811,7 +846,7 @@ export function EventWizard(props: Props) {
         <div className="s-notice s-stack s-stack--tight" role="status" data-testid="wizard-wait">
           <span>{W.needsWaitingNote}</span>
           <div className="s-row">
-            <Button variant="secondary" icon="close" onClick={() => cancelWait()} data-testid="wizard-wait-cancel">
+            <Button variant="secondary" icon="close" onClick={() => cancelWait(true)} data-testid="wizard-wait-cancel">
               {W.needsWaitCancel}
             </Button>
           </div>

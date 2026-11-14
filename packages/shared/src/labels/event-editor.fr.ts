@@ -421,7 +421,9 @@ export const wizardV2Labels = {
   needsWaiting: "Chargement…",
   // Tour 4 : pendant l'attente l'étape est figée ; seul ce bouton rend la main (aucun libellé des docs : le plus simple).
   needsWaitingNote: "Les missions de l'événement se chargent : l'étape continuera toute seule dès leur arrivée.",
-  needsWaitCancel: "Annuler",
+  needsWaitCancel: "Annuler l'attente",
+  // Tour 5 : une modification de la saisie pendant l'attente (appli) annule le clic, et le dit.
+  needsWaitChanged: "Clic annulé : la saisie a changé. Appuie de nouveau sur le bouton.",
   posterStillSending: "La photo de l'affiche s'envoie encore : attends la fin de l'envoi.",
 } as const;
 

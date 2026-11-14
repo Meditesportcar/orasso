@@ -365,6 +365,8 @@ test("appli : clic en attente puis « Annuler » : l'étape se dégèle, rien n'
   const second = `Appli second ${unique()}`;
   await v(page, "wizard-title").fill(second);
   await expect(v(page, "wizard-next")).toContainText("Continuer");
+  // Tour 5 : l'annulation par une modification le dit.
+  await expect(v(page, "wizard-notice")).toContainText("Clic annulé");
   release();
   await page.waitForLoadState("networkidle");
   await expect(v(page, "wizard-step")).toContainText("Type");

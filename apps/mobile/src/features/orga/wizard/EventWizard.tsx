@@ -14,6 +14,7 @@ import {
   afterNeedWrites,
   afterZoneWrites,
   type CategoryOption,
+  cancelIsAnnounced,
   decideClick,
   draftStart,
   type EventDraft,
@@ -31,6 +32,7 @@ import {
   type NeedDraft,
   needsFromSaved,
   newTicket,
+  nextEpoch,
   notifyChanged,
   notifyFieldsOfDraft,
   notifySavedCode,
@@ -52,6 +54,7 @@ import {
   type WaitedAction,
   type WaitTicket,
   type WizardMemo,
+  waitCancelReason,
   waitIsStale,
   withArrivalsInHours,
   withCopyOpening,
@@ -98,7 +101,7 @@ import {
 import type { StepContext } from "./types";
 import { VotesTemps } from "./VotesTemps";
 
-const { space1, space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 
 const SCREENS: Record<EventWizardStep, (ctx: StepContext) => ReactNode> = {
   type: TypeTemps,
@@ -366,8 +369,10 @@ export function EventWizard({
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
     // Tour 3 : une modification PAR LA PERSONNE (un champ) change `epoch` et annule le clic en attente ; les fusions
-    // automatiques (missions, valeurs calculées) passent par `setDraft` et ne l'annulent pas.
-    setEpoch((e) => e + 1);
+    // automatiques (missions, valeurs calculées) passent par `setDraft` et ne l'annulent pas. Tour 5 : seulement si la
+    // valeur change vraiment (un `onBlur` qui rappelle `onChange` sans changement n'annule rien).
+    const next = { ...latest.current, [key]: value };
+    setEpoch((e) => nextEpoch(e, !sameDraft(next, latest.current)));
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
   const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
@@ -379,7 +384,7 @@ export function EventWizard({
     setDraft((prev) => withCopyOpening(prev, copyLead, now()));
   }, [copyLead, start]);
   const setD = useCallback((update: (prev: EventDraft) => EventDraft) => {
-    setEpoch((e) => e + 1);
+    setEpoch((e) => nextEpoch(e, !sameDraft(update(latest.current), latest.current)));
     setDraft(update);
   }, []);
 
@@ -698,6 +703,10 @@ export function EventWizard({
   // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
   useEffect(() => {
     const gone = leaving.current || done.current;
+    for (const t of [waiting, due]) {
+      // Tour 5 : une modification (ou une restauration) qui annule le clic le dit, plus d'annulation silencieuse.
+      if (t && !gone && cancelIsAnnounced(waitCancelReason(t, waitCtx))) setNotice(W.needsWaitChanged);
+    }
     if (waiting && (gone || waitIsStale(waiting, waitCtx))) setWaiting(null);
     if (due && (gone || waitIsStale(due, waitCtx))) setDue(null);
   }, [waiting, due, waitCtx]);
@@ -891,7 +900,12 @@ export function EventWizard({
           </Button>
         </View>
       ) : null}
-      <View pointerEvents={frozen ? "none" : "auto"}>
+      <View
+        style={styles.step}
+        pointerEvents={frozen ? "none" : "auto"}
+        importantForAccessibility={frozen ? "no-hide-descendants" : "auto"}
+        accessibilityElementsHidden={frozen}
+      >
         <Screen {...ctx} />
       </View>
       {notifyShown ? (
@@ -914,6 +928,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: space2, flexWrap: "wrap" },
   end: { gap: space2 },
   grow: { flex: 1 },
+  // Même écart que le corps de `FlowScreen` (`Body`, `gap: space3`) : ce conteneur porte le gel et ne doit rien changer à la mise en page.
+  step: { gap: space3 },
   resume: { gap: space2 },
   head: { gap: space1 },
 });

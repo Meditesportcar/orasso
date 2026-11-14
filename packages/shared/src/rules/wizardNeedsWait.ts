@@ -51,9 +51,25 @@ export const newTicket = (action: WaitedAction, ctx: WaitContext): WaitTicket =>
   account: ctx.account,
 });
 
+/** Pourquoi un billet est annulé (tour 5) : sortie, compte, saisie changée ou étape changée. Une restauration change la saisie ET l'étape : « saisie » prime. */
+export type WaitCancelReason = "leaving" | "account" | "saisie" | "step";
+
+export function waitCancelReason(ticket: WaitTicket, ctx: WaitContext): WaitCancelReason | null {
+  if (ctx.leaving) return "leaving";
+  if (ticket.account !== ctx.account) return "account";
+  if (ticket.epoch !== ctx.epoch) return "saisie";
+  if (ticket.step !== ctx.step) return "step";
+  return null;
+}
+
 /** Le billet est périmé : sortie en cours, ou étape, saisie ou compte différents de ceux vus au clic. */
-export const waitIsStale = (ticket: WaitTicket, ctx: WaitContext): boolean =>
-  ctx.leaving || ticket.step !== ctx.step || ticket.epoch !== ctx.epoch || ticket.account !== ctx.account;
+export const waitIsStale = (ticket: WaitTicket, ctx: WaitContext): boolean => waitCancelReason(ticket, ctx) !== null;
+
+/** Seul un changement de la saisie annule en le disant (« Clic annulé : la saisie a changé ») : une sortie ou un autre temps se voient. */
+export const cancelIsAnnounced = (reason: WaitCancelReason | null): boolean => reason === "saisie";
+
+/** `epoch` n'avance que si la valeur change vraiment (un champ qui rappelle `onChange` sans changement n'annule rien). */
+export const nextEpoch = (epoch: number, changed: boolean): number => (changed ? epoch + 1 : epoch);
 
 /** Le compte vu par l'assistant après une annonce de session d'une AUTRE fenêtre : tout autre identifiant (ou aucun) le change. */
 export const accountAfterAnnouncement = (

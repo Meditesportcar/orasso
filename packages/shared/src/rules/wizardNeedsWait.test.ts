@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   accountAfterAnnouncement,
+  cancelIsAnnounced,
   decideClick,
   newTicket,
+  nextEpoch,
   settleWait,
   type WaitedAction,
+  waitCancelReason,
   waitIsStale,
 } from "./wizardNeedsWait";
 
@@ -114,5 +117,35 @@ describe("l'étape est figée pendant l'attente (tour 4)", () => {
   it("seules la restauration, « Effacer » et « Recommencer » font avancer `epoch` : elles annulent, rien d'autre", () => {
     expect(waitIsStale(ticket, { ...seen, epoch: seen.epoch + 1 })).toBe(true);
     expect(waitIsStale(ticket, seen)).toBe(false);
+  });
+});
+
+describe("pourquoi l'attente est annulée, et quand elle le dit (tour 5)", () => {
+  const seen = { step: 1, epoch: 3, account: "a", leaving: false };
+  const ticket = newTicket("next", seen);
+
+  it("chaque cause donne sa raison, la sortie et le compte avant la saisie, la saisie avant l'étape", () => {
+    expect(waitCancelReason(ticket, seen)).toBeNull();
+    expect(waitCancelReason(ticket, { ...seen, leaving: true })).toBe("leaving");
+    expect(waitCancelReason(ticket, { ...seen, account: "b" })).toBe("account");
+    expect(waitCancelReason(ticket, { ...seen, step: 2 })).toBe("step");
+    expect(waitCancelReason(ticket, { ...seen, epoch: 4 })).toBe("saisie");
+    // Une restauration change la saisie et l'étape : la raison dite est la saisie.
+    expect(waitCancelReason(ticket, { ...seen, epoch: 4, step: 2 })).toBe("saisie");
+    expect(waitCancelReason(ticket, { ...seen, epoch: 4, leaving: true })).toBe("leaving");
+  });
+
+  it("seule une saisie changée annule en le disant", () => {
+    expect(cancelIsAnnounced("saisie")).toBe(true);
+    for (const r of ["leaving", "account", "step", null] as const) expect(cancelIsAnnounced(r)).toBe(false);
+  });
+
+  it("`epoch` n'avance que si la valeur a vraiment changé : un `onBlur` qui rappelle `onChange` ne coûte pas le clic", () => {
+    expect(nextEpoch(3, false)).toBe(3);
+    expect(nextEpoch(3, true)).toBe(4);
+    const unchanged = { ...seen, epoch: nextEpoch(seen.epoch, false) };
+    expect(waitIsStale(ticket, unchanged)).toBe(false);
+    const changed = { ...seen, epoch: nextEpoch(seen.epoch, true) };
+    expect(waitIsStale(ticket, changed)).toBe(true);
   });
 });
