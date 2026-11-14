@@ -8,6 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
+  albumPhotoTags,
   eventAlbumPhotos,
   eventAlbums,
   passportStamps,
@@ -47,7 +48,8 @@ describe("« Tes photos » : seulement les miennes", () => {
     await pose(s.leo, photo(1), { userId: s.kenji.id });
     const res = await mine(s.dam);
     expect(res.status).toBe(200);
-    expect(Object.keys(res.json).sort()).toEqual(["album", "media", "photos", "vehicle"]);
+    expect(Object.keys(res.json).sort()).toEqual(["album", "media", "photos", "vehicle", "viewerIsAuthor"]);
+    expect(res.json.viewerIsAuthor, "je ne suis pas l'auteur de l'album").toBe(false);
     expect(res.json.media).toMatchObject({ name: "Sud Cars" });
     expect(res.json.media.key).toBe(`m:${s.leoMedia}`);
     expect(res.json.vehicle).toMatchObject({ id: s.car.dam.vehicle.id });
@@ -75,6 +77,22 @@ describe("« Tes photos » : seulement les miennes", () => {
     const kenji = await mine(s.kenji);
     expect(kenji.json.photos.map((p: { id: string }) => p.id)).toEqual([photo(1)]);
     expect(kenji.json.vehicle).toBeNull();
+  });
+
+  it("« Contacter » : `viewerIsAuthor` est vrai seulement pour l'auteur de l'album (le compte du média), faux pour tout autre", async () => {
+    await pose(s.leo, photo(0), { vehicleId: s.car.dam.vehicle.id });
+    expect((await mine(s.dam)).json.viewerIsAuthor).toBe(false);
+    // L'auteur (Léo, compte du média) est lui-même identifié sur une photo de son album : le champ lui dit qu'il est l'auteur.
+    await db.insert(albumPhotoTags).values({
+      photoId: photo(1),
+      targetKind: "user",
+      userId: s.leo.id,
+      taggedBy: s.dam.id,
+      taggedAs: "owner",
+    });
+    const own = await mine(s.leo);
+    expect(own.status).toBe(200);
+    expect(own.json.viewerIsAuthor).toBe(true);
   });
 
   it("deux identifications de moi sur la même photo : une seule ligne ; retirer celle d'un autre laisse l'autre, la dernière donne 404", async () => {

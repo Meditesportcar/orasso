@@ -218,10 +218,14 @@ export function MyPhotosScreen({ id }: { id: string }) {
             onClose={() => setSheet(null)}
             onRemove={(p) => void remove(p)}
             onReport={report}
-            onContact={() => {
-              setSheet(null);
-              void contact.open();
-            }}
+            onContact={
+              v?.viewerIsAuthor
+                ? undefined
+                : () => {
+                    setSheet(null);
+                    void contact.open();
+                  }
+            }
           />
           <StorySheet
             photo={story}
@@ -260,7 +264,9 @@ export function MyPhotosScreen({ id }: { id: string }) {
               </Text>
             </View>
             {/* Plus aucune photo (dernière identification retirée) : l'API refuserait l'ouverture, le bouton n'est pas montré. */}
-            {photos.length > 0 ? <ContactMediaButton busy={contact.busy} onPress={() => void contact.open()} /> : null}
+            {photos.length > 0 && !v?.viewerIsAuthor ? (
+              <ContactMediaButton busy={contact.busy} onPress={() => void contact.open()} />
+            ) : null}
           </View>
           {note ? <Notice testID="my-photos-note">{note}</Notice> : null}
           {error ? (
