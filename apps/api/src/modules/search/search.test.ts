@@ -431,6 +431,65 @@ describe("pagination par date : GET /events?structureId=…", () => {
     expect(third.json.nextCursor).toBeNull();
   });
 
+  // Lot B2b, tour 2 : des débuts à la microseconde (écrits par `now()` en SQL) ne sont jamais coupés à la milliseconde par le curseur.
+  it("plus de `limit` événements au même début à la microseconde : aucune répétition, aucun saut", async () => {
+    const owner = await person("Orga_Date_Micro");
+    const s = await createStructure(owner.id);
+    const t0 = now().getTime();
+    const made = [];
+    for (let i = 0; i < 5; i++) made.push(await createEvent(s.id, { startsAt: new Date(t0 + 3 * DAY) }));
+    // Même début, avec des microsecondes ; deux autres un peu plus tard (différence de 1 µs seulement).
+    await db.execute(
+      sql`update events set starts_at = '2026-12-01 10:00:00.123456+00', ends_at = '2026-12-01 14:00:00+00' where id in (${sql.join(
+        made.slice(0, 3).map((e) => sql`${e.id}::uuid`),
+        sql`, `,
+      )})`,
+    );
+    await db.execute(
+      sql`update events set starts_at = '2026-12-01 10:00:00.123457+00', ends_at = '2026-12-01 14:00:00+00' where id in (${sql.join(
+        made.slice(3).map((e) => sql`${e.id}::uuid`),
+        sql`, `,
+      )})`,
+    );
+    const order = [...made.slice(0, 3)]
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .concat([...made.slice(3)].sort((a, b) => (a.id < b.id ? -1 : 1)))
+      .map((e) => e.slug);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 6; page++) {
+      const res = await get(
+        null,
+        `/events?structureId=${s.id}&limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
+      expect(res.status).toBe(200);
+      seen.push(...(ids(res.json.items) as string[]));
+      cursor = res.json.nextCursor;
+      if (!cursor) break;
+    }
+    expect(seen).toEqual(order);
+  });
+
+  it("une date impossible dans le curseur (date ou places) : 200 et repli, jamais 500", async () => {
+    const owner = await person("Orga_Date_Impossible");
+    const s = await createStructure(owner.id);
+    const t0 = now().getTime();
+    const made: Awaited<ReturnType<typeof createEvent>>[] = [];
+    for (const days of [1, 2, 3]) made.push(await createEvent(s.id, { startsAt: new Date(t0 + days * DAY) }));
+    const bad = (extra: object) =>
+      Buffer.from(JSON.stringify({ startsAt: "2026-02-30T00:00:00.000Z", id: made[0]!.id, ...extra })).toString(
+        "base64url",
+      );
+    for (const [sort, extra] of [
+      ["date", {}],
+      ["seats", { seats: 5 }],
+    ] as const) {
+      const res = await get(null, `/events?structureId=${s.id}&sort=${sort}&limit=2&cursor=${bad(extra)}`);
+      expect(res.status, sort).toBe(200);
+      expect(res.json.items.length, sort).toBeGreaterThan(0);
+    }
+  });
+
   it("l'ancien curseur numérique (APK en ligne) reste accepté, sans 400", async () => {
     const owner = await person("Orga_Date_Ancien");
     const s = await createStructure(owner.id);
