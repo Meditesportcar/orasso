@@ -8,7 +8,7 @@ import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { SEED_PLAN_POSTS } from "./feed";
 import { HOUR, now } from "./helpers";
-import { isSeedPost, type SeedPost } from "./seed-scope";
+import { isSeedAccount, isSeedPost, type SeedPost } from "./seed-scope";
 
 /** Les deux publications de Kenji_66 du plan de `feed.ts` (identifiant fixe, ou légende et auteur pour une base posée avant `SEED_ADOPT_BEFORE`). */
 const planPost = (caption: string): SeedPost => {
@@ -20,7 +20,9 @@ export const KENJI_RECENT_POST = planPost("Retour de la sortie du Roussillon Dri
 const OLDER_POST = planPost("Sur le plateau ce week-end.");
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 /** [auteur, texte, il y a (heures), flammes de…]. */
 const TOP: [string, string, number, string[]][] = [

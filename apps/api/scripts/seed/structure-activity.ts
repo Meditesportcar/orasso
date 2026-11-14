@@ -106,6 +106,13 @@ export async function seedStructureActivity() {
   await db
     .update(t.notifications)
     .set({ deliveredAt: new Date(Date.now() - 2 * HOUR) })
-    .where(and(isNotNull(t.notifications.structureId), sql`${t.notifications.deliveredAt} is null`));
+    .where(
+      and(
+        isNotNull(t.notifications.structureId),
+        sql`${t.notifications.deliveredAt} is null`,
+        // Seulement les lignes que ce seed vient de poser (marque `seed`).
+        sql`${t.notifications.data} ->> 'seed' = 'r9d'`,
+      ),
+    );
   console.log(`Activité de structure : ${lines} ligne(s) (MéditeSportCar et Roues Libres 66).`);
 }

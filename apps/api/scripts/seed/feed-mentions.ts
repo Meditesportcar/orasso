@@ -2,8 +2,8 @@
 // Rassemblement du Lydia (Roues Libres 66) ; les mentions de La Brasa (« Sur place ») et de Kenji_66 (« Passionnés ») sont
 // matérialisées par la reprise (`backfillMentions`, sans notification) ; une mention masquée (Julie_66, masquée sur la
 // fiche du Lydia par Sarah_66) ; une publication d'un compte privé (Marc_66) rattachée au Lydia, qui n'apparaît nulle part.
-import { randomBytes, randomUUID } from "node:crypto";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
+import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -13,14 +13,16 @@ import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { LYDIA_ORGA_POSTS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
-import { isSeedPost } from "./seed-scope";
+import { isSeedAccount, isSeedPost, seedPostId } from "./seed-scope";
 
 const LYDIA_SLUG = "rassemblement-du-lydia";
-const JULIE_CAPTION = "J'y serai avec la Clio : à samedi au pied du Lydia !";
+export const JULIE_CAPTION = "J'y serai avec la Clio : à samedi au pied du Lydia !";
 const MARC_CAPTION = "Compte privé : cette publication ne doit apparaître sur aucune fiche.";
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 async function photoFor(postId: string, index: number): Promise<boolean> {
   const photo = await reviewedNoPlateCar(index);
@@ -62,11 +64,23 @@ export async function seedFeedMentions() {
   ] as const) {
     const person = await byPseudo(pseudo);
     if (!person) continue;
+    // Identifiant fixe : la publication de la graine se retrouve par lui, jamais par sa légende (une vraie publication de même légende
+    // n'est pas à elle). Renouvellement du Lydia : elle est rattachée à la nouvelle édition, jamais recréée.
+    const id = seedPostId(`mention:${pseudo}:${caption}`);
+    await db
+      .update(t.feedPosts)
+      .set({ eventId: lydia.id })
+      .where(
+        and(
+          eq(t.feedPosts.id, id),
+          isNull(t.feedPosts.deletedAt),
+          sql`${t.feedPosts.eventId} is distinct from ${lydia.id}`,
+        ),
+      );
     const already = await db.query.feedPosts.findFirst({
-      where: and(eq(t.feedPosts.authorId, person.userId), eq(t.feedPosts.caption, caption)),
+      where: or(eq(t.feedPosts.id, id), and(eq(t.feedPosts.authorId, person.userId), eq(t.feedPosts.caption, caption))),
     });
     if (already) continue;
-    const id = randomUUID();
     const createdAt = new Date(at - hoursAgo * HOUR);
     await db.insert(t.feedPosts).values({
       id,
@@ -88,10 +102,11 @@ export async function seedFeedMentions() {
   // Une mention masquée : celle de Julie_66 sur la fiche du Lydia (la publication reste à Julie, qui n'en sait rien).
   const julie = await byPseudo("Julie_66");
   if (julie) {
+    // La publication de la graine seulement (identifiant fixe) : une vraie publication de Julie_66 de même légende n'est jamais masquée.
     const post = await db.query.feedPosts.findFirst({
-      where: and(eq(t.feedPosts.authorId, julie.userId), eq(t.feedPosts.caption, JULIE_CAPTION)),
+      where: eq(t.feedPosts.id, seedPostId(`mention:Julie_66:${JULIE_CAPTION}`)),
     });
-    if (post) {
+    if (post && !post.deletedAt) {
       await db
         .update(t.feedPostMentions)
         .set({ hiddenAt: new Date(at - HOUR), hiddenBy: sarah.userId })

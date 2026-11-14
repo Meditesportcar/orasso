@@ -11,7 +11,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type FeedAspect, feedLabels, OFFICIAL_PSEUDO } from "@orasso/shared";
 import { hashPassword } from "better-auth/crypto";
-import { and, eq, gt, like, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, like, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -20,7 +20,7 @@ import { storage } from "../../src/lib/storage";
 import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { createAccount, DAY, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
-import { type SeedPost, seedPostId } from "./seed-scope";
+import { isSeedAccount, type SeedPost, seedPostId } from "./seed-scope";
 
 const SIZE: Record<FeedAspect, { width: number; height: number }> = {
   portrait_4_5: { width: 1080, height: 1350 },
@@ -43,7 +43,9 @@ async function monogram(): Promise<Buffer> {
 }
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 type Planned = {
   author: string;
@@ -202,8 +204,8 @@ export async function seedFeed() {
 }
 
 /** Publications du plan que ce seed pose (compte Orasso, Kenji_66, Marc_66), avec leur identifiant fixe : les autres scripts ne visent que celles-là. */
-export const SEED_PLAN_POSTS: SeedPost[] = PLAN.map((p, i) => ({
-  id: seedPostId(`plan:${i}`),
+export const SEED_PLAN_POSTS: SeedPost[] = PLAN.map((p) => ({
+  id: seedPostId(`plan:${p.author}:${p.caption}`),
   author: p.author,
   caption: p.caption,
 }));
@@ -211,17 +213,17 @@ export const SEED_PLAN_POSTS: SeedPost[] = PLAN.map((p, i) => ({
 /** Les trois publications de Roues Libres 66 (Sarah_66) rattachées au Lydia : identifiants fixes, dans l'ordre de `seedPublications`. */
 export const LYDIA_ORGA_POSTS: SeedPost[] = [
   {
-    id: seedPostId("lydia:0"),
+    id: seedPostId(`lydia:Sarah_66:${"Le plateau JDM prend forme au pied du Lydia : passez nous voir."}`),
     author: "Sarah_66",
     caption: "Le plateau JDM prend forme au pied du Lydia : passez nous voir.",
   },
   {
-    id: seedPostId("lydia:1"),
+    id: seedPostId(`lydia:Sarah_66:${"Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond."}`),
     author: "Sarah_66",
     caption: "Le plan du plateau est en ligne : rangée JDM à gauche, youngtimers au fond.",
   },
   {
-    id: seedPostId("lydia:2"),
+    id: seedPostId(`lydia:Sarah_66:${"L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h."}`),
     author: "Sarah_66",
     caption: "L'ouverture du plateau passe à 9 h 30 demain matin au lieu de 9 h.",
   },
@@ -338,6 +340,21 @@ export async function seedPublications() {
     console.log("Publications rattachées : Lydia ou Roues Libres 66 absents, rien ajouté.");
     return;
   }
+  // Renouvellement du Lydia : la suppression de l'ancienne édition garde ses publications (événement vidé) ; celles de la graine
+  // (identifiants fixes, non supprimées) sont rattachées à la nouvelle édition, jamais recréées (clé primaire déjà prise).
+  await db
+    .update(t.feedPosts)
+    .set({ eventId: lydia.id })
+    .where(
+      and(
+        inArray(
+          t.feedPosts.id,
+          LYDIA_ORGA_POSTS.map((p) => p.id),
+        ),
+        isNull(t.feedPosts.deletedAt),
+        sql`${t.feedPosts.eventId} is distinct from ${lydia.id}`,
+      ),
+    );
   const already = await db.query.feedPosts.findFirst({
     where: and(eq(t.feedPosts.structureId, structure.id), eq(t.feedPosts.eventId, lydia.id)),
   });
@@ -355,25 +372,30 @@ export async function seedPublications() {
     extra: Partial<typeof t.feedPosts.$inferInsert> = {},
   ) => {
     const createdAt = new Date(at - hoursAgo * HOUR);
-    return db.insert(t.feedPosts).values({
-      id,
-      authorId: sarah.userId,
-      persona: "organizer",
-      structureId: structure.id,
-      eventId: lydia.id,
-      eventRole: "organizer",
-      caption,
-      department: "66",
-      createdAt,
-      updatedAt: createdAt,
-      ...extra,
-    });
+    return db
+      .insert(t.feedPosts)
+      .values({
+        id,
+        authorId: sarah.userId,
+        persona: "organizer",
+        structureId: structure.id,
+        eventId: lydia.id,
+        eventRole: "organizer",
+        caption,
+        department: "66",
+        createdAt,
+        updatedAt: createdAt,
+        ...extra,
+      })
+      .onConflictDoNothing()
+      .returning({ id: t.feedPosts.id });
   };
 
   // Avec une photo.
   const withPhoto = LYDIA_ORGA_POSTS[0]?.id ?? randomUUID();
-  await orga(withPhoto, LYDIA_ORGA_POSTS[0]?.caption ?? "", 3);
-  if (!(await storeFeedPhoto(withPhoto, 3))) {
+  const insertedFirst = (await orga(withPhoto, LYDIA_ORGA_POSTS[0]?.caption ?? "", 3)).length > 0;
+  // Une publication de la graine supprimée n'est jamais recréée (identifiant déjà pris) : alors, pas de photo non plus.
+  if (insertedFirst && !(await storeFeedPhoto(withPhoto, 3))) {
     await db.delete(t.feedPosts).where(eq(t.feedPosts.id, withPhoto));
     console.log("Publications rattachées : photos du seed absentes, rien ajouté.");
     return;
@@ -387,7 +409,10 @@ export async function seedPublications() {
   });
 
   // La Brasa, prestataire retenu au Lydia.
-  const brasa = await db.query.providerProfiles.findFirst({ where: eq(t.providerProfiles.name, "La Brasa") });
+  const sofia = await byPseudo("Sofia_66");
+  const brasa = sofia
+    ? await db.query.providerProfiles.findFirst({ where: eq(t.providerProfiles.userId, sofia.userId) })
+    : null;
   if (brasa) {
     const kept = await db.query.applications.findFirst({
       where: and(

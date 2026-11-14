@@ -5,7 +5,7 @@
 // - une publication du journal d'une de ses sorties à venir (candidature retenue ou billet), au nom de la structure
 //   organisatrice : « Pour ta sortie de samedi ».
 // Rejouable : les lignes existantes ne sont jamais doublées (clés uniques, légende repérée).
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
@@ -15,12 +15,14 @@ import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { LYDIA_ORGA_POSTS, SEED_PLAN_POSTS } from "./feed";
 import { HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
-import { isSeedAccount, isSeedPost } from "./seed-scope";
+import { isSeedAccount, isSeedPost, SEED_EVENT_SLUGS, seedPostId } from "./seed-scope";
 
 const OUTING_CAPTION = "Le programme de la journée est en ligne : retrouvez-nous dès l'ouverture des portes.";
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 export async function seedFeedSeen() {
   const damien = await byPseudo("Damien_66");
@@ -69,7 +71,7 @@ export async function seedFeedSeen() {
         sql`${t.profiles.userId} <> ${damien.userId}`,
         eq(t.profiles.official, false),
         // Comptes de la graine seulement : un vrai compte ne reçoit jamais de flamme qu'il n'a pas donnée.
-        isSeedAccount("profiles.user_id"),
+        isSeedAccount(t.profiles.userId),
       ),
     )
     .orderBy(t.profiles.pseudo)
@@ -144,6 +146,10 @@ export async function seedFeedSeen() {
         coalesce(e.poster_post_key, e.poster_key, e.poster_photo_key) as poster
       from events e
       where e.status = 'published' and e.ends_at > now()
+        and e.slug in (${sql.join(
+          SEED_EVENT_SLUGS.map((slug) => sql`${slug}`),
+          sql`, `,
+        )})
         and (exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${damien.userId}
               and a.kind = 'vehicle' and a.status = 'accepted')
           or exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${damien.userId} and k.status = 'valid'))
@@ -158,27 +164,37 @@ export async function seedFeedSeen() {
     if (already) journal = "déjà présente";
     else {
       const owner = await db.query.structureMembers.findFirst({
-        where: and(eq(t.structureMembers.structureId, event.structure_id), eq(t.structureMembers.role, "owner")),
+        where: and(
+          eq(t.structureMembers.structureId, event.structure_id),
+          eq(t.structureMembers.role, "owner"),
+          eq(t.structureMembers.status, "active"),
+          // Jamais au nom d'un organisateur réel : événement de la graine ET propriétaire de la graine, sinon rien.
+          isSeedAccount(t.structureMembers.userId),
+        ),
       });
       const structure = await db.query.structures.findFirst({ where: eq(t.structures.id, event.structure_id) });
       const photo = await reviewedNoPlateCar(4);
       if (owner && structure && (photo || event.poster)) {
         const createdAt = new Date(at - 5 * HOUR);
-        const id = randomUUID();
-        await db.insert(t.feedPosts).values({
-          id,
-          authorId: owner.userId,
-          persona: "organizer",
-          structureId: structure.id,
-          eventId: event.id,
-          eventRole: "organizer",
-          caption: OUTING_CAPTION,
-          department: structure.department ?? "66",
-          createdAt,
-          updatedAt: createdAt,
-        });
+        const id = seedPostId(`outing:${event.id}`);
+        const inserted = await db
+          .insert(t.feedPosts)
+          .values({
+            id,
+            authorId: owner.userId,
+            persona: "organizer",
+            structureId: structure.id,
+            eventId: event.id,
+            eventRole: "organizer",
+            caption: OUTING_CAPTION,
+            department: structure.department ?? "66",
+            createdAt,
+            updatedAt: createdAt,
+          })
+          .onConflictDoNothing()
+          .returning({ id: t.feedPosts.id });
         // Une photo du seed (aucune plaque lisible) ; sans elle, l'affiche de l'événement fait le visuel.
-        if (photo) {
+        if (photo && inserted.length > 0) {
           const out = await sharp(photo.data)
             .resize(1080, 1350, { fit: "cover", position: "attention" })
             .webp({ quality: 80 })

@@ -5,18 +5,20 @@
 // l'autocollant du Rassemblement du Lydia) ; lot R7h : une story publique de Kenji_66 avec ce même autocollant, qui
 // identifie Roues Libres 66 et date d'il y a 3 h ; la story de crew de Kenji_66 date d'il y a 3 h 30 (les cinq autres : il y a 4 h) :
 // l'ordre de lecture de ses trois stories est écrit (abonnés, crew, Lydia). Elles finissent dans 20 h, 21 h 30 et 21 h. Idempotent : rien si des stories existent déjà.
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { AppError } from "../../src/lib/errors";
 import type { AuthUser, Viewer } from "../../src/lib/session";
 import { notificationsService } from "../../src/modules/notifications/service";
 import { storiesService } from "../../src/modules/stories/service";
 import { uploadsService } from "../../src/modules/uploads/service";
 import { reviewedNoPlateCar } from "./photos";
+import { isSeedAccount } from "./seed-scope";
 
 async function viewer(pseudo: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({
-    where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`,
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
   });
   if (!profile) return null;
   const [u] = await db.select().from(t.user).where(eq(t.user.id, profile.userId));
@@ -94,36 +96,59 @@ export async function seedStories() {
       : []),
   ];
   let i = 0;
+  const made: string[] = [];
   for (const { who, over } of shots) {
     const photo = await reviewedNoPlateCar(i++);
     if (!photo) continue;
-    const up = await uploadsService.upload(
-      who,
-      "story",
-      new File([new Uint8Array(photo.data)], photo.name, { type: "image/webp" }),
-    );
-    await storiesService.create(who, {
-      uploadKey: up.key,
-      noPlateConfirmed: true,
-      persona: "fan",
-      tags: [],
-      ...over,
-    } as never);
+    try {
+      const up = await uploadsService.upload(
+        who,
+        "story",
+        new File([new Uint8Array(photo.data)], photo.name, { type: "image/webp" }),
+      );
+      const created = await storiesService.create(who, {
+        uploadKey: up.key,
+        noPlateConfirmed: true,
+        persona: "fan",
+        tags: [],
+        ...over,
+      } as never);
+      made.push(created.id);
+    } catch (error) {
+      // Compte suspendu (403), devenu privé (400), sorti du crew, limite (429) : la graine continue sans cette story.
+      if (error instanceof AppError && [400, 403, 404, 409, 429].includes(error.status)) {
+        console.log(`Stories : une story de ${who.profile.pseudo} non posée (${error.status}).`);
+        continue;
+      }
+      throw error;
+    }
   }
-  // « Dans 20 h » : créées il y a 4 h.
+  if (made.length === 0) {
+    console.log("Stories : aucune story posée.");
+    return;
+  }
+  // « Dans 20 h » : créées il y a 4 h (seulement celles que ce passage vient de poser).
   await db.execute(
-    sql`update stories set created_at = now() - interval '4 hours', expires_at = now() + interval '20 hours', updated_at = now()`,
+    sql`update stories set created_at = now() - interval '4 hours', expires_at = now() + interval '20 hours', updated_at = now()
+      where id in (${sql.join(
+        made.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`,
   );
   // Lot R7h, tour 2 : les trois stories de Kenji_66 ont chacune leur date, l'ordre de lecture est écrit : abonnés (il y a 4 h),
   // puis crew (il y a 3 h 30), puis le Lydia (il y a 3 h). Les recettes de la visionneuse comptent sur cet ordre.
+  const ids = sql.join(
+    made.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
   await db.execute(
     sql`update stories set created_at = now() - interval '210 minutes', expires_at = now() + interval '21 hours 30 minutes', updated_at = now()
-      where author_id = ${kenji.user.id} and audience = 'crew'`,
+      where id in (${ids}) and author_id = ${kenji.user.id} and audience = 'crew'`,
   );
   await db.execute(
     sql`update stories set created_at = now() - interval '3 hours', expires_at = now() + interval '21 hours', updated_at = now()
-      where author_id = ${kenji.user.id} and caption = ${"Le Lydia, c'est parti !"}`,
+      where id in (${ids}) and author_id = ${kenji.user.id} and caption = ${"Le Lydia, c'est parti !"}`,
   );
   await notificationsService.flush();
-  console.log(`Stories : ${i} stories de démonstration (finissent dans 20 h).`);
+  console.log(`Stories : ${made.length} stories de démonstration (finissent dans 20 h).`);
 }

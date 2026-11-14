@@ -1,16 +1,15 @@
-// Règle unique de la graine (lot R9-fix, tour 3) : elle ne crée, ne modifie, ne flamme, n'épingle, ne marque « vu » et ne commente
-// que ses propres objets, jamais « la plus récente publication » d'un auteur ou d'une page, jamais un compte réel.
-//  - Une publication de la graine est créée avec un identifiant fixe (`seedPostId`) et retrouvée par lui.
-//  - Les publications posées par la graine avant ce changement (identifiant aléatoire) ne sont adoptées que si leur auteur et leur
-//    légende sont ceux de la graine ET qu'elles sont antérieures à `SEED_ADOPT_BEFORE` : une publication réelle republiée avec la même
-//    légende après cette date n'est jamais adoptée.
+// Règle unique de la graine (lot R9-fix, tours 3 et 4) : elle ne crée, ne modifie, ne flamme, n'épingle, ne marque « vu » et ne
+// commente que ses propres objets, jamais « la plus récente publication » d'un auteur ou d'une page, jamais un compte réel.
+// Preuve d'origine : un objet est à la graine seulement s'il porte une marque que seule elle pose.
+//  - Une publication de la graine est créée avec un identifiant fixe (`seedPostId`, dérivé de l'auteur et de la légende) et
+//    retrouvée par lui, jamais par sa légende : une vraie publication de même légende n'est pas à elle.
+//  - Les publications posées avant ce changement (identifiant aléatoire) ne sont PAS adoptées : leurs photos sont rangées sous la
+//    même clé `private/feed/…` que les vraies, aucune marque ne les distingue. Leurs effets déjà posés restent ; la graine ne les
+//    refait pas (les nouvelles publications du Lydia et du plan, elles, sont créées avec leur identifiant fixe).
 //  - Les comptes de la graine sont ceux dont l'e-mail finit par `@orasso.local`.
 // Si l'objet de la graine manque ou est supprimé, la graine ne fait rien.
 import { createHash } from "node:crypto";
-import { type SQL, sql } from "drizzle-orm";
-
-/** Date constante (UTC) : tout ce que la graine a posé avant elle, sans identifiant fixe, est à elle. Ne jamais la repousser. */
-export const SEED_ADOPT_BEFORE = new Date("2026-11-14T18:00:00Z");
+import { type AnyColumn, type SQL, sql } from "drizzle-orm";
 
 /** Identifiant fixe (forme UUID, dérivé d'une clé) d'une publication de la graine. */
 export function seedPostId(key: string): string {
@@ -20,17 +19,36 @@ export function seedPostId(key: string): string {
 
 export type SeedPost = { id: string; author: string; caption: string };
 
-/** Condition SQL « cette ligne de `feed_posts` (alias `alias`) est une publication de la graine de la liste ». */
+/** Condition SQL « cette ligne de `feed_posts` (alias `alias`) est une publication de la graine de la liste » : par identifiant seulement. */
 export function isSeedPost(items: SeedPost[], alias = "feed_posts"): SQL {
   const a = sql.raw(alias);
-  const parts = items.map(
-    (i) =>
-      sql`(${a}.id = ${i.id}::uuid or (${a}.caption = ${i.caption} and ${a}.created_at < ${SEED_ADOPT_BEFORE.toISOString()}::timestamptz
-        and exists (select 1 from profiles pr where pr.user_id = ${a}.author_id and lower(pr.pseudo) = ${i.author.toLowerCase()})))`,
-  );
-  return sql`(${sql.join(parts, sql` or `)})`;
+  return sql`${a}.id in (${sql.join(
+    items.map((i) => sql`${i.id}::uuid`),
+    sql`, `,
+  )})`;
 }
 
-/** Condition SQL « ce profil (colonne `userColumn`) est un compte de la graine ». */
-export const isSeedAccount = (userColumn: string): SQL =>
-  sql`exists (select 1 from "user" su where su.id = ${sql.raw(userColumn)} and su.email like '%@orasso.local')`;
+/** Condition SQL « ce compte (colonne d'identifiant d'utilisateur) est un compte de la graine ». */
+export const isSeedAccount = (userColumn: AnyColumn): SQL =>
+  sql`exists (select 1 from "user" su where su.id = ${userColumn} and su.email like '%@orasso.local')`;
+
+/** Les événements posés par la graine (« Pour ta sortie » ne se publie que pour eux). */
+export const SEED_EVENT_SLUGS = [
+  "balade-prades",
+  "c-et-c-perpignan-2026",
+  "cars-coffee-carcassonne",
+  "cars-coffee-ceret",
+  "expo-rivesaltes-2026",
+  "exposition-beziers",
+  "hivernale-2027",
+  "nocturne-de-canet-2026",
+  "nocturne-de-rentree",
+  "nocturne-port-sete",
+  "portes-ouvertes-muret",
+  "rassemblement-du-lydia",
+  "rassemblement-narbonne",
+  "rassemblement-toulouse",
+  "salon-argeles",
+  "salon-montpellier",
+  "toulouse-auto-retro",
+];

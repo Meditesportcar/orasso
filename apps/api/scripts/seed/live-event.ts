@@ -266,6 +266,25 @@ async function themedVotes(
   return n;
 }
 
+/** La structure du Lydia (Roues Libres 66, sinon MéditeSportCar) et son propriétaire peuvent-ils créer un événement ? */
+async function renewalPossible(): Promise<boolean> {
+  const structure =
+    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") })) ??
+    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") }));
+  if (!structure || structure.verification === "suspended") return false;
+  const owner = await db.query.structureMembers.findFirst({
+    where: and(
+      eq(t.structureMembers.structureId, structure.id),
+      eq(t.structureMembers.role, "owner"),
+      eq(t.structureMembers.status, "active"),
+    ),
+  });
+  if (!owner) return false;
+  const profile = await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) });
+  if (!profile || profile.bannedAt || profile.deletedAt) return false;
+  return !(profile.suspendedUntil && profile.suspendedUntil > new Date());
+}
+
 export async function seedLiveEvent() {
   const real = new Date();
   const existing = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
@@ -283,6 +302,14 @@ export async function seedLiveEvent() {
     if (existing.status === "published" && existing.startsAt <= real && keep && complete) {
       console.log(`En direct : « ${TITLE} » en cours (jusqu'au ${existing.endsAt.toISOString().slice(0, 10)}).`);
       await presenceDemo(existing.id);
+      return;
+    }
+    // Renouvellement : l'éligibilité de la structure et de son propriétaire est contrôlée AVANT de supprimer l'ancienne édition (une
+    // structure suspendue ou un propriétaire banni ferait échouer la création : l'ancien Lydia serait perdu pour rien).
+    if (!(await renewalPossible())) {
+      console.log(
+        "En direct : structure ou propriétaire suspendus, renouvellement sauté (l'ancienne édition est gardée).",
+      );
       return;
     }
     await teardown(existing);

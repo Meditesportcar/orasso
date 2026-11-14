@@ -26,14 +26,25 @@ async function viewerOfUser(userId: string, secondFactor: string | null = null):
 type Page = { kind: "provider" | "media" | "structure"; id: string };
 
 export async function seedPageFollows() {
-  const brasa = await db.query.providerProfiles.findFirst({
-    where: and(eq(t.providerProfiles.name, "La Brasa"), isNull(t.providerProfiles.deletedAt)),
-  });
-  const sudCars = await db.query.mediaProfiles.findFirst({
-    where: and(eq(t.mediaProfiles.name, "Sud Cars"), isNull(t.mediaProfiles.deletedAt)),
-  });
+  // Les pages de la graine se retrouvent par leur titulaire de la graine (compte `@orasso.local`), jamais par leur nom : une vraie page
+  // de même nom n'est pas à elle.
+  const seedUser = async (email: string) => (await db.query.user.findFirst({ where: eq(t.user.email, email) }))?.id;
+  const sofiaId = await seedUser("sofia@orasso.local");
+  const leoId = await seedUser("leo@orasso.local");
+  const brasa = sofiaId
+    ? await db.query.providerProfiles.findFirst({
+        where: and(eq(t.providerProfiles.userId, sofiaId), isNull(t.providerProfiles.deletedAt)),
+      })
+    : null;
+  const sudCars = leoId
+    ? await db.query.mediaProfiles.findFirst({
+        where: and(eq(t.mediaProfiles.userId, leoId), isNull(t.mediaProfiles.deletedAt)),
+      })
+    : null;
   const rouesLibres = await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") });
-  const damien = await db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = 'damien_66'` });
+  const damien = await db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = 'damien_66'`, isSeedAccount(t.profiles.userId)),
+  });
   if (!brasa || !sudCars || !rouesLibres || !damien) {
     console.log("Abonnements de pages : La Brasa, Sud Cars, Roues Libres 66 ou Damien_66 absents, rien.");
     return;
@@ -165,7 +176,7 @@ async function seedPageFeed(pages: {
       .select({ userId: t.profiles.userId })
       .from(t.profiles)
       .where(
-        and(sql`lower(${t.profiles.pseudo}) in ('kenji_66', 'lea_11', 'marc_66')`, isSeedAccount("profiles.user_id")),
+        and(sql`lower(${t.profiles.pseudo}) in ('kenji_66', 'lea_11', 'marc_66')`, isSeedAccount(t.profiles.userId)),
       );
     const flamed = await db
       .select({ userId: t.feedPostReactions.userId })
