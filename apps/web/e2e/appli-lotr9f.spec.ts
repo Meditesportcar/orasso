@@ -304,9 +304,17 @@ test("Kenji « C'est ma voiture » sans notification (Damien est organisateur : 
   await leo.page.getByTestId("album-action-tag-identify").click();
   await leo.page.getByTestId("tag-open-picker").click();
   await expect(leo.page.getByTestId("tag-picker-grid")).toBeVisible();
+  // Une seule lettre : l'API ne cherche pas de personne ; on attend SA réponse (la frappe est temporisée) avant de dire qu'aucun onglet « Personnes » n'existe.
+  const oneLetter = leo.page.waitForResponse((r) => r.url().includes("/taggable") && /[?&]q=K(&|$)/.test(r.url()));
   await leo.page.getByTestId("tag-picker-search").fill("K");
+  expect((await oneLetter).status()).toBe(200);
   await expect(leo.page.getByText("Personnes", { exact: true })).toHaveCount(0);
+  // Deux lettres : la réponse de la recherche est attendue et son statut vérifié, pour qu'un échec dise sa cause (panne de l'API, pas l'écran).
+  const twoLetters = leo.page.waitForResponse((r) => r.url().includes("/taggable") && /[?&]q=Ke(&|$)/.test(r.url()));
   await leo.page.getByTestId("tag-picker-search").fill("Ke");
+  const answer = await twoLetters;
+  expect(answer.status(), `GET taggable?q=Ke : ${(await answer.text()).slice(0, 200)}`).toBe(200);
+  await expect(leo.page.getByTestId("tag-picker-retry")).toHaveCount(0);
   await leo.page.getByText("Personnes", { exact: true }).click();
   await expect(leo.page.getByTestId("tag-pick-person").filter({ hasText: "Kenji_66" })).toBeVisible({
     timeout: 30_000,

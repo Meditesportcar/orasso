@@ -277,44 +277,70 @@ test("une photo, deux identifications : retrait, relecture en panne (erreur, pas
   await ctx.close();
 });
 
-test("un autre compte se connecte dans un autre onglet pendant une relecture retenue : jamais les photos de A sous B, la page finit sous B", async ({
+test("un autre compte se connecte dans un autre onglet pendant une relecture retenue : le masquage précède le rechargement, jamais les photos de A sous B, la page finit sous B", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
   const s = await scenario();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  // L'observateur du DOM : dès que « Mise à jour… » s'affiche, aucune photo ne doit réapparaître (le drapeau survit au rechargement).
-  await page.addInitScript(() => {
-    // Par document : le flag de fuite survit au rechargement (sessionStorage), pas l'état « périmé vu » (la page rechargée est neuve).
-    let staleSeen = false;
+  // L'observateur du DOM (un par document, les drapeaux survivent au rechargement dans sessionStorage) :
+  // - « stale-seen » : l'état masqué « Mise à jour… » a été rendu avant le rechargement ;
+  // - « seen-after » : les photos visibles dans ce document APRÈS une annonce de session (même canal que le site) ; aucune de celles de A.
+  // Seule l'annonce du compte B compte (celles de A lui-même et de la page de connexion, avant, n'en sont pas).
+  const kenjiId =
+    (await sql<{ id: string }>('select id from "user" where email = $1', ["kenji@orasso.local"]))[0]?.id ?? "";
+  await page.addInitScript((otherId: string) => {
+    let announcedAt = 0;
+    try {
+      new BroadcastChannel("orasso-session").addEventListener("message", (e) => {
+        if ((e as MessageEvent).data?.userId !== otherId) return;
+        announcedAt = performance.now();
+      });
+    } catch {
+      // Sans canal : le repli par `storage` n'est pas observé ici.
+    }
     const check = () => {
-      if (document.querySelector('[data-testid="my-photos-stale"]')) staleSeen = true;
-      if (staleSeen && document.querySelector('[data-testid="my-photo"]'))
-        sessionStorage.setItem("leak", `${Date.now()}`);
+      if (document.querySelector('[data-testid="my-photos-stale"]')) sessionStorage.setItem("stale-seen", "1");
+      // 300 ms de grâce : le temps que React rende l'état masqué après l'annonce (aucune photo de A ne doit rester visible au-delà).
+      if (announcedAt === 0 || performance.now() - announcedAt < 300) return;
+      const seen = new Set<string>(JSON.parse(sessionStorage.getItem("seen-after") ?? "[]"));
+      for (const i of document.querySelectorAll('[data-testid="my-photo"] img'))
+        seen.add(new URL((i as HTMLImageElement).src).pathname);
+      sessionStorage.setItem("seen-after", JSON.stringify([...seen]));
     };
     new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
-  });
+  }, kenjiId);
   await loginInBrowser(page, DAMIEN, undefined, `/app/albums/${s.albumId}/mes-photos`);
   await expect(page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
-  const damienRows = await page.getByTestId("my-photo").count();
-  expect(damienRows).toBeGreaterThan(1);
-  // La relecture qui suit le retrait est lue (compte A) puis retenue.
+  const damienSrc = await page
+    .locator('[data-testid="my-photo"] img')
+    .evaluateAll((l) => l.map((i) => (i as HTMLImageElement).src));
+  expect(damienSrc.length).toBeGreaterThan(1);
+  // La relecture qui suit le retrait est EXPLICITEMENT retenue : demandée par A, lue avec le cookie de A, puis gardée jusqu'à la fin.
   let release: () => void = () => undefined;
   const held = new Promise<void>((r) => {
     release = r;
   });
+  let fetchedAsA: () => void = () => undefined;
+  const fetchedAsAPromise = new Promise<void>((r) => {
+    fetchedAsA = r;
+  });
   await page.route(`**/api/me/albums/${s.albumId}/my-photos`, async (route) => {
     const response = await route.fetch();
+    fetchedAsA();
     await held;
     await route.fulfill({ response });
   });
+  const requested = page.waitForRequest(
+    (r) => r.method() === "GET" && r.url().includes(`/me/albums/${s.albumId}/my-photos`),
+  );
   page.on("dialog", (d) => void d.accept());
   await page.getByTestId("my-photo-more").first().click();
   await page.getByTestId("photo-sheet-not-mine").click();
-  await page.waitForTimeout(1500);
-  // Un autre onglet du même navigateur : B se connecte (cookie et annonce de session).
-  // La connexion de B passe par l'API (cookie du contexte remplacé, sans annonce de « déconnecté ») ; la page de l'autre onglet annonce B.
+  await requested;
+  await fetchedAsAPromise;
+  // Un autre onglet du même navigateur : B se connecte (cookie remplacé par l'API, sans annonce de « déconnecté ») et annonce son compte.
   const other = await ctx.newPage();
   const signIn = await ctx.request.post("/api/auth/sign-in/email", {
     data: { email: "kenji@orasso.local", password: SEED_PASSWORD },
@@ -323,9 +349,31 @@ test("un autre compte se connecte dans un autre onglet pendant une relecture ret
   expect(signIn.ok()).toBe(true);
   await other.goto(`/app/albums/${s.albumId}/mes-photos`);
   await expect(other.getByTestId("my-photo")).toHaveCount(1, { timeout: 30_000 });
+  // La relecture de A arrive tard : elle ne doit rien afficher.
   release();
-  // La première page se recharge sous B : une seule ligne (celle de Kenji), jamais les lignes de Damien.
-  await expect(page.getByTestId("my-photo")).toHaveCount(1, { timeout: 60_000 });
-  expect(await page.evaluate(() => sessionStorage.getItem("leak"))).toBeNull();
+  // La première page finit sous B : l'identité des photos est celle de Kenji, aucune de celles de Damien.
+  const kenjiApi = await apiCall<{ photos: { url: string }[] }>(
+    await login("kenji@orasso.local"),
+    "GET",
+    `/me/albums/${s.albumId}/my-photos`,
+  );
+  await expect(page.getByTestId("my-photo")).toHaveCount(kenjiApi.data.photos.length, { timeout: 60_000 });
+  const finalSrc = await page
+    .locator('[data-testid="my-photo"] img')
+    .evaluateAll((l) => l.map((i) => (i as HTMLImageElement).src));
+  expect(finalSrc.map((u) => new URL(u).pathname).sort()).toEqual(
+    kenjiApi.data.photos.map((p) => new URL(p.url, "http://x").pathname).sort(),
+  );
+  for (const u of damienSrc) {
+    if (!kenjiApi.data.photos.some((p) => new URL(p.url, "http://x").pathname === new URL(u).pathname))
+      expect(finalSrc).not.toContain(u);
+  }
+  // Le masquage a bien précédé le rechargement, et aucune photo de A n'a été visible après l'annonce de B.
+  expect(await page.evaluate(() => sessionStorage.getItem("stale-seen"))).toBe("1");
+  const seenAfter: string[] = JSON.parse((await page.evaluate(() => sessionStorage.getItem("seen-after"))) ?? "[]");
+  const kenjiPaths = new Set(kenjiApi.data.photos.map((p) => new URL(p.url, "http://x").pathname));
+  const damienOnly = damienSrc.map((u) => new URL(u).pathname).filter((p) => !kenjiPaths.has(p));
+  expect(damienOnly.length).toBeGreaterThan(0);
+  expect(seenAfter.filter((p) => damienOnly.includes(p))).toEqual([]);
   await ctx.close();
 });

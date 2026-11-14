@@ -248,3 +248,87 @@ export function nextLiveStoryExpiry(
 export function readIsQuiet(routine: boolean, pendingRemovals: number): boolean {
   return routine && pendingRemovals === 0;
 }
+
+export type MyPhotosReadState<V> = {
+  /** La liste lue par la dernière relecture réussie (prime sur celle du chargement de la page) ; `null` sinon. */
+  fresh: V | null;
+  /** Les identifications retirées (`tagId`) qui attendent leur réconciliation : levées à la première lecture réussie. */
+  removed: ReadonlySet<string>;
+  /** La dernière relecture a échoué (panne, pas une 404) : l'écran le dit, avec « Réessayer ». */
+  error: string | null;
+  /** Une relecture non silencieuse est en route. */
+  reading: boolean;
+};
+
+/**
+ * Les relectures de « Tes photos » (site) : une relecture à la fois compte (la dernière lancée), les retraits attendent la première
+ * lecture réussie, et tant qu'un retrait attend aucune relecture n'est silencieuse (un échec de la minuterie d'expiration se voit).
+ * Chaque méthode d'application rend le nouvel état, ou `null` si la réponse est périmée (à jeter).
+ */
+export function createMyPhotosReads<V>() {
+  let fresh: V | null = null;
+  let removed = new Set<string>();
+  let error: string | null = null;
+  let reading = false;
+  let n = 0;
+  const state = (): MyPhotosReadState<V> => ({ fresh, removed: new Set(removed), error, reading });
+  type Read = { quiet: boolean; live: () => boolean };
+  return {
+    state,
+    pending: () => removed.size,
+    removeTag(tagId: string): MyPhotosReadState<V> {
+      removed.add(tagId);
+      return state();
+    },
+    start(routine: boolean): Read {
+      const id = ++n;
+      const quiet = readIsQuiet(routine, removed.size);
+      if (!quiet) reading = true;
+      return { quiet, live: () => n === id };
+    },
+    ok(read: Read, data: V): MyPhotosReadState<V> | null {
+      if (!read.live()) return null;
+      fresh = data;
+      removed = new Set();
+      error = null;
+      reading = false;
+      return state();
+    },
+    notFound(read: Read): MyPhotosReadState<V> | null {
+      if (!read.live()) return null;
+      reading = false;
+      return state();
+    },
+    fail(read: Read, message: string): MyPhotosReadState<V> | null {
+      if (!read.live()) return null;
+      reading = false;
+      if (!read.quiet) error = message;
+      return state();
+    },
+    /** Un nouveau chargement de la page : la liste relue et les relectures en route tombent ; `reread` : un retrait attend encore. */
+    newLoaded(): { state: MyPhotosReadState<V>; reread: boolean } {
+      n += 1;
+      fresh = null;
+      error = null;
+      reading = false;
+      return { state: state(), reread: removed.size > 0 };
+    },
+    invalidate() {
+      n += 1;
+    },
+  };
+}
+
+/**
+ * Ce que « Tes photos » montre quand la liste visible est vide : « Chargement… » tant qu'un retrait attend sa réconciliation (jamais un
+ * faux « aucune photo »), rien quand l'erreur est affichée, sinon « aucune photo ».
+ */
+export function emptyPhotosState(
+  pendingRemovals: number,
+  visibleCount: number,
+  hasError: boolean,
+): "list" | "loading" | "error" | "empty" {
+  if (visibleCount > 0) return "list";
+  if (hasError) return "error";
+  return pendingRemovals > 0 ? "loading" : "empty";
+}

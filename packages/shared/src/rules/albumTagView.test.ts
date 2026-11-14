@@ -1,12 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { albumTagLabels as L } from "../labels/albumTags.fr";
 import type { Taggable } from "../schemas/albumTags";
 import {
   albumViewerRoleOf,
   appendTaggablePage,
+  createMyPhotosReads,
   createOperationGate,
   createTaggablePicker,
+  emptyPhotosState,
   liveStoryAt,
   mentionsSummary,
   myPhotoTaggedBy,
@@ -292,6 +294,89 @@ describe("readIsQuiet (relecture de routine concurrente d'un retrait)", () => {
     expect(readIsQuiet(true, 0)).toBe(true);
     expect(readIsQuiet(true, 1)).toBe(false);
     expect(readIsQuiet(false, 0)).toBe(false);
+  });
+});
+
+describe("createMyPhotosReads (relectures de « Tes photos », réponses contrôlées)", () => {
+  afterEach(() => vi.useRealTimers());
+  type V = { photos: { id: string; liveStory: { expiresAt: string } | null }[] };
+  const view = (...ids: string[]): V => ({ photos: ids.map((id) => ({ id, liveStory: null })) });
+
+  it("minuterie d'expiration et relecture après un retrait : la minuterie n'est pas silencieuse, elle périme la relecture du retrait, et son échec se voit", () => {
+    vi.useFakeTimers();
+    const reads = createMyPhotosReads<V>();
+    reads.removeTag("t1");
+    const afterRemove = reads.start(false);
+    let timerRead: ReturnType<typeof reads.start> | null = null;
+    setTimeout(() => {
+      timerRead = reads.start(true);
+    }, 1_000);
+    vi.advanceTimersByTime(1_000);
+    expect(timerRead).not.toBeNull();
+    const tr = timerRead as unknown as ReturnType<typeof reads.start>;
+    // Un retrait attend : la relecture de minuterie n'est pas silencieuse.
+    expect(tr.quiet).toBe(false);
+    // La relecture du retrait, périmée, est jetée ; l'échec de la minuterie s'affiche (jamais un faux « aucune photo »).
+    expect(reads.ok(afterRemove, view("a"))).toBeNull();
+    const failed = reads.fail(tr, "Panne");
+    expect(failed?.error).toBe("Panne");
+    expect(failed?.removed.has("t1")).toBe(true);
+    expect(emptyPhotosState(failed?.removed.size ?? 0, 0, failed?.error !== null)).toBe("error");
+    // « Réessayer » réussit : les retraits sont levés, l'erreur disparaît.
+    const retry = reads.start(false);
+    const ok = reads.ok(retry, view("a"));
+    expect(ok?.error).toBeNull();
+    expect(ok?.removed.size).toBe(0);
+    expect(ok?.fresh?.photos).toHaveLength(1);
+  });
+
+  it("sans retrait en attente, la relecture de minuterie est silencieuse : son échec ne dit rien", () => {
+    const reads = createMyPhotosReads<V>();
+    const read = reads.start(true);
+    expect(read.quiet).toBe(true);
+    expect(reads.fail(read, "Panne")?.error).toBeNull();
+  });
+
+  it("deux relectures : seule la dernière lancée s'applique, la plus ancienne arrivée après est jetée", () => {
+    const reads = createMyPhotosReads<V>();
+    reads.removeTag("t1");
+    const first = reads.start(false);
+    const second = reads.start(false);
+    expect(reads.ok(second, view("fresh"))?.fresh?.photos[0]?.id).toBe("fresh");
+    expect(reads.ok(first, view("old"))).toBeNull();
+    expect(reads.state().fresh?.photos[0]?.id).toBe("fresh");
+  });
+
+  it("un nouveau chargement de la page périme la relecture en route et en demande une autre si un retrait attend", () => {
+    const reads = createMyPhotosReads<V>();
+    reads.removeTag("t1");
+    const inFlight = reads.start(false);
+    const loaded = reads.newLoaded();
+    expect(loaded.reread).toBe(true);
+    expect(reads.ok(inFlight, view("old"))).toBeNull();
+    expect(createMyPhotosReads<V>().newLoaded().reread).toBe(false);
+  });
+
+  it("réponse reçue après l'expiration d'une story : « Déjà en story » n'est plus montré au rendu", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-11-14T09:59:00Z"));
+    const reads = createMyPhotosReads<V>();
+    const read = reads.start(false);
+    // La réponse part avec une story qui expire à 10:00 ; elle n'arrive qu'à 10:01.
+    const payload: V = { photos: [{ id: "a", liveStory: { expiresAt: "2026-11-14T10:00:00Z" } }] };
+    vi.setSystemTime(Date.parse("2026-11-14T10:01:00Z"));
+    const state = reads.ok(read, payload);
+    expect(liveStoryAt(state?.fresh?.photos[0]?.liveStory, Date.now())).toBeNull();
+    expect(nextLiveStoryExpiry(state?.fresh?.photos ?? [], Date.now())).toBeNull();
+  });
+});
+
+describe("emptyPhotosState", () => {
+  it("liste visible : rien de plus ; vide avec retrait en attente : « Chargement… » ; avec erreur : l'erreur ; sinon « aucune photo »", () => {
+    expect(emptyPhotosState(1, 2, false)).toBe("list");
+    expect(emptyPhotosState(1, 0, false)).toBe("loading");
+    expect(emptyPhotosState(1, 0, true)).toBe("error");
+    expect(emptyPhotosState(0, 0, false)).toBe("empty");
   });
 });
 

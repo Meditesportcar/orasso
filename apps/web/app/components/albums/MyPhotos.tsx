@@ -6,7 +6,8 @@
 import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
   albumLabels,
-  createOperationGate,
+  createMyPhotosReads,
+  emptyPhotosState,
   albumTagLabels as L,
   liveStoryAt,
   type MyPhoto,
@@ -14,7 +15,6 @@ import {
   myPhotoTaggedBy,
   nextLiveStoryExpiry,
   proV2Labels,
-  readIsQuiet,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-router";
@@ -35,20 +35,18 @@ export function MyPhotos({
   albumId: string;
   myUserId: string;
 }) {
-  // Relectures ordonnées : seule la dernière lancée s'applique (une réponse plus ancienne n'écrase ni la liste fraîche ni les retraits).
-  const reads = useRef(createOperationGate());
-  // La liste lue par la relecture d'après un retrait prime sur celle du chargement de la page, jusqu'au prochain chargement.
-  const [fresh, setFresh] = useState<MyPhotosView | null>(null);
-  const view = fresh ?? loaded;
+  // Les relectures (ordre, retraits en attente, erreur) : la logique est partagée et testée (`createMyPhotosReads`).
+  const reads = useRef(createMyPhotosReads<MyPhotosView>());
+  const [rs, setRs] = useState(() => reads.current.state());
+  const view = rs.fresh ?? loaded;
+  const removed = rs.removed;
   // Un nouveau chargement de la page (`loaded` : revalidation, autre compte) remplace la liste relue et périme toute relecture en route.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seulement au nouveau `loaded`
   useEffect(() => {
-    reads.current.invalidate();
-    setFresh(null);
-    setReadError(null);
-    setRereading(false);
+    const next = reads.current.newLoaded();
+    setRs(next.state);
     // Un retrait attend encore sa réconciliation (la page servie date d'avant le DELETE) : on relit.
-    if (removedRef.current.size > 0) void reread();
+    if (next.reread) void reread();
   }, [loaded]);
   // Un autre compte annoncé par une autre fenêtre (sans nouveau chargement de cette page) : tout est périmé, rien des données n'est
   // rendu, puis la page est rechargée en entier. Une annonce de ce compte-ci est sans effet.
@@ -82,9 +80,6 @@ export function MyPhotos({
   // La page de départ d'une relecture : une 404 ne ramène à l'album que si l'utilisateur n'est pas parti ailleurs entre-temps.
   const here = useRef({ key: location.key, idle: navigation.state === "idle" });
   here.current = { key: location.key, idle: navigation.state === "idle" };
-  // La relecture après un retrait a échoué (panne, pas une 404) : l'écran le dit, avec « Réessayer » ; les retraits ne sont réconciliés
-  // qu'après une lecture réussie.
-  const [readError, setReadError] = useState<string | null>(null);
   // L'heure au rendu : « Déjà en story » cesse à l'expiration de la story (rendu programmé, et au retour au premier plan).
   const [tick, setTick] = useState(0);
   const [sheet, setSheet] = useState<MyPhoto | null>(null);
@@ -92,18 +87,13 @@ export function MyPhotos({
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Les photos dont l'identification vient d'être retirée disparaissent tout de suite, sans attendre la relecture.
-  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
-  // Lu par les relectures de routine : tant qu'un retrait attend sa réconciliation, aucune relecture n'est silencieuse.
-  const removedRef = useRef<ReadonlySet<string>>(removed);
-  removedRef.current = removed;
-  const [rereading, setRereading] = useState(false);
   // Rangées par `tagId` : une photo peut porter deux identifications de moi ; retirer l'une laisse la photo (et son autre identification).
   // L'heure courante à chaque rendu (l'état `tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration
   // d'une story ne bloque pas « En story ».
   const nowMs = Date.now();
   const photos = view.photos.filter((p) => !removed.has(p.tagId));
   const count = photos.length;
+  const emptyState = emptyPhotosState(removed.size, count, rs.error !== null);
   const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `reread` ne dépend que de refs et de l'album ; `tick` relance la programmation
@@ -121,7 +111,7 @@ export function MyPhotos({
             () => {
               setTick((n) => n + 1);
               // Jamais silencieuse tant qu'un retrait attend sa réconciliation (une panne doit se voir, avec « Réessayer »).
-              void reread(removedRef.current.size === 0);
+              void reread(true);
             },
             Math.min(Math.max(next - Date.now(), 0) + 250, 2 ** 31 - 1),
           );
@@ -131,29 +121,26 @@ export function MyPhotos({
     };
   }, [view, tick]);
 
-  /** Relit `my-photos` (une seule lecture, ordonnée) ; `silent` : sans message d'erreur (relecture de routine). */
-  async function reread(silent = false) {
+  /** Relit `my-photos` (la dernière lancée seule compte) ; `routine` : une relecture de minuterie, silencieuse sans retrait en attente. */
+  async function reread(routine = false) {
     if (staleRef.current) return;
-    // Des retraits en attente : la relecture n'est jamais silencieuse.
-    const quiet = readIsQuiet(silent, removedRef.current.size);
-    const latest = reads.current.start();
+    const read = reads.current.start(routine);
     const startKey = here.current.key;
-    if (!quiet) setRereading(true);
+    if (!read.quiet) setRs(reads.current.state());
     const next = await apiFetch<MyPhotosView>(`/me/albums/${encodeURIComponent(albumId)}/my-photos`, {
       timeoutMs: 15_000,
     });
-    if (!alive.current || !latest() || staleRef.current) return;
-    setRereading(false);
-    if (next.ok) {
-      setFresh(next.data);
-      setRemoved(new Set());
-      setReadError(null);
-    } else if (next.status === 404) {
-      // Plus aucune identification à mon nom : retour à l'album, sauf si l'utilisateur est déjà parti ailleurs (ou une page se charge).
-      if (here.current.idle && here.current.key === startKey) navigate(`/albums/${albumId}`);
-    } else if (!quiet) {
-      setReadError(next.error.message);
-    }
+    if (!alive.current || staleRef.current) return;
+    const applied = next.ok
+      ? reads.current.ok(read, next.data)
+      : next.status === 404
+        ? reads.current.notFound(read)
+        : reads.current.fail(read, next.error.message);
+    if (!applied) return;
+    setRs(applied);
+    // Plus aucune identification à mon nom : retour à l'album, sauf si l'utilisateur est déjà parti ailleurs (ou une page se charge).
+    if (!next.ok && next.status === 404 && here.current.idle && here.current.key === startKey)
+      navigate(`/albums/${albumId}`);
   }
 
   async function remove(photo: MyPhoto) {
@@ -164,7 +151,7 @@ export function MyPhotos({
     if (!res.ok) return setError(res.error.message);
     setSheet(null);
     setNote(L.screens.removed);
-    setRemoved((cur) => new Set([...cur, photo.tagId]));
+    setRs(reads.current.removeTag(photo.tagId));
     // La sortie se décide sur la relecture : 404 = plus aucune identification à mon nom, on revient à l'album.
     await reread();
   }
@@ -200,9 +187,9 @@ export function MyPhotos({
           {error}
         </p>
       )}
-      {readError && (
+      {rs.error && (
         <div role="alert" className="s-stack" data-testid="load-error">
-          <p className="s-error">{readError}</p>
+          <p className="s-error">{rs.error}</p>
           <Button
             type="button"
             variant="secondary"
@@ -214,14 +201,12 @@ export function MyPhotos({
           </Button>
         </div>
       )}
-      {count === 0 && !readError && rereading && removed.size > 0 && (
+      {emptyState === "loading" && (
         <p className="s-muted" role="status" data-testid="my-photos-loading">
           Chargement…
         </p>
       )}
-      {count === 0 && !readError && !(rereading && removed.size > 0) && (
-        <p className="s-muted">{L.screens.myPhotosEmpty}</p>
-      )}
+      {emptyState === "empty" && <p className="s-muted">{L.screens.myPhotosEmpty}</p>}
       <ul className="myp-list">
         {photos.map((p, i) => (
           <li key={p.id} className="myp-row" data-testid="my-photo">

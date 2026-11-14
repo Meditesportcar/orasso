@@ -7,6 +7,7 @@ import { Button, Chip, ChipRow, Icon, Text, TextField, tokens, useTheme } from "
 import {
   albumLabels,
   createOperationGate,
+  emptyPhotosState,
   albumTagLabels as L,
   liveStoryAt,
   type MyPhoto,
@@ -122,11 +123,18 @@ export function MyPhotosScreen({ id }: { id: string }) {
     if (previousAccountId.current !== accountId) {
       previousAccountId.current = accountId;
       setRemoved(new Set());
-      setReconciling(false);
       exitWanted.current = false;
     }
   }, [accountId]);
-  const [reconciling, setReconciling] = useState(false);
+  // Toute nouvelle donnée lue avec succès (relecture après un retrait, minuterie, retour, tirage : la dernière qui réussit) réconcilie : les
+  // retraits sont levés et la sortie n'est plus attendue.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seulement quand de nouvelles données arrivent
+  useEffect(() => {
+    if (removed.size > 0) {
+      setRemoved(new Set());
+      exitWanted.current = false;
+    }
+  }, [v]);
   // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
   // les retraits ne sont levés qu'après une lecture réussie.
   const reconcileError = removed.size > 0 && view.error && view.error.status !== 404 ? view.error : null;
@@ -151,9 +159,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
   }
   async function reconcile() {
     exitWanted.current = true;
-    setReconciling(true);
     const next = await view.reload();
-    if (alive.current) setReconciling(false);
     if (next && alive.current) {
       exitWanted.current = false;
       setRemoved(new Set());
@@ -182,6 +188,7 @@ export function MyPhotosScreen({ id }: { id: string }) {
   }
 
   const count = photos.length;
+  const emptyState = emptyPhotosState(removed.size, count, reconcileError !== null);
   const headline = v ? (v.vehicle ? L.photosOfYourCar(count, v.vehicle.label) : L.photosWhereIdentified(count)) : "";
   return (
     <FlowScreen
@@ -243,10 +250,8 @@ export function MyPhotosScreen({ id }: { id: string }) {
               {error}
             </Notice>
           ) : null}
-          {count === 0 && reconciling && removed.size > 0 ? <Waiting blocks={[80]} label="Chargement…" /> : null}
-          {count === 0 && !reconcileError && !(reconciling && removed.size > 0) ? (
-            <Muted variant="body">{L.screens.myPhotosEmpty}</Muted>
-          ) : null}
+          {emptyState === "loading" ? <Waiting blocks={[80]} label="Chargement…" /> : null}
+          {emptyState === "empty" ? <Muted variant="body">{L.screens.myPhotosEmpty}</Muted> : null}
           {photos.map((p, i) => (
             <View
               key={p.id}
