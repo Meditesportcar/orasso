@@ -15,7 +15,7 @@ const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-b3a-captures/appli`;
 const SHOTS = Boolean(process.env.CAPTURES);
 if (SHOTS) mkdirSync(DIR, { recursive: true });
 
-async function open(browser: Browser, opts: { scale: number; theme: "beton" | "sable" }) {
+async function open(browser: Browser, opts: { scale: number; theme: "beton" | "sable"; email?: string }) {
   const ctx = await browser.newContext({ viewport: { width: 384, height: 900 }, baseURL: APP });
   await ctx.route(/(openfreemap|openstreetmap)\.org/, (route) => route.abort());
   await ctx.addInitScript(
@@ -32,7 +32,7 @@ async function open(browser: Browser, opts: { scale: number; theme: "beton" | "s
   if (await skip.isVisible().catch(() => false))
     await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
-  await page.getByLabel("E-mail").fill("damien@orasso.local");
+  await page.getByLabel("E-mail").fill(opts.email ?? "damien@orasso.local");
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 60_000 });
@@ -163,9 +163,10 @@ for (const [label, path] of [
   test(`page ${label} : relecture en panne → la liste reste, la panne se dit une fois, pas de « Aucun événement »`, async ({
     browser,
   }) => {
-    const { ctx, page } = await open(browser, { scale: 1, theme: "beton" });
+    const { ctx, page } = await open(browser, { scale: 1, theme: "beton", email: "sarah@orasso.local" });
     if (label === "du propriétaire") {
       await visit(page, "/moi");
+      await page.getByTestId("casquette-organizer").filter({ hasText: "Roues Libres 66" }).first().click();
       await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
     }
     await visit(page, path);
