@@ -3,13 +3,26 @@
 // aux commentaires coupés. Rejouable : rien n'est ajouté si la publication a déjà des commentaires. Les compteurs sont ceux
 // que l'API tiendrait (commentaires non supprimés, réponses comprises).
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { SEED_PLAN_POSTS } from "./feed";
 import { HOUR, now } from "./helpers";
+import { isSeedAccount, isSeedPost, type SeedPost } from "./seed-scope";
+
+/** Les deux publications de Kenji_66 du plan de `feed.ts` (identifiant fixe seulement : aucune adoption des anciennes publications). */
+const planPost = (caption: string): SeedPost => {
+  const found = SEED_PLAN_POSTS.find((p) => p.author === "Kenji_66" && p.caption === caption);
+  if (!found) throw new Error(`Publication du plan absente : ${caption}`);
+  return found;
+};
+export const KENJI_RECENT_POST = planPost("Retour de la sortie du Roussillon Drift.");
+const OLDER_POST = planPost("Sur le plateau ce week-end.");
 
 const byPseudo = (pseudo: string) =>
-  db.query.profiles.findFirst({ where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}` });
+  db.query.profiles.findFirst({
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
+  });
 
 /** [auteur, texte, il y a (heures), flammes de…]. */
 const TOP: [string, string, number, string[]][] = [
@@ -26,11 +39,17 @@ export async function seedFeedComments() {
     console.log("Commentaires du Fil : Kenji_66 absent, rien ajouté.");
     return;
   }
-  const posts = (
-    await db.select().from(t.feedPosts).where(eq(t.feedPosts.authorId, kenji.userId)).orderBy(t.feedPosts.createdAt)
-  ).filter((p) => !p.deletedAt);
-  const recent = posts.at(-1);
-  const older = posts.at(-2);
+  // Les publications du seed (légende du plan de `feed.ts`), jamais « la dernière » de Kenji_66 : une vraie publication n'est pas touchée.
+  const own = async (item: SeedPost) =>
+    (
+      await db
+        .select()
+        .from(t.feedPosts)
+        .where(and(eq(t.feedPosts.authorId, kenji.userId), isNull(t.feedPosts.deletedAt), isSeedPost([item])))
+        .limit(1)
+    )[0];
+  const recent = await own(KENJI_RECENT_POST);
+  const older = await own(OLDER_POST);
   if (!recent) return;
   const [existing] = await db
     .select({ id: t.feedPostComments.id })
@@ -43,11 +62,19 @@ export async function seedFeedComments() {
   }
 
   const ids = new Map<string, string>();
-  const userOf = async (pseudo: string) => {
+  // Tous les comptes de la graine nécessaires sont résolus AVANT d'écrire quoi que ce soit : un compte absent (supprimé) = rien d'ajouté,
+  // jamais une graine arrêtée à moitié.
+  const wanted = new Set(["Damien_66", "Lea_11", ...TOP.flatMap(([author, , , flames]) => [author, ...flames])]);
+  const users = new Map<string, string>();
+  for (const pseudo of wanted) {
     const p = await byPseudo(pseudo);
-    if (!p) throw new Error(`Compte du seed absent : ${pseudo}`);
-    return p.userId;
-  };
+    if (!p) {
+      console.log(`Commentaires du Fil : compte du seed absent (${pseudo}), rien ajouté.`);
+      return;
+    }
+    users.set(pseudo, p.userId);
+  }
+  const userOf = async (pseudo: string) => users.get(pseudo) ?? "";
   const at = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * HOUR);
 
   let total = 0;

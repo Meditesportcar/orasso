@@ -41,6 +41,7 @@ import { ensureAllCategories } from "../../src/modules/votes/context";
 import { votesLifecycle } from "../../src/modules/votes/lifecycle";
 import { createEvent, DAY, parisAt } from "./helpers";
 import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
+import { isSeedAccount } from "./seed-scope";
 
 const SLUG = "rassemblement-du-lydia";
 const TITLE = "Rassemblement du Lydia";
@@ -95,7 +96,7 @@ const VOTES: [string, string][] = [
 
 async function viewer(pseudo: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({
-    where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`,
+    where: and(sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`, isSeedAccount(t.profiles.userId)),
   });
   if (!profile || profile.deletedAt) return null;
   const [u] = await db.select().from(t.user).where(eq(t.user.id, profile.userId));
@@ -266,9 +267,85 @@ async function themedVotes(
   return n;
 }
 
+/** Damien_66 peut-il avoir une voiture inscrite (sans rien écrire) : voiture montrable, ou voiture active non certifiée + photo relue. */
+async function carUsable(userId: string): Promise<boolean> {
+  if (await showableCar(userId)) return true;
+  const [car] = await db
+    .select({ id: t.vehicles.id })
+    .from(t.vehicles)
+    .where(
+      and(
+        eq(t.vehicles.ownerId, userId),
+        eq(t.vehicles.status, "active"),
+        eq(t.vehicles.vehicleType, "car"),
+        sql`${t.vehicles.pendingTransferId} is null and ${t.vehicles.certifiedAt} is null`,
+      ),
+    )
+    .limit(1);
+  return Boolean(car) && Boolean(await reviewedNoPlateCar(0));
+}
+
+/**
+ * Ce qu'il faut pour créer (ou recréer) le Lydia : la structure (Roues Libres 66, sinon MéditeSportCar) ni supprimée ni suspendue, son
+ * propriétaire actif, de la graine, ni banni ni suspendu, et Damien_66 (compte de la graine). Contrôlé AVANT toute suppression :
+ * sinon rien n'est supprimé ni créé (jamais au nom d'un compte réel).
+ */
+async function liveParticipants() {
+  const structure =
+    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") })) ??
+    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") }));
+  if (!structure || structure.deletedAt || structure.verification === "suspended") return null;
+  const owner = await db.query.structureMembers.findFirst({
+    where: and(
+      eq(t.structureMembers.structureId, structure.id),
+      eq(t.structureMembers.role, "owner"),
+      eq(t.structureMembers.status, "active"),
+      isSeedAccount(t.structureMembers.userId),
+    ),
+  });
+  const profile = owner ? await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) }) : null;
+  if (!profile || profile.bannedAt || profile.deletedAt) return null;
+  if (profile.suspendedUntil && profile.suspendedUntil > new Date()) return null;
+  const orga = await viewer(profile.pseudo, "totp");
+  const damien = await viewer("Damien_66");
+  if (!orga || !damien || damien.profile.bannedAt) return null;
+  // Mêmes refus que la candidature de l'API (`applications/service.ts`) : Damien_66 banni de la structure.
+  const banned = await db.query.structureBans.findFirst({
+    where: and(eq(t.structureBans.structureId, structure.id), eq(t.structureBans.userId, damien.user.id)),
+  });
+  if (banned) {
+    console.log("En direct : Damien_66 est banni de la structure, rien supprimé ni créé.");
+    return null;
+  }
+  if (!(await carUsable(damien.user.id))) {
+    console.log("En direct : Damien_66 n'a pas de voiture utilisable, rien supprimé ni créé.");
+    return null;
+  }
+  return { structure, orga, damien };
+}
+
 export async function seedLiveEvent() {
   const real = new Date();
-  const existing = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
+  const sameSlug = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
+  // Preuve d'origine : slug de la graine ET structure de la graine ET créateur de la graine ; sinon l'événement n'est pas à elle
+  // (jamais supprimé, jamais complété) et la graine s'arrête là pour cette étape.
+  const [seedOwned] = sameSlug
+    ? await db
+        .select({ id: t.events.id })
+        .from(t.events)
+        .where(
+          and(
+            eq(t.events.id, sameSlug.id),
+            isSeedAccount(t.events.createdBy),
+            sql`${t.events.structureId} in (select s.id from structures s where s.slug in ('roues-libres-66', 'meditesportcar'))`,
+          ),
+        )
+    : [];
+  if (sameSlug && !seedOwned) {
+    console.log("En direct : un événement de ce nom existe mais n'est pas celui de la graine, rien supprimé ni créé.");
+    return;
+  }
+  const existing = sameSlug;
   if (existing) {
     // Gardé s'il reste au moins un jour : un déploiement le dernier jour le recrée, pour qu'il soit encore en cours le
     // lendemain (décision du coordinateur, 08/11).
@@ -285,27 +362,22 @@ export async function seedLiveEvent() {
       await presenceDemo(existing.id);
       return;
     }
+    // Renouvellement : l'éligibilité de la structure et de son propriétaire est contrôlée AVANT de supprimer l'ancienne édition (une
+    // structure suspendue ou un propriétaire banni ferait échouer la création : l'ancien Lydia serait perdu pour rien).
+    if (!(await liveParticipants())) {
+      console.log(
+        "En direct : structure, propriétaire ou compte de démonstration inéligibles, renouvellement sauté (l'ancienne édition est gardée).",
+      );
+      return;
+    }
     await teardown(existing);
   }
-  const structure =
-    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "roues-libres-66") })) ??
-    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") }));
-  const owner = structure
-    ? await db.query.structureMembers.findFirst({
-        where: and(
-          eq(t.structureMembers.structureId, structure.id),
-          eq(t.structureMembers.role, "owner"),
-          eq(t.structureMembers.status, "active"),
-        ),
-      })
-    : undefined;
-  const orgProfile = owner ? await db.query.profiles.findFirst({ where: eq(t.profiles.userId, owner.userId) }) : null;
-  const orga = orgProfile ? await viewer(orgProfile.pseudo, "totp") : null;
-  const damien = await viewer("Damien_66");
-  if (!structure || !orga || !damien) {
-    console.log("En direct : structure ou comptes de démonstration absents, rien ajouté.");
+  const participants = await liveParticipants();
+  if (!participants) {
+    console.log("En direct : structure ou comptes de démonstration absents ou inéligibles, rien ajouté.");
     return;
   }
+  const { structure, orga, damien } = participants;
   // Tâches planifiées (verrouillage, règlement) comme une vraie publication : pg-boss sans traitement.
   const boss = await startJobs({ work: false });
   try {
@@ -589,7 +661,10 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
   }
   await applyAs(damien, null, parisAt(-9, 8, 42));
   const damienApp = people.get(damien.profile.pseudo);
-  if (!damienApp) throw new Error("En direct : candidature de Damien_66 impossible");
+  if (!damienApp) {
+    console.log("En direct : candidature de Damien_66 impossible, suite sautée.");
+    return;
+  }
 
   at(parisAt(-7, 20, 30));
   const decide = (appId: string, decision: "accept" | "waitlist", zone: string | null) =>
