@@ -36,8 +36,8 @@ import {
   isAfterReload,
   isForeign,
   nextAnnounced,
-  reloadAutomatically,
   reloadManually,
+  useReloadWhenForeign,
   useSessionConfirmation,
 } from "../lib/sessionReload";
 import type { Route } from "./+types/app-crew";
@@ -209,14 +209,8 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
     const rest = params.toString();
     void navigate(`${pathname}${rest ? `?${rest}` : ""}`, { replace: true });
   }, [pending, confirmed, foreign, pathname, search, navigate]);
-  const [gaveUp, setGaveUp] = useState(false);
-  useEffect(() => {
-    if (!foreign) {
-      setGaveUp(false);
-      return;
-    }
-    if (reloadAutomatically(RELOAD_SCOPE) === "refused") setGaveUp(true);
-  }, [foreign]);
+  // Le rechargement part dans un effet de mise en page (avant l'image qui montre « Mise à jour… »), voir `useReloadWhenForeign`.
+  const gaveUp = useReloadWhenForeign(foreign, RELOAD_SCOPE);
   if ((foreign && gaveUp) || confirmed === "failed") {
     // Les rechargements n'ont pas résolu la discordance (ou le compte n'a pas pu être confirmé) : jamais « Mise à jour… » à vie.
     return (

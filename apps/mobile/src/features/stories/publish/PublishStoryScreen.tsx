@@ -12,7 +12,9 @@ import {
   commercialField,
   commercialIssue,
   eventsWithPlace,
+  forgetSendKey,
   storyPublishLabels as L,
+  newSendUncertainty,
   partnershipLabels,
   resolveStoryAuthor,
   type StoryAccountOutcome,
@@ -21,6 +23,7 @@ import {
   type StoryAuthor,
   type StoryCreated,
   sendIfAlive,
+  settleSendAttempt,
   storyAccountOutcome,
   storyAccountStale,
   storyAudienceOptions,
@@ -186,9 +189,11 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
   const [maybeSent, setMaybeSent] = useState(false);
   // Un envoi antérieur est parti sans réponse certaine : un refus ultérieur (4xx, `account_changed`, verrou) ne prouve pas qu'il n'a rien
   // créé. L'incertitude reste jusqu'à une confirmation ; `outcomeOf` ne laisse jamais « pas partie » après un tel envoi.
-  const uncertainBefore = useRef(false);
+  // La clé d'envoi suit la même incertitude (`@orasso/shared` `sendKey`) : gardée tant qu'une tentative antérieure peut encore aboutir,
+  // même après un refus net ultérieur (une autre clé créerait une 2e story si la 1re aboutit).
+  const sendState = useRef(newSendUncertainty());
   const outcomeOf = (o: StoryAccountOutcome): StoryAccountOutcome =>
-    o === "confirmed" ? o : uncertainBefore.current ? "uncertain" : o;
+    o === "confirmed" ? o : sendState.current.uncertain ? "uncertain" : o;
   // Le segment « Publication | Story » (T18) : « Publication » rouvre l'écran au nom du même auteur (jamais celui de la casquette active).
   const kindKey = asPerson ? "me" : (frozen.current?.key ?? "me");
   const authorName = author.persona === "fan" ? (me?.profile.pseudo ?? "") : (author.name ?? "");
@@ -322,6 +327,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       setVideo(null);
       keys.current = {};
       videoKeys.current = {};
+      forgetSendKey(sendState.current);
     }
     setError(null);
     setStep(before);
@@ -384,6 +390,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       // Une photo remplace l'ancienne : celle d'avant est effacée.
       if (draft) discardTempPhotos([draft.plate.photo.uri, draft.upload.uri, draft.display.uri]);
       keys.current = {};
+      forgetSendKey(sendState.current);
       const next = newStoryDraft(randomUUID(), got.original, upload, display);
       setDraft(next);
       setStep(stepAfterMedia(got.original));
@@ -419,6 +426,7 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       if (draft) discardTempPhotos([draft.plate.photo.uri, draft.upload.uri, draft.display.uri]);
       keys.current = {};
       videoKeys.current = {};
+      forgetSendKey(sendState.current);
       // L'aperçu et les détails dessinent la vignette : un brouillon de photo d'après elle, sans plaque ni cadre à régler.
       const poster = { uri: got.posterUri, width: got.width, height: got.height };
       setDraft(newStoryDraft(randomUUID(), poster, poster, poster));
@@ -538,8 +546,10 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       videoKeys.current = {};
       markStoryPublished(result.value);
       discardTempPhotos();
+      settleSendAttempt(sendState.current, { ok: true, status: 201 });
       setMaybeSent(false);
-      setCreatedAudience(chosen?.audience ?? "followers");
+      // Une reprise rend le vrai public de la story (celui du 1er envoi), pas celui du dernier essai.
+      setCreatedAudience(result.value.audience ?? chosen?.audience ?? "followers");
       setCreated(result.value);
       setStep("done");
     } catch (e) {
@@ -547,8 +557,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind(outcomeOf("prevented"));
       // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
       const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
-      if (refused && !uncertainBefore.current) setMaybeSent(false);
-      if (!refused && creating) uncertainBefore.current = true;
+      const renewable = refused && !sendState.current.uncertain;
+      if (renewable) setMaybeSent(false);
+      if (!refused && creating) sendState.current.uncertain = true;
       if (!guard.current())
         return setStaleKind(
           outcomeOf(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false })),
@@ -558,8 +569,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       else if (isUploadTimeout(e)) setError(V.uploadTimeout);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
       else {
-        // Un envoi refusé (format, durée, fichier inconnu) : au nouvel essai, tout repart.
-        if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) videoKeys.current = {};
+        // Un envoi refusé (format, durée, fichier inconnu) : au nouvel essai, tout repart, sauf si une tentative antérieure reste incertaine.
+        if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && !sendState.current.uncertain)
+          videoKeys.current = {};
         setError(errorMessage(e));
       }
     } finally {
@@ -628,16 +640,18 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
       keys.current = {};
       markStoryPublished(story);
       discardTempPhotos();
+      settleSendAttempt(sendState.current, { ok: true, status: 201 });
       setMaybeSent(false);
-      setCreatedAudience(chosen?.audience ?? "followers");
+      setCreatedAudience(story.audience ?? chosen?.audience ?? "followers");
       setCreated(story);
       setStep("done");
     } catch (e) {
       if (e instanceof ApiRequestError && e.code === "account_changed") return setStaleKind(outcomeOf("prevented"));
       // Un refus net de l'API (4xx hors réseau) prouve que rien n'a été créé ; sinon l'issue dépend de la création (partie ou non).
       const refused = e instanceof ApiRequestError && !e.isNetwork && e.status >= 400 && e.status < 500;
-      if (refused && !uncertainBefore.current) setMaybeSent(false);
-      if (!refused && creating) uncertainBefore.current = true;
+      const renewable = refused && !sendState.current.uncertain;
+      if (renewable) setMaybeSent(false);
+      if (!refused && creating) sendState.current.uncertain = true;
       if (!guard.current())
         return setStaleKind(
           outcomeOf(refused ? "prevented" : storyAccountOutcome({ accepted: creating, answered: false })),
@@ -649,8 +663,9 @@ export function PublishStoryScreen({ auteur }: { auteur?: string } = {}) {
         setStep("plate");
         setError(e.message);
       } else {
-        // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
-        if (e instanceof ApiRequestError && e.status === 400) keys.current = {};
+        // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart, sauf si une tentative antérieure reste
+        // incertaine (elle peut encore aboutir : la même clé la retrouve).
+        if (e instanceof ApiRequestError && e.status === 400 && !sendState.current.uncertain) keys.current = {};
         setError(errorMessage(e));
       }
     } finally {

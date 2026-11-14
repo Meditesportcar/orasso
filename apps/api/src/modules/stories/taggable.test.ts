@@ -273,13 +273,15 @@ describe("création idempotente (tour 2)", () => {
   it("réponse perdue puis légende modifiée : une seule story, rendue comme reprise (replayed)", async () => {
     const kenji = await signUp("Kenji");
     const key = await uploadKey(kenji);
-    const first = await send(kenji, key, { caption: "A" });
+    const first = await send(kenji, key, { caption: "A", audience: "public" });
     expect(first.status).toBe(201);
     expect(first.json.replayed).toBeUndefined();
     const again = await send(kenji, key, { caption: "B", audience: "followers" });
     expect(again.status, JSON.stringify(again.json)).toBe(201);
     expect(again.json.id).toBe(first.json.id);
     expect(again.json.replayed).toBe(true);
+    // La reprise rend le VRAI public de la story (celui du 1er envoi), pas celui du dernier essai.
+    expect(again.json.audience).toBe("public");
     const rows = await db.select().from(stories);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.caption).toBe("A");

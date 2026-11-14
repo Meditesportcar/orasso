@@ -309,7 +309,9 @@ test("un autre compte se connecte dans un autre onglet pendant une relecture ret
   // - « leak-with-stale » : un « my-photo » est présent alors que l'écran masqué est rendu ; « stale-late » : pas de masquage sous 2 s.
   await page.addInitScript(
     ({ otherId, aOnlyPaths }: { otherId: string; aOnlyPaths: string[] }) => {
-      let announcedAt = 0;
+      // Le guet est armé dès le début d'un NOUVEAU document si l'annonce de B a déjà été reçue par un document précédent (la marque
+      // `announced` survit au rechargement) : il couvre le HTML rendu par le serveur et l'hydratation, pas seulement la page d'avant.
+      let announcedAt = sessionStorage.getItem("announced") ? 1 : 0;
       const mark = (k: string, v = "1") => sessionStorage.setItem(k, v);
       if (typeof BroadcastChannel === "undefined") mark("no-channel");
       else {
@@ -401,5 +403,141 @@ test("un autre compte se connecte dans un autre onglet pendant une relecture ret
   // Aucune photo de A ajoutée après l'annonce, aucune photo présente sous l'écran masqué.
   expect(await flag("leak-added")).toBeNull();
   expect(await flag("leak-with-stale")).toBeNull();
+  await ctx.close();
+});
+
+test("B2a : réponse préparée sous B (retenue), cookie et annonce de C, puis réponse rendue : jamais une photo de B, la page finit sous C", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = await scenario();
+  const kenjiCookie = await login("kenji@orasso.local");
+  const pathOf = (u: string) => new URL(u, "http://x").pathname;
+  const kenjiPhotos = (
+    await apiCall<{ photos: { url: string }[] }>(kenjiCookie, "GET", `/me/albums/${s.albumId}/my-photos`)
+  ).data.photos.map((p) => pathOf(p.url));
+  expect(kenjiPhotos.length).toBeGreaterThan(0);
+  const kenjiId =
+    (await sql<{ id: string }>('select id from "user" where email = $1', ["kenji@orasso.local"]))[0]?.id ?? "";
+  const sarahId =
+    (await sql<{ id: string }>('select id from "user" where email = $1', ["sarah@orasso.local"]))[0]?.id ?? "";
+  expect(kenjiId).not.toBe("");
+  expect(sarahId).not.toBe("");
+  // C (Sarah) n'a aucune identification dans cet album : l'API répond 404.
+  expect((await apiCall(await login("sarah@orasso.local"), "GET", `/me/albums/${s.albumId}/my-photos`)).status).toBe(
+    404,
+  );
+  const cookiesOf = async (email: string) => {
+    const other = await browser.newContext();
+    await loginInBrowser(await other.newPage(), email, undefined, "/app/fil");
+    const cookies = await other.cookies();
+    await other.close();
+    return cookies;
+  };
+  const kenjiCookies = await cookiesOf("kenji@orasso.local");
+  const sarahCookies = await cookiesOf("sarah@orasso.local");
+
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  // Le guet est armé (par le test, au moment où l'annonce de B part) pour tous les documents suivants : une photo de B ne doit
+  // JAMAIS être ajoutée au DOM, ni dans le HTML rendu par le serveur ni à l'hydratation.
+  await page.addInitScript(
+    ({ bPaths }: { bPaths: string[] }) => {
+      const armed = () => sessionStorage.getItem("armed") === "1";
+      const look = () => {
+        if (!armed()) return;
+        for (const img of document.querySelectorAll("img")) {
+          if (bPaths.includes(new URL((img as HTMLImageElement).src, location.href).pathname))
+            sessionStorage.setItem("leak-b", "1");
+        }
+      };
+      new MutationObserver(look).observe(document, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src"],
+      });
+      document.addEventListener("DOMContentLoaded", look);
+      window.addEventListener("load", look);
+    },
+    { bPaths: kenjiPhotos },
+  );
+  await loginInBrowser(page, DAMIEN, undefined, `/app/albums/${s.albumId}/mes-photos`);
+  await expect(page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
+  // Un autre onglet du même navigateur (créé AVANT la retenue du document : une page qui navigue ne répond plus aux appels du test) :
+  // c'est lui qui annoncera le compte de C.
+  const other = await ctx.newPage();
+  await other.goto("/app/fil");
+
+  // Le prochain document de la page est RÉELLEMENT préparé par le serveur sous B (route.fetch sans redirection) puis retenu.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  let reached: () => void = () => undefined;
+  const arrived = new Promise<void>((r) => {
+    reached = r;
+  });
+  let prepared: { status: number; body: string } | null = null;
+  let armedRoute = false;
+  await page.route(/\/app\/albums\/[^/]+\/mes-photos(\?|$)/, async (route) => {
+    if (armedRoute && route.request().resourceType() === "document") {
+      armedRoute = false;
+      const response = await route.fetch({ maxRedirects: 0 });
+      prepared = { status: response.status(), body: await response.text() };
+      reached();
+      await held;
+      return route.fulfill({ response });
+    }
+    return route.continue();
+  });
+  const announceToPage = (id: string) =>
+    page.evaluate((userId) => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "orasso-session", newValue: JSON.stringify({ userId, from: "x" }) }),
+      );
+    }, id);
+  armedRoute = true;
+  try {
+    await ctx.clearCookies();
+    await ctx.addCookies(kenjiCookies);
+    await page.evaluate(() => sessionStorage.setItem("armed", "1"));
+    await announceToPage(kenjiId);
+    // Le rechargement de la page part sur l'annonce de B : son document est demandé (borne : l'échec doit se dire).
+    await Promise.race([
+      arrived,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("aucun rechargement après l'annonce de B")), 30_000),
+      ),
+    ]);
+    const got = prepared as { status: number; body: string } | null;
+    expect(got, "la réponse retenue").not.toBeNull();
+    const { status, body } = got as { status: number; body: string };
+    expect(status).toBe(200);
+    expect(body.includes(kenjiId), "la réponse retenue est celle de B (son identifiant y figure)").toBe(true);
+    for (const p of kenjiPhotos) expect(body.includes(p), `la réponse retenue contient la photo ${p}`).toBe(false);
+    expect(body.includes('data-testid="my-photo"'), "aucune ligne de photo dans la réponse retenue").toBe(false);
+    // C se connecte et s'annonce pendant que la réponse de B est retenue : l'ANCIEN document reçoit l'annonce, pas le nouveau.
+    await ctx.clearCookies();
+    await ctx.addCookies(sarahCookies);
+    await other.evaluate((id) => {
+      const c = new BroadcastChannel("orasso-session");
+      c.postMessage({ userId: id });
+      c.close();
+    }, sarahId);
+    release();
+    // La page finit sous C (aucune identification : « Aucune photo… »), après avoir confirmé par /me puis rechargé.
+    await expect(page.getByTestId("my-photos-empty")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("my-photos-stale")).toHaveCount(0);
+    await expect(page.getByTestId("my-photos-refresh-failed")).toHaveCount(0);
+    await expect(page.getByTestId("my-photo")).toHaveCount(0);
+    expect(await page.evaluate(() => sessionStorage.getItem("leak-b")), "une photo de B est apparue sous C").toBeNull();
+    expect(new URL(page.url()).searchParams.has("apres-rechargement"), "la marque est retirée de l'adresse").toBe(
+      false,
+    );
+  } finally {
+    // Le document retenu est toujours libéré (sinon la fermeture du contexte attend le gestionnaire de route).
+    release();
+  }
   await ctx.close();
 });

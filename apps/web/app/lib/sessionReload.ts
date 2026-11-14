@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "./api.client";
+import { listenSession } from "./sessionChannel";
 
 // Partie B1, tour 7 : l'aide commune des pages privées qui se rechargent quand le compte change dans une autre fenêtre (le Crew ;
 // « Tes photos » l'adoptera). Deux pièces :
@@ -145,7 +146,8 @@ export const ME_TIMEOUT_MS = 10_000;
 /** Ce que la vérification doit savoir de la réponse de `/me` (le résultat de `apiFetch` convient). */
 export type MeResult = { ok: true; data: { user: { id: string } } } | { ok: false; status: number };
 
-const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
+/** Lit `/me` (exporté pour le test : le délai de 10 s est une règle). */
+export const fetchMe = (): Promise<MeResult> => apiFetch<{ user: { id: string } }>("/me", { timeoutMs: ME_TIMEOUT_MS });
 
 /**
  * Ce que ce document sait de la session courante (tour 11 : un seul modèle, sans optimisme aux transitions). `me` est le dernier
@@ -179,6 +181,94 @@ export function deriveConfirmation(k: MeKnowledge, owner: string, afterReload: b
   return k.failed ? "failed" : "checking";
 }
 
+// B2a, tours 1 et 2 : le compte que le `/me` de la page enfant (Crew, « Tes photos ») a rendu, tenu pour la mise en page de CE document : elle
+// ne lit plus `/me` elle-même ni ne recharge (un seul compteur de rechargements, celui de la page qui porte les données). `undefined` :
+// aucune réponse encore ; `null` : plus de session.
+//
+// Tour 2 : une confirmation partagée peut être PÉRIMÉE (une réponse retardée de `/me` pour B publiée après que C s'est annoncé ; ou un
+// `/me` parti avant que le chargeur ait changé). Tout est donc numéroté par une horloge unique du document : chaque départ de `/me`, chaque
+// annonce étrangère et chaque pose de repère de la mise en page prend le numéro suivant. Une publication porte le numéro du DÉPART de sa
+// requête ; elle est ignorée si une annonce étrangère est venue depuis, et la mise en page ne la retient que si ce départ est postérieur à son
+// repère (le moment où son `loaderData` a changé).
+let sharedMe: string | null | undefined;
+/** Le numéro de départ de la requête qui a donné `sharedMe` (0 : aucune). */
+let sharedStartedAt = 0;
+let sharedClock = 0;
+/** Le numéro de la dernière annonce étrangère : toute requête partie avant est périmée. */
+let lastForeignAt = 0;
+const sharedListeners = new Set<() => void>();
+
+const notifyShared = (): void => {
+  for (const listener of [...sharedListeners]) listener();
+};
+
+/** Numéro du départ d'une lecture de `/me` (à prendre AVANT de la lancer). */
+export const beginSharedRequest = (): number => ++sharedClock;
+
+/** Repère de la mise en page : à reprendre quand son `loaderData` change ; seules les publications parties APRÈS comptent. */
+export const markSharedLayout = (): number => ++sharedClock;
+
+/**
+ * Publie le compte rendu par un `/me` parti au numéro `startedAt`. Sans effet si `me` est `undefined`, si une annonce étrangère est venue
+ * depuis le départ (réponse périmée), ou si elle n'est pas plus récente que celle déjà retenue (l'abonné n'est prévenu qu'une fois).
+ */
+export function publishSharedMe(me: string | null | undefined, startedAt: number): void {
+  if (me === undefined || startedAt < lastForeignAt) return;
+  // Une réponse plus ancienne que celle déjà retenue ne la remplace pas ; la même réponse, partie plus tard, rafraîchit son numéro.
+  if (sharedMe !== undefined && startedAt <= sharedStartedAt) return;
+  sharedMe = me;
+  sharedStartedAt = startedAt;
+  notifyShared();
+}
+
+/** Une annonce d'un AUTRE compte venue d'une autre fenêtre : la confirmation partagée tombe, et toute réponse partie avant est ignorée. */
+export function noteForeignAnnouncement(): void {
+  lastForeignAt = ++sharedClock;
+  if (sharedMe === undefined) return;
+  sharedMe = undefined;
+  sharedStartedAt = 0;
+  notifyShared();
+}
+
+/**
+ * Le compte partagé que la mise en page peut retenir : celui d'un `/me` parti après son repère `since` (`undefined` sinon). Lecture sans React.
+ */
+export const sharedConfirmedMe = (since: number): string | null | undefined =>
+  sharedMe !== undefined && sharedStartedAt > since ? sharedMe : undefined;
+
+/** La confirmation de la mise en page, sans React : par la même déduction que le hook. */
+export const sharedConfirmation = (owner: string, afterReload: boolean, since: number): SessionConfirmation =>
+  deriveConfirmation({ me: sharedConfirmedMe(since), failed: false }, owner, afterReload);
+
+export const subscribeShared = (listener: () => void): (() => void) => {
+  sharedListeners.add(listener);
+  return () => void sharedListeners.delete(listener);
+};
+
+/** Remet à zéro le compte partagé (tests ; un nouveau document repart de zéro de lui-même). */
+export function resetSharedMe(): void {
+  sharedMe = undefined;
+  sharedStartedAt = 0;
+  sharedClock = 0;
+  lastForeignAt = 0;
+  notifyShared();
+}
+
+/**
+ * Ce que la mise en page déduit du `/me` de la page enfant : « checking » sous la marque tant qu'elle n'a rien dit ; jamais de rechargement.
+ * Le repère est repris quand le compte ou la marque de son `loaderData` changent (les cas où l'enfant revérifie), pas à chaque revalidation.
+ */
+export function useSharedConfirmation(owner: string, afterReload: boolean): SessionConfirmation {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le repère se reprend quand le compte ou la marque changent, pas à la lecture
+  const since = useMemo(() => markSharedLayout(), [owner, afterReload]);
+  const me = useSyncExternalStore(
+    subscribeShared,
+    () => sharedConfirmedMe(since),
+    () => undefined,
+  );
+  return deriveConfirmation({ me, failed: false }, owner, afterReload);
+}
+
 /** Le vérificateur : chaque appel relit `/me` ; la réponse d'un appel plus ancien que le dernier est ignorée. Sans DOM : testable. */
 export function createConfirmer(read: () => Promise<MeResult>) {
   let seq = 0;
@@ -202,10 +292,15 @@ export function useSessionConfirmation(
   const stalled = useSyncExternalStore(onReloadStalled, isReloadStalled, () => false);
   const confirmer = useRef<ReturnType<typeof createConfirmer> | null>(null);
   if (confirmer.current === null) confirmer.current = createConfirmer(fetchMe);
-  const verify = useCallback(
-    () => (confirmer.current as ReturnType<typeof createConfirmer>)((res) => setKnown((prev) => recordMe(prev, res))),
-    [],
-  );
+  const verify = useCallback(() => {
+    // Le numéro de départ est pris avant la lecture : la mise en page ne retient la réponse que si rien ne l'a périmée entre-temps.
+    const startedAt = beginSharedRequest();
+    return (confirmer.current as ReturnType<typeof createConfirmer>)((res) => {
+      setKnown((prev) => recordMe(prev, res));
+      if (res.ok) publishSharedMe(res.data.user.id, startedAt);
+      else if (res.status === 401) publishSharedMe(null, startedAt);
+    });
+  }, []);
   const first = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `owner` relance la vérification (un autre résultat du chargeur)
   useEffect(() => {
@@ -252,7 +347,33 @@ export function useSessionConfirmation(
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [verify]);
+  // Une annonce d'un autre compte, venue d'une autre fenêtre, périme la confirmation partagée avec la mise en page.
+  useEffect(
+    () =>
+      listenSession((announced, self) => {
+        if (!self && announced !== owner) noteForeignAnnouncement();
+      }),
+    [owner],
+  );
   return { confirmed: deriveConfirmation(known, owner, afterReload), stalled };
+}
+
+/**
+ * Recharge la page (compté, en GET) dès que `foreign` devient vrai ; rend vrai quand le compteur refuse (boucle : la page dit alors
+ * « Recharger la page » au lieu de « Mise à jour… » à vie). Le lancement est un effet de MISE EN PAGE : il part avant l'affichage du
+ * rendu qui fait passer la page à « étrangère », donc un `reloadStalled` resté vrai d'une restauration précédente ne montre jamais,
+ * le temps d'une image, le bouton « Recharger la page » sous le nouveau « Mise à jour… » (tour 12 de B1, mineur d'Opus).
+ */
+export function useReloadWhenForeign(foreign: boolean, scope: string): boolean {
+  const [gaveUp, setGaveUp] = useState(false);
+  useLayoutEffect(() => {
+    if (!foreign) {
+      setGaveUp(false);
+      return;
+    }
+    if (reloadAutomatically(scope) === "refused") setGaveUp(true);
+  }, [foreign, scope]);
+  return gaveUp;
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */

@@ -2,23 +2,36 @@
 // (3e rechargement en moins de 20 s refusé), repli sans stockage, un seul comptage par rechargement lancé, décision « autre compte ».
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { apiFetch } from "./api.client";
 import {
   AFTER_RELOAD_PARAM,
+  beginSharedRequest,
   createConfirmer,
   deriveConfirmation,
+  fetchMe,
   isAfterReload,
   isForeign,
   ME_TIMEOUT_MS,
   type MeKnowledge,
   type MeResult,
+  markSharedLayout,
   mayReload,
   nextAnnounced,
+  noteForeignAnnouncement,
+  publishSharedMe,
   recordMe,
   reloadAutomatically,
   reloadManually,
+  resetSharedMe,
   type SessionConfirmation,
+  sharedConfirmation,
+  sharedConfirmedMe,
+  subscribeShared,
   unknownMe,
 } from "./sessionReload";
+
+// `/me` : le module `api.client` est remplacé (il fait un vrai `fetch`) ; chaque test lit ses appels.
+vi.mock("./api.client", () => ({ apiFetch: vi.fn() }));
 
 function stubWindow(opts: { storage: boolean; search?: string; hash?: string }) {
   const replaced: string[] = [];
@@ -266,6 +279,26 @@ describe("confirmation du compte (dernier compte rendu par /me)", () => {
   it("le délai de /me est de 10 s", () => {
     expect(ME_TIMEOUT_MS).toBe(10_000);
   });
+
+  it("la vérification lit /me avec un délai de 10 s (sans lui, « Mise à jour… » à vie) et rend la réponse telle quelle", async () => {
+    const reply = me("A");
+    vi.mocked(apiFetch).mockClear();
+    vi.mocked(apiFetch).mockResolvedValueOnce(reply as never);
+    expect(await fetchMe()).toBe(reply);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(apiFetch).toHaveBeenCalledWith("/me", { timeoutMs: 10_000 });
+  });
+
+  it("un /me abandonné au délai (status 0) donne « failed » avec la marque, jamais « checking » à vie", async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: false,
+      status: 0,
+      error: { code: "internal", message: "x" },
+    } as never);
+    const { box, apply } = localKnowledge();
+    await createConfirmer(fetchMe)(apply);
+    expect(confirmation(box.k, "A", true)).toBe("failed");
+  });
 });
 
 describe("un changement d'owner ou d'afterReload ne remet jamais « ok » (tour 11)", () => {
@@ -363,8 +396,12 @@ describe("verrou global de rechargement", () => {
       const stalled = vi.fn();
       const off = mod.onReloadStalled(stalled);
       mod.reloadAutomatically("crew");
+      // Le minuteur de blocage est armé : un seul minuteur en attente.
+      expect(vi.getTimerCount()).toBe(1);
       mod.resetReloadLock();
-      // Tour 12 : la restauration pose elle-même le fait (une notification) ; le minuteur annulé n'en ajoute pas une seconde.
+      // Tour 12 : la restauration pose elle-même le fait (une notification) ; le minuteur est annulé (aucun en attente : sans
+      // `clearStall()` il resterait un minuteur, ce que le seul décompte des notifications ne voyait pas).
+      expect(vi.getTimerCount()).toBe(0);
       expect(stalled).toHaveBeenCalledTimes(1);
       vi.advanceTimersByTime(mod.RELOAD_STALL_MS * 2);
       expect(stalled).toHaveBeenCalledTimes(1);
@@ -510,5 +547,129 @@ describe("le bouton de secours est un fait du document (tour 12)", () => {
     const next = recordMe(failed, me("A"));
     expect(next.failed).toBe(false);
     expect(deriveConfirmation(next, "A", true)).toBe("ok");
+  });
+});
+
+// B2a, tour 1 : la mise en page ne recharge pas et ne lit pas `/me` ; un seul compteur (celui de la page enfant) borne les rechargements.
+describe("la mise en page sous la marque : un seul compteur", () => {
+  it("sous un /me qui ne correspond pas de façon répétée : 2 rechargements au plus en 20 s, jamais un de plus par la mise en page", async () => {
+    vi.resetModules();
+    const { replaced, store } = stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    // La page enfant (portée `crew`) est seule à recharger : 2 départs, puis le refus.
+    const results: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      results.push(mod.reloadAutomatically("crew"));
+      mod.resetReloadLock();
+    }
+    expect(results).toEqual(["started", "started", "refused", "refused"]);
+    expect(replaced).toHaveLength(2);
+    // Aucun compteur propre à la mise en page.
+    expect(store.has("orasso-reloads:layout")).toBe(false);
+  });
+
+  it("le source de la mise en page ne demande aucun rechargement et ne lit pas /me", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../layouts/app.tsx", import.meta.url), "utf8");
+    expect(src).not.toContain("useReloadWhenForeign");
+    expect(src).not.toContain("useSessionConfirmation");
+    expect(src).toContain("useSharedConfirmation");
+  });
+
+  it("la mise en page déduit sa confirmation du /me de l'enfant : neutre tant qu'il n'a rien dit, puis ok ou mismatch", async () => {
+    vi.resetModules();
+    stubWindow({ storage: true });
+    const mod = await import("./sessionReload");
+    // Sans DOM : l'état partagé se lit par la même déduction que le hook (`deriveConfirmation`) ; ici, le contrat de la marque.
+    expect(deriveConfirmation({ me: undefined, failed: false }, "C", true)).toBe("checking");
+    expect(deriveConfirmation({ me: "C", failed: false }, "C", true)).toBe("ok");
+    expect(deriveConfirmation({ me: "B", failed: false }, "C", true)).toBe("mismatch");
+    expect(typeof mod.useSharedConfirmation).toBe("function");
+    expect(typeof mod.resetSharedMe).toBe("function");
+  });
+});
+
+// B2a, tour 2 : l'état partagé avec la mise en page, lu sans React (numéros de départ, annonces étrangères, repère de la mise en page).
+describe("la confirmation partagée avec la mise en page (sans React)", () => {
+  beforeEach(() => resetSharedMe());
+  afterEach(() => resetSharedMe());
+
+  it("publier puis lire : la mise en page retient un /me parti après son repère", () => {
+    const since = markSharedLayout();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmedMe(since)).toBe("B");
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    expect(sharedConfirmation("C", true, since)).toBe("mismatch");
+  });
+
+  it("l'abonné n'est prévenu qu'une fois pour la même publication ; undefined est sans effet", () => {
+    const seen = vi.fn();
+    const off = subscribeShared(seen);
+    const at = beginSharedRequest();
+    publishSharedMe(undefined, at);
+    expect(seen).not.toHaveBeenCalled();
+    publishSharedMe("B", at);
+    publishSharedMe("B", at);
+    expect(seen).toHaveBeenCalledTimes(1);
+    off();
+    publishSharedMe("C", beginSharedRequest());
+    expect(seen).toHaveBeenCalledTimes(1);
+  });
+
+  it("une réponse plus ancienne que celle retenue ne la remplace pas ; une plus récente, si", () => {
+    const first = beginSharedRequest();
+    const second = beginSharedRequest();
+    publishSharedMe("C", second);
+    publishSharedMe("B", first);
+    expect(sharedConfirmedMe(0)).toBe("C");
+    publishSharedMe("D", beginSharedRequest());
+    expect(sharedConfirmedMe(0)).toBe("D");
+  });
+
+  it("resetSharedMe remet tout à zéro", () => {
+    publishSharedMe("B", beginSharedRequest());
+    resetSharedMe();
+    expect(sharedConfirmedMe(0)).toBeUndefined();
+    expect(sharedConfirmation("B", true, 0)).toBe("checking");
+  });
+
+  it("/me retenu, annonce de C, puis livraison de la réponse retardée de B : pas « ok »", () => {
+    const since = markSharedLayout();
+    const slow = beginSharedRequest(); // le /me de B part…
+    noteForeignAnnouncement(); // …C s'annonce depuis une autre fenêtre…
+    publishSharedMe("B", slow); // …la réponse de B arrive après.
+    expect(sharedConfirmedMe(since)).toBeUndefined();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+  });
+
+  it("une annonce étrangère fait tomber une confirmation déjà retenue ; un /me parti après elle la rétablit", () => {
+    const since = markSharedLayout();
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    const seen = vi.fn();
+    const off = subscribeShared(seen);
+    noteForeignAnnouncement();
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest());
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+    off();
+  });
+
+  it("une publication antérieure au chargeur (repère de la mise en page) est ignorée", () => {
+    publishSharedMe("B", beginSharedRequest()); // l'ancien document de la page, avant le chargeur
+    const since = markSharedLayout(); // le `loaderData` de la mise en page change (retour arrière côté client)
+    expect(sharedConfirmedMe(since)).toBeUndefined();
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
+    publishSharedMe("B", beginSharedRequest()); // un /me parti après le repère
+    expect(sharedConfirmation("B", true, since)).toBe("ok");
+  });
+
+  it("un /me parti avant le repère mais livré après est ignoré", () => {
+    const early = beginSharedRequest();
+    const since = markSharedLayout();
+    publishSharedMe("B", early);
+    expect(sharedConfirmation("B", true, since)).toBe("checking");
   });
 });

@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { feedPublishLabels } from "@orasso/shared";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
 import { postText } from "./lotr6a-setup";
@@ -175,19 +176,25 @@ test.describe("tour 1", () => {
     await open(page, crew.chef.email, `/app/crew?crew=${crew.slug}`);
     await expect(page.getByTestId("crew-post").first()).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 1500));
-    await page.waitForTimeout(400);
-    const b = await bar(page);
-    // Collée juste sous la barre du haut (--bar-top : 64 px), pas ailleurs dans la page.
-    expect(Math.abs(b.y - 64), `rangée à ${b.y} px`).toBeLessThanOrEqual(2);
+    // Collée juste sous la barre du haut (--bar-top : 64 px), pas ailleurs dans la page : la condition géométrique est attendue
+    // (la rangée se pose quand le défilement est fini), pas une durée fixe.
+    await expect
+      .poll(async () => Math.abs((await bar(page)).y - 64), { message: "rangée collée à 64 px" })
+      .toBeLessThanOrEqual(2);
     await expect(page.getByTestId("crew-cover-open")).not.toBeInViewport();
-    // Changer d'onglet : le début du nouvel onglet est sous la rangée.
+    // Changer d'onglet (un nouveau document, ~600 ms sous charge) : le début du nouvel onglet est sous la rangée.
     await page.getByTestId("crew-tab-membres").click();
     await expect(page.getByTestId("crew-members")).toBeVisible();
-    await page.waitForTimeout(400);
-    const m = (await page.getByTestId("crew-members").boundingBox()) as { y: number };
-    const b2 = await bar(page);
-    expect(m.y).toBeGreaterThanOrEqual(b2.y + b2.height - 2);
-    expect(m.y).toBeLessThan(600);
+    await expect
+      .poll(
+        async () => {
+          const m = (await page.getByTestId("crew-members").boundingBox()) as { y: number };
+          const b2 = await bar(page);
+          return m.y >= b2.y + b2.height - 2 && m.y < 600;
+        },
+        { message: "le début de l'onglet des membres est sous la rangée" },
+      )
+      .toBe(true);
   });
 
   test("la pastille des nouvelles publications ramène la publication sous la rangée d'onglets", async ({ page }) => {
@@ -575,7 +582,8 @@ async function holdNextDocument(page: Page, prepare = false) {
       armed = false;
       if (prepare) {
         // La réponse est RÉELLEMENT préparée par le serveur sous le compte courant (B) puis retenue : le cookie change ensuite.
-        const prepared = await route.fetch();
+        // Sans suivre les redirections : une redirection (vers la connexion) ne se prendrait pas pour la réponse de B.
+        const prepared = await route.fetch({ maxRedirects: 0 });
         response = { status: prepared.status(), body: await prepared.text() };
         reached();
         await held;
@@ -596,18 +604,26 @@ async function holdNextDocument(page: Page, prepare = false) {
   };
 }
 
-/** La réponse retenue est bien celle de B (200, page neutre « pending ») et ne contient AUCUNE donnée privée de B : ni l'identifiant,
- * ni l'adresse, ni le nom de son crew (HTML et données sérialisées), ni le nom. */
+/**
+ * La réponse retenue est bien celle de B (200, et l'identifiant de B y figure : c'est ce que dit une page préparée sous sa session) et
+ * ne contient, ni dans le HTML ni dans les données sérialisées, les données du Crew de B (son identifiant, son adresse, son nom, les
+ * clés `crews`, `members` et `invitations` que le chargeur ne renvoie que hors rechargement) ni le pseudo de la personne dont la
+ * page se rechargeait. Elle ne prouve rien d'autre que l'absence de ces chaînes : la mise en page a sa propre recette.
+ */
 function expectNoPrivateData(
   held: { status: number; body: string } | null,
   crew: { id: string; slug: string; name: string },
+  prepared: { userId: string; foreignPseudo: string },
 ) {
   expect(held, "la réponse retenue").not.toBeNull();
   const { status, body } = held as { status: number; body: string };
   expect(status).toBe(200);
-  expect(body, "page neutre du rechargement").toContain("pending");
-  for (const secret of [crew.id, crew.slug, crew.name]) {
+  expect(body.includes(prepared.userId), "la réponse retenue est celle de B (son identifiant y figure)").toBe(true);
+  for (const secret of [crew.id, crew.slug, crew.name, prepared.foreignPseudo]) {
     expect(body.includes(secret), `la réponse retenue contient « ${secret} »`).toBe(false);
+  }
+  for (const key of ["crews", "members", "invitations"]) {
+    expect(body.includes(`"${key}"`), `la réponse retenue contient la clé « ${key} »`).toBe(false);
   }
 }
 
@@ -664,8 +680,15 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     // événement `pageshow` persisté part de la fenêtre 300 ms après qu'elle a affiché « Mise à jour… » (rechargement réellement lancé) ;
     // le bouton doit venir de la restauration, donc avant 10 s (le minuteur de « Recharger la page » est de 15 s).
     const events: string[] = [];
+    // Dates (performance.now() du document) du `pageshow` envoyé et de l'apparition du bouton : l'écart dit que le bouton vient de la
+    // restauration, pas du minuteur de 15 s ni d'un hasard de la marge.
+    const at: Record<string, number> = {};
     a.on("console", (m) => {
-      if (m.text().startsWith("b1seen:")) events.push(m.text().slice(7));
+      const text = m.text();
+      if (!text.startsWith("b1seen:")) return;
+      const [id, t] = text.slice(7).split("@");
+      events.push(id as string);
+      at[id as string] = Number(t);
     });
     await a.evaluate(() => {
       const seen = new Set<string>();
@@ -673,9 +696,12 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
         for (const id of ["crew-refreshing", "crew-refresh-slow"]) {
           if (!seen.has(id) && document.querySelector(`[data-testid="${id}"]`)) {
             seen.add(id);
-            console.log(`b1seen:${id}`);
+            console.log(`b1seen:${id}@${performance.now()}`);
             if (id === "crew-refreshing") {
-              setTimeout(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })), 300);
+              setTimeout(() => {
+                console.log(`b1seen:pageshow@${performance.now()}`);
+                window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+              }, 300);
             }
           }
         }
@@ -687,7 +713,11 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await announceForbidding(a, crew.paul.id, INVITATION);
     await hold.arrived;
     // « Mise à jour… » d'abord, sans bouton ; puis, à la restauration, le bouton s'ajoute dessous sans que « Mise à jour… » parte.
-    await expect.poll(() => events, { timeout: 10_000 }).toEqual(["crew-refreshing", "crew-refresh-slow"]);
+    await expect.poll(() => events, { timeout: 10_000 }).toEqual(["crew-refreshing", "pageshow", "crew-refresh-slow"]);
+    // Le bouton arrive tout de suite après la restauration (moins de 2 s), bien avant le minuteur de 15 s.
+    const gap = (at["crew-refresh-slow"] as number) - (at.pageshow as number);
+    expect(gap, `écart entre le pageshow et le bouton : ${gap} ms`).toBeGreaterThanOrEqual(0);
+    expect(gap, `écart entre le pageshow et le bouton : ${gap} ms`).toBeLessThan(2_000);
     hold.release();
     await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
     await expect(a.getByTestId("crew-refresh-slow")).toHaveCount(0);
@@ -711,7 +741,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     // Le serveur a rendu le rechargement sous B (réponse lue par `route.fetch()`) ; elle est retenue pendant que C se connecte et
     // s'annonce : l'ANCIEN document reçoit l'annonce de C, le nouveau n'est pas encore là.
     await hold.arrived;
-    expectNoPrivateData(hold.prepared(), crew);
+    expectNoPrivateData(hold.prepared(), crew, { userId: crew.chef.id, foreignPseudo: crew.sarah.pseudo });
     await swapCookies(ctx, paul);
     await announce(other, crew.paul.id);
     hold.release();
@@ -738,7 +768,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await swapCookies(ctx, chef);
     await announceForbidding(a, crew.chef.id, `${INVITATION}, ${OUTINGS}`);
     await hold.arrived;
-    expectNoPrivateData(hold.prepared(), crew);
+    expectNoPrivateData(hold.prepared(), crew, { userId: crew.chef.id, foreignPseudo: crew.sarah.pseudo });
     // Pendant que la réponse de B est retenue : B se déconnecte (plus de session) et l'annonce.
     await ctx.clearCookies();
     await announce(other, null);
@@ -1073,5 +1103,260 @@ test.describe("partie B1, tour 4 : composeur de story du site", () => {
     const stories = await storiesOf(author, author.id);
     expect(stories.map((x) => x.id)).toEqual([created.id]);
     await ctx.close();
+  });
+});
+
+// B2a : le POST de publication d'une story a un délai (20 s) ; au délai, l'issue est « incertaine » (la story est peut-être publiée),
+// jamais un échec certain ni un état neutre sans fin.
+test.describe("B2a : une publication de story qui ne répond pas", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  async function toSend(page: Page, email: string, caption: string) {
+    await loginInBrowser(page, email, undefined, "/app/story/publier");
+    await page.getByTestId("story-file").setInputFiles(landscape());
+    await expect(page.getByTestId("story-fit")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("story-plate-none").click();
+    await page.getByTestId("story-plate-none-yes").click();
+    await page.getByTestId("story-caption").fill(caption);
+    await expect(page.getByTestId("story-publish-send")).toBeEnabled();
+  }
+
+  /** Le POST de la story est retenu sans fin (aucune réponse, jamais d'erreur réseau) ; compte les envois. */
+  async function neverAnswer(page: Page) {
+    const sent = { posts: 0 };
+    await page.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      sent.posts += 1;
+      await new Promise<void>(() => undefined);
+    });
+    return sent;
+  }
+
+  test("sans réponse : au délai, « Ta story a peut-être été publiée » (pas un échec certain), et l'envoi peut être repris", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const author = await who("StB2aDelai");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await toSend(a, author.email, "Envoi sans réponse");
+    const sent = await neverAnswer(a);
+    await a.getByTestId("story-publish-send").click();
+    // L'envoi est en cours (le bouton est désactivé) tant que le délai de 20 s n'est pas écoulé.
+    await expect(a.getByTestId("story-publish-send")).toBeDisabled();
+    // Le délai du POST est de 20 s : l'issue arrive après lui, pas avant.
+    const startedAt = Date.now();
+    await expect(a.getByTestId("story-error")).toBeVisible({ timeout: 60_000 });
+    const waited = Date.now() - startedAt;
+    expect(waited, `l'issue est arrivée après ${waited} ms`).toBeGreaterThan(15_000);
+    await expect(a.getByTestId("story-error")).toContainText("Ta story a peut-être été publiée");
+    await expect(a.getByTestId("story-error")).not.toContainText("Connexion impossible");
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    expect(sent.posts).toBe(1);
+    await ctx.close();
+  });
+
+  test("reprise réelle : la 1re publication aboutit après le délai, le nouvel essai (même clé) ne crée pas de 2e story", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const author = await who("StB2aReprise");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    await toSend(a, author.email, "Reprise après le délai");
+    const keys: string[] = [];
+    let posts = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await a.route(/\/api\/me\/stories$/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      posts += 1;
+      keys.push((route.request().postDataJSON() as { uploadKey?: string }).uploadKey ?? "");
+      if (posts > 1) return route.continue();
+      // 1re requête : retenue au-delà du délai de 20 s du composeur, PUIS livrée à l'API (la story est créée, la réponse est perdue).
+      await gate;
+      try {
+        await route.fetch();
+        await route.abort();
+      } catch {
+        // La page a déjà abandonné la requête : la livraison à l'API a eu lieu avant.
+      }
+    });
+    await a.getByTestId("story-publish-send").click();
+    await expect(a.getByTestId("story-error")).toBeVisible({ timeout: 60_000 });
+    const message = await a.getByTestId("story-error").innerText();
+    expect(message).toContain("Ta story a peut-être été publiée");
+    expect(message).toContain("pas publiée deux fois");
+    expect(message).not.toContain("profil");
+    // La 1re requête aboutit maintenant, côté API, après l'abandon du composeur.
+    release();
+    await expect.poll(async () => (await storiesOf(author, author.id)).length, { timeout: 30_000 }).toBe(1);
+    const first = (await storiesOf(author, author.id))[0];
+    // Le composeur est toujours là, le brouillon intact : on réessaie ici, avec la même clé.
+    await expect(a.getByTestId("story-publish-send")).toBeEnabled();
+    const secondResponse = a.waitForResponse(
+      (r) => /\/api\/me\/stories$/.test(r.url()) && r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    await a.getByTestId("story-publish-send").click();
+    const replay = await secondResponse;
+    expect(replay.status()).toBe(201);
+    const replayed = (await replay.json()) as { id: string; replayed?: boolean; audience?: string };
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]?.length ?? 0).toBeGreaterThan(0);
+    // Le nouvel essai ABOUTIT : l'écran de réussite d'une reprise, la même story, le vrai public rendu par l'API.
+    await expect(a.getByTestId("story-done")).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByTestId("story-done")).toContainText("Ta story est déjà partie");
+    expect(posts).toBe(2);
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.audience).toBeTruthy();
+    expect(replayed.id).toBe(first?.id);
+    const stories = await storiesOf(author, author.id);
+    expect(stories.map((x) => x.id)).toEqual([first?.id]);
+    await ctx.close();
+  });
+
+  test("l'annonce de B pendant un envoi sans réponse : l'état neutre se termine au délai, « peut-être publiée »", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const author = await who("StB2aNeutre");
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const a = await ctx.newPage();
+    await setTheme(a, "beton");
+    const SECRET = "Brouillon secret de A, envoi sans réponse";
+    await toSend(a, author.email, SECRET);
+    const sent = await neverAnswer(a);
+    await a.getByTestId("story-publish-send").click();
+    await expect.poll(() => sent.posts, { timeout: 30_000 }).toBe(1);
+    await signInOther(browser, ctx, "sarah@orasso.local");
+    await expect(a.getByTestId("story-stale-sending")).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText(SECRET)).toHaveCount(0);
+    // Sans le délai, cet état durait sans fin : au délai, l'issue incertaine s'affiche (aucune donnée de A).
+    await expect(a.getByTestId("story-stale")).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByTestId("story-stale")).toContainText("a peut-être été publiée");
+    await expect(a.getByTestId("story-stale-sending")).toHaveCount(0);
+    await expect(a.getByText(SECRET)).toHaveCount(0);
+    await ctx.close();
+  });
+});
+
+// B2a : la mise en page (`layouts/app`) sous la marque `?apres-rechargement=1`. Le document préparé sous B et rendu sous C ne porte
+// rien de privé de B (accès le plus proche, pastilles, suspension, état de l'e-mail) et ne l'annonce pas aux autres onglets.
+test.describe("B2a : la mise en page sous la marque", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("réponse préparée sous B, rendue sous C : rien de privé de B dans la mise en page, et B n'est jamais annoncé", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const crew = await r5Crew(unique());
+    const KENJI = "kenji@orasso.local";
+    const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await db.connect();
+    // Idempotent : une passe tuée avant son `finally` aurait laissé Kenji suspendu et non vérifié ; on le remet à l'état du seed AVANT de le lire.
+    await db.query('update "user" set email_verified = true where email = $1', [KENJI]);
+    await db.query(
+      'update profiles set suspended_until = null where user_id = (select id from "user" where email = $1)',
+      [KENJI],
+    );
+    const found = await db.query<{ id: string; email_verified: boolean; suspended_until: Date | null }>(
+      'select u.id, u.email_verified, p.suspended_until from "user" u join profiles p on p.user_id = u.id where u.email = $1',
+      [KENJI],
+    );
+    const was = found.rows[0];
+    if (!was) throw new Error("Kenji (seed) introuvable");
+    const until = new Date(Math.floor(Date.now() / 1000) * 1000 + 9 * 86_400_000);
+    try {
+      // B : un e-mail à confirmer et une suspension (en plus de son accès proche et de ses pastilles, qui viennent du seed).
+      await db.query('update "user" set email_verified = false where id = $1', [was.id]);
+      await db.query("update profiles set suspended_until = $2 where user_id = $1", [was.id, until]);
+
+      // Précondition : sous sa propre session, la mise en page de B montre bien tout cela (sinon la recette ne prouverait rien).
+      const bCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const bPage = await bCtx.newPage();
+      await loginInBrowser(bPage, KENJI, undefined, "/app/explorer");
+      await expect(bPage.getByTestId("near-access")).toHaveCount(1);
+      const nearTitle = (await bPage.locator(".near__text strong").first().innerText()).trim();
+      expect(nearTitle.length).toBeGreaterThan(3);
+      // L'adresse de l'accès (ASCII : le titre peut être sérialisé avec des échappements) : son dernier segment identifie la sortie.
+      const nearHref = (await bPage.getByTestId("near-access").getAttribute("href")) ?? "";
+      const nearKey = nearHref.split("/").filter(Boolean).pop()?.split("?")[0] ?? "";
+      expect(nearKey.length).toBeGreaterThan(3);
+      await expect(bPage.getByTestId("verify-banner")).toBeVisible();
+      await expect(bPage.getByTestId("suspended-banner")).toBeVisible();
+      const badges = await bPage.locator('[aria-label*="non lu"]').count();
+      expect(badges, "pastilles de B (Activité ou Messages)").toBeGreaterThan(0);
+      await bCtx.close();
+
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      // Les annonces de session reçues par un autre onglet de la fenêtre (le canal est partagé par les pages d'un même contexte).
+      await ctx.addInitScript(() => {
+        try {
+          const c = new BroadcastChannel("orasso-session");
+          c.onmessage = (e) => {
+            const log = JSON.parse(sessionStorage.getItem("__b2alog") ?? "[]") as unknown[];
+            log.push((e.data as { userId?: string | null } | null)?.userId ?? null);
+            sessionStorage.setItem("__b2alog", JSON.stringify(log));
+          };
+        } catch {
+          // Pas de canal : rien à noter.
+        }
+      });
+      const a = await ctx.newPage();
+      await setTheme(a, "beton");
+      await loginInBrowser(a, crew.sarah.email, undefined, "/app/crew");
+      await expect(a.getByTestId("crew-tab-none")).toBeVisible();
+      const w = await ctx.newPage();
+      await w.goto("/app/fil");
+      await expect(w.getByTestId("verify-banner")).toBeVisible();
+      const heard = () =>
+        w.evaluate(() => JSON.parse(sessionStorage.getItem("__b2alog") ?? "[]") as Array<string | null>);
+
+      const hold = await holdNextDocument(a, true);
+      const kenji = await cookiesOf(browser, KENJI);
+      const paul = await cookiesOf(browser, crew.paul.email);
+      hold.arm();
+      await swapCookies(ctx, kenji);
+      // Seule la page A reçoit l'annonce de B (événement `storage`) : l'onglet témoin ne doit entendre B que si un document l'annonce.
+      await a.evaluate((id) => {
+        window.dispatchEvent(
+          new StorageEvent("storage", { key: "orasso-session", newValue: JSON.stringify({ userId: id, from: "x" }) }),
+        );
+      }, was.id);
+      await hold.arrived;
+      const held = hold.prepared();
+      expect(held, "la réponse retenue").not.toBeNull();
+      const { status, body } = held as { status: number; body: string };
+      expect(status).toBe(200);
+      expect(body.includes(was.id), "la réponse retenue est celle de B (son identifiant y figure)").toBe(true);
+      expect(body.includes(nearTitle), "l'accès le plus proche de B (titre)").toBe(false);
+      expect(body.includes(nearKey), "l'accès le plus proche de B (adresse)").toBe(false);
+      expect(body.includes("near-access"), "l'accès flottant").toBe(false);
+      expect(body.includes("Vérifie ton e-mail"), "l'état de l'e-mail de B").toBe(false);
+      expect(body.includes("verify-banner")).toBe(false);
+      expect(body.includes("suspended-banner"), "le bandeau de suspension de B").toBe(false);
+      expect(body.includes(until.toISOString().slice(0, 16)), "la date de suspension de B").toBe(false);
+      expect(body.includes("non lu"), "les pastilles de B").toBe(false);
+      // C se connecte pendant que la réponse de B est retenue, puis elle est rendue sous C.
+      await swapCookies(ctx, paul);
+      hold.release();
+      await expect.poll(() => loadedUser(a), { timeout: 30_000 }).toBe(crew.paul.id);
+      await expect(a.getByTestId("crew-tab-none")).toBeVisible();
+      await expect(a.getByTestId("near-access")).toHaveCount(0);
+      await expect(a.getByTestId("suspended-banner")).toHaveCount(0);
+      // Le compte de C est bien annoncé (la mise en page a confirmé par /me puis annoncé) ; celui de B ne l'a jamais été.
+      await expect.poll(heard, { timeout: 20_000 }).toContain(crew.paul.id);
+      expect(await heard(), "B a été annoncé aux autres onglets").not.toContain(was.id);
+      await ctx.close();
+    } finally {
+      await db.query('update "user" set email_verified = $2 where id = $1', [was.id, was.email_verified]);
+      await db.query("update profiles set suspended_until = $2 where user_id = $1", [was.id, was.suspended_until]);
+      await db.end();
+    }
   });
 });

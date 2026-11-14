@@ -193,6 +193,8 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(contact).toContainText("Contacter");
       await page.waitForLoadState("networkidle");
       await shot(page, `tes-photos-contacter-${theme}-${viewport.width}`);
+      // Le corps de `/conversations/<id>/read` est coupé par une navigation : on écoute la réponse AVANT d'ouvrir la conversation.
+      const readResp = page.waitForResponse((r) => /\/conversations\/[^/]+\/read$/.test(r.url()));
       await contact.click();
       await page.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
       const conversationUrl = page.url();
@@ -200,8 +202,8 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(page.getByTestId("view-page")).toBeVisible();
       await expect(page.locator('img[src*="sud-cars-logo"]').filter({ visible: true }).first()).toBeVisible();
 
-      // Le corps de `/conversations/<id>/read` est coupé par la navigation : on attend la fin du réseau de l'écran de la conversation.
-      await page.waitForLoadState("networkidle");
+      // La réponse de `/read` est terminée (corps lu) avant de quitter l'écran de la conversation.
+      await (await readResp).finished();
       await page.goto(`/app/albums/${albumId}/mes-photos`);
       await page.waitForLoadState("networkidle");
       await page.getByTestId("my-photo-more").first().click();
@@ -299,8 +301,11 @@ test("« Contacter » : un retour arrière pendant l'appel n'est pas remplacé p
   });
   await page.goBack();
   await dataAskedPromise;
-  // La réponse de « Contacter » arrive pendant ce chargement ; la suite (attente du chargement, ouverture, absence de fuite) est vérifiée plus bas.
+  // La réponse de « Contacter » arrive pendant ce chargement retenu : on attend qu'elle soit entièrement reçue, PUIS on vérifie que la
+  // conversation ne s'est pas ouverte (retour arrière en cours) ; seulement ensuite le chargement de la page précédente est relâché.
+  const convResp = page.waitForResponse((r) => /\/api\/media\/[^/]+\/conversation/.test(r.url()));
   release();
+  await (await convResp).finished();
   expect(page.url()).not.toMatch(/\/messages\//);
   releaseData();
   await page.waitForURL((u) => u.pathname === before);
@@ -379,9 +384,19 @@ test("« Contacter » : un rechargement de la même page à la réponse n'empêc
       ),
     )
     .toBe("loading");
+  const convResp = page.waitForResponse((r) => /\/api\/media\/[^/]+\/conversation/.test(r.url()));
   release();
-  // La réponse de « Contacter » est traitée pendant le chargement retenu ; on lui laisse le temps d'arriver, puis rien ne doit être parti.
-  await page.waitForTimeout(1_500);
+  // La réponse de « Contacter » est entièrement reçue pendant le chargement retenu ; le routeur est toujours en « loading » quand on vérifie.
+  await (await convResp).finished();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __reactRouterDataRouter: { state: { navigation: { state: string } } } })
+            .__reactRouterDataRouter.state.navigation.state,
+      ),
+    )
+    .toBe("loading");
   expect(page.url()).not.toMatch(/\/messages\//);
   expect(conversationData, "rien ne part vers la conversation avant le retour au repos").toEqual([]);
   releaseData();
