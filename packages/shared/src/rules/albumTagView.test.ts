@@ -357,6 +357,20 @@ describe("createMyPhotosReads (relectures de « Tes photos », réponses contrô
     expect(createMyPhotosReads<V>().newLoaded().reread).toBe(false);
   });
 
+  it("invalidate() (autre compte annoncé, démontage) : une réponse qui arrive ensuite, réussie ou non, est jetée et ne touche à rien", () => {
+    const reads = createMyPhotosReads<V>();
+    reads.removeTag("t1");
+    const inFlight = reads.start(false);
+    reads.invalidate();
+    expect(reads.ok(inFlight, view("a"))).toBeNull();
+    expect(reads.fail(inFlight, "Panne")).toBeNull();
+    expect(reads.notFound(inFlight)).toBeNull();
+    const state = reads.state();
+    expect(state.fresh).toBeNull();
+    expect(state.error).toBeNull();
+    expect(state.removed.has("t1")).toBe(true);
+  });
+
   it("réponse reçue après l'expiration d'une story : « Déjà en story » n'est plus montré au rendu", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-11-14T09:59:00Z"));

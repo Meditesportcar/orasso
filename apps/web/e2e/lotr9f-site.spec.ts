@@ -284,39 +284,68 @@ test("un autre compte se connecte dans un autre onglet pendant une relecture ret
   const s = await scenario();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  // L'observateur du DOM (un par document, les drapeaux survivent au rechargement dans sessionStorage) :
-  // - « stale-seen » : l'état masqué « Mise à jour… » a été rendu avant le rechargement ;
-  // - « seen-after » : les photos visibles dans ce document APRÈS une annonce de session (même canal que le site) ; aucune de celles de A.
-  // Seule l'annonce du compte B compte (celles de A lui-même et de la page de connexion, avant, n'en sont pas).
+  // Les identités, connues AVANT la connexion de B : les photos de A seul (celles que B ne doit jamais voir), l'identifiant de B.
   const kenjiId =
     (await sql<{ id: string }>('select id from "user" where email = $1', ["kenji@orasso.local"]))[0]?.id ?? "";
-  await page.addInitScript((otherId: string) => {
-    let announcedAt = 0;
-    try {
-      new BroadcastChannel("orasso-session").addEventListener("message", (e) => {
-        if ((e as MessageEvent).data?.userId !== otherId) return;
-        announcedAt = performance.now();
-      });
-    } catch {
-      // Sans canal : le repli par `storage` n'est pas observé ici.
-    }
-    const check = () => {
-      if (document.querySelector('[data-testid="my-photos-stale"]')) sessionStorage.setItem("stale-seen", "1");
-      // 300 ms de grâce : le temps que React rende l'état masqué après l'annonce (aucune photo de A ne doit rester visible au-delà).
-      if (announcedAt === 0 || performance.now() - announcedAt < 300) return;
-      const seen = new Set<string>(JSON.parse(sessionStorage.getItem("seen-after") ?? "[]"));
-      for (const i of document.querySelectorAll('[data-testid="my-photo"] img'))
-        seen.add(new URL((i as HTMLImageElement).src).pathname);
-      sessionStorage.setItem("seen-after", JSON.stringify([...seen]));
-    };
-    new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
-  }, kenjiId);
+  expect(kenjiId).not.toBe("");
+  const pathOf = (u: string) => new URL(u, "http://x").pathname;
+  const kenjiPhotos = (
+    await apiCall<{ photos: { url: string }[] }>(
+      await login("kenji@orasso.local"),
+      "GET",
+      `/me/albums/${s.albumId}/my-photos`,
+    )
+  ).data.photos.map((p) => pathOf(p.url));
+  const damienPhotos = (
+    await apiCall<{ photos: { url: string }[] }>(s.damien, "GET", `/me/albums/${s.albumId}/my-photos`)
+  ).data.photos.map((p) => pathOf(p.url));
+  const aOnly = damienPhotos.filter((p) => !kenjiPhotos.includes(p));
+  expect(aOnly.length).toBeGreaterThan(0);
+  // L'observateur du DOM (un par document ; les constats survivent au rechargement dans sessionStorage), sur des ÉVÉNEMENTS observables :
+  // - « announced » : l'annonce de B a été reçue (même canal que le site) ; sans canal, « no-channel » ;
+  // - « stale-seen » : l'écran masqué « Mise à jour… » a été rendu, « stale-delay » : le temps entre l'annonce et ce rendu ;
+  // - « leak-added » : un nœud « my-photo » portant une photo de A seul est AJOUTÉ (ou son `src` change) après l'annonce ;
+  // - « leak-with-stale » : un « my-photo » est présent alors que l'écran masqué est rendu ; « stale-late » : pas de masquage sous 2 s.
+  await page.addInitScript(
+    ({ otherId, aOnlyPaths }: { otherId: string; aOnlyPaths: string[] }) => {
+      let announcedAt = 0;
+      const mark = (k: string, v = "1") => sessionStorage.setItem(k, v);
+      if (typeof BroadcastChannel === "undefined") mark("no-channel");
+      else {
+        new BroadcastChannel("orasso-session").addEventListener("message", (e) => {
+          if ((e as MessageEvent).data?.userId !== otherId) return;
+          announcedAt = performance.now();
+          mark("announced");
+          setTimeout(() => {
+            if (!sessionStorage.getItem("stale-seen")) mark("stale-late");
+          }, 2000);
+        });
+      }
+      const isA = (img: Element) =>
+        !!img.closest('[data-testid="my-photo"]') &&
+        aOnlyPaths.includes(new URL((img as HTMLImageElement).src, location.href).pathname);
+      new MutationObserver((records) => {
+        if (document.querySelector('[data-testid="my-photos-stale"]')) {
+          if (!sessionStorage.getItem("stale-seen"))
+            mark("stale-delay", String(announcedAt ? performance.now() - announcedAt : -1));
+          mark("stale-seen");
+          if (document.querySelector('[data-testid="my-photo"]')) mark("leak-with-stale");
+        }
+        if (announcedAt === 0) return;
+        for (const r of records) {
+          const imgs: Element[] =
+            r.type === "attributes"
+              ? [r.target as Element]
+              : [...r.addedNodes].flatMap((n) => (n instanceof Element ? [n, ...n.querySelectorAll("img")] : []));
+          if (imgs.some((i) => i.tagName === "IMG" && isA(i))) mark("leak-added");
+        }
+      }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+    },
+    { otherId: kenjiId, aOnlyPaths: aOnly },
+  );
   await loginInBrowser(page, DAMIEN, undefined, `/app/albums/${s.albumId}/mes-photos`);
   await expect(page.getByTestId("my-photo").first()).toBeVisible({ timeout: 30_000 });
-  const damienSrc = await page
-    .locator('[data-testid="my-photo"] img')
-    .evaluateAll((l) => l.map((i) => (i as HTMLImageElement).src));
-  expect(damienSrc.length).toBeGreaterThan(1);
+  expect(await page.getByTestId("my-photo").count()).toBeGreaterThan(1);
   // La relecture qui suit le retrait est EXPLICITEMENT retenue : demandée par A, lue avec le cookie de A, puis gardée jusqu'à la fin.
   let release: () => void = () => undefined;
   const held = new Promise<void>((r) => {
@@ -352,28 +381,24 @@ test("un autre compte se connecte dans un autre onglet pendant une relecture ret
   // La relecture de A arrive tard : elle ne doit rien afficher.
   release();
   // La première page finit sous B : l'identité des photos est celle de Kenji, aucune de celles de Damien.
-  const kenjiApi = await apiCall<{ photos: { url: string }[] }>(
-    await login("kenji@orasso.local"),
-    "GET",
-    `/me/albums/${s.albumId}/my-photos`,
-  );
-  await expect(page.getByTestId("my-photo")).toHaveCount(kenjiApi.data.photos.length, { timeout: 60_000 });
-  const finalSrc = await page
-    .locator('[data-testid="my-photo"] img')
-    .evaluateAll((l) => l.map((i) => (i as HTMLImageElement).src));
-  expect(finalSrc.map((u) => new URL(u).pathname).sort()).toEqual(
-    kenjiApi.data.photos.map((p) => new URL(p.url, "http://x").pathname).sort(),
-  );
-  for (const u of damienSrc) {
-    if (!kenjiApi.data.photos.some((p) => new URL(p.url, "http://x").pathname === new URL(u).pathname))
-      expect(finalSrc).not.toContain(u);
-  }
-  // Le masquage a bien précédé le rechargement, et aucune photo de A n'a été visible après l'annonce de B.
+  await expect(page.getByTestId("my-photo")).toHaveCount(kenjiPhotos.length, { timeout: 60_000 });
+  const finalSrc = (
+    await page.locator('[data-testid="my-photo"] img').evaluateAll((l) => l.map((x) => (x as HTMLImageElement).src))
+  ).map(pathOf);
+  expect([...finalSrc].sort()).toEqual([...kenjiPhotos].sort());
+  for (const p of aOnly) expect(finalSrc).not.toContain(p);
+  // Le masquage a bien précédé le rechargement.
   expect(await page.evaluate(() => sessionStorage.getItem("stale-seen"))).toBe("1");
-  const seenAfter: string[] = JSON.parse((await page.evaluate(() => sessionStorage.getItem("seen-after"))) ?? "[]");
-  const kenjiPaths = new Set(kenjiApi.data.photos.map((p) => new URL(p.url, "http://x").pathname));
-  const damienOnly = damienSrc.map((u) => new URL(u).pathname).filter((p) => !kenjiPaths.has(p));
-  expect(damienOnly.length).toBeGreaterThan(0);
-  expect(seenAfter.filter((p) => damienOnly.includes(p))).toEqual([]);
+  const flag = (k: string) => page.evaluate((key) => sessionStorage.getItem(key), k);
+  expect(await flag("no-channel")).toBeNull();
+  // L'annonce de B a été reçue par la page de A, le masquage a été rendu, et vite (2 s au plus).
+  expect(await flag("announced")).toBe("1");
+  expect(await flag("stale-late")).toBeNull();
+  const delay = Number(await flag("stale-delay"));
+  expect(delay).toBeGreaterThanOrEqual(0);
+  expect(delay).toBeLessThan(2000);
+  // Aucune photo de A ajoutée après l'annonce, aucune photo présente sous l'écran masqué.
+  expect(await flag("leak-added")).toBeNull();
+  expect(await flag("leak-with-stale")).toBeNull();
   await ctx.close();
 });

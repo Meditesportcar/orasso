@@ -126,14 +126,17 @@ export function MyPhotosScreen({ id }: { id: string }) {
       exitWanted.current = false;
     }
   }, [accountId]);
-  // Toute nouvelle donnée lue avec succès (relecture après un retrait, minuterie, retour, tirage : la dernière qui réussit) réconcilie : les
-  // retraits sont levés et la sortie n'est plus attendue.
+  // Toute nouvelle donnée lue avec succès (relecture après un retrait, minuterie, retour, tirage) réconcilie les retraits.
+  // Par identification : une lecture lancée AVANT le retrait, arrivée après, contient encore le `tagId` retiré : il reste masqué (et la
+  // sortie sur 404 reste attendue) ; seuls les `tagId` absents des données lues sont réconciliés.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seulement quand de nouvelles données arrivent
   useEffect(() => {
-    if (removed.size > 0) {
-      setRemoved(new Set());
-      exitWanted.current = false;
-    }
+    if (!v || removed.size === 0) return;
+    const present = new Set(v.photos.map((p) => p.tagId));
+    const kept = new Set([...removed].filter((id) => present.has(id)));
+    if (kept.size === removed.size) return;
+    setRemoved(kept);
+    if (kept.size === 0) exitWanted.current = false;
   }, [v]);
   // Retraits non réconciliés : la relecture qui a suivi un retrait a échoué (panne, pas une 404). L'écran le dit, avec « Réessayer » ;
   // les retraits ne sont levés qu'après une lecture réussie.
