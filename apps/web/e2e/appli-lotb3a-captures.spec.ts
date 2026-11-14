@@ -97,7 +97,8 @@ for (const m of MATRIX) {
     await expect(lydia).toBeVisible();
     await lydia.scrollIntoViewIfNeeded();
     await shot(page, `appli-eventrow-${m.tag}`);
-    expect(await splitWords(page, '[data-testid="event-row"]')).toEqual([]);
+    await page.evaluate(() => document.fonts.ready);
+    await expect.poll(() => splitWords(page, '[data-testid="event-row"]')).toEqual([]);
     await ctx.close();
   });
 
@@ -122,32 +123,73 @@ for (const m of MATRIX) {
   });
 }
 
-// Point 7 (parité D20) : la relecture de la page en panne garde la liste et la dit à part, comme le site.
-test("page d'une structure : relecture en panne → la liste reste, la panne se dit une fois, pas de « Aucun événement »", async ({
+// Conversation : un long message (≥ 15 lignes) à ×1,3 : la saisie défile en interne, compteur et « Envoyer » restent visibles et disjoints, le fil aussi.
+test("conversation : long message à 384 px ×1,3, saisie plafonnée, compteur et « Envoyer » visibles, fil visible", async ({
   browser,
 }) => {
-  const { ctx, page } = await open(browser, { scale: 1, theme: "beton" });
-  await visit(page, "/o/roues-libres-66?onglet=evenements");
-  const list = page.getByTestId("structure-events");
-  await expect(list.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
-  const rows = await list.getByTestId("event-row").count();
-  await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0);
-  // Les relectures de la liste tombent en panne ; l'aller-retour par la fiche d'un événement relit la page au retour.
-  await page.route("**/api/events?*structureId=*", (route) => route.fulfill({ status: 503, body: "{}" }));
-  await list.getByTestId("event-row").first().click();
-  await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
-  await page.goBack();
-  await expect(page.getByTestId("structure-upcoming-reread-error")).toBeVisible({ timeout: 30_000 });
-  await expect(list.getByTestId("event-row")).toHaveCount(rows);
-  await expect(page.getByText("Aucun événement à venir")).toHaveCount(0);
-  await expect(page.getByTestId("structure-upcoming-error")).toHaveCount(0);
-  await shot(page, "appli-page-relecture-en-panne-beton-384");
-  // La reprise : la panne disparaît.
-  await page.unroute("**/api/events?*structureId=*");
-  await list.getByTestId("event-row").first().click();
-  await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
-  await page.goBack();
-  await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0, { timeout: 30_000 });
-  await expect(list.getByTestId("event-row")).toHaveCount(rows);
+  const { ctx, page } = await open(browser, { scale: 1.3, theme: "beton" });
+  await visit(page, "/messages");
+  await page.getByTestId("conversation-row").first().click();
+  await expect(page.getByTestId("message-send")).toBeVisible({ timeout: 30_000 });
+  await page.evaluate(() => document.fonts.ready);
+  await page
+    .getByTestId("message-body")
+    .fill(Array.from({ length: 18 }, (_, i) => `Ligne ${i + 1} du message`).join("\n"));
+  const counter = page.locator('[aria-label$="caractères"]').first();
+  await expect(counter).toBeVisible();
+  await shot(page, "appli-conversation-long-beton-384-x13");
+  const [c, b, f, th] = await Promise.all([
+    counter.boundingBox(),
+    page.getByTestId("message-send").boundingBox(),
+    page.getByTestId("message-body").boundingBox(),
+    page.getByTestId("messages").boundingBox(),
+  ]);
+  if (!c || !b || !f || !th) throw new Error("boîtes absentes");
+  const view = page.viewportSize()?.height ?? 900;
+  expect(b.y + b.height).toBeLessThanOrEqual(view);
+  expect(c.y + c.height).toBeLessThanOrEqual(view);
+  expect(c.y).toBeGreaterThanOrEqual(f.y + f.height - 1);
+  expect(c.x < b.x + b.width && c.x + c.width > b.x && c.y < b.y + b.height && c.y + c.height > b.y).toBe(false);
+  expect(f.height).toBeLessThan(200);
+  expect(th.height).toBeGreaterThan(60);
   await ctx.close();
 });
+
+// Point 7 (parité D20) : la relecture de la page en panne garde la liste et la dit à part, comme le site.
+for (const [label, path] of [
+  ["publique", "/o/roues-libres-66?onglet=evenements"],
+  ["du propriétaire", "/page?onglet=evenements"],
+] as const) {
+  test(`page ${label} : relecture en panne → la liste reste, la panne se dit une fois, pas de « Aucun événement »`, async ({
+    browser,
+  }) => {
+    const { ctx, page } = await open(browser, { scale: 1, theme: "beton" });
+    if (label === "du propriétaire") {
+      await visit(page, "/moi");
+      await expect(page.getByTestId("persona-tabbar")).toBeVisible({ timeout: 30_000 });
+    }
+    await visit(page, path);
+    const list = page.getByTestId("structure-events");
+    await expect(list.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
+    const rows = await list.getByTestId("event-row").count();
+    await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0);
+    // Les relectures de la liste tombent en panne ; l'aller-retour par la fiche d'un événement relit la page au retour.
+    await page.route("**/api/events?*structureId=*", (route) => route.fulfill({ status: 503, body: "{}" }));
+    await list.getByTestId("event-row").first().click();
+    await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
+    await page.goBack();
+    await expect(page.getByTestId("structure-upcoming-reread-error")).toBeVisible({ timeout: 30_000 });
+    await expect(list.getByTestId("event-row")).toHaveCount(rows);
+    await expect(page.getByText("Aucun événement à venir")).toHaveCount(0);
+    await expect(page.getByTestId("structure-upcoming-error")).toHaveCount(0);
+    await shot(page, `appli-page-${label === "publique" ? "publique" : "proprietaire"}-relecture-en-panne-beton-384`);
+    // La reprise : la panne disparaît.
+    await page.unroute("**/api/events?*structureId=*");
+    await list.getByTestId("event-row").first().click();
+    await expect(page).toHaveURL(/\/e\//, { timeout: 30_000 });
+    await page.goBack();
+    await expect(page.getByTestId("structure-upcoming-reread-error")).toHaveCount(0, { timeout: 30_000 });
+    await expect(list.getByTestId("event-row")).toHaveCount(rows);
+    await ctx.close();
+  });
+}

@@ -43,6 +43,7 @@ for (const theme of ["beton", "sable"] as const) {
       await setTheme(page, theme);
       await page.goto("/orga/meditesportcar/page");
       await expect(page.getByTestId("owner-page")).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
       await shot(page, `page-proprietaire-${theme}-${width}`);
       // Le nom d'une seule pièce n'est pas coupé en plein mot : une seule ligne.
       const name = await page.getByTestId("page-name").evaluate((el) => ({
@@ -83,10 +84,12 @@ for (const width of [384, 296]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/evenements");
     await expect(page.getByTestId("event-tile").first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
     await shot(page, `evenements-${width}`);
     expect(await splitWords(page, ".w-card__title, .w-card__minimal-title")).toEqual([]);
     await page.goto("/e/rassemblement-du-lydia");
     await expect(page.locator("h1").first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
     await shot(page, `fiche-lydia-${width}`);
     expect(await splitWords(page, "h1, h2")).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
