@@ -11,6 +11,11 @@ export const eventPhotosLabels = {
   titleWithCount: (n: number) => `Photos · ${countFr(n, "album")}`,
   /** « Objectif 66 · 48 photos » sous le titre d'un album. */
   mediaLine: (name: string, photos: number) => `${name} · ${countFr(photos, "photo")}`,
+  /** Une panne de lecture n'est pas « aucun album » : le message, puis « Réessayer ». */
+  loadFailed: "Les albums n'ont pas pu être chargés.",
+  retry: "Réessayer",
+  /** Au-delà de la première page (50 albums) : la suite. */
+  moreAlbums: "Voir plus d'albums",
   officialAlbum: "Album officiel",
   seeAlbum: "Voir l'album",
   /** La phrase gardée en pied de la section (le reste de la note de la maquette n'est pas dans le produit). */

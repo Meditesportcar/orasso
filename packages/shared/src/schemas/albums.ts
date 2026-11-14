@@ -154,7 +154,12 @@ export type AlbumView = AlbumSummary & {
 };
 
 /** `GET /me/albums`, `GET /events/:id/albums`, `GET /media/:id/albums`. */
-export type AlbumsList = { items: AlbumSummary[]; nextCursor: string | null };
+export type AlbumsList = {
+  items: AlbumSummary[];
+  nextCursor: string | null;
+  /** Lot R9g : `GET /events/:id/albums` seulement : le nombre d'albums publiés visibles de l'événement (la page n'en montre que `limit`). */
+  total?: number;
+};
 
 /** Le contenu de la carte « album » du Fil : une carte à part, pas une publication (ni flamme, ni commentaire en R9e). */
 export type AlbumCardView = {
