@@ -13,22 +13,63 @@ import {
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { EventRow, ProRow } from "@/features/explorer/rows";
+import { SmallButton } from "@/features/sorties/bits";
 import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
 
+import type { MoreEventsView } from "./useMoreEvents";
+
 const { space1, space3 } = tokens.spacing;
+
+/** « Voir plus » sous une liste ; après un échec, la panne se dit et « Réessayer » relit la même suite (jamais une liste vidée). */
+function MoreEvents({
+  more,
+  label,
+  errorText,
+  testID,
+}: {
+  more: MoreEventsView | undefined;
+  label: string;
+  errorText: string;
+  testID: string;
+}) {
+  if (!more || (more.next === null && !more.failed)) return null;
+  return (
+    <>
+      {more.failed ? (
+        <Notice tone="error" testID={`${testID}-error`}>
+          {errorText}
+        </Notice>
+      ) : null}
+      <SmallButton
+        icon={more.failed ? "undo" : "down"}
+        disabled={more.busy}
+        onPress={more.onMore}
+        testID={more.failed ? `${testID}-retry` : testID}
+      >
+        {more.failed ? L.readRetry : label}
+      </SmallButton>
+    </>
+  );
+}
 
 export function StructureEvents({
   structure: s,
   upcoming,
   past,
   partners,
+  upcomingMore,
+  pastMore,
 }: {
   structure: StructurePublic;
   /** `null` : la lecture n'a pas abouti (ou n'est pas finie) : on ne dit pas « aucun ». */
   upcoming: EventCard[] | null;
   past: EventCard[] | null;
   partners: ProCard[] | null;
+  /** « Voir plus » au-delà des 50 à venir et des 12 passés. */
+  upcomingMore?: MoreEventsView;
+  pastMore?: MoreEventsView;
 }) {
   const { t } = useTheme();
   const where = [s.postalCode, s.city].filter(Boolean).join(" ");
@@ -41,6 +82,12 @@ export function StructureEvents({
       {upcoming?.map((e) => (
         <EventRow key={e.id} event={e} hints={false} />
       ))}
+      <MoreEvents
+        more={upcomingMore}
+        label={L.eventsMore}
+        errorText={L.eventsReadError}
+        testID="structure-upcoming-more"
+      />
 
       {past && past.length > 0 ? (
         <>
@@ -48,6 +95,7 @@ export function StructureEvents({
           {past.map((e) => (
             <EventRow key={e.id} event={e} hints={false} />
           ))}
+          <MoreEvents more={pastMore} label={L.pastMore} errorText={L.pastReadError} testID="structure-past-more" />
         </>
       ) : null}
 

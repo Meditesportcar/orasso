@@ -59,6 +59,7 @@ import { PageQrSheet } from "./PageQrSheet";
 import { PageTabs } from "./PageTabs";
 import { publicPathOf } from "./pageLinks";
 import { StructureEvents } from "./StructureEvents";
+import { useMoreEvents } from "./useMoreEvents";
 import { useReloadToken } from "./useReloadToken";
 
 const { space1, space4 } = tokens.spacing;
@@ -160,6 +161,9 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       enabled: Boolean(organizer),
     },
   );
+  // « Voir plus » au-delà des 50 à venir et des 12 passés (parité avec le site) : la suite se lit au curseur, sans vider la liste.
+  const moreUpcoming = useMoreEvents(organizer?.id, "upcoming", upcoming.data);
+  const morePast = useMoreEvents(organizer?.id, "past", past.data);
   const partners = useApi(
     () => api.structurePros(data?.kind === "organizer" ? data.slug : ""),
     [data?.kind === "organizer" ? data.slug : null],
@@ -238,8 +242,8 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
             });
 
   const gest = gestOf(kind, router);
-  const upcomingItems: EventCard[] | null = upcoming.data ? upcoming.data.items : null;
-  const pastItems: EventCard[] | null = past.data ? past.data.items : null;
+  const upcomingItems: EventCard[] | null = moreUpcoming.items;
+  const pastItems: EventCard[] | null = morePast.items;
   const partnerItems: ProCard[] | null = partners.data ?? null;
 
   return (
@@ -315,7 +319,14 @@ function OwnerPageBody({ kind }: { kind: OwnerKind }) {
       ) : null}
       {data && head && key ? (
         tab === "events" && data.kind === "organizer" ? (
-          <StructureEvents structure={data.page} upcoming={upcomingItems} past={pastItems} partners={partnerItems} />
+          <StructureEvents
+            structure={data.page}
+            upcoming={upcomingItems}
+            past={pastItems}
+            partners={partnerItems}
+            upcomingMore={moreUpcoming.more}
+            pastMore={morePast.more}
+          />
         ) : tab === "publications" ? (
           <PagePublications
             reloadToken={reloadToken}
