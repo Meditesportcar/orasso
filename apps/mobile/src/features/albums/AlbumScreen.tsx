@@ -126,6 +126,8 @@ export function AlbumScreen({ id }: { id: string }) {
 
   // Lot R9g : l'organisateur de l'événement a ses actions dans la visionneuse (reprise au journal, album officiel).
   const organizer = useIsEventOrganizer(a ?? null);
+  // La propriété (`mine`) et la casquette d'organisateur se calculent séparément : un média qui est aussi l'organisateur de l'événement,
+  // sous sa casquette d'organisateur, a ses droits de titulaire **et** les actions de l'organisateur.
   const role: AlbumViewerRole = a?.mine ? "media" : organizer ? "organizer" : "member";
   return (
     <FlowScreen
@@ -238,6 +240,7 @@ export function AlbumScreen({ id }: { id: string }) {
               album={a}
               index={viewer}
               role={role}
+              organizer={organizer}
               onClose={() => setViewer(null)}
               onDismiss={Platform.OS === "ios" ? runAfterClose : undefined}
               onReport={reportPhoto}

@@ -179,6 +179,23 @@ function Shell() {
         choose({ kind: "organizer", structureId: structureRequests }, "/activite/orga?vue=demandes");
         return;
       }
+      // Un lien de l'appli (profil d'un membre, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
+      // Lot R8b2 : une notification qui porte `postId` ouvre la publication seule (les commentaires s'ouvrent avec `commentId`).
+      const link = publicationLinkOf(data) ?? appLinkOf(data?.link);
+      // Lot R9g : « album publié » (`data.screen = "event-photos"`) ouvre la fiche de l'événement, à la section « Photos ». Traité **avant**
+      // `backToBase()` (comme `structureRequestsTarget`) : la casquette de la structure s'ouvre d'abord (l'organisateur y a le « … » de l'album),
+      // d'un seul `replace` ; sans casquette correspondante, retour à la base puis la fiche.
+      if (link && screen === "event-photos" && /^\/e\/[^/?#\s]+$/.test(link)) {
+        const structureId = typeof data?.structureId === "string" ? data.structureId : null;
+        const own = structureId ? entries.find((e) => e.kind === "organizer" && e.id === structureId) : null;
+        if (structureId && own) {
+          choose({ kind: "organizer", structureId }, `${link}?section=photos`);
+        } else {
+          backToBase();
+          router.navigate(`${link}?section=photos` as never);
+        }
+        return;
+      }
       // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.
       const admin = adminLinkOf(data?.link);
       if (admin) {
@@ -186,18 +203,7 @@ function Shell() {
         return;
       }
       backToBase();
-      // Un lien de l'appli (profil d'un membre, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
-      // Lot R8b2 : une notification qui porte `postId` ouvre la publication seule (les commentaires s'ouvrent avec `commentId`).
-      const link = publicationLinkOf(data) ?? appLinkOf(data?.link);
-      // Lot R9g : « album publié » (`data.screen = "event-photos"`) ouvre la fiche de l'événement, à la section « Photos ».
-      if (link && screen === "event-photos" && /^\/e\/[^/?#\s]+$/.test(link)) {
-        // La notification est celle de l'Activité de la structure : la casquette de cette structure s'ouvre d'abord (l'organisateur y a le
-        // « … » de l'album), comme les autres notifications de la structure ; sans casquette correspondante, la fiche s'ouvre telle quelle.
-        const structureId = typeof data?.structureId === "string" ? data.structureId : null;
-        const own = structureId ? entries.find((e) => e.kind === "organizer" && e.id === structureId) : null;
-        if (structureId && own) choose({ kind: "organizer", structureId }, `${link}?section=photos`);
-        else router.navigate(`${link}?section=photos` as never);
-      } else if (link) router.navigate(link as never);
+      if (link) router.navigate(link as never);
       else router.navigate("/acces");
     },
     [router, backToBase, choose, entries],

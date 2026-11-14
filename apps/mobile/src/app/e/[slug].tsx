@@ -41,7 +41,7 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type ScrollView, StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
@@ -144,6 +144,9 @@ export default function EventPage() {
   // Lot R9g : le lien « Photos » (notification d'album publié, gestion de l'événement) défile jusqu'à la section, une seule fois.
   const pageScroll = useRef<ScrollView>(null);
   const scrolledToPhotos = useRef(false);
+  const revealed = useCallback(() => {
+    scrolledToPhotos.current = true;
+  }, []);
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   // Lot M3 : reprend la lecture partie au toucher de la carte (Explorer, carte), sinon la lance.
@@ -713,15 +716,10 @@ export default function EventPage() {
           slug={e.slug}
           signedIn={status === "in"}
           ownStructure={ownStructure}
-          onSectionY={
-            section === "photos"
-              ? (y) => {
-                  if (scrolledToPhotos.current) return;
-                  scrolledToPhotos.current = true;
-                  pageScroll.current?.scrollTo({ y, animated: false });
-                }
-              : undefined
-          }
+          refreshKey={journalTick}
+          reveal={section === "photos" && !scrolledToPhotos.current}
+          scrollRef={pageScroll}
+          onRevealed={revealed}
         />
       ) : null}
       {/* Lot R6c (R6.3) : qui y va parmi ceux que je suis, et « Inviter du monde » (tout membre connecté, inscrit ou non). */}

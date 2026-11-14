@@ -33,11 +33,11 @@ export const albumsApi = {
     request<null>(`/api/me/albums/${id}/photos/${photoId}`, { method: "DELETE" }),
   publishAlbum: (id: string) => request<AlbumView>(`/api/me/albums/${id}/publish`, { method: "POST" }),
   /** Lot R9g : les albums de la fiche d'un événement (publiés, l'officiel d'abord) ; `signedIn` faux : la liste publique (photos à l'adresse publique). */
-  eventAlbums: (slug: string, signedIn: boolean) =>
+  eventAlbums: (slug: string, signedIn: boolean, cursor?: string | null) =>
     request<AlbumsList>(
       signedIn
-        ? `/api/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50 })}`
-        : `/api/public/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50 })}`,
+        ? `/api/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50, cursor })}`
+        : `/api/public/events/by-slug/${encodeURIComponent(slug)}/albums${qs({ limit: 50, cursor })}`,
     ),
   /** Lot R9g : l'organisateur pose (`on`) ou retire l'étoile « officiel » de l'album. */
   setAlbumOfficial: (eventId: string, albumId: string, on: boolean) =>
