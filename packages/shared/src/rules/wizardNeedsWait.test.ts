@@ -96,3 +96,23 @@ describe("modification de la saisie pendant l'attente (tour 3)", () => {
     expect(waitIsStale(ticket, { ...seen, account: accountAfterAnnouncement("a", "a", false) })).toBe(false);
   });
 });
+
+describe("l'étape est figée pendant l'attente (tour 4)", () => {
+  const seen = { step: 1, epoch: 2, account: "a", leaving: false };
+  const ticket = newTicket("publish", seen);
+
+  it("sortie par un lien ordinaire ou la fermeture (`beforeunload`) ou perte de focus de l'écran (appli) : annulée", () => {
+    // Les deux sorties posent `leaving` dans le contexte (appli : `quitting || blurred`).
+    expect(waitIsStale(ticket, { ...seen, leaving: true })).toBe(true);
+  });
+
+  it("l'écran retrouve le focus : un nouveau billet est nécessaire, l'ancien reste annulé par le composant", () => {
+    expect(waitIsStale(ticket, { ...seen, leaving: false })).toBe(false);
+    expect(waitIsStale(newTicket("publish", { ...seen, leaving: false }), seen)).toBe(false);
+  });
+
+  it("seules la restauration, « Effacer » et « Recommencer » font avancer `epoch` : elles annulent, rien d'autre", () => {
+    expect(waitIsStale(ticket, { ...seen, epoch: seen.epoch + 1 })).toBe(true);
+    expect(waitIsStale(ticket, seen)).toBe(false);
+  });
+});

@@ -210,12 +210,18 @@ export function EventWizard({
   const [waiting, setWaiting] = useState<WaitTicket | null>(null);
   const [due, setDue] = useState<WaitTicket | null>(null);
   const queued = (waiting ?? due)?.action ?? null;
+  // Tour 4 : pendant l'attente l'étape est figée (champs, frise, boutons) ; seul « Annuler » rend la main.
+  const frozen = queued !== null;
+  const queuedRef = useRef(false);
+  queuedRef.current = frozen;
+  // L'écran perd le focus (écran ouvert par-dessus, onglet changé) : l'attente est annulée.
+  const [blurred, setBlurred] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const { me } = useSession();
   const account = me?.user.id ?? null;
   const waitCtx = useMemo(
-    () => ({ step: index, epoch, account, leaving: quitting }),
-    [index, epoch, account, quitting],
+    () => ({ step: index, epoch, account, leaving: quitting || blurred }),
+    [index, epoch, account, quitting, blurred],
   );
   const clickState = needsFailed ? "failed" : canSave ? "ok" : "loading";
   // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
@@ -283,6 +289,8 @@ export function EventWizard({
           setKeptPoster(stored.poster ?? null);
           setResumed(stored);
           setEpoch((e) => e + 1);
+          // Tour 4 : le bandeau « saisie reprise » s'affiche aussi sur un autre temps si CETTE restauration annule une attente.
+          if (queuedRef.current) setShowResume(true);
         }
       }
       setLoaded(true);
@@ -419,6 +427,15 @@ export function EventWizard({
 
   // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin.
   const navigation = useNavigation();
+  useEffect(() => {
+    const off = [
+      navigation.addListener("blur", () => setBlurred(true)),
+      navigation.addListener("focus", () => setBlurred(false)),
+    ];
+    return () => {
+      for (const o of off) o();
+    };
+  }, [navigation]);
   useEffect(() => {
     return navigation.addListener("beforeRemove", (e) => {
       if (leaving.current || done.current) return;
@@ -681,13 +698,9 @@ export function EventWizard({
   // Étape, saisie ou compte changés, ou fenêtre « Quitter l'assistant ? » ouverte : l'attente est annulée (reclic voulu).
   useEffect(() => {
     const gone = leaving.current || done.current;
-    for (const t of [waiting, due]) {
-      // Tour 3 : une restauration qui annule l'attente montre la saisie reprise (même sur un autre temps).
-      if (t && resumed && t.epoch !== waitCtx.epoch) setShowResume(true);
-    }
     if (waiting && (gone || waitIsStale(waiting, waitCtx))) setWaiting(null);
     if (due && (gone || waitIsStale(due, waitCtx))) setDue(null);
-  }, [waiting, due, waitCtx, resumed]);
+  }, [waiting, due, waitCtx]);
 
   const ctx: StepContext = {
     d,
@@ -733,7 +746,12 @@ export function EventWizard({
               {queued === "publish" ? W.needsWaiting : W.publish}
             </Button>
             <View style={styles.actions}>
-              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+              <BackSquare
+                disabled={halted || frozen}
+                onPress={() => void go(-1)}
+                label={W.previous}
+                testID="wizard-back"
+              />
               <Button
                 variant="secondary"
                 icon="calendar"
@@ -760,9 +778,20 @@ export function EventWizard({
         ) : (
           <View style={styles.actions}>
             {index > 0 ? (
-              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+              <BackSquare
+                disabled={halted || frozen}
+                onPress={() => void go(-1)}
+                label={W.previous}
+                testID="wizard-back"
+              />
             ) : (
-              <Button variant="secondary" icon="close" disabled={halted} onPress={close} testID="wizard-cancel">
+              <Button
+                variant="secondary"
+                icon="close"
+                disabled={halted || frozen}
+                onPress={close}
+                testID="wizard-cancel"
+              >
                 {L.cancel}
               </Button>
             )}
@@ -815,7 +844,7 @@ export function EventWizard({
       <StepRail
         labels={eventWizardSteps.map((s) => eventStepLabels[s])}
         index={index}
-        disabled={halted || busy || photoSending !== null}
+        disabled={halted || busy || photoSending !== null || frozen}
         onPick={(i) => {
           setError(null);
           setNotice(null);
@@ -838,6 +867,22 @@ export function EventWizard({
         </View>
       ) : null}
       {notice ? <Notice testID="wizard-notice">{notice}</Notice> : null}
+      {frozen ? (
+        <View style={styles.resume} testID="wizard-wait">
+          <Notice>{W.needsWaitingNote}</Notice>
+          <Button
+            variant="plate"
+            icon="close"
+            onPress={() => {
+              setWaiting(null);
+              setDue(null);
+            }}
+            testID="wizard-wait-cancel"
+          >
+            {W.needsWaitCancel}
+          </Button>
+        </View>
+      ) : null}
       {resumed && (showResume || index === (resumed.step ?? index)) ? (
         <View style={styles.resume} testID="wizard-resumed">
           <Notice>{L.draftResume(resumed.draft.title, formatStamp(resumed.savedAt))}</Notice>
@@ -846,7 +891,9 @@ export function EventWizard({
           </Button>
         </View>
       ) : null}
-      <Screen {...ctx} />
+      <View pointerEvents={frozen ? "none" : "auto"}>
+        <Screen {...ctx} />
+      </View>
       {notifyShown ? (
         <RecipientsBanner count={previewCount} timing={notifyTimingLine(notifyWhen, { now: notifyClock })} />
       ) : null}

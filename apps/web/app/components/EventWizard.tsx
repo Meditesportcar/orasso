@@ -187,16 +187,6 @@ export function EventWizard(props: Props) {
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
-  // Tour 3 : une modification de la saisie PAR LA PERSONNE (un champ) change `epoch` et annule le clic en attente ; les
-  // fusions automatiques (missions, valeurs calculées) passent par `setD` directement et ne l'annulent pas.
-  const userSet = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
-    setEpoch((e) => e + 1);
-    set(key, value);
-  };
-  const userSetD: typeof setD = (update) => {
-    setEpoch((e) => e + 1);
-    setD(update);
-  };
   // Brouillon (création ou brouillon rouvert) : enregistré à chaque temps ; publié : à la fin seulement.
   const isDraft = !saved || saved.status === "draft";
 
@@ -369,13 +359,16 @@ export function EventWizard(props: Props) {
     const timer = setTimeout(() => writeStorage(storageKey, dirty ? storedWizard(d, index) : null), 300);
     return () => clearTimeout(timer);
   }, [d, index, dirty, saving, storageKey, needsSettled]);
+  // Tour 4 : `beforeunload` est toujours écouté (lien ordinaire, fermeture, rechargement) : toute sortie annule le clic
+  // en attente ; la confirmation du navigateur n'est demandée que si la saisie est modifiée.
   useEffect(() => {
-    if (!dirty || saving) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      if (!leaving.current) e.preventDefault();
+    const leave = (e: BeforeUnloadEvent) => {
+      setWaiting(null);
+      setDue(null);
+      if (dirty && !saving && !leaving.current) e.preventDefault();
     };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    window.addEventListener("beforeunload", leave);
+    return () => window.removeEventListener("beforeunload", leave);
   }, [dirty, saving]);
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
@@ -389,6 +382,11 @@ export function EventWizard(props: Props) {
   };
   // Une navigation en cours vers un autre chemin compte aussi comme sortie (tour 3), même sans fenêtre « Quitter ».
   const navigation = useNavigation();
+  /** « Annuler » : le clic en attente est abandonné, la personne reprend la main. */
+  const cancelWait = () => {
+    setWaiting(null);
+    setDue(null);
+  };
   const leavingAsked =
     blocker.state === "blocked" ||
     (navigation.state !== "idle" &&
@@ -672,7 +670,7 @@ export function EventWizard(props: Props) {
 
   const [title, intro] = HEADS[step];
   let body: ReactNode = null;
-  const stepProps = { d, set: userSet, setD: userSetD };
+  const stepProps = { d, set, setD };
   if (step === "type")
     body = (
       <TypeStep
@@ -760,7 +758,8 @@ export function EventWizard(props: Props) {
         </div>
       )}
 
-      <section className="wz-step s-stack" aria-labelledby="step-title" data-step={step}>
+      {/* Tour 4 : pendant l'attente, l'étape est figée (`inert` : champs, liens, boutons) ; seul « Annuler » rend la main. */}
+      <section className="wz-step s-stack" aria-labelledby="step-title" data-step={step} inert={queued !== null}>
         <header className="wz-head">
           <h2 id="step-title" className="wz-title">
             {title}
@@ -808,7 +807,17 @@ export function EventWizard(props: Props) {
         )}
       </section>
 
-      <div className={last ? "wz-cta wz-cta--end" : "wz-cta"}>
+      {queued !== null && (
+        <div className="s-notice s-stack s-stack--tight" role="status" data-testid="wizard-wait">
+          <span>{W.needsWaitingNote}</span>
+          <div className="s-row">
+            <Button variant="secondary" icon="close" onClick={() => cancelWait()} data-testid="wizard-wait-cancel">
+              {W.needsWaitCancel}
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className={last ? "wz-cta wz-cta--end" : "wz-cta"} inert={queued !== null}>
         {last && isDraft ? (
           <>
             <Button

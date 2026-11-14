@@ -419,6 +419,9 @@ export const wizardV2Labels = {
   needsRetry: "Recharger les missions",
   // R9-assistant (14/11/2026) : libellé du bouton dont le clic attend l'arrivée des missions.
   needsWaiting: "Chargement…",
+  // Tour 4 : pendant l'attente l'étape est figée ; seul ce bouton rend la main (aucun libellé des docs : le plus simple).
+  needsWaitingNote: "Les missions de l'événement se chargent : l'étape continuera toute seule dès leur arrivée.",
+  needsWaitCancel: "Annuler",
   posterStillSending: "La photo de l'affiche s'envoie encore : attends la fin de l'envoi.",
 } as const;
 

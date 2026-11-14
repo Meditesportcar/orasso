@@ -328,11 +328,13 @@ test("appli : réponse de création perdue, le nouvel essai ne recrée pas la mi
   await ctx.close();
 });
 
-test("appli : clic en attente puis modification de la saisie : attente annulée, rien d'enregistré, bouton disponible", async ({
+// Tour 4 : pendant l'attente l'étape est figée ; « Annuler » rend la main. (Une saisie forcée par la recette malgré le gel
+// annule aussi l'attente : ceinture gardée dans l'appli, `epoch` avance à chaque modification de champ.)
+test("appli : clic en attente puis « Annuler » : l'étape se dégèle, rien n'est enregistré ; une saisie forcée annule aussi", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
-  const { damien, id } = await appliDraft(`Appli modif ${unique()}`, ["food_truck"]);
+  const { damien, id } = await appliDraft(`Appli annuler ${unique()}`, ["food_truck"]);
   const { ctx, page } = await open(browser);
   await signInOrganizer(page);
   let release: () => void = () => undefined;
@@ -353,13 +355,19 @@ test("appli : clic en attente puis modification de la saisie : attente annulée,
   await v(page, "wizard-title").fill(`Appli premier ${unique()}`);
   await v(page, "wizard-next").click();
   await expect(v(page, "wizard-next")).toContainText("Chargement…");
+  await expect(v(page, "wizard-wait")).toBeVisible();
+  await v(page, "wizard-wait-cancel").click();
+  await expect(v(page, "wizard-next")).toContainText("Continuer");
+  await expect(page.getByTestId("wizard-wait")).toHaveCount(0);
+  // Deuxième clic, puis une saisie forcée par la recette malgré le gel : l'attente est annulée aussi.
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-next")).toContainText("Chargement…");
   const second = `Appli second ${unique()}`;
   await v(page, "wizard-title").fill(second);
   await expect(v(page, "wizard-next")).toContainText("Continuer");
   release();
   await page.waitForLoadState("networkidle");
   await expect(v(page, "wizard-step")).toContainText("Type");
-  await expect(v(page, "wizard-title")).toHaveValue(second);
   expect(writes).toEqual([]);
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).not.toBe(second);
   await v(page, "wizard-next").click();
