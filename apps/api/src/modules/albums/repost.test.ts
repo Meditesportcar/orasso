@@ -2,7 +2,7 @@
 // le crédit servi (liste blanche), l'export 4:5 d'une publication créditée, et la notification `album_published`.
 import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -193,6 +193,116 @@ describe("POST /events/:id/albums/:albumId/photos/:photoId/repost", () => {
     const first = await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.sourceAlbumPhotoId, photo));
     expect((await call(orga, "DELETE", `/me/feed-posts/${first[0]?.postId}`)).status).toBe(204);
     expect((await repost(orga, photo)).status).toBe(201);
+  });
+
+  describe("la photo, l'album ou l'accréditation tombent pendant la copie du fichier", () => {
+    /** Suspend la lecture du fichier de la photo (début de la copie) ; rend la clé des écritures et la libération. */
+    function suspendCopy(photoKey: string) {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let reached: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const realGet = storage.get.bind(storage);
+      const realPut = storage.put.bind(storage);
+      const written: string[] = [];
+      const getSpy = vi.spyOn(storage, "get").mockImplementation(async (key: string) => {
+        if (key !== photoKey) return realGet(key);
+        const data = await realGet(key);
+        reached();
+        await gate;
+        return data;
+      });
+      const putSpy = vi.spyOn(storage, "put").mockImplementation(async (key: string, data: Buffer) => {
+        written.push(key);
+        return realPut(key, data);
+      });
+      return {
+        started,
+        release,
+        written,
+        restore: () => {
+          getSpy.mockRestore();
+          putSpy.mockRestore();
+        },
+      };
+    }
+
+    async function interrupted(change: (a: { id: string; photos: { id: string }[] }) => Promise<void>) {
+      const a = await threeDecisions();
+      albumId = a.id;
+      const target = a.photos[2];
+      const suspended = suspendCopy(target?.storageKey as string);
+      try {
+        const pending = repost(orga, target?.id as string);
+        await suspended.started;
+        await change({ id: a.id, photos: a.photos.map((p) => ({ id: p.id })) });
+        suspended.release();
+        const res = await pending;
+        // Rien n'est publié, et le fichier copié est effacé.
+        expect(await db.select().from(feedPosts)).toHaveLength(0);
+        expect(await db.select().from(feedPostPhotos)).toHaveLength(0);
+        expect(suspended.written.length).toBeGreaterThan(0);
+        for (const key of suspended.written) expect(await storage.get(key)).toBeNull();
+        return res;
+      } finally {
+        suspended.release();
+        suspended.restore();
+      }
+    }
+
+    it("la photo est retirée : 404, rien n'est publié, la copie est effacée", async () => {
+      const res = await interrupted(async (a) => {
+        const del = await call(leo, "DELETE", `/me/albums/${a.id}/photos/${a.photos[2]?.id}`);
+        expect(del.status).toBe(204);
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("l'album est supprimé : 404, rien n'est publié, la copie est effacée", async () => {
+      const res = await interrupted(async (a) => {
+        expect((await call(leo, "DELETE", `/me/albums/${a.id}`)).status).toBe(204);
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("l'accréditation du média est révoquée : 404, rien n'est publié, la copie est effacée", async () => {
+      const res = await interrupted(async () => {
+        await db.execute(sql`update applications set status = 'withdrawn' where user_id = ${leo.id}`);
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  it("une photo déjà reprise dit « déjà reprise » même hors fenêtre ; une photo d'ancienne galerie dit plate_unknown", async () => {
+    const a = await threeDecisions();
+    albumId = a.id;
+    const [reposted, legacy] = [a.photos[1]?.id as string, a.photos[0]?.id as string];
+    expect((await repost(orga, reposted)).status).toBe(201);
+    await db
+      .update(eventAlbumPhotos)
+      .set({ plateState: "unknown", plateRects: null })
+      .where(eq(eventAlbumPhotos.id, legacy));
+    const publishedAt = new Date(
+      (
+        (await db.execute(sql`select published_at from event_albums where id = ${a.id}`)).rows[0] as {
+          published_at: Date;
+        }
+      ).published_at,
+    );
+    useClock(new Date(publishedAt.getTime() + 31 * 86_400_000));
+    const again = await repost(orga, reposted);
+    expect(again.status).toBe(409);
+    expect(again.json.error.code).toBe("already_reposted");
+    const old = await repost(orga, legacy);
+    expect(old.status).toBe(409);
+    expect(old.json.error.code).toBe("plate_unknown");
+    const third = await repost(orga, a.photos[2]?.id as string);
+    expect(third.status).toBe(422);
+    expect(third.json.error.code).toBe("repost_expired");
   });
 
   it("album brouillon, retiré ou d'un média non accrédité : 404", async () => {

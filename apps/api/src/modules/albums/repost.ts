@@ -18,7 +18,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { eventAlbumPhotos, eventAlbums, events, feedPostPhotos } from "../../db/schema";
+import { applications, eventAlbumPhotos, eventAlbums, events, feedPostPhotos } from "../../db/schema";
 import { requireAuthorship } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
@@ -99,12 +99,13 @@ export const albumRepost = {
         ),
       );
     if (!photo) throw notFound(L.errors.photoNotFound);
-    // 3a. Le contenu frais : la reprise est permise 30 jours après la publication de l'album (quelle que soit la date de l'événement).
-    if (!repostWindowOpen(found.a.publishedAt, now()))
-      throw new AppError(422, "repost_expired", L.errors.repostExpired);
     // 3. La plaque : la décision du média est gardée. `unknown` (ancienne galerie) : on ne sait pas, donc on ne reprend pas.
     if (photo.plateState === "unknown") throw new AppError(409, "plate_unknown", L.errors.plateUnknown);
     if (await isReposted(db, photoId)) throw alreadyError();
+    // 3a. Le contenu frais : la reprise est permise 30 jours après la publication de l'album (quelle que soit la date de l'événement).
+    //     Après les deux contrôles ci-dessus : une photo déjà reprise dit « déjà reprise », une photo `unknown` dit `plate_unknown`.
+    if (!repostWindowOpen(found.a.publishedAt, now()))
+      throw new AppError(422, "repost_expired", L.errors.repostExpired);
     // 4. Le rattachement : le rôle `organizer` est celui de la structure de l'événement (déjà vérifié par `requireAuthorship`), jamais reçu.
     //    La fenêtre de 30 jours après la fin de l'événement (`withinAttachWindow`) ne s'applique pas : c'est celle de l'album qui compte (3a).
     //    L'événement doit rester visible (publié ou annulé, pas sur invitation).
@@ -140,6 +141,38 @@ export const albumRepost = {
         // Deux reprises simultanées de la même photo : la seconde attend le verrou, puis voit la première.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album-repost:${photoId}`}))`);
         if (await isReposted(tx, photoId)) throw alreadyError();
+        // Pendant la copie, l'album, la photo ou l'accréditation ont pu tomber : on relit **et on verrouille** avant d'écrire. Même ordre
+        // que les retraits (verrou consultatif de l'album, puis les lignes) : un retrait, une suppression d'album ou une révocation
+        // attend la fin de la reprise, ou a fini avant et la relecture le voit. Si une condition tombe : 404, et le fichier copié est
+        // effacé par le `catch` ci-dessous.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`album:${albumId}`}))`);
+        await tx
+          .select({ id: applications.id })
+          .from(applications)
+          .where(
+            and(
+              eq(applications.eventId, eventId),
+              eq(applications.mediaProfileId, found.a.mediaProfileId),
+              eq(applications.kind, "media"),
+            ),
+          )
+          .for("share");
+        const [albumAgain] = await albumBase(tx)
+          .where(and(eq(eventAlbums.id, albumId), eq(eventAlbums.eventId, eventId), albumVisibleSql(now())))
+          .for("share", { of: eventAlbums });
+        if (!albumAgain) throw notFound(L.errors.albumNotFound);
+        const [photoAgain] = await tx
+          .select({ id: eventAlbumPhotos.id })
+          .from(eventAlbumPhotos)
+          .where(
+            and(
+              eq(eventAlbumPhotos.id, photoId),
+              eq(eventAlbumPhotos.albumId, albumId),
+              isNull(eventAlbumPhotos.deletedAt),
+            ),
+          )
+          .for("share");
+        if (!photoAgain) throw notFound(L.errors.photoNotFound);
         await insertPostWithPhotos(
           tx,
           {
