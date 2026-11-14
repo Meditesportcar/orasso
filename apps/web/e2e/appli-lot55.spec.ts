@@ -177,6 +177,18 @@ async function published(where: { slug?: string; email?: string }): Promise<{ n:
   return row ?? { n: 0, views: 0 };
 }
 
+/** Les liens (hors galeries) publiés sur un événement, tous médias confondus : ce que « Médias » de la fiche affiche depuis R9g. */
+async function linksOn(slug: string): Promise<number> {
+  const [row] = await sql<{ n: number }>(
+    `select count(*)::int as n from media_contents c
+       join media_profiles m on m.id = c.media_profile_id and m.deleted_at is null
+       join events e on e.id = c.event_id
+      where c.deleted_at is null and c.kind <> 'gallery' and e.slug = $1`,
+    [slug],
+  );
+  return row?.n ?? 0;
+}
+
 /** Nombre écrit comme l'appli (`toLocaleString("fr-FR")`, espace insécable fine), en motif d'expression régulière. */
 const frNumber = (n: number) => n.toLocaleString("fr-FR").replace(/\s/g, "\\s");
 
@@ -511,8 +523,8 @@ for (const theme of THEMES) {
     await expect(contents).toBeVisible({ timeout: 30_000 });
     await contents.scrollIntoViewIfNeeded();
     const rows = contents.getByTestId("event-media-content");
-    // Tous les contenus publiés sur l'événement, tous médias confondus (lus dans la base).
-    const onEvent = (await published({ slug: "beziers-night-2026" })).n;
+    // R9g : les galeries sont des albums de la section « Photos » ; « Médias » ne garde que les liens, tous médias confondus (lus dans la base).
+    const onEvent = await linksOn("beziers-night-2026");
     await expect(rows).toHaveCount(onEvent);
     await expect(rows.first()).toContainText("Le roll de minuit");
     await expect(rows.first()).toContainText("Mis en avant");

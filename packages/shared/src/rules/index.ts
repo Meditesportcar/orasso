@@ -31,6 +31,7 @@ export * from "./eventInvites";
 export * from "./eventJournal";
 export * from "./eventNotifications";
 export * from "./eventNotifyScreen";
+export * from "./eventPhotos";
 export * from "./eventProgress";
 export * from "./eventSeats";
 export * from "./explore";

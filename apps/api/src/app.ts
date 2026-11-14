@@ -34,6 +34,8 @@ import { activityRoutes } from "./modules/activity/routes";
 import { adminPublicRoutes, adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
+import { albumsEventPublicRoutes } from "./modules/albums/event-public";
+import { albumOfficialRoutes } from "./modules/albums/official-routes";
 import { albumsPublicRoutes, albumsRoutes } from "./modules/albums/routes";
 import { albumTagsRoutes } from "./modules/albums/tags-routes";
 import { isLegacyGalleryKey, legacyFileState } from "./modules/albums/view";
@@ -260,6 +262,7 @@ app.use("*", (c, next) =>
 app.route("/", feedPublicPhotoRoutes);
 // Vague R9 (lot R9e) : photos publiques d'un album publié visible de tous (T34), avant la session (aucun cookie dans une réponse en cache public).
 app.route("/", albumsPublicRoutes);
+app.route("/", albumsEventPublicRoutes);
 // Vague R9 (lot R9e) : `?cards=album` (le client sait dessiner la carte « album » du Fil) lu sur `/fil` et `/fil/*`.
 app.use("/fil/*", albumCardsMiddleware);
 // Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
@@ -279,6 +282,7 @@ app.route("/", structuresRoutes);
 app.route("/", providersRoutes);
 // Vague R9 (lot R9e) : albums des médias ; avant `mediaRoutes` (il décore `GET /media/:id` de ses compteurs).
 app.route("/", albumsRoutes);
+app.route("/", albumOfficialRoutes);
 // Lot R9f : identifications sur les photos d'album, « Tes photos », « En story » et « Enregistrer » (session exigée).
 app.route("/", albumTagsRoutes);
 app.route("/", mediaRoutes);

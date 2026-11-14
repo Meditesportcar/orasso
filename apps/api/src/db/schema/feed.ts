@@ -26,6 +26,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { eventAlbumPhotos } from "./albums";
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { events } from "./events";
@@ -160,10 +161,20 @@ export const feedPostPhotos = pgTable(
     position: smallint("position").notNull(),
     plateBlurred: boolean("plate_blurred").notNull().default(false),
     noPlateConfirmed: boolean("no_plate_confirmed").notNull().default(false),
+    /**
+     * Lot R9g (T44, T45) : une photo reprise d'un album dans le journal de l'événement garde le crédit du média (`credit_media_id`, la
+     * page du média) et sa source (`source_album_photo_id`). Un crédit vient toujours d'une photo d'album (CHECK). `restrict` : la photo
+     * d'album d'une reprise n'est jamais effacée en dur (un album se retire en douceur, `deleted_at` ; seul un brouillon est purgé, et
+     * un brouillon ne se reprend pas). Une même photo ne se reprend qu'une fois (index unique partiel) ; supprimer la publication libère la photo.
+     */
+    creditMediaId: uuid("credit_media_id").references(() => mediaProfiles.id, { onDelete: "set null" }),
+    sourceAlbumPhotoId: uuid("source_album_photo_id").references(() => eventAlbumPhotos.id, { onDelete: "restrict" }),
     ...timestamps,
   },
   (t) => [
     uniqueIndex("feed_post_photos_position_key").on(t.postId, t.position),
+    uniqueIndex("feed_post_photos_source_key").on(t.sourceAlbumPhotoId).where(sql`${t.sourceAlbumPhotoId} is not null`),
+    check("feed_post_photos_credit_check", sql`${t.creditMediaId} is null or ${t.sourceAlbumPhotoId} is not null`),
     check("feed_post_photos_position_check", sql`${t.position} between 0 and 5`),
     check("feed_post_photos_plate_check", sql`${t.plateBlurred} or ${t.noPlateConfirmed}`),
   ],

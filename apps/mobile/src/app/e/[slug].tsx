@@ -41,8 +41,8 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type ScrollView, StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
 import { CandSheet } from "@/features/event/CandSheet";
@@ -60,6 +60,7 @@ import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
 import { NotifyBell } from "@/features/event/NotifyBell";
 import { OrgBar } from "@/features/event/OrgBar";
+import { PhotosSection } from "@/features/event/PhotosSection";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { PresenceSheet } from "@/features/event/PresenceSheet";
 import { orderPlaces, usedNow } from "@/features/event/places";
@@ -132,12 +133,21 @@ export default function EventPage() {
     candidater,
     jour,
     crew: crewParam,
+    section,
   } = useLocalSearchParams<{
     slug: string;
     candidater?: string;
     jour?: string;
     crew?: string;
+    section?: string;
   }>();
+  // Lot R9g : le lien « Photos » (notification d'album publié, gestion de l'événement) défile jusqu'à la section, une seule fois.
+  const pageScroll = useRef<ScrollView>(null);
+  // Le slug pour lequel le lien profond a déjà défilé (un autre événement sur la même instance : de nouveau).
+  const scrolledFor = useRef<string | null>(null);
+  const revealed = useCallback(() => {
+    scrolledFor.current = slug;
+  }, [slug]);
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   // Lot M3 : reprend la lecture partie au toucher de la carte (Explorer, carte), sinon la lance.
@@ -145,6 +155,17 @@ export default function EventPage() {
     enabled: status !== "loading",
   });
   const e = event.data;
+  // Le plateau (au-dessus de « Photos ») se lit à part et repousse la section en arrivant : le lien profond attend sa résolution, ou 4 s au plus
+  // **à partir du lancement de sa lecture** (l'événement chargé), par événement.
+  const eventId = e?.id ?? null;
+  const [lineupSettledFor, setLineupSettledFor] = useState<string | null>(null);
+  const lineupSettled = useCallback(() => setLineupSettledFor(eventId), [eventId]);
+  useEffect(() => {
+    if (!eventId) return;
+    const timer = setTimeout(() => setLineupSettledFor(eventId), 4_000);
+    return () => clearTimeout(timer);
+  }, [eventId]);
+  const lineupDone = eventId !== null && lineupSettledFor === eventId;
   // Compteurs de la fiche (lot R8d) : `publications` (le journal) et `mentions` (absent sans session), posés par l'API.
   const counts: PageCounts = (e ?? {}) as PageCounts;
   // Lot M3 : la carte touchée (aperçu immédiat) et la place de son affiche (transition, une seule fois).
@@ -544,6 +565,7 @@ export default function EventPage() {
         </>
       }
       liftHero
+      scrollRef={pageScroll}
       onClose={close}
       onRefresh={async () => {
         setJournalTick((t) => t + 1);
@@ -699,7 +721,21 @@ export default function EventPage() {
         </SmButton>
       ) : null}
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
-      <LineupBlock eventId={e.id} slug={e.slug} />
+      <LineupBlock key={e.id} eventId={e.id} slug={e.slug} onSettled={lineupSettled} />
+      {/* Lot R9g : « Photos », les albums des médias accrédités (l'officiel en tête) ; rien sans album publié. */}
+      {!cancelled ? (
+        <PhotosSection
+          key={e.slug}
+          slug={e.slug}
+          signedIn={status === "in"}
+          ownStructure={ownStructure}
+          refreshKey={journalTick}
+          // Instance réutilisée A → B : `useApi` garde la fiche A pendant que B charge ; le défilement ne vaut que pour la fiche demandée.
+          reveal={section === "photos" && e.slug === slug && lineupDone && scrolledFor.current !== slug}
+          scrollRef={pageScroll}
+          onRevealed={revealed}
+        />
+      ) : null}
       {/* Lot R6c (R6.3) : qui y va parmi ceux que je suis, et « Inviter du monde » (tout membre connecté, inscrit ou non). */}
       {shareable ? <WhoGoes going={going.data} onInvite={() => setInviting(true)} /> : null}
       <AdmissionTags event={e} />

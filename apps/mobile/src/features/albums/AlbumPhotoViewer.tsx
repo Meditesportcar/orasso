@@ -17,6 +17,7 @@ export function AlbumPhotoViewer({
   album,
   index,
   role,
+  organizer = false,
   onClose,
   onDismiss,
   onReport,
@@ -27,6 +28,8 @@ export function AlbumPhotoViewer({
   /** La photo ouverte ; `null` : fermée. */
   index: number | null;
   role: AlbumViewerRole;
+  /** La casquette courante est l'organisateur de l'événement : ses actions (R9g) s'ajoutent à celles du rôle R9f ; le rôle seul ne les ouvre jamais (le média auteur qui porte aussi cette casquette a les deux). */
+  organizer?: boolean;
   onClose: () => void;
   /** La visionneuse est fermée (iOS : `Modal.onDismiss`) : l'écran ouvre alors la feuille suivante. */
   onDismiss?: () => void;
@@ -51,7 +54,7 @@ export function AlbumPhotoViewer({
   }, [index]);
   const photos = album.photos;
   const current = index === null ? null : (photos[Math.min(at, photos.length - 1)] ?? null);
-  const registered = actionsFor(role);
+  const registered = actionsFor(role, organizer);
   return (
     <Modal
       visible={index !== null}

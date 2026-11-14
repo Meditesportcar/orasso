@@ -348,6 +348,28 @@ describe("pagination effective (Codex 7)", () => {
     expect(first.json.items).toHaveLength(20);
     expect(first.json.nextCursor).not.toBeNull();
   });
+
+  it("51 albums : la première page (50) dit le total et garde un curseur ; la suivante rend le 51e, sans doublon ; la liste publique pareil", async () => {
+    const ids = await many(51);
+    for (const path of [`/events/by-slug/${eventSlug}/albums`, `/public/events/by-slug/${eventSlug}/albums`]) {
+      const first = await call(path.startsWith("/public") ? null : kenji, "GET", `${path}?limit=50`);
+      expect(first.status).toBe(200);
+      expect(first.json.items).toHaveLength(50);
+      expect(first.json.total).toBe(51);
+      expect(first.json.nextCursor).toBe(first.json.items[49].id);
+      const second = await call(
+        path.startsWith("/public") ? null : kenji,
+        "GET",
+        `${path}?limit=50&cursor=${first.json.nextCursor}`,
+      );
+      expect(second.json.items).toHaveLength(1);
+      expect(second.json.nextCursor).toBeNull();
+      expect(second.json.total).toBe(51);
+      const seen = [...first.json.items, ...second.json.items].map((a: { id: string }) => a.id);
+      expect(new Set(seen).size).toBe(51);
+      expect([...seen].sort()).toEqual([...ids].sort());
+    }
+  });
 });
 
 describe("événement annulé", () => {
@@ -401,7 +423,7 @@ describe("liste blanche", () => {
     );
     const list = await call(kenji, "GET", `/events/${eventId}/albums`);
     expect([...keysOf(list.json)].sort()).toEqual(
-      [...keysOf({ items: [view.json], nextCursor: null })].filter((k) => k !== "photos").sort(),
+      [...keysOf({ items: [view.json], nextCursor: null, total: 4 })].filter((k) => k !== "photos").sort(),
     );
     const owner = await albumRow(album.id);
     for (const text of [view.text, list.text]) {

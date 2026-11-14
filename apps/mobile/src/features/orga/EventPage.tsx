@@ -22,6 +22,7 @@ import {
   eventEditorLabels as EL,
   type EventCounters,
   eventOutlookLabels,
+  eventPhotosLabels,
   eventStatusLabels,
   invitationLabels,
   eventJournalLabels as JL,
@@ -29,6 +30,7 @@ import {
   orgaLabels,
   orgaV2Labels,
   remainingFil,
+  showPhotosSection,
   ticketingAppLabels,
   triageAppLabels,
   voteOrgaLabels,
@@ -654,6 +656,8 @@ export function EventPage({
             >
               {afterEventLabels.reportTitle} · {afterEventLabels.thanksTitle}
             </Button>
+            {/* Lot R9g : « Photos · N albums · officiel : <média> » (les albums des médias accrédités) ouvre la fiche, à la section. */}
+            <PhotosLine slug={e.slug} />
             <Button
               variant="secondary"
               icon="copy"
@@ -667,6 +671,26 @@ export function EventPage({
         </>
       ) : null}
     </FlowScreen>
+  );
+}
+
+/** Lot R9g : la ligne « Photos » du bloc « Après » ; rien tant qu'aucun album n'est publié. */
+function PhotosLine({ slug }: { slug: string }) {
+  const router = useRouter();
+  const albums = useApi(() => api.eventAlbums(slug, true), [slug]);
+  const items = albums.data?.items ?? [];
+  if (!showPhotosSection(items)) return null;
+  const official = items.find((a) => a.official)?.media.name ?? null;
+  return (
+    <Button
+      variant="secondary"
+      icon="camera"
+      onPress={() => router.push(`/e/${slug}?section=photos` as never)}
+      fullWidth
+      testID="orga-photos"
+    >
+      {eventPhotosLabels.manageLine(items.length, official)}
+    </Button>
   );
 }
 

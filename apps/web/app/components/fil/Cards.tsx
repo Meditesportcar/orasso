@@ -14,6 +14,7 @@ import { useState } from "react";
 
 import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
+import { CreditFoot, CreditOverlay } from "../publications/CreditLine";
 import { FoldedCaption } from "../publications/FoldedCaption";
 import { OfferLine, OfferTag } from "../publications/OfferLine";
 import { AlbumCard } from "./AlbumCard";
@@ -237,6 +238,8 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
           </div>
         ))}
       </div>
+      {/* Lot R9g (T45) : le crédit d'une photo reprise d'un album, sur la photo affichée. */}
+      <CreditOverlay credit={post.photos[Math.min(index, n - 1)]?.credit} />
       {n > 1 ? (
         <span className="fil-photos__count" aria-hidden="true" data-testid="feed-post-photo-count">
           {L.photoOf(index + 1, n)}
@@ -297,6 +300,8 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
         </p>
       ) : null}
       <FeedPhotos post={post} />
+      {/* Lot R9g (T45) : « repartagée, crédit non retirable · Voir l'album » sous la photo reprise. */}
+      <CreditFoot credit={post.photos.find((p) => p.credit)?.credit} />
       {post.offer ? <OfferLine offer={post.offer} /> : null}
       {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
       {post.vehicle || (post.event && !post.attach) ? (

@@ -13,7 +13,7 @@ export const r9NotificationTable = {
     label: "Un album de photos est publié",
     title: "{name}",
     body: "{name} : un nouvel album de photos vient d'être publié.",
-    push: true,
+    push: false,
     email: false,
   },
   album_tagged: {
