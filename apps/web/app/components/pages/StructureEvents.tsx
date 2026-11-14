@@ -170,7 +170,8 @@ export function StructureEvents({
         </h2>
         {upcoming === null ? (
           <ReadError text={L.eventsReadError} testId="structure-events-error" />
-        ) : upcoming.length === 0 && params.get(EVENTS_CURSOR_PARAM.upcoming) ? (
+        ) : upcoming.length === 0 && up.readFailed ? null : upcoming.length === 0 &&
+          params.get(EVENTS_CURSOR_PARAM.upcoming) ? (
           <FromStart
             href={fromStartHref(location, EVENTS_CURSOR_PARAM.upcoming)}
             testId="structure-upcoming-from-start"
@@ -205,34 +206,34 @@ export function StructureEvents({
           </h2>
           <ReadError text={L.pastReadError} testId="structure-past-error" />
         </section>
-      ) : past.length === 0 && params.get(EVENTS_CURSOR_PARAM.past) ? (
+      ) : past.length > 0 || old.readFailed || params.get(EVENTS_CURSOR_PARAM.past) ? (
         <section className="s-stack" aria-labelledby="so-past">
           <h2 id="so-past" className="s-h2 s-head">
             Événements passés
           </h2>
-          <FromStart href={fromStartHref(location, EVENTS_CURSOR_PARAM.past)} testId="structure-past-from-start" />
-        </section>
-      ) : past.length > 0 ? (
-        <section className="s-stack" aria-labelledby="so-past">
-          <h2 id="so-past" className="s-h2 s-head">
-            Événements passés
-          </h2>
-          <div className="w-cards" data-testid="structure-past">
-            {past.map((event) => (
-              <EventTile key={event.id} event={event} showStructure={false} />
-            ))}
-          </div>
+          {past.length > 0 ? (
+            <div className="w-cards" data-testid="structure-past">
+              {past.map((event) => (
+                <EventTile key={event.id} event={event} showStructure={false} />
+              ))}
+            </div>
+          ) : !old.readFailed ? (
+            <FromStart href={fromStartHref(location, EVENTS_CURSOR_PARAM.past)} testId="structure-past-from-start" />
+          ) : null}
+          {/* La panne de la relecture se dit à part, quelle que soit la longueur de la liste gardée (vide comprise). */}
           {old.readFailed ? <ReadError text={L.pastReadError} testId="structure-past-reread-error" /> : null}
-          <MoreEvents
-            next={old.next}
-            failed={old.failed}
-            busy={old.busy}
-            onMore={() => void old.more()}
-            testId="structure-past-more"
-            label={L.pastMore}
-            errorText={L.pastReadError}
-            href={moreHref(location, EVENTS_CURSOR_PARAM.past, old.next)}
-          />
+          {past.length > 0 ? (
+            <MoreEvents
+              next={old.next}
+              failed={old.failed}
+              busy={old.busy}
+              onMore={() => void old.more()}
+              testId="structure-past-more"
+              label={L.pastMore}
+              errorText={L.pastReadError}
+              href={moreHref(location, EVENTS_CURSOR_PARAM.past, old.next)}
+            />
+          ) : null}
         </section>
       ) : null}
 
