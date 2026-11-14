@@ -149,6 +149,9 @@ export const storyPublishLabels = {
   /** Le compte a changé pendant l'envoi : on ne sait pas si la story est partie (la réponse n'a pas été appliquée). */
   accountChangedUncertain:
     "Le compte connecté a changé pendant l'envoi : ta story a peut-être été publiée sous ton autre compte. Vérifie-le en t'y reconnectant.",
+  /** L'envoi est resté sans réponse (réseau perdu ou délai) : la story est peut-être partie, ce n'est pas un échec certain. */
+  publishUncertain:
+    "Ta story a peut-être été publiée. Vérifie sur ton profil avant de la republier ; si elle n'y est pas, réessaie.",
   /** L'API a accepté la story avant le changement de compte : elle est publiée, sous le compte qui a ouvert l'écran. */
   accountChangedPublished:
     "Ta story a été publiée, sous le compte qui a ouvert cet écran. Le compte connecté a changé depuis : reconnecte-toi à ce compte pour la voir.",

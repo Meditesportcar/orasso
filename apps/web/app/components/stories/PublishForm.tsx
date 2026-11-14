@@ -168,6 +168,9 @@ function uploadWithProgress(
   });
 }
 
+/** Délai du POST de publication : sans réponse, l'issue est « incertaine » (la story est peut-être publiée), jamais une attente sans fin. */
+export const POST_TIMEOUT_MS = 20_000;
+
 const PERSON: StoryAuthor = { persona: "fan" };
 
 export function PublishForm({
@@ -423,7 +426,11 @@ export function PublishForm({
       async () => {
         setMaybePosted(true);
         const post = () =>
-          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
+          apiFetch<StoryCreated>("/me/stories", {
+            method: "POST",
+            json: { ...body, expectedUserId: userId },
+            timeoutMs: POST_TIMEOUT_MS,
+          });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code === "validation_error") return post();
         return first;
@@ -441,6 +448,8 @@ export function PublishForm({
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
     if (res.error.code === "account_changed") return setSessionStale(true);
+    // Aucune réponse (réseau perdu ou délai) : la requête est peut-être arrivée, la story existe peut-être : pas un échec certain.
+    if (res.status === 0) return setError(L.publishUncertain);
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.status >= 400 && res.status < 500) clipKeys.current = null;
     setError(res.error.message);
@@ -489,7 +498,11 @@ export function PublishForm({
       async () => {
         setMaybePosted(true);
         const post = () =>
-          apiFetch<StoryCreated>("/me/stories", { method: "POST", json: { ...body, expectedUserId: userId } });
+          apiFetch<StoryCreated>("/me/stories", {
+            method: "POST",
+            json: { ...body, expectedUserId: userId },
+            timeoutMs: POST_TIMEOUT_MS,
+          });
         const first = await post();
         if (!first.ok && first.status === 400 && first.error.code !== "plate_decision_required") return post();
         return first;
@@ -507,6 +520,8 @@ export function PublishForm({
     // 409 `account_changed` : la session n'est plus celle du brouillon (annonce manquée) : l'écran se verrouille comme à une annonce, au lieu
     // d'un message d'erreur qui laisserait le brouillon de A affiché sous B.
     if (res.error.code === "account_changed") return setSessionStale(true);
+    // Aucune réponse (réseau perdu ou délai) : la requête est peut-être arrivée, la story existe peut-être : pas un échec certain.
+    if (res.status === 0) return setError(L.publishUncertain);
     if (res.status === 429) return setError(L.tooManyRequests);
     // Une clé déjà envoyée peut avoir été refusée (image inconnue) : au nouvel essai, tout repart.
     if (res.status === 400) uploaded.current = null;

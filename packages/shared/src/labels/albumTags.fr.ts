@@ -113,6 +113,9 @@ export const albumTagLabels = {
     storyAlreadyNote: "Cette photo est déjà dans ta story : le public et la légende d'origine sont gardés.",
     storyPlateNote: "Si une plaque est lisible sur la photo, elle est floutée dans la story.",
     myPhotosEmpty: "Aucune photo n'est identifiée à ton nom dans cet album.",
+    // Site : la page se recharge quand le compte change dans une autre fenêtre (B2a) ; mêmes mots que le Crew.
+    refreshFailed: "Impossible de mettre ton compte à jour pour le moment.",
+    refreshReload: "Recharger la page",
     morePhotos: "Voir plus d'albums",
     openAlbum: "Voir l'album",
     carBadge: (n: number) => `${n} voiture${n > 1 ? "s" : ""} identifiée${n > 1 ? "s" : ""}`,

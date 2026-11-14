@@ -19,6 +19,7 @@ import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
 import { useAnnounceSession } from "../lib/sessionChannel";
+import { isAfterReload, useReloadWhenForeign, useSessionConfirmation } from "../lib/sessionReload";
 import { useChannel } from "../lib/useChannel";
 import "../styles/activity.css";
 import "../styles/moderation.css";
@@ -37,6 +38,22 @@ import type { Route } from "./+types/app";
 // titre, ✕ qui revient), sans bande, sans barre ni accès flottant (mode B).
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
+  // Page née d'un rechargement automatique (`?apres-rechargement=1`) : la session a pu changer pendant la lecture. La mise en page ne lit
+  // RIEN de privé (l'identifiant du compte seulement ; pastilles à 0, accès proche, suspension, e-mail et département neutres) et
+  // n'annonce pas son compte avant que `/me` l'ait confirmé (`AppLayout`) ; la navigation qui retire la marque relit le chargeur.
+  if (isAfterReload(new URL(request.url))) {
+    return {
+      afterReload: true as const,
+      userId: me.user.id,
+      base: "visitor" as const,
+      unreadNotifications: 0,
+      unreadMessages: 0,
+      near: null,
+      emailVerified: true,
+      suspension: null,
+      department: null,
+    };
+  }
   // Accès flottant : l'accès le plus proche (J-7 à J+1) parmi mes places retenues (à venir et finies depuis moins d'un
   // jour), mes billets et mes missions staff, comme l'appli. Une lecture qui échoue ne bloque pas l'espace.
   const [upcoming, past, tickets, staff, summary] = await Promise.all([
@@ -48,6 +65,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   ]);
   const counts = topBarCounts(summary.ok ? summary.data : null);
   return {
+    afterReload: false as const,
     userId: me.user.id,
     // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
     base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
@@ -112,7 +130,11 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
   // Activité et Messages en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
-  useAnnounceSession(loaderData.userId);
+  // Après un rechargement automatique, le compte de cette mise en page n'est annoncé (aux autres fenêtres, dont un Crew ouvert ailleurs)
+  // qu'une fois confirmé par `/me` ; une discordance (la page n'est pas celle d'une page qui se recharge d'elle-même) recharge ici.
+  const { confirmed } = useSessionConfirmation(loaderData.userId, loaderData.afterReload, false);
+  useAnnounceSession(loaderData.userId, !loaderData.afterReload || confirmed === "ok");
+  useReloadWhenForeign(loaderData.afterReload && confirmed === "mismatch", "layout");
   const announcements = useAnnouncements(loaderData.userId);
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {

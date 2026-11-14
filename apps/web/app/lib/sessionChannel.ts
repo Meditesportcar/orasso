@@ -83,9 +83,13 @@ export function listenSession(listener: Listener): () => void {
   };
 }
 
-/** À mettre dans chaque mise en page : annonce le compte à chaque chargement de page (connecté ou non). */
-export function useAnnounceSession(userId: string | null): void {
+/**
+ * À mettre dans chaque mise en page : annonce le compte à chaque chargement de page (connecté ou non). `enabled` faux : rien n'est
+ * annoncé (une page née d'un rechargement automatique n'annonce son compte qu'une fois confirmé par `/me` : son rendu peut dater
+ * d'avant un changement de session, et son annonce ferait recharger les autres fenêtres pour rien).
+ */
+export function useAnnounceSession(userId: string | null, enabled = true): void {
   useEffect(() => {
-    announceSession(userId);
-  }, [userId]);
+    if (enabled) announceSession(userId);
+  }, [userId, enabled]);
 }

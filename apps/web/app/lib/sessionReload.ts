@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch } from "./api.client";
 
@@ -197,6 +197,7 @@ export function createConfirmer(read: () => Promise<MeResult>) {
 export function useSessionConfirmation(
   owner: string,
   afterReload: boolean,
+  watch = true,
 ): { confirmed: SessionConfirmation; stalled: boolean } {
   const [known, setKnown] = useState<MeKnowledge>(unknownMe);
   const stalled = useSyncExternalStore(onReloadStalled, isReloadStalled, () => false);
@@ -214,6 +215,8 @@ export function useSessionConfirmation(
     if (!wasFirst || afterReload) void verify();
   }, [verify, afterReload, owner]);
   useEffect(() => {
+    // `watch` faux (la mise en page : elle ne confirme qu'après un rechargement) : aucune revérification au retour de l'onglet.
+    if (!watch) return;
     let hiddenBefore = document.visibilityState === "hidden";
     let blurred = false;
     const onVisibility = () => {
@@ -251,8 +254,26 @@ export function useSessionConfirmation(
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [verify]);
+  }, [verify, watch]);
   return { confirmed: deriveConfirmation(known, owner, afterReload), stalled };
+}
+
+/**
+ * Recharge la page (compté, en GET) dès que `foreign` devient vrai ; rend vrai quand le compteur refuse (boucle : la page dit alors
+ * « Recharger la page » au lieu de « Mise à jour… » à vie). Le lancement est un effet de MISE EN PAGE : il part avant l'affichage du
+ * rendu qui fait passer la page à « étrangère », donc un `reloadStalled` resté vrai d'une restauration précédente ne montre jamais,
+ * le temps d'une image, le bouton « Recharger la page » sous le nouveau « Mise à jour… » (tour 12 de B1, mineur d'Opus).
+ */
+export function useReloadWhenForeign(foreign: boolean, scope: string): boolean {
+  const [gaveUp, setGaveUp] = useState(false);
+  useLayoutEffect(() => {
+    if (!foreign) {
+      setGaveUp(false);
+      return;
+    }
+    if (reloadAutomatically(scope) === "refused") setGaveUp(true);
+  }, [foreign, scope]);
+  return gaveUp;
 }
 
 /** Le dernier compte annoncé par une AUTRE fenêtre : l'annonce de cette fenêtre (dont celle de sa propre mise en page) ne change rien. */

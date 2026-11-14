@@ -22,16 +22,28 @@ import { useLocation, useNavigate, useNavigation, useRevalidator } from "react-r
 import { apiFetch } from "../../lib/api.client";
 import { listenSession } from "../../lib/sessionChannel";
 import { latchStale } from "../../lib/sessionGuard";
+import {
+  AFTER_RELOAD_PARAM,
+  reloadManually,
+  useReloadWhenForeign,
+  useSessionConfirmation,
+} from "../../lib/sessionReload";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 import "../../styles/albums.css";
 
+/** Portée du compteur de rechargements automatiques (`sessionReload.ts`). */
+const RELOAD_SCOPE = "mes-photos";
+
 export function MyPhotos({
   view: loaded,
+  afterReload,
   albumId,
   myUserId,
 }: {
-  view: MyPhotosView;
+  /** `null` : page née d'un rechargement automatique (le chargeur n'a rien lu ; `afterReload`). */
+  view: MyPhotosView | null;
+  afterReload: boolean;
   albumId: string;
   myUserId: string;
 }) {
@@ -39,6 +51,9 @@ export function MyPhotos({
   const reads = useRef(createMyPhotosReads<MyPhotosView>());
   const [rs, setRs] = useState(() => reads.current.state());
   const view = rs.fresh ?? loaded;
+  // Une page née d'un rechargement automatique reste neutre tant que `/me` n'a pas confirmé que la session courante est celle de
+  // `myUserId`, puis navigue sans la marque (le chargeur relit pour le bon compte). Elle revérifie au retour de l'onglet / du focus.
+  const { confirmed, stalled } = useSessionConfirmation(myUserId, afterReload);
   const removed = rs.removed;
   // Un nouveau chargement de la page (`loaded` : revalidation, autre compte) remplace la liste relue et périme toute relecture en route.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seulement au nouveau `loaded`
@@ -48,8 +63,9 @@ export function MyPhotos({
     // Un retrait attend encore sa réconciliation (la page servie date d'avant le DELETE) : on relit.
     if (next.reread) void reread();
   }, [loaded]);
-  // Un autre compte annoncé par une autre fenêtre (sans nouveau chargement de cette page) : tout est périmé, rien des données n'est
-  // rendu, puis la page est rechargée en entier. Une annonce de ce compte-ci est sans effet.
+  // Un autre compte annoncé par une autre fenêtre (sans nouveau chargement de cette page), ou `/me` qui ne confirme pas `myUserId` :
+  // tout est périmé, rien des données n'est rendu, puis la page est rechargée en entier (en GET, comptée : `sessionReload`). Une
+  // annonce de ce compte-ci est sans effet.
   const [stale, setStale] = useState(false);
   const staleRef = useRef(false);
   useEffect(
@@ -62,9 +78,24 @@ export function MyPhotos({
       }),
     [myUserId],
   );
+  const foreign = stale || confirmed === "mismatch";
+  // Les relectures sont suspendues tant que l'état n'est pas « ok » (rien ne se lit ni ne s'applique sous un autre compte).
+  const okRef = useRef(true);
+  okRef.current = confirmed === "ok" && !stale;
   useEffect(() => {
-    if (stale) window.location.reload();
-  }, [stale]);
+    if (confirmed !== "ok" || stale) reads.current.invalidate();
+  }, [confirmed, stale]);
+  const gaveUp = useReloadWhenForeign(foreign, RELOAD_SCOPE);
+  const { pathname, search } = useLocation();
+  // Page née d'un rechargement dont le compte est confirmé : navigation sans la marque (relit le chargeur, retire la marque).
+  const navigateAway = useNavigate();
+  useEffect(() => {
+    if (!afterReload || confirmed !== "ok" || foreign) return;
+    const params = new URLSearchParams(search);
+    params.delete(AFTER_RELOAD_PARAM);
+    const rest = params.toString();
+    void navigateAway(`${pathname}${rest ? `?${rest}` : ""}`, { replace: true });
+  }, [afterReload, confirmed, foreign, pathname, search, navigateAway]);
   // Page quittée (retour, autre lien) pendant la relecture : ni navigation ni mise à jour.
   const alive = useRef(true);
   useEffect(() => {
@@ -91,10 +122,14 @@ export function MyPhotos({
   // L'heure courante à chaque rendu (l'état `tick` ne sert qu'à provoquer le rafraîchissement) : une réponse reçue après l'expiration
   // d'une story ne bloque pas « En story ».
   const nowMs = Date.now();
-  const photos = view.photos.filter((p) => !removed.has(p.tagId));
+  const photos = (view?.photos ?? []).filter((p) => !removed.has(p.tagId));
   const count = photos.length;
   const emptyState = emptyPhotosState(removed.size, count, rs.error !== null);
-  const headline = view.vehicle ? L.photosOfYourCar(count, view.vehicle.label) : L.photosWhereIdentified(count);
+  const headline = !view
+    ? ""
+    : view.vehicle
+      ? L.photosOfYourCar(count, view.vehicle.label)
+      : L.photosWhereIdentified(count);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `reread` ne dépend que de refs et de l'album ; `tick` relance la programmation
   useEffect(() => {
@@ -103,7 +138,7 @@ export function MyPhotos({
       if (document.visibilityState === "visible") setTick((n) => n + 1);
     };
     document.addEventListener("visibilitychange", onShow);
-    const next = nextLiveStoryExpiry(view.photos, Date.now());
+    const next = nextLiveStoryExpiry(view?.photos ?? [], Date.now());
     const id =
       next === null
         ? null
@@ -123,14 +158,14 @@ export function MyPhotos({
 
   /** Relit `my-photos` (la dernière lancée seule compte) ; `routine` : une relecture de minuterie, silencieuse sans retrait en attente. */
   async function reread(routine = false) {
-    if (staleRef.current) return;
+    if (staleRef.current || !okRef.current) return;
     const read = reads.current.start(routine);
     const startKey = here.current.key;
     if (!read.quiet) setRs(reads.current.state());
     const next = await apiFetch<MyPhotosView>(`/me/albums/${encodeURIComponent(albumId)}/my-photos`, {
       timeoutMs: 15_000,
     });
-    if (!alive.current || staleRef.current) return;
+    if (!alive.current || staleRef.current || !okRef.current) return;
     const applied = next.ok
       ? reads.current.ok(read, next.data)
       : next.status === 404
@@ -156,10 +191,34 @@ export function MyPhotos({
     await reread();
   }
 
-  if (stale) {
+  if ((foreign && gaveUp) || confirmed === "failed") {
+    // Les rechargements n'ont pas résolu la discordance (ou le compte n'a pas pu être confirmé) : jamais « Mise à jour… » à vie.
+    return (
+      <div className="s-narrow s-stack" data-testid="my-photos-refresh-failed">
+        <p className="s-error" role="alert">
+          {L.screens.refreshFailed}
+        </p>
+        <Button variant="secondary" icon="undo" onClick={() => reloadManually(RELOAD_SCOPE)}>
+          {L.screens.refreshReload}
+        </Button>
+      </div>
+    );
+  }
+  if (!view || foreign || confirmed !== "ok") {
     return (
       <div className="s-narrow s-stack" data-testid="my-photos-stale">
         <p role="status">Mise à jour…</p>
+        {stalled ? (
+          // Rechargement lent ou interrompu (page restaurée) : « Mise à jour… » reste, le bouton s'ajoute dessous.
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => reloadManually(RELOAD_SCOPE)}
+            data-testid="my-photos-refresh-slow"
+          >
+            {L.screens.refreshReload}
+          </Button>
+        ) : null}
       </div>
     );
   }
