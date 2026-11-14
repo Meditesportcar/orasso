@@ -494,26 +494,30 @@ async function watchLeaks(ctx: BrowserContext) {
     ([forbidKey, leakKey, seenKey]) => {
       const check = () => {
         try {
+          const seen = new Set<string>(JSON.parse(sessionStorage.getItem(seenKey as string) ?? "[]"));
+          for (const id of ["crew-refreshing", "crew-refresh-failed"]) {
+            if (document.querySelector(`[data-testid="${id}"]`)) seen.add(id);
+          }
+          sessionStorage.setItem(seenKey as string, JSON.stringify([...seen]));
+          // Armé seulement quand la page a montré « Mise à jour… » (ou l'échec) : avant, les données de A sont légitimes et une
+          // mutation du DOM sans rapport ne doit pas être prise pour une fuite.
+          const armed = seen.has("crew-refreshing") || seen.has("crew-refresh-failed");
           const raw = sessionStorage.getItem(forbidKey as string);
           const rule = raw ? (JSON.parse(raw) as { sel: string; origin: number | null }) : null;
           // `origin` : l'interdiction ne vaut que pour le document qui l'a posée (le rechargé sous le même compte retrouve ses données).
           if (
+            armed &&
             rule &&
             (rule.origin === null || rule.origin === performance.timeOrigin) &&
             document.querySelector(rule.sel)
           ) {
             sessionStorage.setItem(leakKey as string, rule.sel);
           }
-          const seen = new Set<string>(JSON.parse(sessionStorage.getItem(seenKey as string) ?? "[]"));
-          for (const id of ["crew-refreshing", "crew-refresh-failed"]) {
-            if (document.querySelector(`[data-testid="${id}"]`)) seen.add(id);
-          }
-          sessionStorage.setItem(seenKey as string, JSON.stringify([...seen]));
         } catch {
           // Stockage indisponible : rien à noter.
         }
       };
-      new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
+      new MutationObserver(check).observe(document, { childList: true, subtree: true });
       document.addEventListener("DOMContentLoaded", check);
       window.addEventListener("load", check);
     },
@@ -554,7 +558,7 @@ async function swapCookies(ctx: BrowserContext, cookies: Awaited<ReturnType<type
 }
 
 /** Retient le prochain chargement de document de /app/crew (le rechargement) jusqu'à `release()`. */
-async function holdNextDocument(page: Page) {
+async function holdNextDocument(page: Page, prepare = false) {
   let release: () => void = () => undefined;
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -567,6 +571,13 @@ async function holdNextDocument(page: Page) {
   await page.route(/\/app\/crew(\?|$)/, async (route) => {
     if (armed && route.request().resourceType() === "document") {
       armed = false;
+      if (prepare) {
+        // La réponse est RÉELLEMENT préparée par le serveur sous le compte courant (B) puis retenue : le cookie change ensuite.
+        const prepared = await route.fetch();
+        reached();
+        await held;
+        return route.fulfill({ response: prepared });
+      }
       reached();
       await held;
     }
@@ -623,10 +634,12 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await ctx.close();
   });
 
-  test("A → B → C rapprochés : jamais les données de B, la page finit sous C", async ({ browser }) => {
+  test("A → B → C rapprochés : la réponse préparée sous B, rendue sous C : jamais les données de B, la page finit sous C", async ({
+    browser,
+  }) => {
     test.setTimeout(240_000);
     const { crew, ctx, a } = await setup(browser);
-    const hold = await holdNextDocument(a);
+    const hold = await holdNextDocument(a, true);
     const other = await ctx.newPage();
     await other.goto("/app/fil");
     const chef = await cookiesOf(browser, crew.chef.email);
@@ -635,7 +648,8 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     hold.arm();
     await swapCookies(ctx, chef);
     await announceForbidding(a, crew.chef.id, `${INVITATION}, ${OUTINGS}`);
-    // Le premier rechargement (sous B) est retenu ; C se connecte et s'annonce avant qu'il revienne.
+    // Le serveur a rendu le rechargement sous B (réponse lue par `route.fetch()`) ; elle est retenue pendant que C se connecte et
+    // s'annonce : l'ANCIEN document reçoit l'annonce de C, le nouveau n'est pas encore là.
     await hold.arrived;
     await swapCookies(ctx, paul);
     await announce(other, crew.paul.id);
@@ -645,6 +659,30 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await expect(a.getByTestId("crew-refreshing")).toHaveCount(0);
     await expect(a.getByTestId("crew-refresh-failed")).toHaveCount(0);
     expect(await leaked(a), "une donnée de A ou de B est apparue sous C").toBeNull();
+    expect(await seen(a), "« Mise à jour… » a été affiché").toContain("crew-refreshing");
+    await ctx.close();
+  });
+
+  test("A → B, la réponse préparée sous B est retenue, B se déconnecte : jamais les données de B, la page de connexion", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { crew, ctx, a } = await setup(browser);
+    const hold = await holdNextDocument(a, true);
+    const other = await ctx.newPage();
+    await other.goto("/app/fil");
+    const chef = await cookiesOf(browser, crew.chef.email);
+    // Ni les invitations de A (Sarah) ni le crew de B (le chef) ne doivent jamais s'afficher.
+    hold.arm();
+    await swapCookies(ctx, chef);
+    await announceForbidding(a, crew.chef.id, `${INVITATION}, ${OUTINGS}`);
+    await hold.arrived;
+    // Pendant que la réponse de B est retenue : B se déconnecte (plus de session) et l'annonce.
+    await ctx.clearCookies();
+    await announce(other, null);
+    hold.release();
+    await a.waitForURL(/connexion/, { timeout: 60_000 });
+    expect(await leaked(a), "une donnée de A ou de B est apparue après la déconnexion").toBeNull();
     expect(await seen(a), "« Mise à jour… » a été affiché").toContain("crew-refreshing");
     await ctx.close();
   });
@@ -706,6 +744,9 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
   }) => {
     test.setTimeout(240_000);
     const { ctx, a } = await setup(browser);
+    // Cette recette montre seulement que l'annonce de sa propre mise en page (même compte que les données) ne déclenche rien ; le cas
+    // qui discrimine (une annonce de cette fenêtre qui dirait un AUTRE compte reste ignorée) est couvert par `sessionReload.test.ts`
+    // (`nextAnnounced`, `isForeign`) et `sessionChannel.test.ts` (`self`).
     // Un rechargement de la page fait annoncer de nouveau son compte par la mise en page : l'annonce arrive au Crew comme un message
     // BroadcastChannel de la même fenêtre.
     let loads = 0;
@@ -780,6 +821,7 @@ test.describe("partie B1, tour 6 : le Crew se recharge au lieu de se réconcilie
     await a.goto("/app/crew");
     await expect(a.getByTestId("crew-refresh-failed")).toBeVisible({ timeout: 60_000 });
     await expect(a.getByRole("button", { name: "Recharger la page" })).toBeVisible();
+    await expect(a.getByTestId("crew-tab-invitation")).toHaveCount(0);
     // Le chargement de départ et un seul rechargement automatique.
     expect(docs).toBe(2);
     await ctx.close();
