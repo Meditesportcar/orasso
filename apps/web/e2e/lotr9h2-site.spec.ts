@@ -82,7 +82,7 @@ const SPACES = [
     title: "Roues Libres 66",
     type: /Organisateur|Structure|Association/i,
     tabs: ["Événements", "Publications", "Mentions"],
-    first: "events",
+    first: "publications", // « Publications » par défaut quand la page en a (R9.3) ; la structure de la graine en a
     gest: [
       ["team", "Équipe", "/orga/roues-libres-66/staff"],
       ["structure", "Réglages de la structure", "/orga/roues-libres-66/structure"],
@@ -352,14 +352,14 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
     // La pastille dit au nom de qui on agit, et le bouton aussi (tour 1, point 1) : un lien reçu ne fait jamais suivre en silence.
     await expect(page.getByTestId("page-actor")).toBeVisible();
-    await expect(page.getByTestId("page-actor-name")).toHaveText("Roues Libres 66");
+    await expect(page.getByTestId("page-actor-name")).toHaveText(structure.label);
     await expect(page.getByTestId("page-actor")).toContainText("Tu agis au nom de");
-    await expect(page.getByTestId("follow-button")).toHaveText("Suivre en tant que Roues Libres 66");
+    await expect(page.getByTestId("follow-button")).toHaveText(`Suivre en tant que ${structure.label}`);
     await shot(page, `providers-au-nom-d-une-page-${theme}`);
     const base = await providerAs("sarah@orasso.local", brasa.id, key);
     await page.getByTestId("follow-button").click();
     await expect(page.getByTestId("follow-button")).toContainText("Suivi");
-    await expect(page.getByTestId("follow-button")).toHaveText("Suivi en tant que Roues Libres 66");
+    await expect(page.getByTestId("follow-button")).toHaveText(`Suivi en tant que ${structure.label}`);
     expect(followCalls.at(-1)).toBe(key);
     const asPage = await providerAs("sarah@orasso.local", brasa.id, key);
     expect(asPage.isFollowing, "la page suit").toBe(true);
