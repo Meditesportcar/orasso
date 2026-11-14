@@ -304,6 +304,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
           past={past}
           partners={partners}
           inviteToken={inviteToken}
+          inviteFailed={false}
           origin={origin}
         />
       ) : tab === "publications" ? (

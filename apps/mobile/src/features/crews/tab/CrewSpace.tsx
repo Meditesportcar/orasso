@@ -17,7 +17,7 @@ import {
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
@@ -83,16 +83,36 @@ export function CrewSpace({
     enabled: Boolean(v && leader && live),
   });
   const [tab, setTab] = useState<CrewTabId>(() => tabOfParam(linkTab?.value));
-  // Un lien reçu alors que le crew est déjà affiché (notification, `?onglet=sorties`) change l'onglet.
-  const seenLink = useRef(linkTab?.n ?? 0);
-  useEffect(() => {
-    if (!linkTab || linkTab.n === seenLink.current) return;
-    seenLink.current = linkTab.n;
-    if (linkTab.value) setTab(tabOfParam(linkTab.value));
-  }, [linkTab]);
   // La rangée d'onglets collée : sa place dans la zone qui défile et sa hauteur (mesurées), pour garder le début d'un onglet
   // sous elle au changement d'onglet et pour la pastille « nouvelle publication ».
   const tabsBox = useRef({ y: 0, h: 0 });
+  const scrollRef = scroll.scrollRef;
+  const scrollY = scroll.scrollY;
+  // Défilé au-delà du haut du crew : le début du nouvel onglet revient sous la barre collante ; sinon on ne bouge pas. Le
+  // défilement part **après** le rendu du nouvel onglet (`useLayoutEffect`) : sur appareil (Fabric), avant, on verrait un instant le
+  // haut de l'ancien onglet. Le même chemin sert au toucher d'un onglet et à un lien reçu (`?onglet=`, notification).
+  const recadre = useRef(false);
+  const changeTab = useCallback(
+    (id: CrewTabId) => {
+      recadre.current = id !== tab && scrollY.current > tabsBox.current.y;
+      setTab(id);
+    },
+    [tab, scrollY],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement d'onglet déclenche le recadrage.
+  useLayoutEffect(() => {
+    if (!recadre.current) return;
+    recadre.current = false;
+    scrollRef.current?.scrollTo({ y: tabsBox.current.y, animated: false });
+  }, [tab]);
+  // Un lien reçu alors que le crew est déjà affiché (notification, `?onglet=sorties`) change l'onglet (par `changeTab`, donc recadré).
+  const seenLink = useRef(linkTab?.n ?? 0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul un nouveau lien compte, pas l'identité de `changeTab`.
+  useEffect(() => {
+    if (!linkTab || linkTab.n === seenLink.current) return;
+    seenLink.current = linkTab.n;
+    if (linkTab.value) changeTab(tabOfParam(linkTab.value));
+  }, [linkTab]);
   const feedScroller = useMemo<CrewFeedScroller | undefined>(
     () =>
       scroller
@@ -109,13 +129,6 @@ export function CrewSpace({
         : undefined,
     [scroller, scroll.scrollRef],
   );
-  const scrollRef = scroll.scrollRef;
-  const scrollY = scroll.scrollY;
-  const changeTab = (id: CrewTabId) => {
-    // Défilé au-delà du haut du crew : le début du nouvel onglet revient sous la barre collante ; sinon on ne bouge pas.
-    if (scrollY.current > tabsBox.current.y) scrollRef.current?.scrollTo({ y: tabsBox.current.y, animated: false });
-    setTab(id);
-  };
   const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +223,7 @@ export function CrewSpace({
           Chargement…
         </Muted>
       ),
+      lostFailed,
     );
   }
 

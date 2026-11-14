@@ -104,6 +104,13 @@ export function resolveStoryAuthor(
 }
 
 /**
+ * `?auteur=` demande une page (`s:`, `p:`, `v:`, `m:`) que le compte ne tient pas (ou plus) : l'écran ne la remplace pas en silence par
+ * la casquette active ni par la personne, il bloque l'envoi. `me` et l'absence de paramètre ne sont jamais « indisponibles ».
+ */
+export const askedPageUnavailable = (auteur: string | null | undefined, choice: StoryAuthorChoice | null): boolean =>
+  choice === null && /^[spvm]:./.test(auteur?.trim() ?? "");
+
+/**
  * L'auteur d'une story est-il encore une casquette du compte ? (R9n, tour 2, point 9 : l'auteur est figé à l'ouverture ; si un
  * rafraîchissement de `GET /me` le retire, l'envoi est bloqué.) La personne : toujours ; une structure ou une fiche pro : sa ligne
  * (même identifiant) ; prestataire et média : leur ligne.

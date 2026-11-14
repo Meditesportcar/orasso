@@ -281,7 +281,10 @@ export function CrewTabsBar({
         label={crewLabels.crew}
         testId="crew-tabs"
         itemTestId={(id) => `crew-tab-${id}`}
-        itemClass={(id) => (id === "sorties" ? "crw-tab-outings" : undefined)}
+        // Sorties : masqué à grand écran (les sorties y sont à droite) ; Fil y est alors souligné quand l'adresse dit `?onglet=sorties`.
+        itemClass={(id) =>
+          id === "sorties" ? "crw-tab-outings" : id === "fil" && value === "sorties" ? "crw-tab-wide-on" : undefined
+        }
       />
       {button}
     </div>

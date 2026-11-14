@@ -77,6 +77,25 @@ export function storyEffectiveVisibility(author: StoryAuthor, visibility: Profil
 }
 
 /**
+ * Le brouillon appartient au compte qui a ouvert l'écran (appli, comme le site : `latchStale`) : si le compte connecté n'est plus
+ * celui-là (déconnexion, autre compte), l'écran se verrouille et rien ne part. `openedAs` nul : l'écran s'ouvre avant que le profil
+ * soit lu, rien à comparer encore.
+ */
+export const storyAccountStale = (openedAs: string | null, current: string | null): boolean =>
+  openedAs !== null && current !== openedAs;
+
+/**
+ * Ce qu'on sait d'un envoi quand le compte a changé (appli) : `prevented` (rien n'est parti : le verrou a bloqué avant l'envoi, ou
+ * l'API a refusé `account_changed`), `uncertain` (la création était partie, la réponse n'a pas été appliquée : la story existe peut-être),
+ * `confirmed` (l'API a accepté la story avant le changement). `accepted` : la création est partie ; `answered` : on en a la réponse.
+ */
+export type StoryAccountOutcome = "prevented" | "uncertain" | "confirmed";
+export function storyAccountOutcome(sent: { accepted: boolean; answered: boolean }): StoryAccountOutcome {
+  if (!sent.accepted) return "prevented";
+  return sent.answered ? "confirmed" : "uncertain";
+}
+
+/**
  * L'autocollant d'événement : refusé pour un compte privé (la story ne pourrait pas être repartagée publiquement : même
  * règle que `canTag` de l'API, qui lit le réglage du compte) et pour une story de crew. `reason` dit pourquoi, pour le
  * bouton grisé.

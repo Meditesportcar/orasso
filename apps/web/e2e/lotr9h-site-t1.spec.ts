@@ -155,7 +155,10 @@ test("Story : A puis B par revalidation, annonce de session retardée : le broui
   // Le formulaire est remonté pour B : plus de photo, plus de page de A, rien à envoyer.
   await expect(a.getByTestId("story-fit")).toHaveCount(0, { timeout: 30_000 });
   await expect(a.getByText("en tant que Sud Cars")).toHaveCount(0);
-  await expect(a.getByTestId("story-publish-send")).toBeDisabled();
+  // La page de A n'est pas tenue par B : jamais un repli sur « Moi » (petit lot de fin, B1 : l'écran dit « plus accès » et ne propose
+  // aucun envoi ; avant, B recevait un formulaire désactivé au nom de la personne).
+  await expect(a.getByTestId("story-author-lost")).toBeVisible();
+  await expect(a.getByTestId("story-publish-send")).toHaveCount(0);
   await ctx.close();
 });
 

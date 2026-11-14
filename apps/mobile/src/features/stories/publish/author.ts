@@ -60,3 +60,6 @@ export const storyPublishHref = (actor: string | null, activeKind: string): stri
  */
 export const storyHeaderPlain = (author: StoryAuthor, activeKind: string): boolean =>
   author.persona === "fan" && (activeKind === "fan" || activeKind === "visitor" || activeKind === "admin");
+
+/** Une page demandée par `?auteur=` que le compte ne tient pas (règle partagée avec le site). */
+export { askedPageUnavailable } from "@orasso/shared";

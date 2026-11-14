@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { requestRowCounts, requestRowShown } from "../messaging";
 import {
   COAUTHOR_CAPTION_PREVIEW_MAX,
   canDeletePost,
@@ -12,6 +13,7 @@ import {
   signature,
   withLabel,
 } from "./coauthors";
+import { draftFromBody } from "./feedPublish";
 
 const base = {
   authorKey: "s:11111111-1111-4111-8111-111111111111",
@@ -74,8 +76,7 @@ describe("coauthors : règles pures", () => {
 });
 
 describe("brouillon de « Publier »", () => {
-  it("un envoi incertain garde son co-auteur dans le corps renvoyé, mais le brouillon affiché ne le reprend pas", async () => {
-    const { draftFromBody } = await import("./feedPublish");
+  it("un envoi incertain garde son co-auteur dans le corps renvoyé, mais le brouillon affiché ne le reprend pas", () => {
     const body = { persona: "fan", caption: "x", coAuthor: { kind: "user", id: "abc" }, clientId: "c1" };
     const draft = draftFromBody(body, []);
     expect(draft.caption).toBe("x");
@@ -86,8 +87,7 @@ describe("brouillon de « Publier »", () => {
 });
 
 describe("ligne « Demandes » avec la seule invitation à publier", () => {
-  it("le résumé donne 1 et la ligne est montrée ; l'ancien résumé sans le champ reste à 0", async () => {
-    const { requestRowCounts, requestRowShown } = await import("../messaging");
+  it("le résumé donne 1 et la ligne est montrée ; l'ancien résumé sans le champ reste à 0", () => {
     const summary = {
       unreadMessages: 0,
       unseenActivity: 0,

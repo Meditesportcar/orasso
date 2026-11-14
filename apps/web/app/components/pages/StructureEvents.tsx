@@ -1,7 +1,7 @@
 // L'onglet « Événements » de la page d'une structure, sur le site (lot R8g) : les événements à venir puis passés d'aujourd'hui, et
 // dessous ce que la page montrait : « À propos » (la présentation en entier, la note des avis, site et réseaux), les pros
 // partenaires, le lien d'invitation (aux organisateurs de la structure). Rendu côté serveur.
-import { Plate } from "@orasso/design-system/web";
+import { Button, Plate } from "@orasso/design-system/web";
 import {
   type EventCard,
   pagesLabels as L,
@@ -10,10 +10,33 @@ import {
   structureKindLabels,
 } from "@orasso/shared";
 
+import { useRevalidator } from "react-router";
+
 import { EventTile } from "../EventTile";
 import { ProTile } from "../ProTile";
 import { ShareButtons } from "../ShareButtons";
 import { Stars } from "../Stars";
+
+/** Une lecture qui a échoué : le message et « Réessayer » (relit la page), jamais une absence. */
+function ReadError({ text, testId }: { text: string; testId: string }) {
+  const revalidator = useRevalidator();
+  return (
+    <div className="s-stack s-stack--tight" role="alert" data-testid={testId}>
+      <p className="s-notice">{text}</p>
+      <div>
+        <Button
+          variant="secondary"
+          icon="undo"
+          disabled={revalidator.state !== "idle"}
+          onClick={() => void revalidator.revalidate()}
+          data-testid={`${testId}-retry`}
+        >
+          {L.readRetry}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function StructureEvents({
   structure,
@@ -21,13 +44,15 @@ export function StructureEvents({
   past,
   partners,
   inviteToken,
+  inviteFailed,
   origin,
 }: {
   structure: StructurePublic;
-  upcoming: EventCard[];
-  past: EventCard[];
-  partners: ProCard[];
+  upcoming: EventCard[] | null;
+  past: EventCard[] | null;
+  partners: ProCard[] | null;
   inviteToken: string | null;
+  inviteFailed: boolean;
   origin: string;
 }) {
   const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
@@ -39,7 +64,9 @@ export function StructureEvents({
         <h2 id="so-next" className="s-h2 s-head">
           Prochains événements
         </h2>
-        {upcoming.length === 0 ? (
+        {upcoming === null ? (
+          <ReadError text={L.eventsReadError} testId="structure-events-error" />
+        ) : upcoming.length === 0 ? (
           <p className="s-notice">Aucun événement à venir pour l'instant. Suis la structure pour être prévenu.</p>
         ) : (
           <div className="w-cards" data-testid="structure-upcoming">
@@ -50,7 +77,14 @@ export function StructureEvents({
         )}
       </section>
 
-      {past.length > 0 && (
+      {past === null ? (
+        <section className="s-stack" aria-labelledby="so-past">
+          <h2 id="so-past" className="s-h2 s-head">
+            Événements passés
+          </h2>
+          <ReadError text={L.pastReadError} testId="structure-past-error" />
+        </section>
+      ) : past.length > 0 ? (
         <section className="s-stack" aria-labelledby="so-past">
           <h2 id="so-past" className="s-h2 s-head">
             Événements passés
@@ -61,7 +95,7 @@ export function StructureEvents({
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       <Plate as="section" aria-labelledby="so-about" data-testid="structure-about">
         <h2 id="so-about" className="s-h2">
@@ -101,7 +135,15 @@ export function StructureEvents({
         )}
       </Plate>
 
-      {partners.length > 0 && (
+      {partners === null ? (
+        <section className="s-stack" aria-labelledby="so-partners">
+          <h2 id="so-partners" className="s-h2 s-head">
+            {L.eventsPartners}
+          </h2>
+          <ReadError text={L.partnersReadError} testId="structure-partners-error" />
+        </section>
+      ) : null}
+      {partners !== null && partners.length > 0 && (
         <section className="s-stack" aria-labelledby="so-partners" data-testid="structure-partners">
           <h2 id="so-partners" className="s-h2 s-head">
             {L.eventsPartners}
@@ -114,6 +156,7 @@ export function StructureEvents({
         </section>
       )}
 
+      {inviteFailed ? <ReadError text={L.inviteReadError} testId="structure-invite-error" /> : null}
       {inviteToken && (
         <Plate as="section" aria-labelledby="so-invite">
           <h2 id="so-invite" className="s-h2">

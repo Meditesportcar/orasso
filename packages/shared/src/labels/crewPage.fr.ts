@@ -7,6 +7,11 @@ import { pluralFr } from "./plural.fr";
 const plural = pluralFr;
 
 export const crewPageLabels = {
+  /** Le compte a changé : la page d'avant est masquée le temps de la relecture. */
+  refreshing: "Mise à jour de ton compte…",
+  /** Les relectures n'ont pas résolu la discordance de compte : une action de reprise. */
+  refreshFailed: "Impossible de mettre ton compte à jour pour le moment.",
+  refreshReload: "Recharger la page",
   // En-tête de la page.
   idLine: (department: string, members: number, since: number) =>
     `Crew · ${department} · ${members} ${plural(members, "membre", "membres")} · depuis ${since}`,

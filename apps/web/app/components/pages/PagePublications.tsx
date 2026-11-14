@@ -33,6 +33,7 @@ export function PagePublications({
   total,
   session,
   publicFirst,
+  publishAs,
 }: {
   /** `s:<structure>` ou `p:<fiche pro>`. */
   authorKey: string;
@@ -47,6 +48,8 @@ export function PagePublications({
   session: boolean;
   /** Sans session : la première page lue par le serveur. */
   publicFirst: PublicPostsPage | null;
+  /** Lot R9h (partie 2) : la Page du propriétaire : sa clé d'auteur (« Publier » ouvre `/app/fil/publier?auteur=<clé>`). */
+  publishAs?: string;
 }) {
   if (!session) return <PublicPublications key={authorKey} authorKey={authorKey} name={name} first={publicFirst} />;
   const header = withFilter ? (
@@ -71,7 +74,8 @@ export function PagePublications({
       mine={false}
       total={filter === "all" ? total : null}
       filter={withFilter ? filter : undefined}
-      emptyText={pageEmptyText(filter, name)}
+      emptyText={publishAs && filter === "all" ? L.ownEmptyText : pageEmptyText(filter, name)}
+      publishAs={publishAs}
       header={header}
     />
   );

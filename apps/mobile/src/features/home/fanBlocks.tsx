@@ -216,6 +216,8 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
 
 /** Plancher d'un titre du rail : la plus petite taille de texte des jetons (« credit »), jamais en dessous. */
 const RAIL_TITLE_MIN = tokens.type.credit.fontSize ?? 9;
+/** Comme les libellés plafonnés des maquettes (`data-fsmax="1.12"`) : le titre ne grandit pas au-delà de ×1,12 avec la police système. */
+const RAIL_TITLE_MAX_FONT_SCALE = 1.12;
 
 /** `.rail` d'affiches `.mp` (150 × 188, corps : titre italique, date · distance). */
 export function PosterRail({
@@ -283,6 +285,7 @@ export function PosterRail({
               variant="posterS"
               base={styles.mpTitle.fontSize}
               min={RAIL_TITLE_MIN}
+              maxFontSizeMultiplier={RAIL_TITLE_MAX_FONT_SCALE}
               color={c.ink}
               style={styles.mpTitle}
             >
@@ -318,6 +321,7 @@ export function PosterRail({
                 variant="posterS"
                 base={styles.mpTitle.fontSize}
                 min={RAIL_TITLE_MIN}
+                maxFontSizeMultiplier={RAIL_TITLE_MAX_FONT_SCALE}
                 color={c.ink}
                 style={styles.mpTitle}
               >
