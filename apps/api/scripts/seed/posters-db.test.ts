@@ -103,31 +103,61 @@ describe("posterOf", () => {
   it.each([
     ["le titre d'affiche", { posterTitle: "AUTRE TITRE" }],
     ["la date", { startsAt: new Date(Date.now() + 40 * 86_400_000), endsAt: new Date(Date.now() + 41 * 86_400_000) }],
+    ["le titre de l'événement (affiche sans titre propre)", { title: "Autre nom de l'événement" }],
     ["la ville", { city: "Elne" }],
     ["le style", { posterStyle: "swiss" as const }],
-  ])("%s change pendant le rendu : rien n'est écrit, ni rendu ni photo orphelins", async (_name, change) => {
+  ])(
+    "%s change pendant le rendu : rien n'est écrit, aucun rendu laissé, la photo posée reste",
+    async (_name, change) => {
+      const { u, structure } = await seedOwner("meditesportcar");
+      const e = await createEvent(structure.id, { createdBy: u.id });
+      let rendered: string[] = [];
+      let newPhoto: string | null = null;
+      const original = posterService.renderForEvent.bind(posterService);
+      vi.spyOn(posterService, "renderForEvent").mockImplementationOnce(async (ev, settings) => {
+        newPhoto = settings.photoKey;
+        await db.update(events).set(change).where(eq(events.id, e.id));
+        const keys = await original(ev, settings);
+        rendered = [keys.postKey, keys.storyKey];
+        return keys;
+      });
+      expect(await posterOf(e, await demoEventPhotos())).toBeNull();
+      const after = await row(e.id);
+      expect([after.posterPostKey, after.posterStoryKey, after.posterPhotoKey]).toEqual([null, null, null]);
+      expect(rendered).toHaveLength(2);
+      for (const key of rendered) expect(await storage.get(key)).toBeNull();
+      // La graine ne supprime jamais un fichier de photo (sa clé peut servir à une copie).
+      expect(newPhoto).not.toBeNull();
+      expect(await storage.get(newPhoto ?? "")).not.toBeNull();
+    },
+  );
+
+  it("une clé de photo déjà référencée par une copie reste lisible, que le rendu échoue ou que la garde refuse", async () => {
     const { u, structure } = await seedOwner("meditesportcar");
-    const e = await createEvent(structure.id, { createdBy: u.id });
-    let rendered: string[] = [];
-    let newPhoto: string | null = null;
+    const photos = await demoEventPhotos();
     const original = posterService.renderForEvent.bind(posterService);
-    vi.spyOn(posterService, "renderForEvent").mockImplementationOnce(async (ev, settings) => {
-      newPhoto = settings.photoKey;
-      await db.update(events).set(change).where(eq(events.id, e.id));
-      const keys = await original(ev, settings);
-      rendered = [keys.postKey, keys.storyKey];
-      return keys;
-    });
-    expect(await posterOf(e, await demoEventPhotos())).toBeNull();
-    const after = await row(e.id);
-    expect([after.posterPostKey, after.posterStoryKey, after.posterPhotoKey]).toEqual([null, null, null]);
-    expect(rendered).toHaveLength(2);
-    for (const key of rendered) expect(await storage.get(key)).toBeNull();
-    expect(newPhoto).not.toBeNull();
-    expect(await storage.get(newPhoto ?? "")).toBeNull();
+    for (const mode of ["rendu en échec", "garde refusée"] as const) {
+      const e = await createEvent(structure.id, {
+        createdBy: u.id,
+        slug: `evt-${mode.length}-${Math.random().toString(36).slice(2, 6)}`,
+      });
+      let key: string | null = null;
+      vi.spyOn(posterService, "renderForEvent").mockImplementationOnce(async (ev, settings) => {
+        key = settings.photoKey;
+        // Une copie d'événement référence déjà ce fichier.
+        await createEvent(structure.id, { createdBy: u.id, posterPhotoKey: settings.photoKey, ...withPoster() });
+        if (mode === "rendu en échec") throw new Error("rendu impossible");
+        await db.update(events).set({ posterTitle: "AUTRE" }).where(eq(events.id, e.id));
+        return original(ev, settings);
+      });
+      if (mode === "rendu en échec") await expect(posterOf(e, photos)).rejects.toThrow("rendu impossible");
+      else expect(await posterOf(e, photos)).toBeNull();
+      expect(key, mode).not.toBeNull();
+      expect(await storage.get(key ?? ""), mode).not.toBeNull();
+    }
   });
 
-  it("un rendu qui échoue ne laisse ni ligne écrite ni photo orpheline", async () => {
+  it("un rendu qui échoue ne laisse aucune ligne écrite", async () => {
     const { u, structure } = await seedOwner("meditesportcar");
     const e = await createEvent(structure.id, { createdBy: u.id });
     let newPhoto: string | null = null;
@@ -137,6 +167,6 @@ describe("posterOf", () => {
     });
     await expect(posterOf(e, await demoEventPhotos())).rejects.toThrow("rendu impossible");
     expect((await row(e.id)).posterStyle).toBeNull();
-    expect(await storage.get(newPhoto ?? "")).toBeNull();
+    expect(newPhoto).not.toBeNull();
   });
 });

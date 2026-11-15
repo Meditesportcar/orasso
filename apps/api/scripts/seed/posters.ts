@@ -144,27 +144,18 @@ export async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made"
 
   const style = posterStyles.find((s) => s === e.posterStyle) ?? styleOf(e.slug);
   let photoKey = hasPoster && photoOk ? e.posterPhotoKey : null;
-  let created = false;
   if (!photoKey && photo) {
     // Clé propre à l'octet près : une photo remplacée n'est jamais servie depuis un cache de l'ancienne. L'ancienne photo n'est jamais
     // supprimée : une copie ou une récurrence d'événement peut la référencer.
     photoKey = `${SEED_PHOTO_PREFIX}${e.slug}-${createHash("sha1").update(photo.data).digest("hex").slice(0, 8)}.webp`;
-    created = photoKey !== e.posterPhotoKey;
     await storage.put(photoKey, photo.data);
   }
   const settings: PosterSettings = { photoKey, style, title: e.posterTitle ?? posterTitleOf(e.title) };
-  const dropNewPhoto = async () => {
-    if (created && photoKey) await storage.remove(photoKey).catch(() => undefined);
-  };
-  let keys: Awaited<ReturnType<typeof posterService.renderForEvent>>;
-  try {
-    // Le rendu d'abord : s'il échoue, la ligne reste telle quelle ; sinon réglages et rendus s'écrivent ensemble.
-    keys = await posterService.renderForEvent(e, settings);
-  } catch (error) {
-    await dropNewPhoto();
-    throw error;
-  }
-  // Écriture gardée par tout ce qui entre dans le rendu (comme `posterService.regenerate`) : date, ville, photo, style, titre.
+  // Le rendu d'abord : s'il échoue, la ligne reste telle quelle ; sinon réglages et rendus s'écrivent ensemble. Un fichier de photo n'est
+  // jamais supprimé par la graine : sa clé est déterministe, une copie ou une autre réparation peut déjà s'en servir (un fichier
+  // orphelin est accepté ; les rendus, à clé aléatoire, se retirent).
+  const keys = await posterService.renderForEvent(e, settings);
+  // Écriture gardée par tout ce qui entre dans le rendu (comme `posterService.regenerate`) : date, ville, titre de l'événement (d'où vient le titre d'affiche quand il est nul), photo, style, titre d'affiche.
   const [row] = await db
     .update(t.events)
     .set({ ...posterColumns(settings), posterPostKey: keys.postKey, posterStoryKey: keys.storyKey })
@@ -172,6 +163,7 @@ export async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made"
       and(
         eq(t.events.id, e.id),
         eq(t.events.startsAt, e.startsAt),
+        eq(t.events.title, e.title),
         sql`${t.events.city} is not distinct from ${e.city}`,
         sql`${t.events.posterPhotoKey} is not distinct from ${e.posterPhotoKey}`,
         sql`${t.events.posterStyle} is not distinct from ${e.posterStyle}`,
@@ -180,9 +172,8 @@ export async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made"
     )
     .returning();
   if (!row) {
-    // Modifié pendant le rendu : ce rendu ne sert plus, rien n'est écrit, pas de photo orpheline.
+    // Modifié pendant le rendu : ce rendu ne sert plus, rien n'est écrit (la photo posée reste, voir plus haut).
     await Promise.all([storage.remove(keys.postKey), storage.remove(keys.storyKey)]).catch(() => undefined);
-    await dropNewPhoto();
     return null;
   }
   await posterService.removeRenders(e);

@@ -82,7 +82,19 @@ const nextPlate = () => {
 };
 
 /** Les couleurs de départ des dégradés factices posés par la graine (logos, photos de prestataires, ancien visuel d'affiche). */
-export const FAKE_PHOTO_COLORS = ["#d4a017", "#1f4e79", "#8a1c1c", "#c9a227", "#2b2f36", "#b5452a"] as const;
+export const FAKE_PHOTO_COLORS = [
+  "#d4a017",
+  "#1f4e79",
+  "#8a1c1c",
+  "#c9a227",
+  "#2b2f36",
+  "#b5452a",
+  // La palette des photos de véhicules du seed (`PALETTE`, lot C5, 6c1e4dac).
+  "#e8e4da",
+  "#3a5f3a",
+  "#6b6f76",
+  "#c0c0c0",
+] as const;
 
 /** Le dégradé factice d'avant le lot C5 (silhouette de voiture sur dégradé), en WebP 1200 × 800. Les photos d'événement n'en sont plus (D34) ; le seed sait les reconnaître (`isLegacyFakePhoto`). */
 export async function fakePhotoWebp(color: string) {
