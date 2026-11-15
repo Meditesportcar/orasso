@@ -72,20 +72,19 @@ for (const [width, theme] of [
     await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar/page");
     await expect(page.getByTestId("owner-page")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    const logo = page.locator(".o-appbar--tab .o-appbar__logo");
-    const mark = page.locator(".o-appbar--tab .o-appbar__monogram");
-    // Une version de chaque image est affichée (fond sombre) ; l'autre est cachée par le thème.
-    const shown = async (loc: ReturnType<Page["locator"]>) =>
-      loc.evaluateAll((els) => els.filter((e) => getComputedStyle(e).display !== "none").length);
+    // Aucun élément `o-monogram` dans la barre : c'est la même image du logotype (`<picture>`) qui devient le monogramme.
+    await expect(page.locator(".o-appbar--tab .o-monogram")).toHaveCount(0);
+    const logo = page.locator(".o-appbar--tab img.o-appbar__logo").locator("visible=true");
+    await expect(logo).toHaveCount(1);
+    const box = await logo.boundingBox();
+    const shown = await logo.evaluate((img) => (img as HTMLImageElement).currentSrc);
     if (width < 290) {
-      expect(await shown(mark)).toBe(1);
-      expect(await shown(logo)).toBe(0);
-      const box = await mark.locator("visible=true").boundingBox();
+      expect(shown).toMatch(/monogramme/);
       expect(Math.round(box?.width ?? 0)).toBe(30);
+      expect(Math.round(box?.height ?? 0)).toBe(30);
     } else {
-      expect(await shown(logo)).toBe(1);
-      expect(await shown(mark)).toBe(0);
-      const box = await logo.locator("visible=true").boundingBox();
+      expect(shown).toMatch(/logo/);
+      expect(shown).not.toMatch(/monogramme/);
       expect(box?.width ?? 0).toBeGreaterThanOrEqual(100);
     }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

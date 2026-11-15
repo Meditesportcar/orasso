@@ -19,6 +19,10 @@
   display: none;
 }
 
+/* Le `<picture>` du logotype qui devient monogramme (lot B3b) ne crée pas de boîte : l'image reste l'élément de la mise en page. */
+.o-brand-picture {
+  display: contents;
+}
 .o-logo {
   display: block;
   height: auto;

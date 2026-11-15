@@ -2,7 +2,7 @@ import { navLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
 import type { IconName } from "../../icons";
 import { initialsOf } from "../../initials";
-import { Logo, Monogram } from "./Brand";
+import { Logo } from "./Brand";
 import { Button } from "./Button";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
@@ -158,8 +158,7 @@ export function AppBar({
     const hasClose = Boolean(onClose || closeHref);
     return (
       <header className={cx("o-appbar", "o-appbar--tab", bleed && "o-appbar--bleed", className)}>
-        <Logo width={118} className="o-appbar__logo" />
-        <Monogram className="o-appbar__monogram" />
+        <Logo width={118} className="o-appbar__logo" monogramBelow={289} />
         {persona && (
           // Lot C1 : la pastille `.capchip` de l'artefact (logo rond ou initiales sur moutarde, nom de la casquette).
           <span className={cx("o-appbar__persona", !persona.role && "is-round")} title={persona.label}>
