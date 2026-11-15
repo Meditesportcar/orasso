@@ -2,6 +2,15 @@
 
 À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 14/11/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
+## État au 15/11/2026 : lot B3b (affiches de démo, carte d'abonnement du Fil) en ligne
+
+- **En ligne sur dev.orasso.fr** : `main` = **`a22bd5de`** (= `vague-r8`, poussé, déployé le 15/11 vers 2 h 55, `/api/health` ok). Aucune migration. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261115-015105.dump`). La graine a refait 15 vieilles affiches de démo avec une vraie photo (une seule fois).
+- **APK** : `Orasso APK/Orasso-2026-11-15-a22bd5de-B3b.apk` sur le Drive (236 Mo, signature habituelle) ; installée sur le Xiaomi : Fil sans plantage ni erreur JavaScript. **Installer cette APK.**
+- **Contenu** (relu par Opus et Codex, 4 tours) : affiches de démo conformes à D34 (vraie photo, l'ancienne photo factice reconnue par ses octets), seulement pour les événements de la graine — l'ancienne graine visait **tous** les événements sans affiche, réels compris (vérifié : aucun événement réel sur le dev, rien de réel touché) ; la graine ne supprime jamais une photo et ne refait plus deux affiches à chaque déploiement ; carte du Fil « Événement d'un abonnement · aujourd'hui / demain / date » à la place de « Nouveauté d'un abonnement · à l'instant » (site et appli) ; monogramme dans la barre du site sous 290 px ; test « Orasso » de la graine, rouge sur main depuis R9-fix, réparé.
+- **Vu au déploiement** : le Lydia s'est renouvelé ; comme prévu (règle « la graine ne touche jamais ce dont elle ne prouve pas l'origine »), une dizaine d'anciennes publications de démo (Sarah_66, Julie_66, Marc_66, Sofia_66, sortie) sont **une fois en double** dans le Fil (ancienne copie détachée + nouvelle rattachée). Nettoyage proposé à Damien.
+- **À reprendre en premier** (réserve `lots/b3-reserve.md`) : test `apps/api/src/modules/dev-clock/dev-clock.test.ts:429` rouge (préexistant, rouge aussi avant B3a ; peut-être dépendant de l'heure) ; puis les mineurs de B3a et B3b.
+- **Leçon** : une vérification de fusion « ciblée » ne cible que ce dont aucun autre test ne dépend ; un lot qui touche la graine passe la suite API complète ; on ne lance pas de tests dans le worktree `vague-r8` (pas de `.env`).
+
 ## État au 14/11/2026, 22 h 45 : lot B3a (défauts visibles) en ligne
 
 - **En ligne sur dev.orasso.fr** : `main` = **`8279a27b`** (= `vague-r8`, poussé, déployé le 14/11 vers 22 h 35, `/api/health` ok). Aucune migration. Base sauvegardée juste avant (`/var/backups/orasso/orasso-20261114-213106.dump`). Graine jouée sans rien ajouter.
