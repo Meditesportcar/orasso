@@ -2,6 +2,7 @@
 // dossier de `PHOTOS_SEED_DIR`) pour les affiches ; sinon la sélection réelle de `assets/photos` (22 photos de
 // JohnGRD Photographie, recompressées, sans EXIF). Préfixes : `event-` (scènes), `car-`, `moto-`, `detail-`.
 // Toutes sont rendues en WebP (le pilote de stockage ne sert un `content-type` d'image que pour .webp).
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +119,57 @@ export async function demoEventPhotos(): Promise<{ name: string; data: Buffer }[
     out.push({ name, data });
   }
   return out;
+}
+
+/**
+ * Vrai si ces octets sont l'ancien dégradé factice (`fakePhotoWebp`, posé en photo d'affiche avant le lot C5, D34). Preuve : une
+ * image de 1200 × 800 dont (1) le coin bas droit est le gris de fin du dégradé (#17191c), (2) les rangées du haut et du bas, le
+ * côté gauche, sont lisses (pas de grain : de pas en pas de 100 px, jamais plus de 18 d'écart par canal) et (3) les deux « roues »
+ * (disques de rayon 70 centrés en (400, 590) et (800, 590)) sont du #0d0e10 uni, à 6 près, et plus sombres que le dégradé à côté. Une photo réelle (ou celle d'un organisateur,
+ * même sombre, même 1200 × 800) n'a pas ces trois marques à la fois ; une image illisible n'en est pas une.
+ */
+export async function isLegacyFakePhoto(data: Buffer): Promise<boolean> {
+  try {
+    const meta = await sharp(data).metadata();
+    if (meta.width !== 1200 || meta.height !== 800) return false;
+    const { data: px, info } = await sharp(data).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const i = (y * info.width + x) * info.channels;
+      return [px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0] as const;
+    };
+    const near = (a: readonly number[], b: readonly number[], tolerance: number) =>
+      a.every((v, k) => Math.abs(v - (b[k] ?? 0)) <= tolerance);
+    if (!near(at(1190, 790), [0x17, 0x19, 0x1c], 14)) return false;
+    // Lisse : le dégradé varie d'au plus ~12 par canal en 100 px ; le grain d'une photo, bien plus.
+    const line = (points: (readonly [number, number])[]) => {
+      for (let k = 1; k < points.length; k++) {
+        const [x0, y0] = points[k - 1] as readonly [number, number];
+        const [x1, y1] = points[k] as readonly [number, number];
+        if (!near(at(x0, y0), at(x1, y1), 18)) return false;
+      }
+      return true;
+    };
+    const across = (y: number) => Array.from({ length: 12 }, (_, k) => [k * 100, y] as const);
+    const down = (x: number) => Array.from({ length: 8 }, (_, k) => [x, k * 100] as const);
+    if (!line(across(5)) || !line(across(795)) || !line(down(5))) return false;
+    return (
+      [
+        [400, 590],
+        [800, 590],
+        [370, 590],
+        [830, 590],
+      ].every(([x, y]) => near(at(x as number, y as number), [0x0d, 0x0e, 0x10], 6)) &&
+      // Les roues se détachent du dégradé (un aplat uni, même sombre, n'est pas le dégradé).
+      at(200, 700).every((v, k) => v >= ([0x0d, 0x0e, 0x10][k] ?? 0) + 8)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Entier stable dérivé d'un slug (choix déterministe d'une photo ou d'un style : le même événement a toujours la même). */
+export function slugIndex(slug: string, modulo: number): number {
+  return modulo > 0 ? createHash("sha1").update(slug).digest().readUInt32BE(0) % modulo : 0;
 }
 
 /** Logo de MéditeSportCar (artefact DA v2), en WebP 512 px. */

@@ -19,6 +19,7 @@ function ThemedImage({
   className,
   width,
   height,
+  compact,
 }: {
   dark: string;
   light: string;
@@ -27,10 +28,13 @@ function ThemedImage({
   className: string;
   width?: number;
   height?: number;
+  /** Lot B3b : sous `maxWidth` px de fenêtre, la même image devient le monogramme (`<picture>`), sans second élément dans le DOM. */
+  compact?: { dark: string; light: string; maxWidth: number; size: number };
 }) {
   const show = (version: "dark" | "light") => {
     const hidden = tone === "auto" ? false : tone !== version;
-    return hidden ? null : (
+    if (hidden) return null;
+    const img = (
       <img
         className={cx(className, `o-brand-img o-brand-img--${version}`, tone === "auto" && `o-brand-img--auto`)}
         src={version === "dark" ? dark : light}
@@ -39,6 +43,19 @@ function ThemedImage({
         height={height}
         draggable={false}
       />
+    );
+    return compact ? (
+      <picture className="o-brand-picture">
+        <source
+          media={`(max-width: ${compact.maxWidth}px)`}
+          srcSet={version === "dark" ? compact.dark : compact.light}
+          width={compact.size}
+          height={compact.size}
+        />
+        {img}
+      </picture>
+    ) : (
+      img
     );
   };
   return (
@@ -54,10 +71,15 @@ export type LogoProps = {
   width?: number;
   tone?: BrandTone;
   className?: string;
+  /**
+   * Largeur de fenêtre (px) sous laquelle le logotype est remplacé par le monogramme (règle de marque : moins de 100 px de large,
+   * le monogramme). C'est la même image (`<picture>`) : le CSS de l'appelant lui donne alors sa taille de monogramme.
+   */
+  monogramBelow?: number;
 };
 
 /** Le logotype complet. En dessous de 100 px de large, utiliser Monogram. Jamais déformé ni recoloré. */
-export function Logo({ width = 128, tone = "auto", className }: LogoProps) {
+export function Logo({ width = 128, tone = "auto", className, monogramBelow }: LogoProps) {
   // Rapport du fichier de marque : viewBox 642 × 104.
   const height = Math.round((width * 104) / 642);
   return (
@@ -69,6 +91,9 @@ export function Logo({ width = 128, tone = "auto", className }: LogoProps) {
       className={cx("o-logo", className)}
       width={width}
       height={height}
+      compact={
+        monogramBelow ? { dark: monogramDark, light: monogramLight, maxWidth: monogramBelow, size: 30 } : undefined
+      }
     />
   );
 }

@@ -32,26 +32,50 @@ export function isSeedPost(items: SeedPost[], alias = "feed_posts"): SQL {
 export const isSeedAccount = (userColumn: AnyColumn): SQL =>
   sql`exists (select 1 from "user" su where su.id = ${userColumn} and su.email like '%@orasso.local')`;
 
-/** Les événements posés par la graine (« Pour ta sortie » ne se publie que pour eux). */
+/**
+ * Les événements posés par la graine (« Pour ta sortie » ne se publie que pour eux ; les affiches de démonstration ne se font que
+ * pour eux). Lot B3b : la liste est complète (un test vérifie que chaque événement créé par la graine y est).
+ */
 export const SEED_EVENT_SLUGS = [
   "balade-prades",
+  "beziers-night-2026",
+  "c-et-c-narbonne-2026",
+  "c-et-c-ceret-2026",
   "c-et-c-perpignan-2026",
+  "cars-and-coffee-plage",
   "cars-coffee-carcassonne",
   "cars-coffee-ceret",
+  "expo-de-printemps-2027",
+  "expo-du-boulou-2026",
   "expo-rivesaltes-2026",
   "exposition-beziers",
   "hivernale-2027",
   "nocturne-de-canet-2026",
   "nocturne-de-rentree",
   "nocturne-port-sete",
+  "nuit-des-moteurs",
+  "portes-ouvertes-garage-du-mas-2026",
   "portes-ouvertes-muret",
+  "rasso-du-lac-2026",
+  "rasso-de-printemps-2026",
+  "rassemblement-cote-vermeille-2025",
   "rassemblement-du-lydia",
   "rassemblement-narbonne",
   "rassemblement-toulouse",
   "salon-argeles",
+  "salon-auto-retro-2026",
+  "salon-de-perpignan-2026",
+  "salon-de-printemps-2027",
   "salon-montpellier",
+  "soiree-partenaires-2026",
+  "sortie-du-canigou-2026",
   "toulouse-auto-retro",
 ];
+
+/** Les éditions passées de MéditeSportCar (`msc-edition-01`, `msc-edition-02`…) : un préfixe, leur nombre dépend du seed. */
+export const SEED_EVENT_SLUG_PREFIXES = ["msc-edition-"];
+/** Les éditions ne comptent que si leur structure est celle de la graine (son slug) : un autre organisateur ne peut pas les revendiquer. */
+export const SEED_EDITIONS_STRUCTURE_SLUG = "meditesportcar";
 
 /**
  * Condition SQL « cet événement (colonnes `slug` et `structure_id` de la table d'alias `alias`) est un événement de la graine » :
@@ -60,9 +84,15 @@ export const SEED_EVENT_SLUGS = [
  */
 export function isSeedEvent(alias = "events"): SQL {
   const a = sql.raw(alias);
-  return sql`(${a}.slug in (${sql.join(
+  return sql`((${a}.slug in (${sql.join(
     SEED_EVENT_SLUGS.map((slug) => sql`${slug}`),
     sql`, `,
+  )}) or ${sql.join(
+    SEED_EVENT_SLUG_PREFIXES.map(
+      (prefix) => sql`(${a}.slug like ${`${prefix}%`} and exists (select 1 from structures es
+        where es.id = ${a}.structure_id and es.slug = ${SEED_EDITIONS_STRUCTURE_SLUG}))`,
+    ),
+    sql` or `,
   )}) and exists (select 1 from structure_members sm join "user" su on su.id = sm.user_id
     where sm.structure_id = ${a}.structure_id and sm.role = 'owner' and sm.status = 'active' and su.email like '%@orasso.local')
     and exists (select 1 from "user" cu where cu.id = ${a}.created_by and cu.email like '%@orasso.local'))`;

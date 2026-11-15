@@ -158,7 +158,7 @@ export function AppBar({
     const hasClose = Boolean(onClose || closeHref);
     return (
       <header className={cx("o-appbar", "o-appbar--tab", bleed && "o-appbar--bleed", className)}>
-        <Logo width={118} className="o-appbar__logo" />
+        <Logo width={118} className="o-appbar__logo" monogramBelow={289} />
         {persona && (
           // Lot C1 : la pastille `.capchip` de l'artefact (logo rond ou initiales sur moutarde, nom de la casquette).
           <span className={cx("o-appbar__persona", !persona.role && "is-round")} title={persona.label}>

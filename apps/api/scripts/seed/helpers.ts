@@ -81,9 +81,29 @@ const nextPlate = () => {
   return `${letters[n % 23]}${letters[Math.floor(n / 23) % 23]}-${String(n).padStart(3, "0").slice(-3)}-${letters[(n * 7) % 23]}${letters[(n * 11) % 23]}`;
 };
 
-export async function fakePhoto(key: string, color: string) {
+/** Les couleurs de départ des dégradés factices posés par la graine (logos, photos de prestataires, ancien visuel d'affiche). */
+export const FAKE_PHOTO_COLORS = [
+  "#d4a017",
+  "#1f4e79",
+  "#8a1c1c",
+  "#c9a227",
+  "#2b2f36",
+  "#b5452a",
+  // La palette des photos de véhicules du seed (`PALETTE`, lot C5, 6c1e4dac).
+  "#e8e4da",
+  "#3a5f3a",
+  "#6b6f76",
+  "#c0c0c0",
+] as const;
+
+/** Le dégradé factice d'avant le lot C5 (silhouette de voiture sur dégradé), en WebP 1200 × 800. Les photos d'événement n'en sont plus (D34) ; le seed sait les reconnaître (`isLegacyFakePhoto`). */
+export async function fakePhotoWebp(color: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="#17191C"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><rect x="250" y="420" width="700" height="160" rx="60" fill="#17191C" opacity="0.55"/><circle cx="400" cy="590" r="70" fill="#0d0e10"/><circle cx="800" cy="590" r="70" fill="#0d0e10"/></svg>`;
-  const out = await sharp(Buffer.from(svg)).webp({ quality: 70 }).toBuffer({ resolveWithObject: true });
+  return sharp(Buffer.from(svg)).webp({ quality: 70 }).toBuffer({ resolveWithObject: true });
+}
+
+export async function fakePhoto(key: string, color: string) {
+  const out = await fakePhotoWebp(color);
   await storage.put(key, out.data);
   return out.info;
 }

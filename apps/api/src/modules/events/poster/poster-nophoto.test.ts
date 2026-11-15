@@ -60,3 +60,14 @@ describe("photo illisible (lot B3a, tour 1)", () => {
     expect(light).toBeGreaterThan(20);
   });
 });
+
+describe("photo illisible, un seul contrôle (lot B3b)", () => {
+  it.each(["swiss", "retro", "jdm", "ticket"] as const)(
+    "%s : un buffer corrompu rend exactement l'affiche sans photo",
+    async (style) => {
+      const broken = await render(input(style, Buffer.from("pas une image")), "post", 360);
+      const none = await render(input(style, null), "post", 360);
+      expect(broken.equals(none)).toBe(true);
+    },
+  );
+});

@@ -19,6 +19,7 @@ import {
   type FeedFilter,
 } from "./feed";
 import { nextPlateFrame } from "./plateFrame";
+import { calendarDaysBetween } from "./time";
 
 // --- La liste -------------------------------------------------------------------------------------------------------
 
@@ -561,3 +562,35 @@ export function slidesToLoad(index: number, count: number, near: boolean): numbe
 /** Une carte (position `top` et hauteur à l'écran) est « près de l'écran » à moins de `margin` px de la fenêtre (haut ou bas). */
 export const isNearViewport = (top: number, height: number, viewport: number, margin = viewport): boolean =>
   top + height > -margin && top < viewport + margin;
+
+// --- La ligne de raison d'une carte (lot B3b) ----------------------------------------------------------------------------
+
+const PARIS = "Europe/Paris";
+
+/**
+ * Le moment d'un événement pour la ligne d'une carte : « en cours » (commencé, pas fini), « aujourd'hui », « demain » (jours
+ * calendaires de Paris, donc juste aux changements d'heure), sinon le jour (« 16 novembre »). Un événement terminé (`endsAt` passé,
+ * par exemple une copie hors ligne relue après la fin) dit son jour, jamais « en cours ».
+ */
+export function feedEventMoment(startsAt: string | Date, now: Date, endsAt?: string | Date | null): string {
+  const start = new Date(startsAt);
+  const over = endsAt != null && new Date(endsAt).getTime() <= now.getTime();
+  if (start.getTime() <= now.getTime() && !over) return "en cours";
+  const days = calendarDaysBetween(now, start, PARIS);
+  if (!over && days === 0) return "aujourd'hui";
+  if (!over && days === 1) return "demain";
+  return start.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: PARIS });
+}
+
+/**
+ * La petite ligne d'une carte : la raison, puis l'ancienneté. Une carte d'événement ne dit jamais « à l'instant » ni « il y a 3 j » :
+ * sa date est celle du classement (l'API la ramène à l'instant du parcours pour la faire monter, dès qu'il approche), pas celle d'une
+ * nouveauté. Elle dit quand a lieu l'événement.
+ */
+export function feedReasonLine(card: FeedCard, now: Date): string {
+  if (card.kind === "event_recommended") {
+    const event = (card.payload as { event?: { startsAt?: string; endsAt?: string } }).event;
+    if (event?.startsAt) return `${card.reason.label} · ${feedEventMoment(event.startsAt, now, event.endsAt)}`;
+  }
+  return `${card.reason.label} · ${feedAgo(card.at, now)}`;
+}

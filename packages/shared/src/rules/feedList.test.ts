@@ -12,7 +12,9 @@ import {
   FEED_KINDS_DRAWN,
   feedAgo,
   feedCropPlan,
+  feedEventMoment,
   feedPostBody,
+  feedReasonLine,
   feedRetryAction,
   firstUndecidedPhoto,
   framesPlaced,
@@ -373,5 +375,103 @@ describe("la carte Sponsorisé jamais avant la 4e place (lot R7k2, tour 2)", () 
   it("retire toutes les cartes d'un emplacement refusé, pas les autres", () => {
     const l = [post("a"), ad("s1", "pl1"), post("b"), ad("s2", "pl1"), ad("s3", "pl2")];
     expect(ids(withoutPlacement(l, "pl1"))).toEqual(["a", "b", "s3"]);
+  });
+});
+
+describe("ligne de raison d'une carte d'événement (lot B3b)", () => {
+  // Lundi 16 novembre 2026, 11 h à Paris.
+  const now = new Date("2026-11-16T10:00:00Z");
+  const eventCard = (
+    startsAt: string,
+    at: string,
+    code: "following_structure" | "recommended_event" = "following_structure",
+  ) =>
+    ({
+      id: "event_recommended:e1",
+      kind: "event_recommended",
+      reason: {
+        code,
+        label: code === "following_structure" ? "Événement d'un abonnement" : "Événement recommandé",
+      },
+      at,
+      seen: false,
+      payload: { event: { startsAt } },
+    }) as unknown as FeedCard;
+
+  it("le moment de l'événement, à Paris", () => {
+    expect(feedEventMoment("2026-11-16T09:00:00Z", now)).toBe("en cours");
+    expect(feedEventMoment("2026-11-16T18:00:00Z", now)).toBe("aujourd'hui");
+    // 23 h 30 à Paris le soir même : toujours aujourd'hui (et non le lendemain en UTC).
+    expect(feedEventMoment("2026-11-16T22:30:00Z", now)).toBe("aujourd'hui");
+    expect(feedEventMoment("2026-11-17T08:00:00Z", now)).toBe("demain");
+    expect(feedEventMoment("2026-11-18T08:00:00Z", now)).toBe("18 novembre");
+  });
+  it("une carte d'événement dit le moment de l'événement, jamais « à l'instant » ni l'âge de la carte", () => {
+    expect(feedReasonLine(eventCard("2026-11-17T08:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · demain",
+    );
+    expect(feedReasonLine(eventCard("2026-11-16T18:00:00Z", now.toISOString(), "recommended_event"), now)).toBe(
+      "Événement recommandé · aujourd'hui",
+    );
+    expect(feedReasonLine(eventCard("2026-11-18T09:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · 18 novembre",
+    );
+    // Un événement lointain, dont la carte est datée à l'instant du parcours : la date de l'événement, pas « à l'instant ».
+    expect(feedReasonLine(eventCard("2026-12-10T09:00:00Z", now.toISOString()), now)).toBe(
+      "Événement d'un abonnement · 10 décembre",
+    );
+    // Une carte ancienne (publication de longue date) : la même chose.
+    expect(feedReasonLine(eventCard("2026-12-10T09:00:00Z", "2026-11-14T10:00:00Z"), now)).toBe(
+      "Événement d'un abonnement · 10 décembre",
+    );
+  });
+  it("les autres cartes gardent leur ancienneté", () => {
+    const post = { ...eventCard("2026-11-17T08:00:00Z", "2026-11-16T07:00:00Z"), kind: "feed_post" } as FeedCard;
+    expect(feedReasonLine(post, now)).toBe(`Événement d'un abonnement · ${feedAgo("2026-11-16T07:00:00Z", now)}`);
+  });
+});
+
+describe("moment d'un événement : fin et changements d'heure (lot B3b, tour 1)", () => {
+  it("un événement terminé dit son jour, jamais « en cours » ni « aujourd'hui »", () => {
+    const now = new Date("2026-11-16T10:00:00Z");
+    expect(feedEventMoment("2026-11-16T07:00:00Z", now, "2026-11-16T12:00:00Z")).toBe("en cours");
+    expect(feedEventMoment("2026-11-16T07:00:00Z", now, "2026-11-16T09:00:00Z")).toBe("16 novembre");
+    expect(feedEventMoment("2026-11-14T07:00:00Z", now, "2026-11-15T09:00:00Z")).toBe("14 novembre");
+    // Sans fin connue : comme avant.
+    expect(feedEventMoment("2026-11-14T07:00:00Z", now)).toBe("en cours");
+  });
+
+  it("la ligne d'une carte lit la fin dans le résumé de l'événement", () => {
+    const now = new Date("2026-11-16T10:00:00Z");
+    const card = (endsAt: string) =>
+      ({
+        id: "event_recommended:e1",
+        kind: "event_recommended",
+        reason: { code: "recommended_event", label: "Événement recommandé" },
+        at: "2026-11-15T10:00:00Z",
+        seen: false,
+        payload: { event: { startsAt: "2026-11-16T07:00:00Z", endsAt } },
+      }) as unknown as FeedCard;
+    expect(feedReasonLine(card("2026-11-16T12:00:00Z"), now)).toBe("Événement recommandé · en cours");
+    expect(feedReasonLine(card("2026-11-16T09:00:00Z"), now)).toBe("Événement recommandé · 16 novembre");
+  });
+
+  // Jours calendaires de Paris : « demain » ne dépend pas de la durée de la journée (23 h ou 25 h).
+  it.each([
+    // Passage à l'heure d'été, dimanche 28 mars 2027 (la journée fait 23 h).
+    ["2027-03-27T22:30:00Z", "2027-03-28T08:00:00Z", "demain"], // samedi 23 h 30 → dimanche 10 h (heure d'été)
+    ["2027-03-28T08:00:00Z", "2027-03-28T20:00:00Z", "aujourd'hui"],
+    ["2027-03-28T21:30:00Z", "2027-03-29T10:00:00Z", "demain"], // dimanche 23 h 30 → lundi
+    ["2027-03-27T10:00:00Z", "2027-03-29T10:00:00Z", "29 mars"],
+    // Passage à l'heure d'hiver, dimanche 31 octobre 2027 (la journée fait 25 h).
+    ["2027-10-30T21:30:00Z", "2027-10-31T10:00:00Z", "demain"], // samedi 23 h 30 → dimanche
+    ["2027-10-31T00:30:00Z", "2027-10-31T22:30:00Z", "aujourd'hui"],
+    ["2027-10-31T22:30:00Z", "2027-11-01T10:00:00Z", "demain"], // dimanche 23 h 30 → lundi
+    ["2027-10-29T22:30:00Z", "2027-11-01T10:00:00Z", "1 novembre"],
+    // Autour de minuit à Paris (UTC+1 en novembre).
+    ["2026-11-16T22:59:00Z", "2026-11-16T23:01:00Z", "demain"], // 23 h 59 → 00 h 01
+    ["2026-11-16T22:58:00Z", "2026-11-16T22:59:00Z", "aujourd'hui"],
+  ])("à %s, un événement à %s : %s", (now, start, expected) => {
+    expect(feedEventMoment(start, new Date(now), "2028-01-01T00:00:00Z")).toBe(expected);
   });
 });

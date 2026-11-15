@@ -59,7 +59,9 @@ export const activeRenders = () => active;
 /** Le moteur, remplaçable dans les tests (rendu qui échoue, rendu lent). */
 export const posterEngine = { render: renderPng };
 
-async function renderPng(input: PosterInput, format: PosterFormat, width?: number): Promise<Buffer> {
+async function renderPng(source: PosterInput, format: PosterFormat, width?: number): Promise<Buffer> {
+  // Lot B3b : la photo est contrôlée une seule fois, ici ; le rendu et le repli « image trop lourde » ne voient qu'une photo qui se décode.
+  const input = { ...source, photo: await decodable(source.photo) };
   const raw = await pixels(input, format, width);
   let out = await raw().png({ compressionLevel: 6 }).toBuffer();
   for (const step of PALETTES) {
@@ -99,8 +101,8 @@ async function decodable(photo: Buffer | null): Promise<Buffer | null> {
   }
 }
 
-async function pixels(source: PosterInput, format: PosterFormat, width?: number) {
-  const input = { ...source, photo: await decodable(source.photo) };
+/** Rend les pixels bruts ; `input.photo` est déjà passée par `decodable` (ou vaut `null`). */
+async function pixels(input: PosterInput, format: PosterFormat, width?: number) {
   const ctx = ctxOf(input, format, width);
   const { data, info } = await renderLayout(posterTemplates[input.style](ctx), input, ctx.W, ctx.H);
   return () => sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } });

@@ -77,7 +77,7 @@ export function CasquetteBar({
 }) {
   return (
     <header className="o-appbar o-appbar--tab cas-bar" data-testid="casquette-bar">
-      <Logo width={118} className="o-appbar__logo" />
+      <Logo width={118} className="o-appbar__logo" monogramBelow={289} />
       <a
         className="o-appbar__persona is-round cas-bar__chip"
         href={pageHref}
