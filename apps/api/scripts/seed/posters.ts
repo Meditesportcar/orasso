@@ -98,31 +98,42 @@ export async function seedPosters(onlyEventIds?: string[]) {
   const photos = await demoEventPhotos();
   let made = 0;
   let fixed = 0;
+  let failed = 0;
   for (const e of seedEvents) {
     try {
       const done = await posterOf(e, photos);
       if (done === "made") made++;
       if (done === "fixed") fixed++;
     } catch (error) {
+      failed++;
       // Une affiche qui échoue ne laisse rien à moitié (la ligne n'est écrite qu'avec un rendu réussi) : le passage suivant la reprend.
       console.error(`Affiche de ${e.slug} : échec, reprise au prochain passage.`, error);
     }
   }
-  if (!made && !fixed) console.log("Affiches des événements déjà générées.");
-  else console.log(`Affiches générées : ${made} événements, refaites avec une vraie photo : ${fixed}.`);
+  if (made || fixed) console.log(`Affiches générées : ${made} événements, refaites avec une vraie photo : ${fixed}.`);
+  if (failed) console.log(`Affiches en échec : ${failed} événement(s), reprise au prochain passage.`);
+  if (!made && !fixed && !failed) console.log("Affiches des événements déjà générées.");
 }
 
-type DemoPhoto = { name: string; data: Buffer };
+export type DemoPhoto = { name: string; data: Buffer };
+
+/** Les seuls événements dont une affiche sans photo est réparée : un événement dont un compte a retiré la photo la garde retirée. */
+export const REPAIR_NO_PHOTO_SLUGS = ["salon-de-printemps-2027"] as const;
+/** Les photos posées par la graine seule (clé `seed-…`) : les seules que la graine examine ou remplace ; celle d'un compte n'est jamais touchée. */
+const SEED_PHOTO_PREFIX = `${POSTER_PHOTO_PREFIX}seed-`;
 
 /** Pose la photo d'affiche et le rendu d'un événement de la graine ; `null` si rien n'est à faire. */
-async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made" | "fixed" | null> {
+export async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made" | "fixed" | null> {
   const photo = photos.length ? photos[slugIndex(e.slug, photos.length)] : undefined;
   const hasPoster = Boolean(posterSettingsOf(e));
-  let photoOk = false;
-  if (hasPoster && e.posterPhotoKey) {
-    // Une photo qui manque, ou l'ancien dégradé factice : à remplacer. Sans photo réelle à poser, on ne touche à rien.
+  // La photo en place est bonne sauf : posée par la graine et manquante ou ancien dégradé factice, ou absente d'un événement de la
+  // liste de réparation. Celle d'un compte (autre clé), ou retirée par un compte, n'est jamais examinée ni remplacée.
+  let photoOk = true;
+  if (hasPoster && e.posterPhotoKey?.startsWith(SEED_PHOTO_PREFIX)) {
     const stored = await storage.get(e.posterPhotoKey);
     photoOk = Boolean(stored) && !(await isLegacyFakePhoto(stored as Buffer));
+  } else if (hasPoster && !e.posterPhotoKey) {
+    photoOk = !(REPAIR_NO_PHOTO_SLUGS as readonly string[]).includes(e.slug);
   }
   if (hasPoster && e.posterPostKey && (photoOk || !photo)) return null;
   if (hasPoster && photoOk) {
@@ -132,35 +143,49 @@ async function posterOf(e: EventRow, photos: DemoPhoto[]): Promise<"made" | "fix
   }
 
   const style = posterStyles.find((s) => s === e.posterStyle) ?? styleOf(e.slug);
-  let photoKey = photoOk ? e.posterPhotoKey : null;
+  let photoKey = hasPoster && photoOk ? e.posterPhotoKey : null;
+  let created = false;
   if (!photoKey && photo) {
-    // Clé propre à l'octet près : une photo remplacée n'est jamais servie depuis un cache de l'ancienne.
-    photoKey = `${POSTER_PHOTO_PREFIX}seed-${e.slug}-${createHash("sha1").update(photo.data).digest("hex").slice(0, 8)}.webp`;
+    // Clé propre à l'octet près : une photo remplacée n'est jamais servie depuis un cache de l'ancienne. L'ancienne photo n'est jamais
+    // supprimée : une copie ou une récurrence d'événement peut la référencer.
+    photoKey = `${SEED_PHOTO_PREFIX}${e.slug}-${createHash("sha1").update(photo.data).digest("hex").slice(0, 8)}.webp`;
+    created = photoKey !== e.posterPhotoKey;
     await storage.put(photoKey, photo.data);
   }
   const settings: PosterSettings = { photoKey, style, title: e.posterTitle ?? posterTitleOf(e.title) };
-  // Le rendu d'abord : s'il échoue, la ligne reste telle quelle ; sinon réglages et rendus s'écrivent ensemble.
-  const keys = await posterService.renderForEvent(e, settings);
+  const dropNewPhoto = async () => {
+    if (created && photoKey) await storage.remove(photoKey).catch(() => undefined);
+  };
+  let keys: Awaited<ReturnType<typeof posterService.renderForEvent>>;
+  try {
+    // Le rendu d'abord : s'il échoue, la ligne reste telle quelle ; sinon réglages et rendus s'écrivent ensemble.
+    keys = await posterService.renderForEvent(e, settings);
+  } catch (error) {
+    await dropNewPhoto();
+    throw error;
+  }
+  // Écriture gardée par tout ce qui entre dans le rendu (comme `posterService.regenerate`) : date, ville, photo, style, titre.
   const [row] = await db
     .update(t.events)
     .set({ ...posterColumns(settings), posterPostKey: keys.postKey, posterStoryKey: keys.storyKey })
     .where(
       and(
         eq(t.events.id, e.id),
+        eq(t.events.startsAt, e.startsAt),
+        sql`${t.events.city} is not distinct from ${e.city}`,
         sql`${t.events.posterPhotoKey} is not distinct from ${e.posterPhotoKey}`,
         sql`${t.events.posterStyle} is not distinct from ${e.posterStyle}`,
+        sql`${t.events.posterTitle} is not distinct from ${e.posterTitle}`,
       ),
     )
     .returning();
   if (!row) {
+    // Modifié pendant le rendu : ce rendu ne sert plus, rien n'est écrit, pas de photo orpheline.
     await Promise.all([storage.remove(keys.postKey), storage.remove(keys.storyKey)]).catch(() => undefined);
+    await dropNewPhoto();
     return null;
   }
   await posterService.removeRenders(e);
-  // L'ancienne photo de la graine (dégradé factice), plus servie par personne.
-  if (e.posterPhotoKey && e.posterPhotoKey !== photoKey && e.posterPhotoKey.startsWith(`${POSTER_PHOTO_PREFIX}seed-`)) {
-    await storage.remove(e.posterPhotoKey).catch(() => undefined);
-  }
   return hasPoster ? "fixed" : "made";
 }
 

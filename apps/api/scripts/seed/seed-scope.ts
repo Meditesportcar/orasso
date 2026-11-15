@@ -74,6 +74,8 @@ export const SEED_EVENT_SLUGS = [
 
 /** Les éditions passées de MéditeSportCar (`msc-edition-01`, `msc-edition-02`…) : un préfixe, leur nombre dépend du seed. */
 export const SEED_EVENT_SLUG_PREFIXES = ["msc-edition-"];
+/** Les éditions ne comptent que si leur structure est celle de la graine (son slug) : un autre organisateur ne peut pas les revendiquer. */
+export const SEED_EDITIONS_STRUCTURE_SLUG = "meditesportcar";
 
 /**
  * Condition SQL « cet événement (colonnes `slug` et `structure_id` de la table d'alias `alias`) est un événement de la graine » :
@@ -86,7 +88,10 @@ export function isSeedEvent(alias = "events"): SQL {
     SEED_EVENT_SLUGS.map((slug) => sql`${slug}`),
     sql`, `,
   )}) or ${sql.join(
-    SEED_EVENT_SLUG_PREFIXES.map((prefix) => sql`${a}.slug like ${`${prefix}%`}`),
+    SEED_EVENT_SLUG_PREFIXES.map(
+      (prefix) => sql`(${a}.slug like ${`${prefix}%`} and exists (select 1 from structures es
+        where es.id = ${a}.structure_id and es.slug = ${SEED_EDITIONS_STRUCTURE_SLUG}))`,
+    ),
     sql` or `,
   )}) and exists (select 1 from structure_members sm join "user" su on su.id = sm.user_id
     where sm.structure_id = ${a}.structure_id and sm.role = 'owner' and sm.status = 'active' and su.email like '%@orasso.local')

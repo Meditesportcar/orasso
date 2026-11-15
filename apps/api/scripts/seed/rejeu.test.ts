@@ -586,13 +586,14 @@ describe("affiches de la graine (lot B3b)", () => {
       lac: await posterState("rasso-du-lac-2026"),
       salon: await posterState("salon-de-printemps-2027"),
     };
-    // « Rasso du lac » : la photo n'est plus l'ancien dégradé, une nouvelle affiche est rendue ; l'ancien objet est retiré.
+    // « Rasso du lac » : la photo n'est plus l'ancien dégradé, une nouvelle affiche est rendue ; l'ancien fichier de la photo est gardé.
     expect(afterFirst.lac.photo).not.toBe(oldKey);
     expect(afterFirst.lac.style).toBe(lac.style);
     expect(afterFirst.lac.title).toBe(lac.title);
     expect(afterFirst.lac.post).not.toBe(lac.post);
     expect(await isLegacyFakePhoto((await storage.get(afterFirst.lac.photo ?? "")) as Buffer)).toBe(false);
-    expect(await storage.get(oldKey)).toBeNull();
+    // L'ancien fichier reste : une copie ou une récurrence d'événement peut le référencer.
+    expect(await storage.get(oldKey)).not.toBeNull();
     expect(await storage.get(lac.post ?? "")).toBeNull();
     // « Salon de printemps » : une vraie photo, l'affiche refaite.
     expect(afterFirst.salon.photo).not.toBeNull();

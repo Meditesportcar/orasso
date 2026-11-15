@@ -19,6 +19,7 @@ import {
   type FeedFilter,
 } from "./feed";
 import { nextPlateFrame } from "./plateFrame";
+import { calendarDaysBetween } from "./time";
 
 // --- La liste -------------------------------------------------------------------------------------------------------
 
@@ -565,18 +566,19 @@ export const isNearViewport = (top: number, height: number, viewport: number, ma
 // --- La ligne de raison d'une carte (lot B3b) ----------------------------------------------------------------------------
 
 const PARIS = "Europe/Paris";
-const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: PARIS });
 
 /**
- * Le moment d'un événement pour la ligne d'une carte : « en cours » (commencé), « aujourd'hui », « demain », sinon le jour
- * (« 16 novembre »), à Paris.
+ * Le moment d'un événement pour la ligne d'une carte : « en cours » (commencé, pas fini), « aujourd'hui », « demain » (jours
+ * calendaires de Paris, donc juste aux changements d'heure), sinon le jour (« 16 novembre »). Un événement terminé (`endsAt` passé,
+ * par exemple une copie hors ligne relue après la fin) dit son jour, jamais « en cours ».
  */
-export function feedEventMoment(startsAt: string | Date, now: Date): string {
+export function feedEventMoment(startsAt: string | Date, now: Date, endsAt?: string | Date | null): string {
   const start = new Date(startsAt);
-  if (start.getTime() <= now.getTime()) return "en cours";
-  const today = dayKey(now);
-  if (dayKey(start) === today) return "aujourd'hui";
-  if (dayKey(start) === dayKey(new Date(now.getTime() + 86_400_000))) return "demain";
+  const over = endsAt != null && new Date(endsAt).getTime() <= now.getTime();
+  if (start.getTime() <= now.getTime() && !over) return "en cours";
+  const days = calendarDaysBetween(now, start, PARIS);
+  if (!over && days === 0) return "aujourd'hui";
+  if (!over && days === 1) return "demain";
   return start.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: PARIS });
 }
 
@@ -587,8 +589,8 @@ export function feedEventMoment(startsAt: string | Date, now: Date): string {
  */
 export function feedReasonLine(card: FeedCard, now: Date): string {
   if (card.kind === "event_recommended") {
-    const startsAt = (card.payload as { event?: { startsAt?: string } }).event?.startsAt;
-    if (startsAt) return `${card.reason.label} · ${feedEventMoment(startsAt, now)}`;
+    const event = (card.payload as { event?: { startsAt?: string; endsAt?: string } }).event;
+    if (event?.startsAt) return `${card.reason.label} · ${feedEventMoment(event.startsAt, now, event.endsAt)}`;
   }
   return `${card.reason.label} · ${feedAgo(card.at, now)}`;
 }

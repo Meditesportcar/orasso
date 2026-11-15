@@ -430,3 +430,48 @@ describe("ligne de raison d'une carte d'événement (lot B3b)", () => {
     expect(feedReasonLine(post, now)).toBe(`Événement d'un abonnement · ${feedAgo("2026-11-16T07:00:00Z", now)}`);
   });
 });
+
+describe("moment d'un événement : fin et changements d'heure (lot B3b, tour 1)", () => {
+  it("un événement terminé dit son jour, jamais « en cours » ni « aujourd'hui »", () => {
+    const now = new Date("2026-11-16T10:00:00Z");
+    expect(feedEventMoment("2026-11-16T07:00:00Z", now, "2026-11-16T12:00:00Z")).toBe("en cours");
+    expect(feedEventMoment("2026-11-16T07:00:00Z", now, "2026-11-16T09:00:00Z")).toBe("16 novembre");
+    expect(feedEventMoment("2026-11-14T07:00:00Z", now, "2026-11-15T09:00:00Z")).toBe("14 novembre");
+    // Sans fin connue : comme avant.
+    expect(feedEventMoment("2026-11-14T07:00:00Z", now)).toBe("en cours");
+  });
+
+  it("la ligne d'une carte lit la fin dans le résumé de l'événement", () => {
+    const now = new Date("2026-11-16T10:00:00Z");
+    const card = (endsAt: string) =>
+      ({
+        id: "event_recommended:e1",
+        kind: "event_recommended",
+        reason: { code: "recommended_event", label: "Événement recommandé" },
+        at: "2026-11-15T10:00:00Z",
+        seen: false,
+        payload: { event: { startsAt: "2026-11-16T07:00:00Z", endsAt } },
+      }) as unknown as FeedCard;
+    expect(feedReasonLine(card("2026-11-16T12:00:00Z"), now)).toBe("Événement recommandé · en cours");
+    expect(feedReasonLine(card("2026-11-16T09:00:00Z"), now)).toBe("Événement recommandé · 16 novembre");
+  });
+
+  // Jours calendaires de Paris : « demain » ne dépend pas de la durée de la journée (23 h ou 25 h).
+  it.each([
+    // Passage à l'heure d'été, dimanche 28 mars 2027 (la journée fait 23 h).
+    ["2027-03-27T22:30:00Z", "2027-03-28T08:00:00Z", "demain"], // samedi 23 h 30 → dimanche 10 h (heure d'été)
+    ["2027-03-28T08:00:00Z", "2027-03-28T20:00:00Z", "aujourd'hui"],
+    ["2027-03-28T21:30:00Z", "2027-03-29T10:00:00Z", "demain"], // dimanche 23 h 30 → lundi
+    ["2027-03-27T10:00:00Z", "2027-03-29T10:00:00Z", "29 mars"],
+    // Passage à l'heure d'hiver, dimanche 31 octobre 2027 (la journée fait 25 h).
+    ["2027-10-30T21:30:00Z", "2027-10-31T10:00:00Z", "demain"], // samedi 23 h 30 → dimanche
+    ["2027-10-31T00:30:00Z", "2027-10-31T22:30:00Z", "aujourd'hui"],
+    ["2027-10-31T22:30:00Z", "2027-11-01T10:00:00Z", "demain"], // dimanche 23 h 30 → lundi
+    ["2027-10-29T22:30:00Z", "2027-11-01T10:00:00Z", "1 novembre"],
+    // Autour de minuit à Paris (UTC+1 en novembre).
+    ["2026-11-16T22:59:00Z", "2026-11-16T23:01:00Z", "demain"], // 23 h 59 → 00 h 01
+    ["2026-11-16T22:58:00Z", "2026-11-16T22:59:00Z", "aujourd'hui"],
+  ])("à %s, un événement à %s : %s", (now, start, expected) => {
+    expect(feedEventMoment(start, new Date(now), "2028-01-01T00:00:00Z")).toBe(expected);
+  });
+});

@@ -1,12 +1,12 @@
 // Lot B3b : reconnaître l'ancien dégradé factice des affiches de démonstration (D34), et le choix stable d'une photo par slug.
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { fakePhotoWebp } from "./helpers";
+import { FAKE_PHOTO_COLORS, fakePhotoWebp } from "./helpers";
 import { demoEventPhotos, isLegacyFakePhoto, slugIndex } from "./photos";
 import { SEED_EVENT_SLUG_PREFIXES, SEED_EVENT_SLUGS } from "./seed-scope";
 
 describe("isLegacyFakePhoto", () => {
-  it.each(["#b5452a", "#d4a017", "#2b2f36", "#c9a227"])("reconnaît le dégradé factice %s", async (color) => {
+  it.each([...FAKE_PHOTO_COLORS, "#ffffff"])("reconnaît le dégradé factice %s", async (color) => {
     expect(await isLegacyFakePhoto((await fakePhotoWebp(color)).data)).toBe(true);
   });
 
@@ -18,6 +18,29 @@ describe("isLegacyFakePhoto", () => {
       const same = await sharp(p.data).resize(1200, 800, { fit: "cover" }).webp({ quality: 70 }).toBuffer();
       expect(await isLegacyFakePhoto(same), `${p.name} 1200×800`).toBe(false);
     }
+  });
+
+  it("contre-exemples sombres 1200 × 800 : aplats #17191c et #0d0e10, dégradé sans formes, photo de nuit granuleuse", async () => {
+    const flat = (c: string) =>
+      sharp({ create: { width: 1200, height: 800, channels: 3, background: c } })
+        .webp()
+        .toBuffer();
+    expect(await isLegacyFakePhoto(await flat("#17191c"))).toBe(false);
+    expect(await isLegacyFakePhoto(await flat("#0d0e10"))).toBe(false);
+    const gradient = await sharp(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b5452a"/><stop offset="1" stop-color="#17191C"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/></svg>',
+      ),
+    )
+      .webp({ quality: 70 })
+      .toBuffer();
+    expect(await isLegacyFakePhoto(gradient)).toBe(false);
+    const noise = Buffer.alloc(1200 * 800 * 3);
+    for (let i = 0; i < noise.length; i++) noise[i] = (i * 2654435761) % 29; // nuit : très sombre, grain
+    const night = await sharp(noise, { raw: { width: 1200, height: 800, channels: 3 } })
+      .webp({ quality: 70 })
+      .toBuffer();
+    expect(await isLegacyFakePhoto(night)).toBe(false);
   });
 
   it("une image de 1200 × 800 unie, un buffer illisible et une autre taille : pas le dégradé", async () => {
